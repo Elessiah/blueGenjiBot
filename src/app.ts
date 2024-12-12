@@ -1,11 +1,6 @@
 import "dotenv/config";
 import { EmbedBuilder, REST, TextChannel } from "discord.js";
 import { Client, GatewayIntentBits, ChannelType } from "discord.js";
-import { connect } from "./database";
-import Tunnel, { TunnelType } from "./models/Tunnel";
-import * as deepl from "deepl-node";
-import commands from "./app/commands";
-import { putCommands } from "./app/registerCommands";
 
 const { TOKEN, DEEPL_TOKEN } = process.env;
 
