@@ -1,0 +1,11 @@
+OGMsg :
+    id_msg
+    author
+    date
+
+DPMsg :
+    id_msg
+    id_og
+
+ChannelPartner
+    id_channel,

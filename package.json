@@ -1,7 +1,7 @@
 {
-  "name": "discord_bot_test",
-  "type": "module",
-  "version": "1.0.0",
+  "name": "bluegenjibot",
+  "type": "commonjs",
+  "version": "1.0.1",
   "main": "index.js",
   "license": "MIT",
   "dependencies": {
@@ -11,22 +11,17 @@
     "gridfs-stream": "^1.1.1",
     "moment": "^2.30.1",
     "mongoose": "^8.7.0",
-    "ts-node": "^10.9.2"
+    "sqlite": "^5.1.1",
+    "sqlite3": "^5.1.7"
   },
   "devDependencies": {
-    "@eslint/js": "^9.11.1",
-    "@types/express": "^5.0.0",
-    "eslint": "^9.11.1",
     "globals": "^15.10.0",
-    "mongodb": "^6.9.0",
-    "nodemon": "^3.1.7",
-    "tsx": "^4.19.1",
-    "typescript": "^5.6.2"
+    "nodemon": "^3.1.7"
   },
   "scripts": {
-    "start": "node --experimental-specifier-resolution=node --loader ts-node/esm ../blueGenjiBot/src/app.ts",
-    "genToken": "node --experimental-specifier-resolution=node --loader ts-node/esm src/genToken.ts",
-    "dev": "nodemon --exec tsx ../blueGenjiBot/src/app.ts",
+    "start": "node src/app.js",
+    "genToken": "node src/genToken.js",
+    "dev": "nodemon src/app.js",
     "lint": "eslint ."
   }
 }
