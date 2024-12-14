@@ -31,14 +31,13 @@ class Bdd {
   }
 
   async initDatabase() {
-    console.log("OGMsg");
     await this.Database.exec(
         `CREATE TABLE IF NOT EXISTS OGMsg
         (
           id_msg
-          INTEGER,
+          TEXT,
           id_author
-          INTEGER,
+          TEXT,
           date
           DATETIME
           DEFAULT
@@ -50,14 +49,13 @@ class Bdd {
          )
           );`
     );
-    console.log("DPMsg");
     await this.Database.exec(
         `CREATE TABLE IF NOT EXISTS DPMsg
         (
           id_msg
-          INTEGER,
+          TEXT,
           id_og
-          INTEGER,
+          TEXT,
           PRIMARY
           KEY
          (
@@ -65,17 +63,17 @@ class Bdd {
          )
           );`
     );
-    console.log("ChannelPartner");
     await this.Database.exec(
         `CREATE TABLE IF NOT EXISTS ChannelPartner
          (
            id_channel
-           INTEGER
+           TEXT
            PRIMARY
-           KEY
+           KEY,
+           id_guild
+           TEXT
          );`
     );
-    console.log("Service");
     await this.Database.exec(
         `CREATE TABLE IF NOT EXISTS Service
          (
@@ -90,9 +88,15 @@ class Bdd {
            NULL
          );`
     );
-    const services = ['lfs', 'lfc', 'lfsub', 'lft', 'lfp', 'lfstaff', 'lfcast'];
+    const services = ['lfs', 'ta', 'lfsub', 'lft', 'lfp', 'lfstaff', 'lfcast'];
 
     for (const service of services) {
+      const ret = await this.get("Service", ["*"], {}, {name: service});
+      if (!!ret && ret.length > 0)
+        continue;
+      console.log(
+          `Adding "${service}" to the database...`
+      );
       await this.Database.run('INSERT INTO Service (name) VALUES (?)', [service], function (err) {
         if (err) {
           console.error(`Error while adding "${service}":`, err.message);
@@ -101,12 +105,11 @@ class Bdd {
         }
       });
     }
-    console.log("ChannelPartnerService");
     await this.Database.exec(
         `CREATE TABLE IF NOT EXISTS ChannelPartnerService
         (
           id_channel
-          INTEGER
+          TEXT
           NOT
           NULL,
           id_service
@@ -123,108 +126,101 @@ class Bdd {
     );
   }
 
-  async isTableExist(tableName) {
-    const result = await this.Database.get(
-        `SELECT name FROM sqlite_master WHERE type='table' AND name=?`,
-        tableName
-    );
-    return !!result;
-  }
-
-  async get(tableName, elemName, elemValue) {
-    try {
-      const result = await this.Database.get(
-          `SELECT * FROM ${tableName} WHERE ${elemName} = ?`,
-          elemValue
-      );
-      return result;
-    } catch (err) {
-      console.error(`Failed to retrieve data from ${tableName}:`, err);
+  async set(tableName, elemName, value) {
+    if (typeof (elemName) !== typeof (value)) {
+      console.log("The two parameters must be of the same type.");
       return null;
     }
+    if (typeof (elemName) === typeof ("")) {
+      elemName = [elemName];
+      value = [value];
+    } else if (typeof (elemName) !== typeof ([])) {
+      console.log("The parameters must be a string or an array.");
+      return null;
+    }
+    if (elemName.length !== value.length) {
+      console.log("The two parameters must have the same length.");
+      return null;
+    }
+    const names = "(" + elemName.join(", ") + ")";
+    const values = "(" + value.join(", ") + ")";
+    const query = `INSERT INTO ${tableName} ${names} VALUES ${values}`;
+    await this.Database.run(query);
   }
 
-  async setNewOGMsg(id_msg, id_author) {
+  async get(tableName, values = ["*"], joinOptions = {}, whereConditions = {}) {
+    //console.log("Get params: ", tableName, values, joinOptions, whereConditions);
     try {
-      await this.Database.run(
-          `INSERT INTO OGMsg (id_msg, id_author) VALUES (?, ?)`,
-          id_msg,
-          id_author
-      );
+      const stringValues = values.join(", ");
+      let baseQuery = `SELECT ${stringValues}
+                       FROM ${tableName}`;
+      let joinClause = '';
+      let whereClause = '';
+      const ret = [];
+
+      // Handle JOIN ON clauses
+      if (joinOptions && Object.keys(joinOptions).length > 0) {
+        for (const [joinTable, onCondition] of Object.entries(joinOptions)) {
+          joinClause += ` JOIN ${joinTable} ON ${onCondition}`;
+        }
+      }
+
+      // Handle WHERE conditions
+      if (whereConditions && Object.keys(whereConditions).length > 0) {
+        whereClause += ' WHERE ';
+        const conditions = [];
+        for (const [column, value] of Object.entries(whereConditions)) {
+          conditions.push(`${column} = ?`);
+          ret.push(value);
+        }
+        whereClause += conditions.join(' AND ');
+      }
+
+      const query = `${baseQuery}${joinClause}${whereClause}`;
+      const ret_array = Object.values(ret);
+      //console.log("Get_query", query, ret_array);
+      return await this.Database.all(query, ret_array);
     } catch (err) {
-      console.error("Failed to insert into OGMsg:", err);
+      console.error("Error in get method:", err);
+      throw err;
     }
   }
 
-  async setNewDPMsg(id_msg, id_og) {
+  async setNewPartnerChannel(id_channel, id_guild, service_name) {
     try {
-      await this.Database.run(
-          `INSERT INTO DPMsg (id_msg, id_og) VALUES (?, ?)`,
-          id_msg,
-          id_og
-      );
+      let exists = await this.get("ChannelPartner", ["*"], {}, {id_channel: id_channel});
+      if (typeof (exists) === typeof undefined || exists.length === 0) {
+        await this.set("ChannelPartner", ["id_channel", "id_guild"], [id_channel, id_guild]);
+      }
+      const ret_service = await this.get("Service", ["*"], {}, {name: service_name});
+      const id_service = ret_service[0].id_service;
+      exists = await this.get("ChannelPartnerService", ["*"], {}, {id_channel: id_channel, id_service: id_service});
+      if (typeof (exists) !== typeof undefined && exists.length > 0)
+        return {success: false, message: `Channel is already linked to "${service_name}".`};
+      await this.set("ChannelPartnerService", ["id_channel", "id_service"], [id_channel, id_service]);
+      return {success: true, message: 'AllWentFine'};
     } catch (err) {
-      console.error("Failed to insert into DPMsg:", err);
+      return {success: false, message: "I have encountered an error. Please contact elessiah\n" + err.message };
     }
   }
 
-  async setNewPartnerChannel(id_channel, service_name) {
-    console.log("setNewPartnerChannel");
+  async deleteChannelServices(channel_id) {
     try {
-      // Vérifie si le channel existe
-      console.log("1");
-      const exists = await this.Database.get('SELECT 1 FROM ChannelPartner WHERE (id_channel) = (?)', id_channel);
-
-      // Si le channel n'existe pas, l'ajoute
-      console.log("exists : ", exists);
-      if (!(!!exists)) {
-        console.log("2: ", id_channel);
-        await this.Database.exec('INSERT INTO ChannelPartner (id_channel) VALUES (?)', id_channel);
-      }
-
-      // Récupère le service
-      console.log("3");
-      let id_service = await this.Database.get('SELECT id_service FROM Service WHERE name = ?', service_name);
-      if (!id_service) {
-        return { success: false, message: `Service "${service_name}" not found.` };
-      }
-
-      id_service = id_service.id_service
-
-      // Associe le channel avec le service
-      console.log("Id_service : ", id_service);
-      console.log("4");
-      await this.Database.exec(
-          'INSERT INTO ChannelPartnerService (id_channel, id_service) VALUES (?, ?)',
-          id_channel,
-          id_service
-      );
-
-      return { success: true, message: 'AllWentFine' };
+      const exists = await this.get("ChannelPartner", ["*"], {}, {id_channel: channel_id});
+      if (typeof (exists) === typeof undefined || exists.length === 0)
+        return {success: false, message: `Channel has no services to delete.`};
+      let query = `DELETE
+                   FROM ChannelPartnerService
+                   WHERE id_channel = ?`;
+      await this.Database.run(query, [channel_id]);
+      query = `DELETE
+               FROM ChannelPartner
+               WHERE id_channel = ?`;
+      await this.Database.run(query, [channel_id]);
+      return {success: true, message: 'Services deleted.'};
     } catch (err) {
-      console.error("Error encounter in setNewPartnerChannel :", err);
-      return { success: false, message: err.message || 'An error has occurred.' };
-    }
-  }
-
-  async getPartnerChannelsFromServiceName(service_name) {
-    const id_service = await this.Database.get('SELECT id_service FROM Service WHERE name = ?', service_name);
-      if (!id_service) {
-        return {success: false, message: `Service "${service_name}" cannot be found.`};
-      }
-    return (this.getPartnerChannelsFromServiceId(id_service))
-  }
-
-  async getPartnerChannelsFromServiceId(service_id) {
-    try {
-      const channels_id = await this.Database.get(`SELECT ChannelPartner.id_channel
-                                                   FROM ChannelPartner
-                                                          JOIN ChannelPartnerService
-                                                               ON ChannelPartner.id_channel = ChannelPartnerService.id_channel
-                                                   WHERE ChannelPartnerService.id_service = ?`, service_id);
-      return ({success: true, message: channels_id});
-    } catch (err) {
-      return ({success: false, message: err.message || 'Une erreur inconnue est survenue.'});
+      console.log(err);
+      return {success: false, message: 'Failed to delete channel services.'};
     }
   }
 

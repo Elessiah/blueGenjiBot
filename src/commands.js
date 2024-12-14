@@ -1,14 +1,9 @@
 const { CacheType, ChatInputCommandInteraction } = require("discord.js");
-const updateCommands = require("./updateCommands.js");
 const newChannelPartner = require("./newChannelPartner.js");
+const resetChannel = require("./resetChannel");
+const {resetServer} = require("./resetServer");
 
 const commands = {
-    "update-commands": {
-        handler: updateCommands,
-        parameters: {
-            description : "Refresh the commands"
-        }
-    },
     "assign-channel": {
         handler: newChannelPartner,
         parameters: {
@@ -31,8 +26,8 @@ const commands = {
                             value: "lfs"
                         },
                         {
-                            name: "LookForCompetition",
-                            value: "lfc"
+                            name: "TournamentAnnouncement",
+                            value: "ta"
                         },
                         {
                             name: "LookForSub",
@@ -57,6 +52,26 @@ const commands = {
                     ]
                 }
             ]
+        }
+    },
+    "reset-channel": {
+        handler: resetChannel,
+        parameters: {
+            description: "Remove all the service of the channel",
+            options: [
+                {
+                    name: "channel",
+                    description: "Channel you want to assign",
+                    type: 7, // 7 for channel
+                    required: true
+                }
+            ]
+        }
+    },
+    "reset-all": {
+        handler: resetServer,
+        parameters: {
+            description: "Remove all the service of the server",
         }
     }
 }
