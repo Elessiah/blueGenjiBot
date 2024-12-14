@@ -2,12 +2,37 @@ const { CacheType, ChatInputCommandInteraction } = require("discord.js");
 const newChannelPartner = require("./newChannelPartner.js");
 const resetChannel = require("./resetChannel");
 const {resetServer} = require("./resetServer");
+const printHelp = require("./printHelp");
 
 const commands = {
+    "help": {
+      handler: printHelp,
+      parameters: {
+        description: "Print the primary informations of the bot",
+          options: [
+              {
+                  name: "language",
+                  description: "The language you want to read",
+                  type: 3,
+                  required: true,
+                  choices: [
+                      {
+                          name: "English",
+                          value: "en"
+                      },
+                      {
+                          name: "Français",
+                          value: "fr"
+                      }
+                  ]
+              }
+          ]
+      }
+    },
     "assign-channel": {
         handler: newChannelPartner,
         parameters: {
-            description : "Assign a channel for the service you want activate",
+            description : "Assign a channel for the service you want activate (SERVER ADMIN ONLY)",
             options: [
                 {
                     name: "channel",
@@ -57,7 +82,7 @@ const commands = {
     "reset-channel": {
         handler: resetChannel,
         parameters: {
-            description: "Remove all the service of the channel",
+            description: "Remove all the service of the channel (SERVER ADMIN ONLY)",
             options: [
                 {
                     name: "channel",
@@ -71,7 +96,7 @@ const commands = {
     "reset-all": {
         handler: resetServer,
         parameters: {
-            description: "Remove all the service of the server",
+            description: "Remove all the service of the server (SERVER ADMIN ONLY)",
         }
     }
 }
