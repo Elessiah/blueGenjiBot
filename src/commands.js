@@ -8,7 +8,7 @@ const commands = {
     "help": {
       handler: printHelp,
       parameters: {
-        description: "Print the primary informations of the bot",
+        description: "Send you in private the primary informations of the bot",
           options: [
               {
                   name: "language",

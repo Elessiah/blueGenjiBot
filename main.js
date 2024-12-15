@@ -59,10 +59,16 @@ client.on("guildCreate", async guild => {
     await updateCommands(guild.id);
     const owner = await client.users.fetch(ownerId);
     await owner.send('Bot has join a new server : ' + guild.name);
+    const admin_channel = await client.channels.fetch(process.env.INFO_SERV);
+    await admin_channel.send('Bot has join a new server : ' + guild.name);
 });
 
 client.on("guildDelete", async guild => {
     await _resetServer(guild.id);
+    const owner = await client.users.fetch(ownerId);
+    await owner.send('Bot has leave : ' + guild.name);
+    const admin_channel = await client.channels.fetch(process.env.INFO_SERV);
+    await admin_channel.send('Bot has leave : ' + guild.name);
 })
 
 client.login(process.env.TOKEN);
