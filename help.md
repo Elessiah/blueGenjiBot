@@ -17,7 +17,9 @@ For BlueGenji, there are some updates incoming:
 
 ## How it works
 
-*All the commands except `/help` require administrator permission to be used*.
+*All the commands except `/help` and `/list-partner` require administrator permission to be used*.
+
+`/list-partner` allow you to see all the channels link to a service.
 
 You can add a `service` *(list below)* to a text channel, then any message sent in this channel with the `signature` of the service will be sent to all the other channels added by the community with the same service, and you will receive their messages.
 

@@ -3,12 +3,13 @@ const newChannelPartner = require("./newChannelPartner.js");
 const resetChannel = require("./resetChannel");
 const {resetServer} = require("./resetServer");
 const printHelp = require("./printHelp");
+const {listPartner} = require("./listPartner");
 
 const commands = {
     "help": {
       handler: printHelp,
       parameters: {
-        description: "Send you in private the primary informations of the bot",
+        description: "Send you in private the primary informations of the bot (EVERYONE)",
           options: [
               {
                   name: "language",
@@ -28,6 +29,50 @@ const commands = {
               }
           ]
       }
+    },
+    "list-partner": {
+        handler: listPartner,
+        parameters: {
+            description: "List all the servers with the service activated (EVERYONE)",
+            options: [
+                {
+                    name: "service",
+                    description: "Service you want to list",
+                    type: 3,
+                    required: true,
+                    choices: [
+                        {
+                            name: "LookForScrim",
+                            value: "lfs"
+                        },
+                        {
+                            name: "TournamentAnnouncement",
+                            value: "ta"
+                        },
+                        {
+                            name: "LookForSub",
+                            value: "lfsub"
+                        },
+                        {
+                            name: "LookForTeam",
+                            value: "lft"
+                        },
+                        {
+                            name: "LookForPlayer",
+                            value: "lfp"
+                        },
+                        {
+                            name: "LookForStaff",
+                            value: "lfstaff"
+                        },
+                        {
+                            name: "LookForCast",
+                            value: "lfcast"
+                        }
+                    ]
+                }
+            ]
+        }
     },
     "assign-channel": {
         handler: newChannelPartner,

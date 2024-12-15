@@ -14,6 +14,10 @@ const client = new Client({
     ],
 });
 
+async function getClientInstance() {
+    return client;
+}
+
 const ownerId = process.env.OWNER_ID;
 
 client.on("interactionCreate", async interaction => {
@@ -58,17 +62,29 @@ client.on("ready", async () => {
 client.on("guildCreate", async guild => {
     await updateCommands(guild.id);
     const owner = await client.users.fetch(ownerId);
-    await owner.send('Bot has join a new server : ' + guild.name);
-    const admin_channel = await client.channels.fetch(process.env.INFO_SERV);
-    await admin_channel.send('Bot has join a new server : ' + guild.name);
+    try {
+        await owner.send('Bot has join a new server : ' + guild.name);
+        const admin_channel = await client.channels.fetch(process.env.INFO_SERV);
+        await admin_channel.send('Bot has join a new server : ' + guild.name);
+    } catch (error) {
+        console.log(error);
+    }
 });
 
 client.on("guildDelete", async guild => {
     await _resetServer(guild.id);
-    const owner = await client.users.fetch(ownerId);
-    await owner.send('Bot has leave : ' + guild.name);
-    const admin_channel = await client.channels.fetch(process.env.INFO_SERV);
-    await admin_channel.send('Bot has leave : ' + guild.name);
+    try {
+        const owner = await client.users.fetch(ownerId);
+        await owner.send('Bot has leave : ' + guild.name);
+        const admin_channel = await client.channels.fetch(process.env.INFO_SERV);
+        await admin_channel.send('Bot has leave : ' + guild.name);
+    } catch (error) {
+        console.log(error);
+    }
 })
 
 client.login(process.env.TOKEN);
+
+module.exports = {
+    getClientInstance
+}
