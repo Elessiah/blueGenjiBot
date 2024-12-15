@@ -20,7 +20,8 @@ const newChannelPartner = async(interaction) => {
     }
     try {
         const result = await bdd.setNewPartnerChannel(channel_id, interaction.guild.id, service_name);
-        if (result.success) {
+        console.log(result);
+        if (result.success === true) {
             const channel = interaction.guild.channels.cache.get(channel_id);
             await interaction.reply({content: `Service "${service_name}" added on "${channel.name}"`, ephemeral: true});
             const message = `This channel is now linked to the service \`${service_name.toUpperCase()}\`\nTo be shared, your message must contain the word \`${service_name.toUpperCase()}\``
