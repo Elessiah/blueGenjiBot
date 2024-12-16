@@ -7,26 +7,32 @@ const _resetServer = async(guild_id) => {
         console.log("Bdd failed !");
         return;
     }
-    try {
-        const channels_id = await bdd.get("channelPartner", ["id_channel"], {}, {id_guild: guild_id});
-        let message = "";
-        let success = true;
-        for (const channel_id of channels_id) {
-            const ret = await bdd.deleteChannelServices(channel_id.id_channel);
-            if (!ret.success) {
-                success = false;
-                message += ret.message + "\n";
+    let err_msg = "";
+    let nTry = 0;
+    while (nTry < 10) {
+        try {
+            const channels_id = await bdd.get("channelPartner", ["id_channel"], {}, {id_guild: guild_id});
+            let message = "";
+            let success = true;
+            for (const channel_id of channels_id) {
+                const ret = await bdd.deleteChannelServices(channel_id.id_channel);
+                if (!ret.success) {
+                    success = false;
+                    message += ret.message + "\n";
+                }
             }
+            if (success) {
+                return {success: true, message: "Server reseted."};
+            } else {
+                return {success: false, message: message};
+            }
+        } catch (err) {
+            console.log(err);
+            err_msg = err.message;
         }
-        if (success) {
-            return { success: true, message: "Server reseted." };
-        } else {
-            return { success: false, message: message };
-        }
-    } catch (err) {
-        console.log(err);
-        return { success: false, message: "No service found on this server !" };
+        nTry++;
     }
+    return {success: false, message: err_msg};
 }
 
 const resetServer = async(interaction) => {

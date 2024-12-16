@@ -25,6 +25,7 @@ const newChannelPartner = async(interaction) => {
             const channel = await interaction.guild.channels.cache.get(channel_id);
             let nTry = 0;
             let success = false;
+            let error_message = "";
             while (nTry < 10 && success === false) {
                 try {
                     await interaction.reply({
@@ -33,13 +34,17 @@ const newChannelPartner = async(interaction) => {
                     });
                     success = true;
                 } catch (err) {
-                    const owner = await client.users.fetch(process.env.OWNER_ID);
-                    await owner.send("newChannelPartner Interaction reply: \n" + err.message);
                     nTry++;
+                    error_message = err.message;
                 }
+            }
+            if (nTry === 10) {
+                const owner = await client.users.fetch(process.env.OWNER_ID);
+                await owner.send("newChannelPartner Interaction reply: \n" + error_message);
             }
             nTry = 0;
             success = false;
+            error_message = "";
             while (nTry < 10 && success === false) {
                 try {
                     const message = `This channel is now linked to the service \`${service_name.toUpperCase()}\`\nTo be shared, your message must contain the word \`${service_name.toUpperCase()}\``
@@ -47,10 +52,13 @@ const newChannelPartner = async(interaction) => {
                     await channel.send({embeds: [embed]});
                     success = true;
                 } catch (err) {
-                    const owner = await client.users.fetch(process.env.OWNER_ID);
-                    await owner.send("newChannelPartner channel announcement: \n" + err.message);
                     nTry++;
+                    error_message = err.message;
                 }
+            }
+            if (nTry === 10) {
+                const owner = await client.users.fetch(process.env.OWNER_ID);
+                await owner.send("newChannelPartner channel announcement: \n" + error_message);
             }
         } else {
             await interaction.reply({content: result.message, ephemeral: true});

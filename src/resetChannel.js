@@ -14,15 +14,27 @@ const resetChannel = async(interaction) => {
         await interaction.reply({content: "Bdd failed !", ephemeral: true});
         return;
     }
-    try {
-        const ret = await bdd.deleteChannelServices(channel_id);
-        if (ret.success) {
-            await interaction.reply({content: `Channel "${interaction.channel.name}" reseted`, ephemeral: true})
-        } else {
-            await interaction.reply({content: ret.message, ephemeral: true})
+    let err_msg = "";
+    let success = false;
+    let nTry = 0;
+    while (nTry < 10 && success === false) {
+        try {
+            const ret = await bdd.deleteChannelServices(channel_id);
+            if (ret.success) {
+                await interaction.reply({content: `Channel "${interaction.channel.name}" reseted`, ephemeral: true})
+            } else {
+                await interaction.reply({content: ret.message, ephemeral: true})
+            }
+            success = true;
+        } catch (err) {
+            err_msg = err.message;
+            nTry++;
         }
-    } catch (err) {
-        await interaction.reply({content: err.message + "\n Please contact elessiah", ephemeral: true});
+    }
+    if (nTry === 10) {
+        await interaction.reply({content: err_msg + "\n Please contact elessiah", ephemeral: true});
+        const owner = await interaction.client.users.fetch(process.env.OWNER_ID);
+        await owner.send("resetChannel Interaction reply: \n" + err_msg);
     }
 }
 
