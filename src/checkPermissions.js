@@ -1,10 +1,11 @@
 async function checkPermissions(interaction) {
     try {
-        return !((!interaction.member || !interaction.member.permissions ||
-            !interaction.member.permissions.has("ADMINISTRATOR")) && interaction.member.id !== process.env.OWNER_ID);
+        const member = interaction.guild.members.cache.get(interaction.user.id);
+        return !((member.permissions.has("ADMINISTRATOR")) && interaction.member.id !== process.env.OWNER_ID);
     } catch (e) {
         console.log(e);
-        return false;
+        return interaction.member.id === process.env.OWNER_ID;
+
     }
 }
 
