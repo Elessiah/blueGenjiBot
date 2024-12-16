@@ -23,19 +23,34 @@ const newChannelPartner = async(interaction) => {
         const result = await bdd.setNewPartnerChannel(channel_id, interaction.guild.id, service_name);
         if (result.success === true) {
             const channel = await interaction.guild.channels.cache.get(channel_id);
-            try {
-                await interaction.reply({content: `Service "${service_name}" added on "${channel.name}"`, ephemeral: true});
-            } catch (err) {
-                const owner = await client.users.cache.get(process.env.OWNER_ID);
-                await owner.send("newChannelPartner Interaction reply: \n" + err.message);
+            let nTry = 0;
+            let success = false;
+            while (nTry < 10 && success === false) {
+                try {
+                    await interaction.reply({
+                        content: `Service "${service_name}" added on "${channel.name}"`,
+                        ephemeral: true
+                    });
+                    success = true;
+                } catch (err) {
+                    const owner = await client.users.cache.get(process.env.OWNER_ID);
+                    await owner.send("newChannelPartner Interaction reply: \n" + err.message);
+                    nTry++;
+                }
             }
-            try {
-                const message = `This channel is now linked to the service \`${service_name.toUpperCase()}\`\nTo be shared, your message must contain the word \`${service_name.toUpperCase()}\``
-                const embed = new EmbedBuilder().setAuthor({name: "BlueGenjiBot"}).setDescription(message);
-                await channel.send({embeds: [embed]});
-            } catch (err) {
-                const owner = await client.users.cache.get(process.env.OWNER_ID);
-                await owner.send("newChannelPartner channel announcement: \n" + err.message);
+            nTry = 0;
+            success = false;
+            while (nTry < 10 && success === false) {
+                try {
+                    const message = `This channel is now linked to the service \`${service_name.toUpperCase()}\`\nTo be shared, your message must contain the word \`${service_name.toUpperCase()}\``
+                    const embed = new EmbedBuilder().setAuthor({name: "BlueGenjiBot"}).setDescription(message);
+                    await channel.send({embeds: [embed]});
+                    success = true;
+                } catch (err) {
+                    const owner = await client.users.cache.get(process.env.OWNER_ID);
+                    await owner.send("newChannelPartner channel announcement: \n" + err.message);
+                    nTry++;
+                }
             }
         } else {
             await interaction.reply({content: result.message, ephemeral: true});
