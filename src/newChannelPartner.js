@@ -1,7 +1,7 @@
 const {ChatInputCommandInteraction, PermissionsBitField, EmbedBuilder} = require("discord.js");
 const {getBddInstance} = require("./Bdd");
 const checkPermissions = require("./checkPermissions");
-const getClientInstance = require("../main");
+const client = require("../main")
 
 /**
  * @param {ChatInputCommandInteraction<Cache>} interaction
@@ -26,7 +26,6 @@ const newChannelPartner = async(interaction) => {
             try {
                 await interaction.reply({content: `Service "${service_name}" added on "${channel.name}"`, ephemeral: true});
             } catch (err) {
-                const client = await getClientInstance();
                 const owner = await client.users.cache.get(process.env.OWNER_ID);
                 await owner.send("newChannelPartner Interaction reply: \n" + err.message);
             }
@@ -35,7 +34,6 @@ const newChannelPartner = async(interaction) => {
                 const embed = new EmbedBuilder().setAuthor({name: "BlueGenjiBot"}).setDescription(message);
                 await channel.send({embeds: [embed]});
             } catch (err) {
-                const client = await getClientInstance();
                 const owner = await client.users.cache.get(process.env.OWNER_ID);
                 await owner.send("newChannelPartner channel announcement: \n" + err.message);
             }

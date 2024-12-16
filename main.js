@@ -14,10 +14,6 @@ const client = new Client({
     ],
 });
 
-async function getClientInstance() {
-    return client;
-}
-
 const ownerId = process.env.OWNER_ID;
 
 client.on("interactionCreate", async interaction => {
@@ -85,4 +81,4 @@ client.on("guildDelete", async guild => {
 
 client.login(process.env.TOKEN);
 
-module.exports = getClientInstance;
+module.exports = client;
