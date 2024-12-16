@@ -17,7 +17,9 @@ Pour la structure BlueGenji, quelques mises à jour sont prévues :
 
 ## Comment cela fonctionne
 
-*Toutes les commandes sauf `/help` nécessitent des permissions administrateur pour être utilisées*.
+*Toutes les commandes sauf `/help` et `/list-partner` nécessitent des permissions administrateur pour être utilisées*.
+
+`/list-partner` permet de voir tout les serveurs qui ont activé le service mis en paramètre.
 
 Vous pouvez ajouter à un canal texte un `service` *(liste ci-dessous)*, puis tout message envoyé dans ce canal avec la `signature` du service sera envoyé à tous les autres canaux ajoutés par la communauté avec le même service, et vous recevrez leurs messages.
 

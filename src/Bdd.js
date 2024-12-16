@@ -11,12 +11,12 @@ async function getBddInstance() {
 }
 
 class Bdd {
-  constructor(name) {
+  constructor(name='./database.sqlite') {
     this.name = name;
     this.Database = null;
   }
 
-  static async create(name) {
+  static async create(name='./database.sqlite') {
     const instance = new Bdd(name);
     await instance.init();
     return instance;
