@@ -85,6 +85,4 @@ client.on("guildDelete", async guild => {
 
 client.login(process.env.TOKEN);
 
-module.exports = {
-    getClientInstance
-}
+module.exports = getClientInstance;
