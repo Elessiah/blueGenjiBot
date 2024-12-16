@@ -33,7 +33,7 @@ const newChannelPartner = async(interaction) => {
                     });
                     success = true;
                 } catch (err) {
-                    const owner = await client.users.cache.get(process.env.OWNER_ID);
+                    const owner = await client.users.fetch(process.env.OWNER_ID);
                     await owner.send("newChannelPartner Interaction reply: \n" + err.message);
                     nTry++;
                 }
@@ -47,7 +47,7 @@ const newChannelPartner = async(interaction) => {
                     await channel.send({embeds: [embed]});
                     success = true;
                 } catch (err) {
-                    const owner = await client.users.cache.get(process.env.OWNER_ID);
+                    const owner = await client.users.fetch(process.env.OWNER_ID);
                     await owner.send("newChannelPartner channel announcement: \n" + err.message);
                     nTry++;
                 }
