@@ -1,4 +1,4 @@
-import sendLog from "./sendLog";
+const sendLog = require("./sendLog");
 
 async function safeFollowUp(interaction=null, content="Empty FollowUp", is_ephemeral=true) {
     if (interaction === null) {
@@ -17,7 +17,7 @@ async function safeFollowUp(interaction=null, content="Empty FollowUp", is_ephem
         }
     }
     if (nTry === 10) {
-        await sendLog("safeFollowUp failed : " + err_msg);
+        await sendLog(interaction.client,"safeFollowUp failed : " + err_msg);
         return false;
     }
     return true;

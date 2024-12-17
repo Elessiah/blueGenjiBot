@@ -1,6 +1,6 @@
-import sendLog from "./sendLog";
+const sendLog = require("./sendLog");
 
-async function safeChannelEmbed(channel=null, embed=null) {
+async function safeChannelEmbed(client, channel=null, embed=null) {
     let nTry = 0;
     let success = false;
     let err_msg = "";

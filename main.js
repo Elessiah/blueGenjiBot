@@ -7,16 +7,16 @@ const manageDistribution = require("./src/manageDistribution");
 const {_resetServer} = require("./src/resetServer");
 const sendLog = require("./src/safe/sendLog");
 const safeReply = require("./src/safe/safeReply");
+const {_resetChannel} = require("./src/resetChannel");
 
 const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds, // Nécessaire pour recevoir les événements des serveurs (guilds)
-        GatewayIntentBits.GuildMessages, // Pour les messages
-        GatewayIntentBits.MessageContent  // Pour accéder au contenu des messages
-    ],
-});
+            intents: [
+                GatewayIntentBits.Guilds, // Nécessaire pour recevoir les événements des serveurs (guilds)
+                GatewayIntentBits.GuildMessages, // Pour les messages
+                GatewayIntentBits.MessageContent  // Pour accéder au contenu des messages
+            ],
+        });
 
-const ownerId = process.env.OWNER_ID;
 
 client.on("interactionCreate", async interaction => {
     if (!interaction.isCommand() || !interaction)
@@ -24,11 +24,10 @@ client.on("interactionCreate", async interaction => {
     const { commandName } = interaction;
     const command = commands[commandName];
     if (!command) {
-        await safeReply("Command not found");
-        await interaction.reply({ content: 'Command not found', ephemeral: true });
-        return;
+        return await safeReply("Command not found");
     }
-    command.handler(interaction, interaction.guildId);
+    console.log("Command : " + command.handler);
+    await command.handler(client, interaction, interaction.guildId);
 });
 
 client.on("messageCreate", async message => {
@@ -48,26 +47,24 @@ client.on("messageCreate", async message => {
 
 client.on("ready", async () => {
     for (const guild of client.guilds.cache.values()) {
-        await updateCommands(guild.id);
+        await updateCommands(client, guild.id);
     }
-    await sendLog(ownerId, 'Bot just started! (If it\'s not a restart it\'s a crash)');
+    await sendLog(client, 'Bot just started! (If it\'s not a restart it\'s a crash)');
 });
 
 client.on("guildCreate", async guild => {
-    await updateCommands(guild.id);
-    await sendLog(guild.id, 'Bot has join : ' + guild.name);
+    await updateCommands(client, guild.id);
+    await sendLog(client,'Bot has join : ' + guild.name);
 });
 
 client.on("guildDelete", async guild => {
-    await _resetServer(guild.id);
-    await sendLog(guild.id, 'Bot has leave : ' + guild.name);
+    await _resetServer(client, guild.id);
+    await sendLog(client,'Bot has leave : ' + guild.name);
 })
 
 client.on("channelDelete", async channel => {
-    await _resetServer(channel.guild.id);
+    await _resetChannel(client, channel.id);
 
 })
 
 client.login(process.env.TOKEN);
-
-module.exports = client;

@@ -1,4 +1,4 @@
-import sendLog from "./sendLog";
+const sendLog = require("./sendLog");
 
 async function safeReply(interaction=null, content="Empty Reply", is_ephemeral=true) {
     if (interaction === null) {
@@ -17,7 +17,7 @@ async function safeReply(interaction=null, content="Empty Reply", is_ephemeral=t
         }
     }
     if (nTry === 10) {
-        await sendLog("safeReply failed : " + err_msg);
+        await sendLog(interaction.client, "safeReply failed : " + err_msg);
         return false;
     }
     return true;

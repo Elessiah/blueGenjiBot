@@ -1,6 +1,6 @@
 const { CacheType, ChatInputCommandInteraction } = require("discord.js");
 const newChannelPartner = require("./newChannelPartner.js");
-const resetChannel = require("./resetChannel");
+const { resetChannel } = require("./resetChannel");
 const {resetServer} = require("./resetServer");
 const printHelp = require("./printHelp");
 const {listPartner} = require("./listPartner");

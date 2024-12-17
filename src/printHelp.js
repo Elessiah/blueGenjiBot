@@ -2,7 +2,7 @@ const fs = require('fs').promises;
 const safeReply = require('./safe/safeReply');
 const sendLog = require("./safe/sendLog");
 
-const printHelp = async(interaction) => {
+const printHelp = async(client, interaction) => {
     try {
         const lang = interaction.options.getString("language");
         let help;
@@ -21,7 +21,7 @@ const printHelp = async(interaction) => {
             await safeReply(interaction, help, true);
     } catch (err) {
         await safeReply(interaction, err.message + "\n Please contact elessiah", true);
-        await sendLog("Print help error : \n" + err);
+        await sendLog(client, "Print help error : \n" + err);
     }
 }
 

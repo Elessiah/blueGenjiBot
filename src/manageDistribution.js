@@ -1,5 +1,6 @@
 const {EmbedBuilder} = require("discord.js");
 const safeChannelEmbed = require("./safe/safeChannelEmbed");
+const sendLog = require("./safe/sendLog");
 
 async function manageDistribution(message, client, bdd, channelId, services) {
     try {
@@ -20,7 +21,7 @@ async function manageDistribution(message, client, bdd, channelId, services) {
                         name: message.author.username,
                         iconURL: message.author.displayAvatarURL(),
                     }).setDescription(message.content);
-                    await safeChannelEmbed(channel, embed)
+                    await safeChannelEmbed(client, channel, embed)
                 }
             }
         }
@@ -28,8 +29,7 @@ async function manageDistribution(message, client, bdd, channelId, services) {
             await message.react("🛰️");
         }
     } catch (err) {
-        const owner = await client.users.fetch(process.env.OWNER_ID);
-        await owner.send("manageDistribution: \n" + err);
+        await sendLog(client, "manageDistribution error : \n" + err);
     }
 }
 

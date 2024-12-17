@@ -4,10 +4,10 @@ const client = require("../main")
 const sendLog = require("./safe/sendLog");
 const safeReply = require("./safe/safeReply");
 
-const _resetChannel = async(channel_id) => {
+const _resetChannel = async(client, channel_id) => {
     const bdd = await getBddInstance();
     if (!bdd) {
-        await sendLog("Bdd failed in _resetChannel!");
+        await sendLog(client, "Bdd failed in _resetChannel!");
         return {success: false, message: "Bdd failed !"};
     }
     let err_msg = "";
@@ -21,7 +21,7 @@ const _resetChannel = async(channel_id) => {
                     let guild = await client.channels.fetch(channel_id);
                     guild = guild.guild;
                     const content = 'A service has been unlinked from a channel of ' + guild.name + '.';
-                    await sendLog(content);
+                    await sendLog(client, content);
                     return {success: true, message: `Channel reseted`};
                 } catch (error) {
                     nTry++;
@@ -39,18 +39,19 @@ const _resetChannel = async(channel_id) => {
     }
 }
 
-const resetChannel = async(interaction) => {
+const resetChannel = async(client, interaction) => {
     if (!await checkPermissions(interaction)) {
         return await safeReply(interaction, "You don't have the permission to do this.", true);
     }
     const channel_id = await interaction.options.getChannel("channel").id;
-    let ret = await _resetChannel(channel_id);
+    let ret = await _resetChannel(client, channel_id);
     if (typeof ret === typeof undefined) {
-        await sendLog("resetChannel failed with no error message");
+        await sendLog(interaction.client, "resetChannel failed with no error message");
         return false;
     }
     if (ret.success === false) {
-        await sendLog("resetChannel failed : \n" + ret.message);
+        if (ret.message !== "Channel has no services to delete.")
+            await sendLog(interaction.client, "resetChannel failed : \n" + ret.message);
     }
     return await safeReply(interaction, ret.message);
 }

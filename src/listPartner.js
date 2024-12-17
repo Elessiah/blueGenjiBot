@@ -2,10 +2,10 @@ const {getBddInstance} = require("./Bdd");
 const sendLog = require("./safe/sendLog");
 const safeReply = require("./safe/safeReply");
 
-const listPartner = async(interaction) => {
+const listPartner = async(client, interaction) => {
     const bdd = await getBddInstance();
     if (!bdd) {
-        await sendLog("Bdd failed in ListPartner!");
+        await sendLog(client, "Bdd failed in ListPartner!");
         return;
     }
     const service_name = interaction.options.getString("service");
@@ -15,7 +15,6 @@ const listPartner = async(interaction) => {
         {name: service_name}
     );
     let guilds = [];
-    const client = interaction.client;
     for (const channel_id of channels_id) {
         try {
             const channel = await client.channels.fetch(channel_id.id_channel);

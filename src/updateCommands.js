@@ -3,7 +3,7 @@ require('dotenv').config();
 const commands = require('./commands.js');
 const sendLog = require("./safe/sendLog");
 
-const updateCommands = async(guildId) => {
+const updateCommands = async(client, guildId) => {
     const { TOKEN, CLIENT_ID } = process.env;
     const rest = new REST({ version: "10" }).setToken(TOKEN);
 
@@ -20,7 +20,8 @@ const updateCommands = async(guildId) => {
             }
         );
     } catch (error) {
-        await sendLog("Update Commands : \n " + error.message);
+
+        await sendLog(client, "Update Commands : \n " + error.message);
     }
 }
 
