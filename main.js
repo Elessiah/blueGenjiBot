@@ -5,6 +5,8 @@ const {updateCommands} = require("./src/updateCommands.js");
 const commands = require("./src/commands");
 const manageDistribution = require("./src/manageDistribution");
 const {_resetServer} = require("./src/resetServer");
+const sendLog = require("./src/safe/sendLog");
+const safeReply = require("./src/safe/safeReply");
 
 const client = new Client({
     intents: [
@@ -22,7 +24,8 @@ client.on("interactionCreate", async interaction => {
     const { commandName } = interaction;
     const command = commands[commandName];
     if (!command) {
-        interaction.reply({ content: 'Command not found', ephemeral: true });
+        await safeReply("Command not found");
+        await interaction.reply({ content: 'Command not found', ephemeral: true });
         return;
     }
     command.handler(interaction, interaction.guildId);
@@ -47,36 +50,22 @@ client.on("ready", async () => {
     for (const guild of client.guilds.cache.values()) {
         await updateCommands(guild.id);
     }
-    const owner = await client.users.fetch(ownerId);
-    try {
-        await owner.send('Bot is ready!');
-    } catch (error) {
-        console.error('Failed to send message to owner:', error);
-    }
+    await sendLog(ownerId, 'Bot just started! (If it\'s not a restart it\'s a crash)');
 });
 
 client.on("guildCreate", async guild => {
     await updateCommands(guild.id);
-    const owner = await client.users.fetch(ownerId);
-    try {
-        await owner.send('Bot has join a new server : ' + guild.name);
-        const admin_channel = await client.channels.fetch(process.env.INFO_SERV);
-        await admin_channel.send('Bot has join a new server : ' + guild.name);
-    } catch (error) {
-        console.log(error);
-    }
+    await sendLog(guild.id, 'Bot has join : ' + guild.name);
 });
 
 client.on("guildDelete", async guild => {
     await _resetServer(guild.id);
-    try {
-        const owner = await client.users.fetch(ownerId);
-        await owner.send('Bot has leave : ' + guild.name);
-        const admin_channel = await client.channels.fetch(process.env.INFO_SERV);
-        await admin_channel.send('Bot has leave : ' + guild.name);
-    } catch (error) {
-        console.log(error);
-    }
+    await sendLog(guild.id, 'Bot has leave : ' + guild.name);
+})
+
+client.on("channelDelete", async channel => {
+    await _resetServer(channel.guild.id);
+
 })
 
 client.login(process.env.TOKEN);

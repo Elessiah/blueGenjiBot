@@ -1,4 +1,6 @@
 const fs = require('fs').promises;
+const safeReply = require('./safe/safeReply');
+const sendLog = require("./safe/sendLog");
 
 const printHelp = async(interaction) => {
     try {
@@ -10,15 +12,16 @@ const printHelp = async(interaction) => {
             help = await fs.readFile('./helpfr.md', 'utf8');
         if (help.length > 2000) {
             const msgs = help.split("##");
-            await interaction.reply({content: "Showing help in " + lang + " language"})
+            await safeReply(interaction, "Showing help in " + lang + " language", true);
             for (const msg of msgs) {
-                await interaction.followUp({content: "##" + msg});
+                await safeReply(interaction, "##" + msg, true);
             }
         }
         else
-            await interaction.reply({content: help});
+            await safeReply(interaction, help, true);
     } catch (err) {
-        await interaction.reply({content: err.message + "\n Please contact elessiah", ephemeral: true});
+        await safeReply(interaction, err.message + "\n Please contact elessiah", true);
+        await sendLog("Print help error : \n" + err);
     }
 }
 

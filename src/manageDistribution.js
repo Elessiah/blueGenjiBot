@@ -1,4 +1,5 @@
 const {EmbedBuilder} = require("discord.js");
+const safeChannelEmbed = require("./safe/safeChannelEmbed");
 
 async function manageDistribution(message, client, bdd, channelId, services) {
     try {
@@ -19,7 +20,7 @@ async function manageDistribution(message, client, bdd, channelId, services) {
                         name: message.author.username,
                         iconURL: message.author.displayAvatarURL(),
                     }).setDescription(message.content);
-                    await channel.send({embeds: [embed]});
+                    await safeChannelEmbed(channel, embed)
                 }
             }
         }

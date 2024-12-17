@@ -1,6 +1,7 @@
 const { REST, Routes } = require('discord.js');
 require('dotenv').config();
 const commands = require('./commands.js');
+const sendLog = require("./safe/sendLog");
 
 const updateCommands = async(guildId) => {
     const { TOKEN, CLIENT_ID } = process.env;
@@ -19,7 +20,7 @@ const updateCommands = async(guildId) => {
             }
         );
     } catch (error) {
-        console.error(error);
+        await sendLog("Update Commands : \n " + error.message);
     }
 }
 

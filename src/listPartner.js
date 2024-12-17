@@ -1,9 +1,11 @@
 const {getBddInstance} = require("./Bdd");
+const sendLog = require("./safe/sendLog");
+const safeReply = require("./safe/safeReply");
 
 const listPartner = async(interaction) => {
     const bdd = await getBddInstance();
     if (!bdd) {
-        console.log("Bdd failed !");
+        await sendLog("Bdd failed in ListPartner!");
         return;
     }
     const service_name = interaction.options.getString("service");
@@ -23,7 +25,7 @@ const listPartner = async(interaction) => {
         }
     }
     const content = `List of all affiliated servers for service ${service_name} : \n` + guilds.join("\n");
-    await interaction.reply({content: content, ephemeral: true});
+    await safeReply(interaction, content, true);
 }
 
 module.exports = { listPartner };

@@ -1,10 +1,13 @@
 const {getBddInstance} = require("./Bdd");
 const checkPermissions = require("./checkPermissions");
+const client = require("../main");
+const sendLog = require("./safe/sendLog");
+const safeReply = require("./safe/safeReply");
 
 const _resetServer = async(guild_id) => {
     const bdd = await getBddInstance();
     if (!bdd) {
-        console.log("Bdd failed !");
+        await sendLog("Bdd failed in ResetServer!");
         return;
     }
     let err_msg = "";
@@ -22,7 +25,14 @@ const _resetServer = async(guild_id) => {
                 }
             }
             if (success) {
-                return {success: true, message: "Server reseted."};
+                try {
+                    const guild = await client.guilds.fetch(guild_id);
+                    await sendLog(`Server "${guild.name}" has deleted all services.`);
+                    return {success: true, message: "Server reseted."};
+                }
+                catch (error) {
+                    console.log(error);
+                }
             } else {
                 return {success: false, message: message};
             }
@@ -37,14 +47,14 @@ const _resetServer = async(guild_id) => {
 
 const resetServer = async(interaction) => {
     if (!await checkPermissions(interaction)) {
-        await interaction.reply({ content: "You don't have the permission to do this.", ephemeral: true });
-        return;
+        return await safeReply(interaction, "You don't have the permission to do this.", true);
     }
     const ret = await _resetServer(interaction.guildId);
     if (ret.success) {
         await interaction.reply({content: `Server "${interaction.guild.name}" reseted`, ephemeral: true})
     } else {
-        await interaction.reply({content: ret.message, ephemeral: true})
+        await sendLog("ResetServer has failed :\n" + ret.message);
+        await safeReply(interaction, "Reset has failed. Please try again.", true);
     }
 }
 

@@ -1,18 +1,14 @@
 const {getBddInstance} = require("./Bdd");
 const checkPermissions = require("./checkPermissions");
+const client = require("../main")
+const sendLog = require("./safe/sendLog");
+const safeReply = require("./safe/safeReply");
 
-const resetChannel = async(interaction) => {
-    if (!await checkPermissions(interaction)) {
-        await interaction.reply({ content: "You don't have the permission to do this.", ephemeral: true });
-        return;
-    }
-    const channel_id = await interaction.options.getChannel("channel").id;
-
+const _resetChannel = async(channel_id) => {
     const bdd = await getBddInstance();
     if (!bdd) {
-        console.log("Bdd failed !");
-        await interaction.reply({content: "Bdd failed !", ephemeral: true});
-        return;
+        await sendLog("Bdd failed in _resetChannel!");
+        return {success: false, message: "Bdd failed !"};
     }
     let err_msg = "";
     let success = false;
@@ -21,21 +17,42 @@ const resetChannel = async(interaction) => {
         try {
             const ret = await bdd.deleteChannelServices(channel_id);
             if (ret.success) {
-                await interaction.reply({content: `Channel "${interaction.channel.name}" reseted`, ephemeral: true})
+                try {
+                    let guild = await client.channels.fetch(channel_id);
+                    guild = guild.guild;
+                    const content = 'A service has been unlinked from a channel of ' + guild.name + '.';
+                    await sendLog(content);
+                    return {success: true, message: `Channel reseted`};
+                } catch (error) {
+                    nTry++;
+                }
             } else {
-                await interaction.reply({content: ret.message, ephemeral: true})
+                return {success: false, message: ret.message};
             }
-            success = true;
         } catch (err) {
             err_msg = err.message;
             nTry++;
         }
     }
     if (nTry === 10) {
-        await interaction.reply({content: err_msg + "\n Please contact elessiah", ephemeral: true});
-        const owner = await interaction.client.users.fetch(process.env.OWNER_ID);
-        await owner.send("resetChannel Interaction reply: \n" + err_msg);
+        return { success: false, message: err_msg + "\n Please contact elessiah" };
     }
 }
 
-module.exports = resetChannel;
+const resetChannel = async(interaction) => {
+    if (!await checkPermissions(interaction)) {
+        return await safeReply(interaction, "You don't have the permission to do this.", true);
+    }
+    const channel_id = await interaction.options.getChannel("channel").id;
+    let ret = await _resetChannel(channel_id);
+    if (typeof ret === typeof undefined) {
+        await sendLog("resetChannel failed with no error message");
+        return false;
+    }
+    if (ret.success === false) {
+        await sendLog("resetChannel failed : \n" + ret.message);
+    }
+    return await safeReply(interaction, ret.message);
+}
+
+module.exports = { resetChannel, _resetChannel };
