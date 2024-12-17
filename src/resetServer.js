@@ -22,21 +22,23 @@ const _resetServer = async(client, guild_id) => {
                 message += ret.message + "\n";
             }
         }
-        if (success) {
+        if (success === true) {
             try {
                 const guild = await client.guilds.fetch(guild_id);
                 await sendLog(client, `Server "${guild.name}" has deleted all services.`);
                 return {success: true, message: "Server reseted."};
             } catch (error) {
                 console.log(error);
+                return {success: false, message: error.message};
             }
         } else {
             return {success: false, message: message};
         }
     } catch (err) {
         console.log(err);
+        await sendLog(client, "_resetServer failed : \n" + err);
+        return {success: false, message: "An error occurred while trying to reset server : " + err.message};
     }
-    return {success: false, message: err_msg};
 }
 
 const resetServer = async(client, interaction) => {

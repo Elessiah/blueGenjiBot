@@ -26,7 +26,6 @@ client.on("interactionCreate", async interaction => {
     if (!command) {
         return await safeReply("Command not found");
     }
-    console.log("Command : " + command.handler);
     await command.handler(client, interaction, interaction.guildId);
 });
 
@@ -64,7 +63,6 @@ client.on("guildDelete", async guild => {
 
 client.on("channelDelete", async channel => {
     await _resetChannel(client, channel.id);
-
 })
 
 client.login(process.env.TOKEN);
