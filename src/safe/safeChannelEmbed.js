@@ -20,6 +20,7 @@ async function safeChannelEmbed(client, channel=null, embed=null, attachements=[
         await sendLog(client, "SafeReply failed : " + err_msg);
         return false;
     }
+    return true;
 }
 
 module.exports = safeChannelEmbed;
