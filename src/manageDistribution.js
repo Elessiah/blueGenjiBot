@@ -6,7 +6,6 @@ const delay = require("./delay");
 
 async function manageDistribution(message, client, bdd, channelId, services) {
     try {
-        let has_send = false;
         let attachement = "";
         if (message.attachments.size === 1) {
             attachement = message.attachments.values().next().value.attachment;
@@ -44,10 +43,12 @@ async function manageDistribution(message, client, bdd, channelId, services) {
                 }
             }
         }
-        await message.react("🛰️");
-        const temp_msg = await safeMsgReply(client, message, "Your message has been sent to " + nbPartner + " channels !");
-        await delay(30000);
-        await temp_msg.delete();
+        if (nbPartner > 0) {
+            await message.react("🛰️");
+            const temp_msg = await safeMsgReply(client, message, "Your message has been sent to " + nbPartner + " channels !");
+            await delay(30000);
+            await temp_msg.delete();
+        }
     } catch (err) {
         await sendLog(client, "manageDistribution error : \n" + err);
     }
