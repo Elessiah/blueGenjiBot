@@ -32,12 +32,20 @@ client.on("messageCreate", async message => {
     if (message.author.bot || message.author.system) return;
     const { channelId } = message;
     const bdd = await getBddInstance();
-    let services = await bdd.get("ChannelPartnerService",
-        ["Service.name"],
-        {"Service":"ChannelPartnerService.id_service = Service.id_service",
-        "ChannelPartner":"ChannelPartnerService.id_channel = ChannelPartner.id_channel"},
-        {"ChannelPartner.id_channel": channelId}
-    );
+    let services;
+    try {
+        services = await bdd.get("ChannelPartnerService",
+            ["Service.name", "Service.id_service"],
+            {
+                "Service": "ChannelPartnerService.id_service = Service.id_service",
+                "ChannelPartner": "ChannelPartnerService.id_channel = ChannelPartner.id_channel"
+            },
+            {"ChannelPartner.id_channel": channelId}
+        );
+    } catch (e) {
+        await sendLog(client, "Error while getting services : " + e.message);
+        return;
+    }
     if (services.length > 0) {
         await manageDistribution(message, client, bdd, channelId, services);
     }

@@ -5,6 +5,7 @@ const safeMsgReply = require("./safe/safeMsgReply");
 const delay = require("./delay");
 const {getBddInstance} = require("./Bdd");
 const {searchString} = require("./searchString");
+const {checkCooldown} = require("./checkCooldown");
 
 async function manageDistribution(message, client, bdd, channelId, services) {
     try {
@@ -19,10 +20,29 @@ async function manageDistribution(message, client, bdd, channelId, services) {
         let nbPartner = 0;
         for (const service of services) {
             if (await searchString(service.name.toLowerCase(), message.content.toLowerCase()) === true) {
-                const targets = await bdd.get("ChannelPartnerService",
-                    ["id_channel"],
-                    {Service: "ChannelPartnerService.id_service = Service.id_service"},
-                    {"Service.name": service.name});
+                const cooldown = await checkCooldown(message.author.id, service.id_service);
+                if (cooldown !== true)
+                {
+                    const temp_msg = await safeMsgReply(client, message, `You must wait ${cooldown} minutes before sending again a message on this service`);
+                    await delay(30000);
+                    await temp_msg.delete();
+                    continue;
+                }
+                try {
+                    await bdd.set('MessageService', ['id_msg', 'id_service'], [message.id, service.id_service]);
+                } catch (e) {
+                    await sendLog(client, 'Error while saving MessageService : ' + e.message);
+                }
+                let targets;
+                try {
+                    targets = await bdd.get("ChannelPartnerService",
+                        ["id_channel"],
+                        {Service: "ChannelPartnerService.id_service = Service.id_service"},
+                        {"Service.name": service.name});
+                } catch (e) {
+                    await sendLog(client,'Error while getting targets : ' + e.message);
+                    continue;
+                }
                 for (const target of targets) {
                     if (target.id_channel === channelId) {
                         continue;
