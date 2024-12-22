@@ -3,6 +3,8 @@ const safeChannelEmbed = require("./safe/safeChannelEmbed");
 const sendLog = require("./safe/sendLog");
 const safeMsgReply = require("./safe/safeMsgReply");
 const delay = require("./delay");
+const {getBddInstance} = require("./Bdd");
+const {searchString} = require("./searchString");
 
 async function manageDistribution(message, client, bdd, channelId, services) {
     try {
@@ -16,7 +18,7 @@ async function manageDistribution(message, client, bdd, channelId, services) {
         }
         let nbPartner = 0;
         for (const service of services) {
-            if (message.content.toLowerCase().includes(service.name + " ")) {
+            if (await searchString(service.name.toLowerCase(), message.content.toLowerCase()) === true) {
                 const targets = await bdd.get("ChannelPartnerService",
                     ["id_channel"],
                     {Service: "ChannelPartnerService.id_service = Service.id_service"},
@@ -38,19 +40,32 @@ async function manageDistribution(message, client, bdd, channelId, services) {
                             iconURL: message.author.displayAvatarURL(),
                         }).setDescription(message.content);
                     }
-                    if (await safeChannelEmbed(client, channel, embed) !== false)
+                    const sentMsg = await safeChannelEmbed(client, channel, embed);
+                    if (sentMsg !== false) {
+                        const ret = await bdd.set("DPMsg",
+                            ['id_msg', 'id_channel', 'id_og'],
+                            [sentMsg.id, channel.id, message.id]);
+                        if (ret.success === false) {
+                            await sendLog(client, "In manageDistribution : " + ret.message);
+                        }
                         nbPartner++;
+                    }
                 }
             }
         }
         if (nbPartner > 0) {
+            const ret = await bdd.set("OGMsg", ['id_msg', 'id_author'], [message.id, message.author.id]);
+            if (ret.success === false) {
+                await sendLog(client, "In manageDistribution: " + ret.message);
+            }
             await message.react("🛰️");
             const temp_msg = await safeMsgReply(client, message, "Your message has been sent to " + nbPartner + " channels !");
             await delay(30000);
             await temp_msg.delete();
         }
     } catch (err) {
-        await sendLog(client, "manageDistribution error : \n" + err);
+        console.error(err);
+        await sendLog(client, "manageDistribution error : \n" + err.message);
     }
 }
 

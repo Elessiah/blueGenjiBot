@@ -1,5 +1,6 @@
 const sqlite = require('sqlite');
 const sqlite3 = require('sqlite3');
+const sendLog = require("./safe/sendLog");
 
 let bdd;
 
@@ -31,6 +32,16 @@ class Bdd {
   }
 
   async initDatabase() {
+    try {
+      await this.dropTable('DPMsg');
+    } catch (err) {
+      console.log(err);
+    }
+    try {
+      await this.dropTable('OGMsg');
+    } catch (err) {
+      console.log(err);
+    }
     await this.Database.exec(
         `CREATE TABLE IF NOT EXISTS OGMsg
         (
@@ -53,6 +64,8 @@ class Bdd {
         `CREATE TABLE IF NOT EXISTS DPMsg
         (
           id_msg
+          TEXT,
+          id_channel
           TEXT,
           id_og
           TEXT,
@@ -127,25 +140,24 @@ class Bdd {
   }
 
   async set(tableName, elemName, value) {
-    if (typeof (elemName) !== typeof (value)) {
-      console.log("The two parameters must be of the same type.");
-      return null;
-    }
-    if (typeof (elemName) === typeof ("")) {
+    if (typeof (elemName) !== typeof ([])) {
       elemName = [elemName];
+    }
+    if (typeof (value) !== typeof ([])) {
       value = [value];
-    } else if (typeof (elemName) !== typeof ([])) {
-      console.log("The parameters must be a string or an array.");
-      return null;
     }
     if (elemName.length !== value.length) {
-      console.log("The two parameters must have the same length.");
-      return null;
+      return {success: false, message: "ElemName and value must be the same length."};
     }
     const names = "(" + elemName.join(", ") + ")";
     const values = "(" + value.join(", ") + ")";
     const query = `INSERT INTO ${tableName} ${names} VALUES ${values}`;
-    await this.Database.run(query);
+    try {
+      this.Database.run(query);
+    } catch (e) {
+      return { success: false, message: `Error while adding "${tableName}": ${e.message}` };
+    }
+    return { success: true, message: "Successfully added "};
   }
 
   async get(tableName, values = ["*"], joinOptions = {}, whereConditions = {}) {
@@ -181,7 +193,6 @@ class Bdd {
       //console.log("Get_query", query, ret_array);
       return await this.Database.all(query, ret_array);
     } catch (err) {
-      console.error("Error in get method:", err);
       throw err;
     }
   }
@@ -224,21 +235,14 @@ class Bdd {
     }
   }
 
-  async getChannelService(channel_id) {
+  async dropTable(table_name) {
     try {
-      const services = await this.Database.get(`SELECT Service.name
-                                                FROM ChannelPartner
-                                                       JOIN ChannelPartnerService
-                                                            ON ChannelPartner.id_channel = ChannelPartnerService.id_channel
-                                                       JOIN Service
-                                                            ON ChannelPartnerService.id_service = Service.id_service
-                                                WHERE ChannelPartner.id_channel = ?`, channel_id);
-      if (!!services)
-        return ({success: true, message: services});
-      return ({success: false, message: `Channel "${channel_id}" cannot be found.`});
+      await this.Database.run(`drop table ${table_name}`);
+      return {success: true, message: 'Table dropped successfully.'};
     } catch (err) {
-      return ({success: false, message: err.message || 'Une erreur inconnue est survenue.'});
+      return {success: false, message: 'Failed to drop table ' + table_name};
     }
+
   }
 }
 

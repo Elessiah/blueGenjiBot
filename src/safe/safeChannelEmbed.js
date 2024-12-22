@@ -5,22 +5,17 @@ async function safeChannelEmbed(client, channel=null, embed=null, attachements=[
         await sendLog(client, "Wrong parameter for safeChannelEmbed : \nChannel : " + channel + "\nEmbed : " + embed);
     }
     let nTry = 0;
-    let success = false;
     let err_msg = "";
-    while (nTry < 10 && success === false) {
+    while (nTry < 10) {
         try {
-            await channel.send({embeds: [embed], files: attachements});
-            success = true;
+            return await channel.send({embeds: [embed], files: attachements});
         } catch (err) {
             err_msg = err.message;
         }
         nTry++;
     }
-    if (nTry === 10) {
-        await sendLog(client, "SafeReply failed : " + err_msg);
-        return false;
-    }
-    return true;
+    await sendLog(client, "SafeReply failed : " + err_msg);
+    return false;
 }
 
 module.exports = safeChannelEmbed;

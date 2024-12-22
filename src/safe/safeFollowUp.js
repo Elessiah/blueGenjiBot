@@ -5,22 +5,17 @@ async function safeFollowUp(interaction=null, content="Empty FollowUp", is_ephem
         return false;
     }
     let nTry = 0;
-    let success = false;
     let err_msg = "";
-    while (nTry < 10 && success === false) {
+    while (nTry < 10) {
         try {
-            await interaction.followUp({content: content, ephemeral: is_ephemeral});
-            success = true;
+            return await interaction.followUp({content: content, ephemeral: is_ephemeral});
         } catch (err) {
             err_msg = err.message;
             nTry++;
         }
     }
-    if (nTry === 10) {
-        await sendLog(interaction.client,"safeFollowUp failed : " + err_msg);
-        return false;
-    }
-    return true;
+    await sendLog(interaction.client, "safeFollowUp failed : " + err_msg);
+    return false;
 }
 
 module.exports = safeFollowUp;

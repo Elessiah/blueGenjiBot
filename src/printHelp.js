@@ -1,6 +1,7 @@
 const fs = require('fs').promises;
 const safeReply = require('./safe/safeReply');
 const sendLog = require("./safe/sendLog");
+const safeFollowUp = require("./safe/safeFollowUp");
 
 const printHelp = async(client, interaction) => {
     try {
@@ -14,7 +15,7 @@ const printHelp = async(client, interaction) => {
             const msgs = help.split("##");
             await safeReply(interaction, "Showing help in " + lang + " language", true);
             for (const msg of msgs) {
-                await safeReply(interaction, "##" + msg, true);
+                await safeFollowUp(interaction, "##" + msg, true);
             }
         }
         else

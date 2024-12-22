@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { Client, GatewayIntentBits } = require("discord.js");
+const { Client, GatewayIntentBits, EmbedBuilder} = require("discord.js");
 const {getBddInstance} = require("./src/Bdd");
 const {updateCommands} = require("./src/updateCommands.js");
 const commands = require("./src/commands");
@@ -16,7 +16,6 @@ const client = new Client({
                 GatewayIntentBits.MessageContent  // Pour accéder au contenu des messages
             ],
         });
-
 
 client.on("interactionCreate", async interaction => {
     if (!interaction.isCommand() || !interaction)
@@ -44,7 +43,38 @@ client.on("messageCreate", async message => {
     }
 })
 
+client.on("messageUpdate", async (oldMessage, newMessage) => {
+    const bdd = await getBddInstance();
+    let DPMsgs = await bdd.get("DPMsg", ["id_msg", "id_channel"], {}, {"id_og": oldMessage.id});
+    if (DPMsgs.length > 0) {
+        let embed;
+        if (oldMessage.attachments.size === 1
+        && newMessage.attachments.size === 1) {
+            const attachement = oldMessage.attachments.values().next().value.attachment;
+            embed = new EmbedBuilder().setAuthor({
+                name: oldMessage.author.username,
+                iconURL: oldMessage.author.displayAvatarURL(),
+            }).setDescription(newMessage.content).setImage(attachement.image);
+        } else {
+            embed = new EmbedBuilder().setAuthor({
+                name: oldMessage.author.username,
+                iconURL: oldMessage.author.displayAvatarURL(),
+            }).setDescription(newMessage.content);
+        }
+        for (let dPMsg of DPMsgs) {
+            let msg = await client.channels.fetch(dPMsg.id_channel);
+            msg = await msg.messages.fetch(dPMsg.id_msg);
+            try {
+                await msg.edit({embeds: [embed]});
+            } catch (err) {
+                await sendLog(client, "Error while edit : " + err.message);
+            }
+        }
+    }
+});
+
 client.on("ready", async () => {
+    const bdd = await getBddInstance();
     for (const guild of client.guilds.cache.values()) {
         await updateCommands(client, guild.id);
     }

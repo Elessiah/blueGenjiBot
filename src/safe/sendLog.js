@@ -12,7 +12,7 @@ async function sendLog(client = null, message = "Error") {
                 const admin_channel = await client.channels.fetch(process.env.INFO_SERV);
                 await admin_channel.send(message);
             } catch (error) {
-                if (error.message !== "Missing Access")
+                if (error.message === "Missing Access")
                     owner.send("Missing Access to admin channel");
             }
             success = true;
