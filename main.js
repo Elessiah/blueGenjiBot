@@ -78,6 +78,7 @@ client.on("messageUpdate", async (oldMessage, newMessage) => {
                 await sendLog(client, "Error while edit : " + err.message);
             }
         }
+        await newMessage.react("📝");
     }
 });
 
