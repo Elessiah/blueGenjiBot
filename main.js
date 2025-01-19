@@ -85,6 +85,20 @@ client.on("messageUpdate", async (oldMessage, newMessage) => {
     }
 });
 
+client.on("messageDelete", async (message) => {
+    const bdd = await getBddInstance();
+    let DPMsgs = await bdd.get("DPMsg", ["id_msg", "id_channel"], {}, {"id_og": message.id});
+    for (let dPMsg of DPMsgs) {
+        let msg = await client.channels.fetch(dPMsg.id_channel);
+        msg = await msg.messages.fetch(dPMsg.id_msg);
+        try {
+            await msg.delete();
+        } catch (err) {
+            await sendLog(client, "Failed to delete: " + err.message);
+        }
+    }
+})
+
 client.on("ready", async () => {
     const bdd = await getBddInstance();
     for (const guild of client.guilds.cache.values()) {
