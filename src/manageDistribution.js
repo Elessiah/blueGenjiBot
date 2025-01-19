@@ -44,12 +44,13 @@ async function manageDistribution(message, client, bdd, channelId, services) {
                     await sendLog(client,'Error while getting targets : ' + e.message);
                     continue;
                 }
+                const channelOG = await client.channels.fetch(channelId);
+                const origin = "*Send from : [" + channelOG.guild.name + "](" + await getInvitFromMessage(client, message) + ")*";
                 for (const target of targets) {
                     if (target.id_channel === channelId) {
                         continue;
                     }
                     const channel = await client.channels.fetch(target.id_channel);
-                    const origin = "*Send from : [" + channel.guild.name + "](" + await getInvitFromMessage(client, message) + ")*";
                     let embed;
                     if (attachement.length > 0) {
                         embed = new EmbedBuilder().setAuthor({
