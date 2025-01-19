@@ -6,6 +6,7 @@ const delay = require("./delay");
 const {getBddInstance} = require("./Bdd");
 const {searchString} = require("./searchString");
 const {checkCooldown} = require("./checkCooldown");
+const getInvitFromMessage = require("./getInvitFromMessage");
 
 async function manageDistribution(message, client, bdd, channelId, services) {
     try {
@@ -48,17 +49,18 @@ async function manageDistribution(message, client, bdd, channelId, services) {
                         continue;
                     }
                     const channel = await client.channels.fetch(target.id_channel);
+                    const origin = "*Send from : [" + channel.guild.name + "](" + await getInvitFromMessage(client, message) + ")*";
                     let embed;
                     if (attachement.length > 0) {
                         embed = new EmbedBuilder().setAuthor({
                             name: message.author.username,
                             iconURL: message.author.displayAvatarURL(),
-                        }).setDescription(message.content).setImage(attachement);
+                        }).setDescription(message.content + "\n\n" + origin).setImage(attachement);
                     } else {
                         embed = new EmbedBuilder().setAuthor({
                             name: message.author.username,
                             iconURL: message.author.displayAvatarURL(),
-                        }).setDescription(message.content);
+                        }).setDescription(message.content + "\n\n" + origin);
                     }
                     const sentMsg = await safeChannelEmbed(client, channel, embed);
                     if (sentMsg !== false) {

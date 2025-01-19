@@ -65,7 +65,7 @@ client.on("messageUpdate", async (oldMessage, newMessage) => {
             embed = new EmbedBuilder().setAuthor({
                 name: oldMessage.author.username,
                 iconURL: oldMessage.author.displayAvatarURL(),
-            }).setDescription(newMessage.content).setImage(attachement.image);
+            }).setDescription(newMessage.content).setImage(attachement);
         } else {
             embed = new EmbedBuilder().setAuthor({
                 name: oldMessage.author.username,
