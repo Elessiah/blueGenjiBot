@@ -7,28 +7,28 @@ const {listPartner} = require("./listPartner");
 
 const commands = {
     "help": {
-      handler: printHelp,
-      parameters: {
-        description: "Send you in private the primary informations of the bot (EVERYONE)",
-          options: [
-              {
-                  name: "language",
-                  description: "The language you want to read",
-                  type: 3,
-                  required: true,
-                  choices: [
-                      {
-                          name: "English",
-                          value: "en"
-                      },
-                      {
-                          name: "Français",
-                          value: "fr"
-                      }
-                  ]
-              }
-          ]
-      }
+        handler: printHelp,
+        parameters: {
+            description: "Send you in private the primary informations of the bot (EVERYONE)",
+            options: [
+                {
+                    name: "language",
+                    description: "The language you want to read",
+                    type: 3,
+                    required: true,
+                    choices: [
+                        {
+                            name: "English",
+                            value: "en"
+                        },
+                        {
+                            name: "Français",
+                            value: "fr"
+                        }
+                    ]
+                }
+            ]
+        }
     },
     "list-partner": {
         handler: listPartner,
@@ -77,7 +77,7 @@ const commands = {
     "assign-channel": {
         handler: newChannelPartner,
         parameters: {
-            description : "Assign a channel for the service you want activate (SERVER ADMIN ONLY)",
+            description: "Assign a channel for the service you want activate (SERVER ADMIN ONLY)",
             options: [
                 {
                     name: "channel",

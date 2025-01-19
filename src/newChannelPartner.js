@@ -2,7 +2,7 @@ const {ChatInputCommandInteraction, PermissionsBitField, EmbedBuilder} = require
 const {getBddInstance} = require("./Bdd");
 const checkPermissions = require("./checkPermissions");
 const safeReply = require("./safe/safeReply");
-const safeChannelEmbed = require("./safe/safeChannelEmbed");
+const safeChannelEmbed = require("./safe/safeChannel");
 const sendLog = require("./safe/sendLog");
 
 /**

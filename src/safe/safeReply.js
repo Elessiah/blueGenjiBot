@@ -7,7 +7,7 @@ async function safeReply(interaction=null, content="Empty Reply", is_ephemeral=t
     let nTry = 0;
     let success = false;
     let err_msg = "";
-    while (nTry < 10 && success === false) {
+    while (nTry < 3 && success === false) {
         try {
             await interaction.reply({content: content, ephemeral: is_ephemeral});
             success = true;
@@ -16,7 +16,7 @@ async function safeReply(interaction=null, content="Empty Reply", is_ephemeral=t
             nTry++;
         }
     }
-    if (nTry === 10) {
+    if (!success) {
         await sendLog(interaction.client, "safeReply failed : " + err_msg);
         return false;
     }

@@ -1,26 +1,31 @@
 const { REST, Routes } = require('discord.js');
 require('dotenv').config();
 const commands = require('./commands.js');
+const blueCommands = require('./blueCommands.js');
 const sendLog = require("./safe/sendLog");
 
 const updateCommands = async(client, guildId) => {
-    const { TOKEN, CLIENT_ID } = process.env;
+    const { TOKEN, CLIENT_ID, SERV_GENJI, SERV_RIVALS } = process.env;
     const rest = new REST({ version: "10" }).setToken(TOKEN);
-
+    let installCommands = {};
+    if (guildId === SERV_GENJI || guildId === SERV_RIVALS) {
+        installCommands = Object.assign({}, commands, blueCommands);
+    } else {
+        installCommands = commands;
+    }
     try {
         await rest.put(
             Routes.applicationGuildCommands(CLIENT_ID, guildId),
             {
-                body: Object.keys(commands).map((command) => {
+                body: Object.keys(installCommands).map((command) => {
                     return {
                         name: command,
-                        ...commands[command].parameters,
+                        ...installCommands[command].parameters,
                     };
                 }),
             }
         );
     } catch (error) {
-
         await sendLog(client, "Update Commands : \n " + error.message);
     }
 }

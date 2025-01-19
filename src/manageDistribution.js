@@ -1,5 +1,5 @@
 const {EmbedBuilder} = require("discord.js");
-const safeChannelEmbed = require("./safe/safeChannelEmbed");
+const safeChannelEmbed = require("./safe/safeChannel");
 const sendLog = require("./safe/sendLog");
 const safeMsgReply = require("./safe/safeMsgReply");
 const delay = require("./delay");

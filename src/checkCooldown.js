@@ -2,6 +2,8 @@ const {getBddInstance} = require("./Bdd");
 const sendLog = require("./safe/sendLog");
 
 async function checkCooldown(author, service) {
+    if (author === process.env.OWNER_ID)
+        return true;
     const bdd = await getBddInstance();
     let dates;
     try {

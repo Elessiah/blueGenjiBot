@@ -1,6 +1,6 @@
 const sendLog = require("./sendLog");
 
-async function safeFollowUp(interaction=null, content="Empty FollowUp", is_ephemeral=true) {
+async function safeFollowUp(interaction=null, content="Empty FollowUp", is_ephemeral=true, attachements = []) {
     if (interaction === null) {
         return false;
     }
@@ -8,7 +8,7 @@ async function safeFollowUp(interaction=null, content="Empty FollowUp", is_ephem
     let err_msg = "";
     while (nTry < 10) {
         try {
-            return await interaction.followUp({content: content, ephemeral: is_ephemeral});
+            return await interaction.followUp({content: content, ephemeral: is_ephemeral, files: attachements});
         } catch (err) {
             err_msg = err.message;
             nTry++;

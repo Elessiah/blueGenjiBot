@@ -8,6 +8,7 @@ const {_resetServer} = require("./src/resetServer");
 const sendLog = require("./src/safe/sendLog");
 const safeReply = require("./src/safe/safeReply");
 const {_resetChannel} = require("./src/resetChannel");
+const blueCommands = require("./src/blueCommands");
 
 const client = new Client({
             intents: [
@@ -21,9 +22,12 @@ client.on("interactionCreate", async interaction => {
     if (!interaction.isCommand() || !interaction)
         return;
     const { commandName } = interaction;
-    const command = commands[commandName];
+    let command = commands[commandName];
     if (!command) {
-        return await safeReply("Command not found");
+        command = blueCommands[commandName];
+        if (!command) {
+            return await safeReply(interaction, "Command not found");
+        }
     }
     await command.handler(client, interaction, interaction.guildId);
 });
@@ -56,8 +60,7 @@ client.on("messageUpdate", async (oldMessage, newMessage) => {
     let DPMsgs = await bdd.get("DPMsg", ["id_msg", "id_channel"], {}, {"id_og": oldMessage.id});
     if (DPMsgs.length > 0) {
         let embed;
-        if (oldMessage.attachments.size === 1
-        && newMessage.attachments.size === 1) {
+        if (oldMessage.attachments.size === 1) {
             const attachement = oldMessage.attachments.values().next().value.attachment;
             embed = new EmbedBuilder().setAuthor({
                 name: oldMessage.author.username,
