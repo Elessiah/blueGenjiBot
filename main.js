@@ -9,6 +9,7 @@ const sendLog = require("./src/safe/sendLog");
 const safeReply = require("./src/safe/safeReply");
 const {_resetChannel} = require("./src/resetChannel");
 const blueCommands = require("./src/blueCommands");
+const getInvitFromMessage = require("./src/getInvitFromMessage");
 
 const client = new Client({
             intents: [
@@ -58,6 +59,7 @@ client.on("messageCreate", async message => {
 client.on("messageUpdate", async (oldMessage, newMessage) => {
     const bdd = await getBddInstance();
     let DPMsgs = await bdd.get("DPMsg", ["id_msg", "id_channel"], {}, {"id_og": oldMessage.id});
+    const origin = "*Sent from : [" + oldMessage.guild.name + "](" + await getInvitFromMessage(client, newMessage) + ")*";
     if (DPMsgs.length > 0) {
         let embed;
         if (oldMessage.attachments.size === 1) {
@@ -65,12 +67,12 @@ client.on("messageUpdate", async (oldMessage, newMessage) => {
             embed = new EmbedBuilder().setAuthor({
                 name: oldMessage.author.username,
                 iconURL: oldMessage.author.displayAvatarURL(),
-            }).setDescription(newMessage.content).setImage(attachement);
+            }).setDescription(newMessage.content + "\n\n" + origin).setImage(attachement);
         } else {
             embed = new EmbedBuilder().setAuthor({
                 name: oldMessage.author.username,
                 iconURL: oldMessage.author.displayAvatarURL(),
-            }).setDescription(newMessage.content);
+            }).setDescription(newMessage.content + "\n\n" + origin);
         }
         for (let dPMsg of DPMsgs) {
             let msg = await client.channels.fetch(dPMsg.id_channel);
