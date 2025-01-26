@@ -2,12 +2,10 @@ const sendLog = require("./safe/sendLog");
 const {PermissionsBitField} = require("discord.js");
 
 async function getInvitFromMessage(client, message) {
-    if (!message.channel.permissionsFor(message.author).has(PermissionsBitField.Flags.CreateInstantInvite))
-        return ("");
     try {
-        const channel = message.guild.channels.cache.find(ch =>
-            ch.isTextBased()
-            && ch.permissionsFor(message.guild.members.me).has(PermissionsBitField.Flags.CreateInstantInvite));
+        if (!message.channel.permissionsFor(message.author).has(PermissionsBitField.Flags.CreateInstantInvite))
+            return ("");
+        const channel = message.channel;
         if (!channel)
             return ("");
 

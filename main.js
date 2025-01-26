@@ -59,7 +59,7 @@ client.on("messageCreate", async message => {
 client.on("messageUpdate", async (oldMessage, newMessage) => {
     const bdd = await getBddInstance();
     let DPMsgs = await bdd.get("DPMsg", ["id_msg", "id_channel"], {}, {"id_og": oldMessage.id});
-    const origin = "*Sent from : [" + oldMessage.guild.name + "](" + await getInvitFromMessage(client, newMessage) + ")*";
+    const origin = "*Sent from : [" + newMessage.guild.name + "](" + await getInvitFromMessage(client, newMessage) + ")*";
     if (DPMsgs.length > 0) {
         let embed;
         if (oldMessage.attachments.size === 1) {
