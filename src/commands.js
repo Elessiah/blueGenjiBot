@@ -4,6 +4,7 @@ const { resetChannel } = require("./resetChannel");
 const {resetServer} = require("./resetServer");
 const printHelp = require("./printHelp");
 const {listPartner} = require("./listPartner");
+const ban = require("./ban");
 
 const commands = {
     "help": {
@@ -142,6 +143,26 @@ const commands = {
         handler: resetServer,
         parameters: {
             description: "Remove all the service of the server (SERVER ADMIN ONLY)",
+        }
+    },
+    "ban": {
+        handler: ban,
+        parameters: {
+            description: "Ban user from the bot services (ONLY SERVER 50+ members) (SERVER ADMIN ONLY)",
+            options: [
+                {
+                    name: "user",
+                    description: "User you want to ban",
+                    type: 6,
+                    required: true
+                },
+                {
+                    name: "reason",
+                    description: "Reason for the ban",
+                    type: 3,
+                    required: true
+                }
+            ]
         }
     }
 }

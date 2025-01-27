@@ -10,6 +10,7 @@ const safeReply = require("./src/safe/safeReply");
 const {_resetChannel} = require("./src/resetChannel");
 const blueCommands = require("./src/blueCommands");
 const getInvitFromMessage = require("./src/getInvitFromMessage");
+const deleteDPMsgs = require("./src/deleteDPMsgs");
 
 const client = new Client({
             intents: [
@@ -88,17 +89,7 @@ client.on("messageUpdate", async (oldMessage, newMessage) => {
 });
 
 client.on("messageDelete", async (message) => {
-    const bdd = await getBddInstance();
-    let DPMsgs = await bdd.get("DPMsg", ["id_msg", "id_channel"], {}, {"id_og": message.id});
-    for (let dPMsg of DPMsgs) {
-        let msg = await client.channels.fetch(dPMsg.id_channel);
-        msg = await msg.messages.fetch(dPMsg.id_msg);
-        try {
-            await msg.delete();
-        } catch (err) {
-            await sendLog(client, "Failed to delete: " + err.message);
-        }
-    }
+    await deleteDPMsgs(client, message.id);
 })
 
 client.on("ready", async () => {

@@ -176,9 +176,35 @@ class Bdd {
     } catch (e) {
       console.log("ChannelPartnerService : ", e);
     }
+    try {
+      await this.Database.exec(
+          `CREATE TABLE IF NOT EXISTS Ban
+           (
+             id_user
+             TEXT
+             PRIMARY
+             KEY,
+             id_moderator
+             TEXT
+             NOT
+             NULL,
+             id_reason
+             TEXT
+             NOT
+             NULL,
+             date
+             DATETIME
+             DEFAULT
+             CURRENT_TIMESTAMP
+           );`
+      );
+    } catch (e) {
+      console.log("Ban : ", e);
+    }
   }
 
   async set(tableName, elemName, value) {
+    // console.log("set", tableName, elemName, value);
     if (typeof (elemName) !== typeof ([])) {
       elemName = [elemName];
     }
@@ -191,6 +217,7 @@ class Bdd {
     const names = "(" + elemName.join(", ") + ")";
     const values = "(" + value.join(", ") + ")";
     const query = `INSERT INTO ${tableName} ${names} VALUES ${values}`;
+    // console.log("End query : ", query);
     try {
       this.Database.run(query);
     } catch (e) {
@@ -205,7 +232,7 @@ class Bdd {
             whereConditions = {},
             is_ascending = null,
             index_elem = "") {
-    //console.log("Get params: ", tableName, values, joinOptions, whereConditions);
+    // console.log("Get params: ", tableName, values, joinOptions, whereConditions);
     try {
       const stringValues = values.join(", ");
       let baseQuery = `SELECT ${stringValues}
@@ -246,9 +273,10 @@ class Bdd {
 
       const query = `${baseQuery}${joinClause}${whereClause}${orderClause}`;
       const ret_array = Object.values(ret);
-      //console.log("Get_query", query, ret_array);
+      // console.log("End get query", query, ret_array);
       return await this.Database.all(query, ret_array);
     } catch (err) {
+      console.error("Error while getting " + err);
       throw err;
     }
   }

@@ -1,4 +1,4 @@
-async function sendLog(client = null, message = "Error") {
+async function sendLog(client = null, message = "Error", idMsg = null) {
     if (!client) {
         return false;
     }
@@ -7,10 +7,17 @@ async function sendLog(client = null, message = "Error") {
     while (nTry < 10 && success === false) {
         try {
             const owner = await client.users.fetch(process.env.OWNER_ID);
-            await owner.send(message);
+            if (idMsg) {
+                idMsg.owner = await owner.send(message);
+            }
             try {
                 const admin_channel = await client.channels.fetch(process.env.INFO_SERV);
-                await admin_channel.send(message);
+                if (idMsg) {
+                    idMsg.admin = await admin_channel.send(message);
+                    idMsg.admin = idMsg.admin.id;
+                } else {
+                    await admin_channel.send(message);
+                }
             } catch (error) {
                 if (error.message === "Missing Access")
                     owner.send("Missing Access to admin channel");

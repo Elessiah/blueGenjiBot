@@ -21,7 +21,7 @@ const blueCommands = {
                 {
                     name: "membre",
                     description: "Membre à envoyer l'adhésion",
-                    type: 6,
+                    type: 6, // 6 membre
                     required: false
                 },
                 {

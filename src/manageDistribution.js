@@ -7,6 +7,7 @@ const {getBddInstance} = require("./Bdd");
 const {searchString} = require("./searchString");
 const {checkCooldown} = require("./checkCooldown");
 const getInvitFromMessage = require("./getInvitFromMessage");
+const checkBan = require("./checkBan");
 
 async function manageDistribution(message, client, bdd, channelId, services) {
     try {
@@ -22,6 +23,10 @@ async function manageDistribution(message, client, bdd, channelId, services) {
         for (const service of services) {
             if (await searchString(service.name.toLowerCase(), message.content.toLowerCase()) === true) {
                 const cooldown = await checkCooldown(message.author.id, service.id_service);
+                if (await checkBan(client, message.author.id) === true) {
+                    await message.react("🚫");
+                    return;
+                }
                 if (cooldown !== true)
                 {
                     const temp_msg = await safeMsgReply(client, message, `You must wait ${cooldown} minutes before sending again a message on this service`);
