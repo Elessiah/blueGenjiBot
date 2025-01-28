@@ -6,7 +6,7 @@ async function getInvitFromMessage(client, message) {
         if (!message.channel.permissionsFor(message.author).has(PermissionsBitField.Flags.CreateInstantInvite))
             return ("");
         const channel = message.channel;
-        if (!channel)
+        if (channel == null)
             return ("");
 
         const invite = await channel.createInvite( {
@@ -17,6 +17,7 @@ async function getInvitFromMessage(client, message) {
         return invite.url;
     } catch (e) {
         await sendLog(client, "Error while trying to retrieve invite : " + e.message);
+        await sendLog(client, "Msg content:\n" + message.content);
         return "";
     }
 }
