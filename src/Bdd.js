@@ -32,9 +32,6 @@ class Bdd {
 
   async initDatabase() {
     try {
-      await this.dropTable('DPMsg');
-      await this.dropTable('OGMsg');
-      await this.dropTable('MessageService');
     } catch (err) {
       console.log(err);
     }
