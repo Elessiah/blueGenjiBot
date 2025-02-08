@@ -1,6 +1,5 @@
 const sqlite = require('sqlite');
 const sqlite3 = require('sqlite3');
-const sendLog = require("./safe/sendLog");
 
 let bdd;
 
@@ -34,11 +33,8 @@ class Bdd {
   async initDatabase() {
     try {
       await this.dropTable('DPMsg');
-    } catch (err) {
-      console.log(err);
-    }
-    try {
       await this.dropTable('OGMsg');
+      await this.dropTable('MessageService');
     } catch (err) {
       console.log(err);
     }
@@ -93,6 +89,10 @@ class Bdd {
             TEXT,
             id_og
             TEXT,
+            date
+            DATETIME
+            DEFAULT
+            CURRENT_TIMESTAMP,
             PRIMARY
             KEY
            (
@@ -231,54 +231,90 @@ class Bdd {
             joinOptions = {},
             whereConditions = {},
             is_ascending = null,
-            index_elem = "") {
-    // console.log("Get params: ", tableName, values, joinOptions, whereConditions);
-    try {
+            index_elem = "",
+            whereSupConditions = {},
+            whereInfConditions = {}) {
       const stringValues = values.join(", ");
-      let baseQuery = `SELECT ${stringValues}
-                       FROM ${tableName}`;
-      let joinClause = '';
-      let whereClause = '';
-      let orderClause = '';
-      const ret = [];
-
-      // Handle JOIN ON clauses
-      if (joinOptions && Object.keys(joinOptions).length > 0) {
-        for (const [joinTable, onCondition] of Object.entries(joinOptions)) {
-          joinClause += ` JOIN ${joinTable} ON ${onCondition}`;
-        }
-      }
-
-      // Handle WHERE conditions
-      if (whereConditions && Object.keys(whereConditions).length > 0) {
-        whereClause += ' WHERE ';
-        const conditions = [];
-        for (const [column, value] of Object.entries(whereConditions)) {
-          conditions.push(`${column} = ?`);
-          ret.push(value);
-        }
-        whereClause += conditions.join(' AND ');
-      }
-
-      if (index_elem.length > 0) {
-        orderClause += `ORDER BY ${index_elem}`;
-        if (is_ascending === true) {
-          orderClause += ' ASC';
-        } else if (is_ascending === false) {
-          orderClause += ' DESC';
-        } else {
-          orderClause = "";
-        }
-      }
-
-      const query = `${baseQuery}${joinClause}${whereClause}${orderClause}`;
-      const ret_array = Object.values(ret);
+      const baseQuery = `SELECT ${stringValues} FROM ${tableName}`;
+      const query = (await this.queryBuilder(baseQuery, joinOptions, whereConditions, is_ascending, index_elem, whereSupConditions, whereInfConditions));
       // console.log("End get query", query, ret_array);
-      return await this.Database.all(query, ret_array);
-    } catch (err) {
-      console.error("Error while getting " + err);
-      throw err;
+      return await this.Database.all(query.query, query.ret_array);
+  }
+
+  async rm(tableName,
+           joinOptions = {},
+           whereConditions = {},
+           whereSupConditions = {},
+           whereInfConditions = {}) {
+    const baseQuery = `DELETE FROM ${tableName} `;
+    const query = (await this.queryBuilder(baseQuery, joinOptions, whereConditions, null, "", whereSupConditions, whereInfConditions));
+    return await this.Database.all(query.query, query.ret_array);
+  }
+
+  async queryBuilder(baseQuery,
+                     joinOptions = {},
+                     whereConditions = {},
+                     is_ascending = null,
+                     index_elem = "",
+                     whereSupConditions = {},
+                     whereInfConditions = {}) {
+    let joinClause = '';
+    let whereClause = '';
+    let orderClause = '';
+    const ret = [];
+
+    // Handle JOIN ON clauses
+    if (joinOptions && Object.keys(joinOptions).length > 0) {
+      for (const [joinTable, onCondition] of Object.entries(joinOptions)) {
+        joinClause += ` JOIN ${joinTable} ON ${onCondition}`;
+      }
     }
+
+    // Handle WHERE conditions
+    if (whereConditions && Object.keys(whereConditions).length > 0) {
+      whereClause += ' WHERE ';
+      const conditions = [];
+      for (const [column, value] of Object.entries(whereConditions)) {
+        conditions.push(`${column} = ?`);
+        ret.push(value);
+      }
+      whereClause += conditions.join(' AND ');
+    }
+    // Handle WHERE superior conditions
+    if (whereSupConditions && Object.keys(whereSupConditions).length > 0) {
+      whereClause += ' WHERE ';
+      const conditions = [];
+      for (const [column, value] of Object.entries(whereInfConditions)) {
+        conditions.push(`${column} > ?`);
+        ret.push(value);
+      }
+      whereClause += conditions.join(' AND ');
+    }
+    // Handle WHERE inferior conditions
+    if (whereInfConditions && Object.keys(whereInfConditions).length > 0) {
+      whereClause += ' WHERE ';
+      const conditions = [];
+      for (const [column, value] of Object.entries(whereInfConditions)) {
+        conditions.push(`${column} < ?`);
+        ret.push(value);
+      }
+      whereClause += conditions.join(' AND ');
+    }
+
+    if (index_elem.length > 0) {
+      orderClause += `ORDER BY ${index_elem}`;
+      if (is_ascending === true) {
+        orderClause += ' ASC';
+      } else if (is_ascending === false) {
+        orderClause += ' DESC';
+      } else {
+        orderClause = "";
+      }
+    }
+
+    const query = `${baseQuery}${joinClause}${whereClause}${orderClause}`;
+    const ret_array = Object.values(ret);
+    return ({ ret_array: ret_array, query: query });
   }
 
   async setNewPartnerChannel(id_channel, id_guild, service_name) {
@@ -328,7 +364,7 @@ class Bdd {
     }
   }
 
-  async getCurrentTimestamp(){
+  async getCurrentTimestamp() {
     const ret = await this.Database.all('SELECT CURRENT_TIMESTAMP');
     return (ret[0].CURRENT_TIMESTAMP);
   }

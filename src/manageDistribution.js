@@ -8,6 +8,7 @@ const {searchString} = require("./searchString");
 const {checkCooldown} = require("./checkCooldown");
 const getInvitFromMessage = require("./getInvitFromMessage");
 const checkBan = require("./checkBan");
+const manageMsgExpiration = require("./manageMsgExpiration");
 
 async function manageDistribution(message, client, bdd, channelId, services) {
     try {
@@ -91,6 +92,7 @@ async function manageDistribution(message, client, bdd, channelId, services) {
             await delay(30000);
             await temp_msg.delete();
         }
+        await manageMsgExpiration(client);
     } catch (err) {
         console.error(err);
         await sendLog(client, "manageDistribution error : \n" + err.message);

@@ -16,8 +16,6 @@ async function getInvitFromMessage(client, message) {
         });
         return invite.url;
     } catch (e) {
-        await sendLog(client, "Error while trying to retrieve invite : " + e.message);
-        await sendLog(client, "Msg content:\n" + message.content);
         return "";
     }
 }
