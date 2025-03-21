@@ -7,7 +7,8 @@ async function checkPermissions(interaction) {
         if (isAdmin || interaction.member.id === process.env.OWNER_ID || interaction.member.id === process.env.PRESIDENT)
             return true;
     } catch (e) {
-        await sendLog(interaction.client, "Error while checking permissions : " + e.message);
+        // await sendLog(interaction.client, "Error while checking permissions : " + e.message);
+        console.log("Error while checking permissions : " + e.message);
     }
     return false;
 }

@@ -5,6 +5,8 @@ const {resetServer} = require("./resetServer");
 const printHelp = require("./printHelp");
 const {listPartner} = require("./listPartner");
 const ban = require("./ban");
+const banlist = require("./banlist");
+const unban = require("./unban");
 
 const commands = {
     "help": {
@@ -161,6 +163,26 @@ const commands = {
                     description: "Reason for the ban",
                     type: 3,
                     required: true
+                }
+            ]
+        }
+    },
+    "ban-list": {
+        handler: banlist,
+        parameters: {
+            description: "Display the list of banned members from the bot service",
+        }
+    },
+    "unban": {
+        handler: unban,
+        parameters: {
+            description: "Unban user from the bot service",
+            options: [
+                {
+                    name: "id_ban",
+                    description: "ID Ban you can find with the ban-list command",
+                    type: 3,
+                    required: true,
                 }
             ]
         }

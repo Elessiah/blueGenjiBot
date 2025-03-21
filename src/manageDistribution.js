@@ -1,5 +1,5 @@
 const {EmbedBuilder} = require("discord.js");
-const safeChannelEmbed = require("./safe/safeChannel");
+const safeChannel = require("./safe/safeChannel");
 const sendLog = require("./safe/sendLog");
 const safeMsgReply = require("./safe/safeMsgReply");
 const delay = require("./delay");
@@ -69,7 +69,7 @@ async function manageDistribution(message, client, bdd, channelId, services) {
                             iconURL: message.author.displayAvatarURL(),
                         }).setDescription(message.content + "\n\n" + origin);
                     }
-                    const sentMsg = await safeChannelEmbed(client, channel, embed);
+                    const sentMsg = await safeChannel(client, channel, embed);
                     if (sentMsg !== false) {
                         const ret = await bdd.set("DPMsg",
                             ['id_msg', 'id_channel', 'id_og'],

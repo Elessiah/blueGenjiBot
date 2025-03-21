@@ -1,4 +1,5 @@
 const getAdhesion = require("./getAdhesion");
+const broadcast = require("./broadcast");
 
 const blueCommands = {
     "get-adhesion": {
@@ -29,6 +30,20 @@ const blueCommands = {
                     description: "Role à envoyer l'adhésion",
                     type: 8, // 8 for role
                     required: false
+                }
+            ]
+        }
+    },
+    "broadcast": {
+        handler: broadcast,
+        parameters: {
+            description: "Send a message on all services. Use with precautions !",
+            options: [
+                {
+                    name: "message",
+                    description: "Broadcast message",
+                    type: 3,
+                    required: true
                 }
             ]
         }
