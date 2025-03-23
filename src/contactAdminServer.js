@@ -18,13 +18,16 @@ async function contactAdminServer(client, interaction) {
     }
     const serverId = interaction.options.getString("server");
     const server = await client.guilds.fetch(serverId);
-    const adminRoles = server.roles.cache.filter(r =>
+    let adminRoles = server.roles.cache.filter(r =>
         r.permissions.has(PermissionsBitField.Flags.Administrator)
     );
     let targets;
     targets = [];
     for (const [roleId, role] of adminRoles) {
         targets.push(...(role.members.map(member => member.user)));
+    }
+    if (targets.length === 0) {
+        targets.push(client.users.fetch(server.ownerId));
     }
     const msg = interaction.options.getString("message");
     let errMsg = "";
@@ -36,7 +39,7 @@ async function contactAdminServer(client, interaction) {
     if (errMsg.length > 0) {
         await sendLog(client, "Erreur pour l'envoies au admins : \n" + errMsg);
     }
-    await safeReply(interaction, "Message successfully sent.");
+    await safeReply(interaction, `Message successfully sent to ${targets.length} admin(s) !`);
 }
 
 module.exports = contactAdminServer;
