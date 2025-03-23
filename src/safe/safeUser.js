@@ -6,7 +6,7 @@ async function safeUser(client, user=null, embed=null, attachements=[], content=
     }
     let nTry = 0;
     let err_msg = "";
-    while (nTry < 10) {
+    while (nTry < 3) {
         try {
             if (embed !== null) {
                 return await user.send({content: content, embeds: [embed], files: attachements});

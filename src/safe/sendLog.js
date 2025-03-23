@@ -4,7 +4,7 @@ async function sendLog(client = null, message = "Error", idMsg = null) {
     }
     let nTry = 0;
     let success = false;
-    while (nTry < 10 && success === false) {
+    while (nTry < 3 && success === false) {
         try {
             const owner = await client.users.fetch(process.env.OWNER_ID);
             if (idMsg) {

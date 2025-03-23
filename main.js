@@ -8,13 +8,14 @@ const {_resetServer} = require("./src/resetServer");
 const sendLog = require("./src/safe/sendLog");
 const safeReply = require("./src/safe/safeReply");
 const {_resetChannel} = require("./src/resetChannel");
-const blueCommands = require("./src/blueCommands");
+const fillBlueCommands = require("./src/fillBlueCommands");
 const getInvitFromMessage = require("./src/getInvitFromMessage");
 const deleteDPMsgs = require("./src/deleteDPMsgs");
 
 const client = new Client({
             intents: [
                 GatewayIntentBits.Guilds, // Nécessaire pour recevoir les événements des serveurs (guilds)
+                GatewayIntentBits.GuildMembers,
                 GatewayIntentBits.GuildMessages, // Pour les messages
                 GatewayIntentBits.MessageContent  // Pour accéder au contenu des messages
             ],
@@ -26,7 +27,7 @@ client.on("interactionCreate", async interaction => {
     const { commandName } = interaction;
     let command = commands[commandName];
     if (!command) {
-        command = blueCommands[commandName];
+        command = (await fillBlueCommands(client))[commandName];
         if (!command) {
             return await safeReply(interaction, "Command not found");
         }
@@ -101,12 +102,17 @@ client.on("ready", async () => {
 });
 
 client.on("guildCreate", async guild => {
-    await updateCommands(client, guild.id);
+    for (const guild of client.guilds.cache.values()) {
+        await updateCommands(client, guild.id);
+    }
     await sendLog(client,'Bot has join : ' + guild.name);
 });
 
 client.on("guildDelete", async guild => {
     await _resetServer(client, guild.id);
+    for (const guild of client.guilds.cache.values()) {
+        await updateCommands(client, guild.id);
+    }
     await sendLog(client,'Bot has leave : ' + guild.name);
 })
 

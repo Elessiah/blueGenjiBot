@@ -6,7 +6,7 @@ async function safeChannel(client, channel=null, embed=null, attachements=[], co
     }
     let nTry = 0;
     let err_msg = "";
-    while (nTry < 10) {
+    while (nTry < 3) {
         try {
             if (embed !== null) {
                 return await channel.send({content: content, embeds: [embed], files: attachements});
@@ -18,7 +18,7 @@ async function safeChannel(client, channel=null, embed=null, attachements=[], co
         }
         nTry++;
     }
-    await sendLog(client, "SafeMessage failed : " + err_msg);
+    await sendLog(client, "SafeMessage failed  to `" + channel.guild.name + "` : " + err_msg);
     return false;
 }
 

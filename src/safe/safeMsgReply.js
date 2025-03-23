@@ -3,7 +3,7 @@ const sendLog = require("./sendLog");
 async function safeMsgReply(client, msg, content) {
     let nTry = 0;
     let err_msg = "";
-    while (nTry < 10) {
+    while (nTry < 3) {
         try {
             return await msg.reply(content);
         } catch (err) {

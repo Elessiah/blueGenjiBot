@@ -6,7 +6,7 @@ async function safeFollowUp(interaction=null, content="Empty FollowUp", is_ephem
     }
     let nTry = 0;
     let err_msg = "";
-    while (nTry < 10) {
+    while (nTry < 3) {
         try {
             return await interaction.followUp({content: content, ephemeral: is_ephemeral, files: attachements});
         } catch (err) {

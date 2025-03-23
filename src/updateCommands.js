@@ -1,7 +1,7 @@
 const { REST, Routes } = require('discord.js');
 require('dotenv').config();
 const commands = require('./commands.js');
-const blueCommands = require('./blueCommands.js');
+const fillBlueCommands = require('./fillBlueCommands.js');
 const sendLog = require("./safe/sendLog");
 
 const updateCommands = async(client, guildId) => {
@@ -9,7 +9,7 @@ const updateCommands = async(client, guildId) => {
     const rest = new REST({ version: "10" }).setToken(TOKEN);
     let installCommands = {};
     if (guildId === SERV_GENJI || guildId === SERV_RIVALS) {
-        installCommands = Object.assign({}, commands, blueCommands);
+        installCommands = Object.assign({}, commands, await fillBlueCommands(client));
     } else {
         installCommands = commands;
     }
