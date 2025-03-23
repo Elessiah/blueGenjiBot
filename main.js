@@ -11,6 +11,7 @@ const {_resetChannel} = require("./src/resetChannel");
 const fillBlueCommands = require("./src/fillBlueCommands");
 const getInvitFromMessage = require("./src/getInvitFromMessage");
 const deleteDPMsgs = require("./src/deleteDPMsgs");
+const checkBan = require("./src/checkBan");
 
 const client = new Client({
             intents: [
@@ -22,7 +23,7 @@ const client = new Client({
         });
 
 client.on("interactionCreate", async interaction => {
-    if (!interaction.isCommand() || !interaction)
+    if (!interaction.isCommand() || !interaction || !(await checkBan(client, interaction.user.id)))
         return;
     const { commandName } = interaction;
     let command = commands[commandName];
