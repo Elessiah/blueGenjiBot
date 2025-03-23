@@ -2,6 +2,7 @@ const getAdhesion = require("./getAdhesion");
 const broadcast = require("./broadcast");
 const buildServerChoices = require("./buildServerChoices");
 const contactAdminServer = require("./contactAdminServer");
+const remoteServerReset = require("./remoteServerReset");
 
 async function fillBlueCommands(client) {
     const serverChoices = await buildServerChoices(client);
@@ -69,6 +70,21 @@ async function fillBlueCommands(client) {
                         description: "Content of your message",
                         type: 3,
                         required: true,
+                    }
+                ]
+            }
+        },
+        "remote-server-reset": {
+            handler: remoteServerReset,
+            parameters: {
+                description: "Admin only ! Remotely reset a server",
+                options: [
+                    {
+                        name: "server",
+                        description: "Server targeted",
+                        type: 3,
+                        required: true,
+                        choices: serverChoices,
                     }
                 ]
             }

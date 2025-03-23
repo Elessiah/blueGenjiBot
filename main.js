@@ -23,8 +23,12 @@ const client = new Client({
         });
 
 client.on("interactionCreate", async interaction => {
-    if (!interaction.isCommand() || !interaction || !(await checkBan(client, interaction.user.id)))
+    if (!interaction.isCommand() || !interaction)
         return;
+    if ((await checkBan(client, interaction.user.id, false))) {
+        await safeReply(interaction, "Banned members cannot use commands ! Contact `elessiah` for any moderation problem !");
+        return;
+    }
     const { commandName } = interaction;
     let command = commands[commandName];
     if (!command) {
