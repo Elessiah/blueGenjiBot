@@ -27,7 +27,7 @@ async function contactAdminServer(client, interaction) {
         targets.push(...(role.members.map(member => member.user)));
     }
     if (targets.length === 0) {
-        targets.push(client.users.fetch(server.ownerId));
+        targets.push(await client.users.fetch(server.ownerId));
     }
     const msg = interaction.options.getString("message");
     let errMsg = "";
