@@ -25,8 +25,10 @@ async function manageDistribution(message, client, bdd, channelId, services) {
             "To target your ad more precisely, specify a region. Available regions: `EU, NA, LATAM, ASIA.`");
         }
         let nbPartner = 0;
+        let hasTried = false;
         for (const service of services) {
             if (await checkMessageValidity(client, service, messageContentLower, message)) {
+                hasTried = true;
                 await bdd.set('MessageService', ['id_msg', 'id_service'], [message.id, service.id_service]);
                 const targets = await bdd.Database.all(`SELECT ChannelPartnerService.id_channel
                                             FROM ChannelPartnerService
@@ -41,7 +43,7 @@ async function manageDistribution(message, client, bdd, channelId, services) {
         }
         if (nbPartner > 0) {
             await manageServiceSuccess(client, bdd, message, target_region, nbPartner);
-        } else {
+        } else if (hasTried) {
             await safeMsgReply(client, message, "Your message was not delivered to any channel. " +
                 "This may be because no users have activated the region filter you specified.");
         }
