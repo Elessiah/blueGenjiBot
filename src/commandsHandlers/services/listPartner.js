@@ -23,12 +23,7 @@ const listPartner = async(client, interaction) => {
         let guilds = [[], [], [], [], []];
         for (const channel_info of channels) {
             const channel = await client.channels.fetch(channel_info.id_channel);
-            try {
-                console.log("Channel info", channel.guild.name, channel.name);
                 guilds[channel_info.region].push(" - [" + channel.guild.name + "](" + (await getInviteFromChannel(channel)) + ")");
-            } catch (e) {
-                console.log("ERROR: ", e);
-            }
         }
         let subContent = "";
         for (let i = 0; i < regions.length; i++) {
@@ -36,6 +31,8 @@ const listPartner = async(client, interaction) => {
                 subContent += `## ${regions[i]}\n` + guilds[i].join("\n") + '\n';
         }
         const content = `List of all affiliated servers for service ${service_name} *(Invite link embedded in a hyperlink with their name)* : \n` + subContent + '----------\nThanks again for using our services !';
+        await sendLog(client, content);
+        console.log("Interaction :  ", interaction);
         await safeReply(interaction, content, true);
     } catch (e) {
         await safeReply(interaction, "An error occurred while trying to retrieve list. Please try again.");
