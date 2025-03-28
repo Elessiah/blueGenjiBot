@@ -23,7 +23,11 @@ const listPartner = async(client, interaction) => {
         let guilds = [[], [], [], [], []];
         for (const channel_info of channels) {
             const channel = await client.channels.fetch(channel_info.id_channel);
-            guilds[channel_info.region].push(" - [" + channel.guild.name + "](" + (await getInviteFromChannel(channel)) + ")");
+            try {
+                guilds[channel_info.region].push(" - [" + channel.guild.name + "](" + (await getInviteFromChannel(channel)) + ")");
+            } catch (e) {
+                console.log("ERROR: ", e);
+            }
         }
         let subContent = "";
         for (let i = 0; i < regions.length; i++) {
