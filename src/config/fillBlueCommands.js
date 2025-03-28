@@ -1,8 +1,8 @@
-const getAdhesion = require("./getAdhesion");
-const broadcast = require("./broadcast");
-const buildServerChoices = require("./buildServerChoices");
-const contactAdminServer = require("./contactAdminServer");
-const remoteServerReset = require("./remoteServerReset");
+const getAdhesion = require("../commandsHandlers/getAdhesion");
+const broadcast = require("../commandsHandlers/broadcast");
+const buildServerChoices = require("../utils/buildServerChoices");
+const contactAdminServer = require("../commandsHandlers/contactAdminServer");
+const remoteServerReset = require("../commandsHandlers/services/remoteServerReset");
 
 async function fillBlueCommands(client) {
     const serverChoices = await buildServerChoices(client);

@@ -1,7 +1,7 @@
 const fs = require('fs').promises;
-const safeReply = require('./safe/safeReply');
-const sendLog = require("./safe/sendLog");
-const safeFollowUp = require("./safe/safeFollowUp");
+const safeReply = require('../safe/safeReply');
+const sendLog = require("../safe/sendLog");
+const safeFollowUp = require("../safe/safeFollowUp");
 
 const printHelp = async(client, interaction) => {
     try {

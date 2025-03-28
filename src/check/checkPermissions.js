@@ -1,4 +1,4 @@
-const sendLog = require("./safe/sendLog");
+const sendLog = require("../safe/sendLog");
 
 async function checkPermissions(interaction) {
     try {

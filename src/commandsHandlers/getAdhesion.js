@@ -1,10 +1,10 @@
 const {AttachmentBuilder} = require("discord.js");
-const sendLog = require("./safe/sendLog");
-const checkPermissions = require("./checkPermissions");
-const safeFollowUp = require("./safe/safeFollowUp");
-const safeReply = require("./safe/safeReply");
-const safeChannel = require("./safe/safeChannel");
-const safeUser = require("./safe/safeUser");
+const sendLog = require("../safe/sendLog");
+const checkPermissions = require("../check/checkPermissions");
+const safeFollowUp = require("../safe/safeFollowUp");
+const safeReply = require("../safe/safeReply");
+const safeChannel = require("../safe/safeChannel");
+const safeUser = require("../safe/safeUser");
 
 const getAdhesion = async(client, interaction) => {
     await safeReply(interaction, "Envoie des adhésions en cours...", true);

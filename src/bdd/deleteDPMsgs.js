@@ -1,5 +1,5 @@
 const {getBddInstance} = require("./Bdd");
-const sendLog = require("./safe/sendLog");
+const sendLog = require("../safe/sendLog");
 
 async function deleteDPMsgs(client, OGMessageID) {
     const bdd = await getBddInstance();

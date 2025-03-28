@@ -1,5 +1,5 @@
-const {getBddInstance} = require("./Bdd");
-const sendLog = require("./safe/sendLog");
+const {getBddInstance} = require("../bdd/Bdd");
+const sendLog = require("../safe/sendLog");
 
 async function checkCooldown(author, service) {
     if (author === process.env.OWNER_ID)

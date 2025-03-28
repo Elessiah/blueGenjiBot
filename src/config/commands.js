@@ -1,12 +1,15 @@
-const { CacheType, ChatInputCommandInteraction } = require("discord.js");
-const newChannelPartner = require("./newChannelPartner.js");
-const { resetChannel } = require("./resetChannel");
-const {resetServer} = require("./resetServer");
-const printHelp = require("./printHelp");
-const {listPartner} = require("./listPartner");
-const ban = require("./ban");
-const banlist = require("./banlist");
-const unban = require("./unban");
+const { CacheType, ChatInputCommandInteraction, ApplicationCommandOptionType } = require("discord.js");
+const newChannelPartner = require("../commandsHandlers/services/newChannelPartner.js");
+const { resetChannel } = require("../commandsHandlers/services/resetChannel");
+const {resetServer} = require("../commandsHandlers/services/resetServer");
+const printHelp = require("../commandsHandlers/printHelp");
+const {listPartner} = require("../commandsHandlers/services/listPartner");
+const ban = require("../commandsHandlers/ban/ban");
+const banlist = require("../commandsHandlers/ban/banlist");
+const unban = require("../commandsHandlers/ban/unban");
+const {areaFilter} = require("../utils/enums");
+const setChannelFilter = require("../commandsHandlers/services/setChannelFilter");
+const displayChannelFilter = require("../commandsHandlers/services/displayChannelFilter");
 
 const commands = {
     "help": {
@@ -17,7 +20,7 @@ const commands = {
                 {
                     name: "language",
                     description: "The language you want to read",
-                    type: 3,
+                    type: ApplicationCommandOptionType.String,
                     required: true,
                     choices: [
                         {
@@ -41,7 +44,7 @@ const commands = {
                 {
                     name: "service",
                     description: "Service you want to list",
-                    type: 3,
+                    type: ApplicationCommandOptionType.String,
                     required: true,
                     choices: [
                         {
@@ -85,13 +88,13 @@ const commands = {
                 {
                     name: "channel",
                     description: "Channel you want to assign",
-                    type: 7, // 7 for channel
+                    type: ApplicationCommandOptionType.Channel,
                     required: true
                 },
                 {
                     name: "service",
                     description: "Service you want to assign",
-                    type: 3, // 3 for string
+                    type: ApplicationCommandOptionType.String, // 3 for string
                     required: true,
                     choices: [
                         {
@@ -123,9 +126,93 @@ const commands = {
                             value: "lfcast"
                         }
                     ]
+                },
+                {
+                    name: "filter",
+                    description: "Region you want to receive",
+                    type: ApplicationCommandOptionType.Integer,
+                    required: true,
+                    choices: [
+                        {
+                            name: "All (No filter)",
+                            value: areaFilter.ALL
+                        },
+                        {
+                            name: "EU (Europe)",
+                            value: areaFilter.EU
+                        },
+                        {
+                            name: "NA (North America)",
+                            value: areaFilter.NA
+                        },
+                        {
+                            name: "LATAM (Latin America)",
+                            value: areaFilter.LATAM
+                        },
+                        {
+                            name: "ASIA",
+                            value: areaFilter.ASIA
+                        }
+                    ]
                 }
             ]
         }
+    },
+    "edit-channel-filter": {
+        handler: setChannelFilter,
+        parameters: {
+            description: "Edit the area that the channel receive, can be cumulative",
+            options: [
+                {
+                  name: "channel",
+                  description: "Channel you want to edit",
+                  type: ApplicationCommandOptionType.Channel, // 7 for channel
+                  required: true,
+                },
+                {
+                    name: "region",
+                    description: "Regional alert that you will now receive.",
+                    type: ApplicationCommandOptionType.Integer,
+                    required: true,
+                    choices: [
+                        {
+                          name: "All (No filter)",
+                          value: areaFilter.ALL
+                        },
+                        {
+                            name: "EU (Europe)",
+                            value: areaFilter.EU
+                        },
+                        {
+                            name: "NA (North America)",
+                            value: areaFilter.NA
+                        },
+                        {
+                            name: "LATAM (Latin America)",
+                            value: areaFilter.LATAM
+                        },
+                        {
+                            name: "ASIA",
+                            value: areaFilter.ASIA
+                        }
+                    ]
+                }
+            ]
+        }
+    },
+    "display-channel-filter": {
+      handler: displayChannelFilter,
+      parameters: {
+          description: "Display channel filter",
+          options: [
+              {
+                  name: "channel",
+                  description: "Channel you want to display filter",
+                  type: ApplicationCommandOptionType.Channel,
+                  required: true,
+              }
+          ]
+      }
     },
     "reset-channel": {
         handler: resetChannel,
@@ -135,7 +222,7 @@ const commands = {
                 {
                     name: "channel",
                     description: "Channel you want to assign",
-                    type: 7, // 7 for channel
+                    type: ApplicationCommandOptionType.Channel,
                     required: true
                 }
             ]
@@ -155,13 +242,13 @@ const commands = {
                 {
                     name: "user",
                     description: "User you want to ban",
-                    type: 6,
+                    type: ApplicationCommandOptionType.User,
                     required: true
                 },
                 {
                     name: "reason",
                     description: "Reason for the ban",
-                    type: 3,
+                    type: ApplicationCommandOptionType.String,
                     required: true
                 }
             ]
@@ -181,7 +268,7 @@ const commands = {
                 {
                     name: "id_ban",
                     description: "ID Ban you can find with the ban-list command",
-                    type: 3,
+                    type: ApplicationCommandOptionType.String,
                     required: true,
                 }
             ]

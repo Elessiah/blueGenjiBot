@@ -1,9 +1,9 @@
-const safeReply = require("./safe/safeReply");
-const checkPermissions = require("./checkPermissions");
-const sendLog = require("./safe/sendLog");
-const {getBddInstance} = require("./Bdd");
-const checkBan = require("./checkBan");
-const deleteDPMsgs = require("./deleteDPMsgs");
+const safeReply = require("../../safe/safeReply");
+const checkPermissions = require("../../check/checkPermissions");
+const sendLog = require("../../safe/sendLog");
+const {getBddInstance} = require("../../bdd/Bdd");
+const checkBan = require("../../check/checkBan");
+const deleteDPMsgs = require("../../bdd/deleteDPMsgs");
 
 async function ban(client, interaction) {
     const guild = interaction.guild;

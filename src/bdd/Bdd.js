@@ -105,13 +105,29 @@ class Bdd {
           `CREATE TABLE IF NOT EXISTS ChannelPartner
            (
              id_channel
-             TEXT
-             PRIMARY
-             KEY,
+               TEXT
+               PRIMARY
+                 KEY,
              id_guild
-             TEXT
+               TEXT
            );`
       );
+      await this.Database.exec(`
+        PRAGMA table_info(ChannelPartner);
+      `);
+
+      const columnExists = await this.Database.get(`
+        SELECT 1
+        FROM pragma_table_info('ChannelPartner')
+        WHERE name = 'region'
+      `);
+
+      if (!columnExists) {
+        await this.Database.exec(`
+          ALTER TABLE ChannelPartner
+            ADD COLUMN region INTEGER DEFAULT 0 CHECK (region BETWEEN 0 AND 8);
+        `);
+      }
     } catch (err) {
       console.log("ChannelPartner : ", err);
     }
@@ -216,11 +232,32 @@ class Bdd {
     const query = `INSERT INTO ${tableName} ${names} VALUES ${values}`;
     // console.log("End query : ", query);
     try {
-      this.Database.run(query);
+      await this.Database.run(query);
     } catch (e) {
       return {success: false, message: `Error while adding "${tableName}": ${e.message}`};
     }
     return {success: true, message: "Successfully added "};
+  }
+
+  async update(tableName, update, where) {
+    let query_values = [];
+    let query = `UPDATE ${tableName}
+                 SET `;
+    const set = [];
+    for (const [column, value] of Object.entries(update)) {
+      set.push(`${column} = ?`);
+      query_values.push(value);
+    }
+    query += set.join(", ");
+
+    query += ' WHERE ';
+    const conditions = [];
+    for (const [column, value] of Object.entries(where)) {
+      conditions.push(`${column} = ?`);
+      query_values.push(value);
+    }
+    query += conditions.join(' AND ');
+    await this.Database.run(query, query_values);
   }
 
   async get(tableName,
@@ -314,11 +351,13 @@ class Bdd {
     return ({ ret_array: ret_array, query: query });
   }
 
-  async setNewPartnerChannel(id_channel, id_guild, service_name) {
+  async setNewPartnerChannel(id_channel, id_guild, service_name, region) {
     try {
       let exists = await this.get("ChannelPartner", ["*"], {}, {id_channel: id_channel});
       if (typeof (exists) === typeof undefined || exists.length === 0) {
-        await this.set("ChannelPartner", ["id_channel", "id_guild"], [id_channel, id_guild]);
+        const ret = await this.set("ChannelPartner", ["id_channel", "id_guild", "region"], [id_channel, id_guild, region]);
+        if (!(ret.success))
+          return ret;
       }
       const ret_service = await this.get("Service", ["*"], {}, {name: service_name});
       const id_service = ret_service[0].id_service;

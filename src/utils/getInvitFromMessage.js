@@ -1,4 +1,4 @@
-const sendLog = require("./safe/sendLog");
+const sendLog = require("../safe/sendLog");
 const {PermissionsBitField} = require("discord.js");
 
 async function getInvitFromMessage(client, message) {

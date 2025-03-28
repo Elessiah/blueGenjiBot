@@ -1,8 +1,8 @@
-const checkPermissions = require("./checkPermissions");
-const safeReply = require("./safe/safeReply");
-const {getBddInstance} = require("./Bdd");
-const sendLog = require("./safe/sendLog");
-const safeChannel = require("./safe/safeChannel");
+const checkPermissions = require("../check/checkPermissions");
+const safeReply = require("../safe/safeReply");
+const {getBddInstance} = require("../bdd/Bdd");
+const sendLog = require("../safe/sendLog");
+const safeChannel = require("../safe/safeChannel");
 
 async function broadcast(client, interaction) {
     if (await checkPermissions(interaction) === false) {

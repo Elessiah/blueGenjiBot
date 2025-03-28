@@ -1,27 +1,28 @@
 const {ChatInputCommandInteraction, PermissionsBitField, EmbedBuilder} = require("discord.js");
-const {getBddInstance} = require("./Bdd");
-const checkPermissions = require("./checkPermissions");
-const safeReply = require("./safe/safeReply");
-const safeChannelEmbed = require("./safe/safeChannel");
-const sendLog = require("./safe/sendLog");
+const {getBddInstance} = require("../../bdd/Bdd");
+const checkPermissions = require("../../check/checkPermissions");
+const safeReply = require("../../safe/safeReply");
+const safeChannelEmbed = require("../../safe/safeChannel");
+const sendLog = require("../../safe/sendLog");
 
 /**
  * @param client
  * @param {ChatInputCommandInteraction<Cache>} interaction
  */
 const newChannelPartner = async(client, interaction) => {
-    if (!await checkPermissions(interaction)) {
-        return await safeReply(interaction,"You don't have the permission to do this.", true);
-    }
-    const channel_id = interaction.options.getChannel("channel").id;
-    const service_name = interaction.options.getString("service");
-
-    const bdd = await getBddInstance();
-    if (!bdd) {
-        return await sendLog(client, "Bdd failed in NewChannelPartner!");
-    }
     try {
-        const result = await bdd.setNewPartnerChannel(channel_id, interaction.guild.id, service_name);
+        if (!await checkPermissions(interaction)) {
+            return await safeReply(interaction, "You don't have the permission to do this.", true);
+        }
+        const channel_id = interaction.options.getChannel("channel").id;
+        const service_name = interaction.options.getString("service");
+        const region = interaction.options.getInteger("filter");
+
+        const bdd = await getBddInstance();
+        if (!bdd) {
+            return await sendLog(client, "Bdd failed in NewChannelPartner!");
+        }
+        const result = await bdd.setNewPartnerChannel(channel_id, interaction.guild.id, service_name, region);
         if (result.success === true) {
             const channel = await interaction.guild.channels.cache.get(channel_id);
             await safeReply(interaction, `Service "${service_name}" added on "${channel.name}"`, true);

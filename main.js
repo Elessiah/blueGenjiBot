@@ -1,17 +1,17 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits, EmbedBuilder} = require("discord.js");
-const {getBddInstance} = require("./src/Bdd");
-const {updateCommands} = require("./src/updateCommands.js");
-const commands = require("./src/commands");
-const manageDistribution = require("./src/manageDistribution");
-const {_resetServer} = require("./src/resetServer");
+const {getBddInstance} = require("./src/bdd/Bdd");
+const {updateCommands} = require("./src/utils/updateCommands.js");
+const commands = require("./src/config/commands");
+const manageDistribution = require("./src/messages/manageDistribution");
+const {_resetServer} = require("./src/commandsHandlers/services/resetServer");
 const sendLog = require("./src/safe/sendLog");
 const safeReply = require("./src/safe/safeReply");
-const {_resetChannel} = require("./src/resetChannel");
-const fillBlueCommands = require("./src/fillBlueCommands");
-const getInvitFromMessage = require("./src/getInvitFromMessage");
-const deleteDPMsgs = require("./src/deleteDPMsgs");
-const checkBan = require("./src/checkBan");
+const {_resetChannel} = require("./src/commandsHandlers/services/resetChannel");
+const fillBlueCommands = require("./src/config/fillBlueCommands");
+const getInvitFromMessage = require("./src/utils/getInvitFromMessage");
+const deleteDPMsgs = require("./src/bdd/deleteDPMsgs");
+const checkBan = require("./src/check/checkBan");
 
 const client = new Client({
             intents: [

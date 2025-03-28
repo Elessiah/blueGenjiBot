@@ -1,8 +1,8 @@
 const { REST, Routes } = require('discord.js');
 require('dotenv').config();
-const commands = require('./commands.js');
-const fillBlueCommands = require('./fillBlueCommands.js');
-const sendLog = require("./safe/sendLog");
+const commands = require('../config/commands.js');
+const fillBlueCommands = require('../config/fillBlueCommands.js');
+const sendLog = require("../safe/sendLog");
 
 const updateCommands = async(client, guildId) => {
     const { TOKEN, CLIENT_ID, SERV_GENJI, SERV_RIVALS } = process.env;

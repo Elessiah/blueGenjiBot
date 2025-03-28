@@ -1,7 +1,7 @@
-const safeReply = require("./safe/safeReply");
-const checkPermissions = require("./checkPermissions");
-const {getBddInstance} = require("./Bdd");
-const sendLog = require("./safe/sendLog");
+const safeReply = require("../../safe/safeReply");
+const checkPermissions = require("../../check/checkPermissions");
+const {getBddInstance} = require("../../bdd/Bdd");
+const sendLog = require("../../safe/sendLog");
 
 async function unban(client, interaction) {
     const guild = interaction.guild;

@@ -1,9 +1,9 @@
-const checkPermissions = require("./checkPermissions");
+const checkPermissions = require("../check/checkPermissions");
 const { PermissionsBitField } = require("discord.js");
-const safeReply = require("./safe/safeReply");
-const {getBddInstance} = require("./Bdd");
-const sendLog = require("./safe/sendLog");
-const safeUser = require("./safe/safeUser");
+const safeReply = require("../safe/safeReply");
+const {getBddInstance} = require("../bdd/Bdd");
+const sendLog = require("../safe/sendLog");
+const safeUser = require("../safe/safeUser");
 
 async function contactAdminServer(client, interaction) {
     if (await checkPermissions(interaction) === false) {

@@ -1,6 +1,6 @@
-const {getBddInstance} = require("./Bdd");
-const safeUser = require("./safe/safeUser");
-const sendLog = require("./safe/sendLog");
+const {getBddInstance} = require("../bdd/Bdd");
+const safeUser = require("../safe/safeUser");
+const sendLog = require("../safe/sendLog");
 
 async function checkBan(client, id_author, alertUser=true) {
     try {

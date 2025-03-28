@@ -1,8 +1,8 @@
-const {getBddInstance} = require("./Bdd");
-const checkPermissions = require("./checkPermissions");
-const client = require("../main")
-const sendLog = require("./safe/sendLog");
-const safeReply = require("./safe/safeReply");
+const {getBddInstance} = require("../../bdd/Bdd");
+const checkPermissions = require("../../check/checkPermissions");
+const client = require("../../../main")
+const sendLog = require("../../safe/sendLog");
+const safeReply = require("../../safe/safeReply");
 
 const _resetChannel = async(client, channel_id) => {
     const bdd = await getBddInstance();

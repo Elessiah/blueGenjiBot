@@ -1,6 +1,6 @@
-const {getBddInstance} = require('./Bdd');
-const sendLog = require("./safe/sendLog");
-const safeReply = require("./safe/safeReply");
+const {getBddInstance} = require('../../bdd/Bdd');
+const sendLog = require("../../safe/sendLog");
+const safeReply = require("../../safe/safeReply");
 
 async function banlist(client, interaction) {
     const bdd = await getBddInstance();

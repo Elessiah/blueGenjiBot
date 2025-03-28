@@ -1,7 +1,7 @@
-const checkPermissions = require("./checkPermissions");
-const safeReply = require("./safe/safeReply");
-const {getBddInstance} = require("./Bdd");
-const sendLog = require("./safe/sendLog");
+const checkPermissions = require("../../check/checkPermissions");
+const safeReply = require("../../safe/safeReply");
+const {getBddInstance} = require("../../bdd/Bdd");
+const sendLog = require("../../safe/sendLog");
 const {_resetServer} = require("./resetServer");
 
 async function remoteServerReset(client, interaction) {
