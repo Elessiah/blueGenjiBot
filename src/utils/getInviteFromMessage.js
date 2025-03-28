@@ -1,7 +1,7 @@
-const sendLog = require("../safe/sendLog");
 const {PermissionsBitField} = require("discord.js");
+const getInviteFromChannel = require("./getInviteFromChannel");
 
-async function getInvitFromMessage(client, message) {
+async function getInviteFromMessage(client, message) {
     try {
         if (!message.channel.permissionsFor(message.author).has(PermissionsBitField.Flags.CreateInstantInvite))
             return ("");
@@ -9,15 +9,10 @@ async function getInvitFromMessage(client, message) {
         if (channel == null)
             return ("");
 
-        const invite = await channel.createInvite( {
-            maxAge: 0,
-            maxUses: 0,
-            unique: false
-        });
-        return invite.url;
+        return await getInviteFromChannel(channel);
     } catch (e) {
         return "";
     }
 }
 
-module.exports = getInvitFromMessage;
+module.exports = getInviteFromMessage;

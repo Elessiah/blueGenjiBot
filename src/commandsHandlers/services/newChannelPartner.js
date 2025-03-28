@@ -4,6 +4,7 @@ const checkPermissions = require("../../check/checkPermissions");
 const safeReply = require("../../safe/safeReply");
 const safeChannelEmbed = require("../../safe/safeChannel");
 const sendLog = require("../../safe/sendLog");
+const {regions} = require("../../utils/enums");
 
 /**
  * @param client
@@ -26,8 +27,8 @@ const newChannelPartner = async(client, interaction) => {
         if (result.success === true) {
             const channel = await interaction.guild.channels.cache.get(channel_id);
             await safeReply(interaction, `Service "${service_name}" added on "${channel.name}"`, true);
-            const message = `This channel is now linked to the service \`${service_name.toUpperCase()}\`\nTo be shared, your message must contain the word \`${service_name.toUpperCase()}\``
-            await sendLog(client, `${interaction.guild.name} has activated ${service_name} !!`);
+            const message = `This channel is now linked to the service \`${service_name.toUpperCase()}\` on region \`${regions[region]}\`.\nTo be shared, your message must contain the word \`${service_name.toUpperCase()}\``
+            await sendLog(client, `${interaction.guild.name} has activated ${service_name} on region \`${regions[region]}\`!!`);
             const embed = new EmbedBuilder().setAuthor({name: "BlueGenjiBot"}).setDescription(message);
             await safeChannelEmbed(client, channel, embed);
         } else {

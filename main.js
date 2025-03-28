@@ -9,7 +9,7 @@ const sendLog = require("./src/safe/sendLog");
 const safeReply = require("./src/safe/safeReply");
 const {_resetChannel} = require("./src/commandsHandlers/services/resetChannel");
 const fillBlueCommands = require("./src/config/fillBlueCommands");
-const getInvitFromMessage = require("./src/utils/getInvitFromMessage");
+const getInviteFromMessage = require("./src/utils/getInviteFromMessage");
 const deleteDPMsgs = require("./src/bdd/deleteDPMsgs");
 const checkBan = require("./src/check/checkBan");
 
@@ -66,7 +66,7 @@ client.on("messageCreate", async message => {
 client.on("messageUpdate", async (oldMessage, newMessage) => {
     const bdd = await getBddInstance();
     let DPMsgs = await bdd.get("DPMsg", ["id_msg", "id_channel"], {}, {"id_og": oldMessage.id});
-    const origin = "*Sent from : [" + newMessage.guild.name + "](" + await getInvitFromMessage(client, newMessage) + ")*";
+    const origin = "*Sent from : [" + newMessage.guild.name + "](" + await getInviteFromMessage(client, newMessage) + ")*";
     if (DPMsgs.length > 0) {
         let embed;
         if (oldMessage.attachments.size === 1) {
