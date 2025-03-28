@@ -3,6 +3,7 @@ const sendLog = require("../../safe/sendLog");
 const safeReply = require("../../safe/safeReply");
 const {regions} = require("../../utils/enums");
 const getInviteFromChannel = require("../../utils/getInviteFromChannel");
+const safeChannel = require("../../safe/safeChannel");
 
 const listPartner = async(client, interaction) => {
     try {
@@ -33,7 +34,10 @@ const listPartner = async(client, interaction) => {
         const content = `List of all affiliated servers for service ${service_name} *(Invite link embedded in a hyperlink with their name)* : \n` + subContent + '----------\nThanks again for using our services !';
         await sendLog(client, content);
         console.log("Interaction :  ", interaction);
-        await safeReply(interaction, content, true);
+        if (await safeReply(interaction, content, true) === false) {
+            await safeChannel(client, interaction.channel, null, [], content);
+        }
+        console.log("end !");
     } catch (e) {
         await safeReply(interaction, "An error occurred while trying to retrieve list. Please try again.");
         console.log("Error while displaying listPartner : ", e.message);

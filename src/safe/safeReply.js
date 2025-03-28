@@ -1,7 +1,7 @@
 const sendLog = require("./sendLog");
 
 async function safeReply(interaction=null, content="Empty Reply", is_ephemeral=true) {
-    if (interaction === null) {
+    if (interaction == null) {
         return false;
     }
     let nTry = 0;
