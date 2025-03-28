@@ -23,9 +23,10 @@ async function ban(client, interaction) {
         await sendLog(client, "Bdd failed in ban !");
         return false;
     }
+    await interaction.deferReply({ephemeral: true});
     const user = interaction.options.getMember("user");
     if (await checkBan(client, user.user.id, false) === true) {
-        await safeReply(interaction, "This user has been already banned.", true);
+        await safeReply(interaction, "This user has been already banned.", true, true);
         return true;
     }
     const reason = interaction.options.getString("reason");
@@ -48,7 +49,7 @@ async function ban(client, interaction) {
     for (let OGMsg of OGMsgs) {
         await deleteDPMsgs(client, OGMsg.id_msg);
     }
-    await safeReply(interaction, "Member has been successfully banned !", true);
+    await safeReply(interaction, "Member has been successfully banned !", true, true);
 }
 
 module.exports = ban;

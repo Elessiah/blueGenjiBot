@@ -45,15 +45,16 @@ const resetServer = async(client, interaction) => {
     if (!await checkPermissions(interaction)) {
         return await safeReply(interaction, "You don't have the permission to do this.", true);
     }
+    await interaction.deferReply({ephemeral: true});
     const ret = await _resetServer(client, interaction.guildId);
     if (ret.success) {
-        await interaction.reply({content: `Server "${interaction.guild.name}" reseted`, ephemeral: true})
+        await safeReply(interaction,`Server "${interaction.guild.name}" reseted`, true, true);
     } else {
         if (ret.message !== "Server already reseted") {
             await sendLog(interaction.client, "ResetServer has failed :\n" + ret.message);
-            await safeReply(interaction, "Reset has failed. Please try again.", true);
+            await safeReply(interaction, "Reset has failed. Please try again.", true, true);
         } else {
-            await safeReply(interaction, ret.message);
+            await safeReply(interaction, ret.message, true, true);
         }
 
     }

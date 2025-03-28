@@ -14,6 +14,7 @@ async function broadcast(client, interaction) {
         await sendLog(client, "Bdd failed in ban !");
         return false;
     }
+    await interaction.deferReply({ephemeral: true});
     const targets = await bdd.get("ChannelPartner", ["id_channel"]);
     const msg = `# Developer Announcement Broadcast!\n> ${interaction.options.getString("message")}`;
     for (const target of targets) {
@@ -27,7 +28,7 @@ async function broadcast(client, interaction) {
             await sendLog(client, "Broadcast channel has failed one time : " + e.message);
         }
     }
-    await safeReply(interaction, "Broadcast executed !");
+    await safeReply(interaction, "Broadcast executed !", true, true);
 }
 
 module.exports = broadcast;

@@ -23,20 +23,21 @@ const newChannelPartner = async(client, interaction) => {
         if (!bdd) {
             return await sendLog(client, "Bdd failed in NewChannelPartner!");
         }
+        await interaction.deferReply({ephemeral: true});
         const result = await bdd.setNewPartnerChannel(channel_id, interaction.guild.id, service_name, region);
         if (result.success === true) {
             const channel = await interaction.guild.channels.cache.get(channel_id);
-            await safeReply(interaction, `Service "${service_name}" added on "${channel.name}"`, true);
+            await safeReply(interaction, `Service "${service_name}" added on "${channel.name}"`, true, true);
             const message = `This channel is now linked to the service \`${service_name.toUpperCase()}\` on region \`${regions[region]}\`.\nTo be shared, your message must contain the word \`${service_name.toUpperCase()}\``
             await sendLog(client, `${interaction.guild.name} has activated ${service_name} on region \`${regions[region]}\`!!`);
             const embed = new EmbedBuilder().setAuthor({name: "BlueGenjiBot"}).setDescription(message);
             await safeChannelEmbed(client, channel, embed);
         } else {
-            await safeReply(interaction, result.message, true);
+            await safeReply(interaction, result.message, true, true);
         }
     } catch (err) {
         await sendLog(client, err.message);
-        await safeReply(interaction, "NewChannelPartner : " + err.message, true);
+        await safeReply(interaction, "NewChannelPartner : " + err.message, true, true);
     }
 }
 

@@ -16,6 +16,7 @@ async function contactAdminServer(client, interaction) {
         await sendLog(client, "Bdd failed in ban !");
         return false;
     }
+    await interaction.deferReply({ephemeral: true});
     const serverId = interaction.options.getString("server");
     const server = await client.guilds.fetch(serverId);
     let adminRoles = server.roles.cache.filter(r =>
@@ -39,7 +40,7 @@ async function contactAdminServer(client, interaction) {
     if (errMsg.length > 0) {
         await sendLog(client, "Erreur pour l'envoies au admins : \n" + errMsg);
     }
-    await safeReply(interaction, `Message successfully sent to ${targets.length} admin(s) !`);
+    await safeReply(interaction, `Message successfully sent to ${targets.length} admin(s) !`, true, true);
 }
 
 module.exports = contactAdminServer;

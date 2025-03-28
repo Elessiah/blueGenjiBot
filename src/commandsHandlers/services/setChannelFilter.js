@@ -14,22 +14,23 @@ async function setChannelFilter(client, interaction) {
             await sendLog(client, "Bdd failed in ban !");
             return false;
         }
+        await interaction.deferReply({ephemeral: true});
         const channel_id = interaction.options.getChannel("channel").id;
         const region = interaction.options.getInteger("region");
         const current_filter = await bdd.get("ChannelPartner", ["region"], {}, {id_channel: channel_id});
         if (current_filter == null || current_filter.length === 0) {
-            await safeReply(interaction, "This channel is not link to any service");
+            await safeReply(interaction, "This channel is not link to any service", true, true);
             return true;
         }
         if (current_filter[0].region === region) {
-            await safeReply(interaction, "This filter is already active !");
+            await safeReply(interaction, "This filter is already active !", true, true);
             return true;
         }
         await bdd.update("ChannelPartner", {region: region}, {id_channel: channel_id});
-        await safeReply(interaction, "The channel filter has been updated!");
+        await safeReply(interaction, "The channel filter has been updated!", true, true);
         return true;
     } catch (e) {
-        await safeReply("An error occurred while trying to edit channel filter. Please try again or contact : elessiah");
+        await safeReply("An error occurred while trying to edit channel filter. Please try again or contact : elessiah", true, true);
         await sendLog(client, "Error while trying to edit channel filter : " + e.message);
         return false;
     }

@@ -43,6 +43,7 @@ const resetChannel = async(client, interaction) => {
     if (!await checkPermissions(interaction)) {
         return await safeReply(interaction, "You don't have the permission to do this.", true);
     }
+    await interaction.deferReply({ephemeral: true});
     const channel_id = await interaction.options.getChannel("channel").id;
     let ret = await _resetChannel(client, channel_id);
     if (typeof ret === typeof undefined) {
@@ -53,7 +54,7 @@ const resetChannel = async(client, interaction) => {
         if (ret.message !== "Channel has no services to delete.")
             await sendLog(interaction.client, "resetChannel failed : \n" + ret.message);
     }
-    return await safeReply(interaction, ret.message);
+    return await safeReply(interaction, ret.message, true, true);
 }
 
 module.exports = { resetChannel, _resetChannel };

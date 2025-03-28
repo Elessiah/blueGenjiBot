@@ -3,7 +3,6 @@ const sendLog = require("../../safe/sendLog");
 const safeReply = require("../../safe/safeReply");
 const {regions} = require("../../utils/enums");
 const getInviteFromChannel = require("../../utils/getInviteFromChannel");
-const safeChannel = require("../../safe/safeChannel");
 
 const listPartner = async(client, interaction) => {
     try {
