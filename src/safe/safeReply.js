@@ -1,16 +1,18 @@
 const sendLog = require("./sendLog");
 
-async function safeReply(interaction=null, content="Empty Reply", is_ephemeral=true) {
+async function safeReply(interaction=null, content="Empty Reply", is_ephemeral=true, lateReply=false) {
     if (interaction == null) {
         return false;
     }
-    console.log("Interaction in safeReply ! :  ", interaction);
     let nTry = 0;
     let success = false;
     let err_msg = "";
     while (nTry < 3 && success === false) {
         try {
-            await interaction.reply({content: content, ephemeral: is_ephemeral});
+            if (!lateReply)
+                await interaction.reply({content: content, ephemeral: is_ephemeral});
+            else
+                await interaction.editReply({content: content });
             success = true;
         } catch (err) {
             err_msg = err.message;

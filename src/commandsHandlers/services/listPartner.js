@@ -12,6 +12,7 @@ const listPartner = async(client, interaction) => {
             await sendLog(client, "Bdd failed in ListPartner!");
             return;
         }
+        await interaction.deferReply({ephemeral: true});
         const service_name = interaction.options.getString("service");
         const channels = await bdd.get("ChannelPartnerService",
             ["ChannelPartnerService.id_channel", "region"],
@@ -32,12 +33,9 @@ const listPartner = async(client, interaction) => {
                 subContent += `## ${regions[i]}\n` + guilds[i].join("\n") + '\n';
         }
         const content = `List of all affiliated servers for service ${service_name} *(Invite link embedded in a hyperlink with their name)* : \n` + subContent + '----------\nThanks again for using our services !';
-        console.log("Interaction :  ", interaction);
-        if (await safeReply(interaction, content, true) === false) {
-            await safeChannel(client, interaction.channel, null, [], content);
-        }
+        await safeReply(interaction, content, true, true);
     } catch (e) {
-        await safeReply(interaction, "An error occurred while trying to retrieve list. Please try again.");
+        await safeReply(interaction, "An error occurred while trying to retrieve list. Please try again.", false, true);
         console.log("Error while displaying listPartner : ", e.message);
     }
 }
