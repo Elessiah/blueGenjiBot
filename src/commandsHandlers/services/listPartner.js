@@ -32,7 +32,7 @@ const listPartner = async(client, interaction) => {
             if (guilds[i].length > 0)
                 subContent += `## ${regions[i]}\n` + guilds[i].join("\n") + '\n';
         }
-        const content = `List of all affiliated servers for service ${service_name} *(Invite link embedded in a hyperlink with their name)* : \n` + subContent + '----------\nThanks again for using our services !';
+        const content = `List of all affiliated servers for service \`${service_name}\` *(Invite link embedded in a hyperlink with their name)* : \n` + subContent + '----------\nThanks again for using our services !';
         await safeReply(interaction, content, true, true);
     } catch (e) {
         await safeReply(interaction, "An error occurred while trying to retrieve list. Please try again.", false, true);
