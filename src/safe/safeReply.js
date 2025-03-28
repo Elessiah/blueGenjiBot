@@ -4,6 +4,7 @@ async function safeReply(interaction=null, content="Empty Reply", is_ephemeral=t
     if (interaction == null) {
         return false;
     }
+    console.log("Interaction in safeReply ! :  ", interaction);
     let nTry = 0;
     let success = false;
     let err_msg = "";
