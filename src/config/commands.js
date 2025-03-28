@@ -161,7 +161,7 @@ const commands = {
     "edit-channel-filter": {
         handler: setChannelFilter,
         parameters: {
-            description: "Edit the area that the channel receive, can be cumulative",
+            description: "Edit the area that the channel receive (ADMIN ONLY)",
             options: [
                 {
                   name: "channel",
@@ -203,7 +203,7 @@ const commands = {
     "display-channel-filter": {
       handler: displayChannelFilter,
       parameters: {
-          description: "Display channel filter",
+          description: "Display channel filter (EVERYONE)",
           options: [
               {
                   name: "channel",
@@ -257,13 +257,13 @@ const commands = {
     "ban-list": {
         handler: banlist,
         parameters: {
-            description: "Display the list of banned members from the bot service",
+            description: "Display the list of banned members from the bot service (EVERYONE)",
         }
     },
     "unban": {
         handler: unban,
         parameters: {
-            description: "Unban user from the bot service",
+            description: "Unban user from the bot service (ONLY SERVER 50+ members) (SERVER ADMIN ONLY)",
             options: [
                 {
                     name: "id_ban",
