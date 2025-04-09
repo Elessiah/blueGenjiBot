@@ -4,8 +4,8 @@ const {checkCooldown} = require("../check/checkCooldown");
 const safeMsgReply = require("../safe/safeMsgReply");
 const delay = require("../utils/delay");
 
-async function checkMessageValidity(client, service, messageContentLower, message) {
-    if (await searchString(service.name.toLowerCase(), messageContentLower) === false) {
+async function checkMessageValidity(client, service, messageContentLower, message, checkKeyword=true) {
+    if (checkKeyword && await searchString(service.name.toLowerCase(), messageContentLower) === false) {
         return false;
     }
     if (await checkBan(client, message.author.id) === true) {

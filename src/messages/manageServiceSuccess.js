@@ -3,13 +3,13 @@ const safeMsgReply = require("../safe/safeMsgReply");
 const {regions} = require("../utils/enums");
 const delay = require("../utils/delay");
 
-async function manageServiceSuccess(client, bdd, message, target_region, nbPartner) {
+async function manageServiceSuccess(client, bdd, message, target_region, nbPartner, usedServices) {
     const ret = await bdd.set("OGMsg", ['id_msg', 'id_author'], [message.id, message.author.id]);
     if (ret.success === false) {
         await sendLog(client, "In manageDistribution: " + ret.message);
     }
     await message.react("🛰️");
-    const temp_msg = await safeMsgReply(client, message, "Your message has been sent to " + nbPartner + " channels of " + regions[target_region] + "/ALL region !");
+    const temp_msg = await safeMsgReply(client, message, "Your message has been sent to " + nbPartner + " channels of " + regions[target_region] + "/ALL region as " + usedServices.join(', '));
     await delay(30000);
     await temp_msg.delete();
 }

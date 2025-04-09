@@ -26,8 +26,14 @@ async function manageDistribution(message, client, bdd, channelId, services) {
         }
         let nbPartner = 0;
         let hasTried = false;
+        let checkKeyword = true;
+        if (services.length === 1) {
+            checkKeyword = false;
+        }
+        const usedServices = [];
         for (const service of services) {
-            if (await checkMessageValidity(client, service, messageContentLower, message)) {
+            if (await checkMessageValidity(client, service, messageContentLower, message, checkKeyword)) {
+                usedServices.push(service.name);
                 hasTried = true;
                 await bdd.set('MessageService', ['id_msg', 'id_service'], [message.id, service.id_service]);
                 const targets = await bdd.Database.all(`SELECT ChannelPartnerService.id_channel
@@ -42,7 +48,7 @@ async function manageDistribution(message, client, bdd, channelId, services) {
             }
         }
         if (nbPartner > 0) {
-            await manageServiceSuccess(client, bdd, message, target_region, nbPartner);
+            await manageServiceSuccess(client, bdd, message, target_region, nbPartner, usedServices);
         } else if (hasTried) {
             await safeMsgReply(client, message, "Your message was not delivered to any channel. " +
                 "This may be because no users have activated the region filter you specified.");
