@@ -3,6 +3,7 @@ const broadcast = require("../commandsHandlers/broadcast");
 const buildServerChoices = require("../utils/buildServerChoices");
 const contactAdminServer = require("../commandsHandlers/contactAdminServer");
 const remoteServerReset = require("../commandsHandlers/services/remoteServerReset");
+const restartBot = require("../commandsHandlers/restartBot");
 
 async function fillBlueCommands(client) {
     const serverChoices = await buildServerChoices(client);
@@ -85,6 +86,20 @@ async function fillBlueCommands(client) {
                         type: 3,
                         required: true,
                         choices: serverChoices,
+                    }
+                ]
+            }
+        },
+        "restart-bot": {
+            handler: restartBot,
+            parameters: {
+                description: "Restart bot and update it",
+                options: [
+                    {
+                        name: "password",
+                        description: "Password, le grand amour d'Elessiah",
+                        type: 3,
+                        required: true,
                     }
                 ]
             }
