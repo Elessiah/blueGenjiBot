@@ -6,6 +6,7 @@ const getTargetRegion = require("./getTargetRegion");
 const buildServiceMessage = require("./buildServiceMessage");
 const sendServiceMessage = require("./sendServiceMessage");
 const manageServiceSuccess = require("./manageServiceSuccess");
+const extractRanks = require("../utils/extractRanks");
 
 async function manageDistribution(message, client, bdd, channelId, services) {
     try {
@@ -15,7 +16,8 @@ async function manageDistribution(message, client, bdd, channelId, services) {
         } else if (message.attachments.size > 1) {
             await safeMsgReply(client, message, "You cannot send more than one attachment ! Cancel your Distribution.");
             return false;
-        }
+        };
+        const ranks = await extractRanks(message.content);
         const embed = await buildServiceMessage(client, message, channelId, attachement);
         const messageContentLower = message.content.toLowerCase();
         const current_region = (await bdd.get("ChannelPartner", ["region"], {}, {id_channel: channelId}))[0].region;
@@ -44,7 +46,7 @@ async function manageDistribution(message, client, bdd, channelId, services) {
                                             WHERE Service.name = ?
                                               AND (ChannelPartner.region = ? OR ChannelPartner.region = 0)`,
                                         [service.name, target_region]);
-                nbPartner += await sendServiceMessage(client, targets, message, embed, bdd);
+                nbPartner += await sendServiceMessage(client, targets, message, embed, bdd, ranks);
             }
         }
         if (nbPartner > 0) {

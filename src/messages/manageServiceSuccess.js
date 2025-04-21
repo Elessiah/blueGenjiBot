@@ -1,6 +1,6 @@
 const sendLog = require("../safe/sendLog");
 const safeMsgReply = require("../safe/safeMsgReply");
-const {regions} = require("../utils/enums");
+const {regions} = require("../utils/globals");
 const delay = require("../utils/delay");
 
 async function manageServiceSuccess(client, bdd, message, target_region, nbPartner, usedServices) {

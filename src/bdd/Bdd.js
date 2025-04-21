@@ -1,5 +1,7 @@
 const sqlite = require('sqlite');
 const sqlite3 = require('sqlite3');
+const {ranks, services} = require('../utils/globals');
+const updateOldPartner = require("../utils/updateOldPartner");
 
 let bdd;
 
@@ -33,72 +35,72 @@ class Bdd {
   async initDatabase() {
     try {
     } catch (err) {
-      console.log(err);
+      console.error(err);
     }
     try {
       await this.Database.exec(
           `CREATE TABLE IF NOT EXISTS OGMsg
-          (
-            id_msg
-            TEXT,
-            id_author
-            TEXT,
-            date
-            DATETIME
-            DEFAULT
-            CURRENT_TIMESTAMP,
-            PRIMARY
-            KEY
            (
-            id_msg
-           )
-            );`
+             id_msg
+               TEXT,
+             id_author
+               TEXT,
+             date
+               DATETIME
+               DEFAULT
+                 CURRENT_TIMESTAMP,
+             PRIMARY
+               KEY
+               (
+                id_msg
+                 )
+           );`
       );
     } catch (err) {
-      console.log("OGMsg :", err);
+      console.error("OGMsg :", err);
     }
     try {
       await this.Database.exec(
           `CREATE TABLE IF NOT EXISTS MessageService
-          (
-            id_msg
-            text,
-            id_service
-            INTEGER,
-            PRIMARY
-            KEY
            (
-            id_msg,
-            id_service
-           )
-            );`
+             id_msg
+               text,
+             id_service
+               INTEGER,
+             PRIMARY
+               KEY
+               (
+                id_msg,
+                id_service
+                 )
+           );`
       );
     } catch (err) {
-      console.log("MessageService : ", err);
+      console.error("MessageService : ", err);
     }
     try {
       await this.Database.exec(
           `CREATE TABLE IF NOT EXISTS DPMsg
-          (
-            id_msg
-            TEXT,
-            id_channel
-            TEXT,
-            id_og
-            TEXT,
-            date
-            DATETIME
-            DEFAULT
-            CURRENT_TIMESTAMP,
-            PRIMARY
-            KEY
            (
-            id_msg
-           )
-            );`
+             id_msg
+               TEXT,
+             id_channel
+               TEXT,
+             id_og
+               TEXT,
+             date
+               DATETIME
+               DEFAULT
+                 CURRENT_TIMESTAMP,
+             PRIMARY
+               KEY
+               (
+                id_msg
+                 )
+           );`
       );
     } catch (err) {
-      console.log("DPMsg : ", err);
+      console.error("DPMsg : ", err);
     }
     try {
       await this.Database.exec(
@@ -125,28 +127,27 @@ class Bdd {
       if (!columnExists) {
         await this.Database.exec(`
           ALTER TABLE ChannelPartner
-            ADD COLUMN region INTEGER DEFAULT 0 CHECK (region BETWEEN 0 AND 8);
+            ADD COLUMN region INTEGER DEFAULT 0 CHECK (region BETWEEN 0 AND 5);
         `);
       }
     } catch (err) {
-      console.log("ChannelPartner : ", err);
+      console.error("ChannelPartner : ", err);
     }
     try {
       await this.Database.exec(
           `CREATE TABLE IF NOT EXISTS Service
            (
              id_service
-             INTEGER
-             PRIMARY
-             KEY
-             AUTOINCREMENT,
+               INTEGER
+               PRIMARY
+                 KEY
+               AUTOINCREMENT,
              name
-             TEXT
-             NOT
-             NULL
+               TEXT
+               NOT
+                 NULL
            );`
       );
-      const services = ['lfs', 'ta', 'lfsub', 'lft', 'lfp', 'lfstaff', 'lfcast'];
 
       for (const service of services) {
         const ret = await this.get("Service", ["*"], {}, {name: service});
@@ -164,56 +165,87 @@ class Bdd {
         });
       }
     } catch (err) {
-      console.log("Service&Co", err);
+      console.error("Service&Co", err);
     }
     try {
       await this.Database.exec(
           `CREATE TABLE IF NOT EXISTS ChannelPartnerService
-          (
-            id_channel
-            TEXT
-            NOT
-            NULL,
-            id_service
-            INTEGER
-            NOT
-            NULL,
-            PRIMARY
-            KEY
            (
-            id_channel,
-            id_service
-           )
-            );`
+             id_channel
+               TEXT
+               NOT
+                 NULL,
+             id_service
+               INTEGER
+               NOT
+                 NULL,
+             PRIMARY
+               KEY
+               (
+                id_channel,
+                id_service
+                 )
+           );`
       );
     } catch (e) {
-      console.log("ChannelPartnerService : ", e);
+      console.error("ChannelPartnerService : ", e);
     }
     try {
       await this.Database.exec(
           `CREATE TABLE IF NOT EXISTS Ban
            (
              id_user
-             TEXT
-             PRIMARY
-             KEY,
+               TEXT
+               PRIMARY
+                 KEY,
              id_moderator
-             TEXT
-             NOT
-             NULL,
+               TEXT
+               NOT
+                 NULL,
              id_reason
-             TEXT
-             NOT
-             NULL,
+               TEXT
+               NOT
+                 NULL,
              date
-             DATETIME
-             DEFAULT
-             CURRENT_TIMESTAMP
+               DATETIME
+               DEFAULT
+                 CURRENT_TIMESTAMP
            );`
       );
     } catch (e) {
-      console.log("Ban : ", e);
+      console.error("Ban : ", e);
     }
+    try {
+      await this.Database.exec(
+          `CREATE TABLE IF NOT EXISTS Ranks
+           (
+             id_rank INTEGER PRIMARY KEY AUTOINCREMENT,
+             name    TEXT NOT NULL
+           );`
+      );
+      for (const rank of ranks) {
+        const ret = await this.get('Ranks', ["*"], {}, {name: rank});
+        if (!!ret && ret.length > 0)
+          continue;
+        console.log(`Adding "${rank}" to the database...`);
+        await this.Database.run("INSERT INTO Ranks (name) VALUES (?)", [rank]);
+      }
+    } catch (e) {
+      console.error("Error rank filter : ", e);
+    }
+    try {
+      await this.Database.exec(
+          `CREATE TABLE IF NOT EXISTS ChannelPartnerRank
+           (
+               id_channel TEXT    NOT NULL,
+               id_rank    INTEGER NOT NULL,
+               PRIMARY KEY (id_channel, id_rank)
+           );`
+      );
+    } catch (e) {
+      console.error('ChannelPartnerRank: ', e);
+    }
+    await updateOldPartner(this);
   }
 
   async set(tableName, elemName, value) {
@@ -230,7 +262,6 @@ class Bdd {
     const names = "(" + elemName.join(", ") + ")";
     const values = "(" + value.join(", ") + ")";
     const query = `INSERT INTO ${tableName} ${names} VALUES ${values}`;
-    // console.log("End query : ", query);
     try {
       await this.Database.run(query);
     } catch (e) {
@@ -386,7 +417,7 @@ class Bdd {
       await this.Database.run(query, [channel_id]);
       return {success: true, message: 'Services deleted.'};
     } catch (err) {
-      console.log(err);
+      console.error(err);
       return {success: false, message: 'Failed to delete channel services.'};
     }
   }
@@ -403,6 +434,15 @@ class Bdd {
   async getCurrentTimestamp() {
     const ret = await this.Database.all('SELECT CURRENT_TIMESTAMP');
     return (ret[0].CURRENT_TIMESTAMP);
+  }
+
+  async partnerHasRanks(channel_id, ranks){
+    let ranksFilter = [];
+    ranks.forEach((rank) => {ranksFilter.push(` Ranks.name='${rank}' `)});
+    ranksFilter = ranksFilter.join(' OR ');
+    const request_result = await this.Database.all(`SELECT * FROM ChannelPartnerRank JOIN Ranks ON ChannelPartnerRank.id_rank = Ranks.id_rank
+      WHERE ChannelPartnerRank.id_channel=${channel_id} AND (${ranksFilter});`);
+    return !(request_result == null || request_result.length === 0);
   }
 }
 

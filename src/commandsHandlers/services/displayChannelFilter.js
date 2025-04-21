@@ -1,7 +1,7 @@
 const sendLog = require("../../safe/sendLog");
 const {getBddInstance} = require("../../bdd/Bdd");
 const safeReply = require("../../safe/safeReply");
-const {regions} = require("../../utils/enums");
+const {regions} = require("../../utils/globals");
 
 async function displayChannelFilter(client, interaction) {
     try {

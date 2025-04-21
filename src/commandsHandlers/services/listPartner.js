@@ -1,7 +1,7 @@
 const {getBddInstance} = require("../../bdd/Bdd");
 const sendLog = require("../../safe/sendLog");
 const safeReply = require("../../safe/safeReply");
-const {regions} = require("../../utils/enums");
+const {regions} = require("../../utils/globals");
 const getInviteFromChannel = require("../../utils/getInviteFromChannel");
 
 const listPartner = async(client, interaction) => {
@@ -35,7 +35,7 @@ const listPartner = async(client, interaction) => {
         await safeReply(interaction, content, true, true);
     } catch (e) {
         await safeReply(interaction, "An error occurred while trying to retrieve list. Please try again.", false, true);
-        console.log("Error while displaying listPartner : ", e.message);
+        console.error("Error while displaying listPartner : ", e.message);
     }
 }
 

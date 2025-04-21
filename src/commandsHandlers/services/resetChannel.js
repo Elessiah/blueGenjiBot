@@ -15,6 +15,7 @@ const _resetChannel = async(client, channel_id) => {
     let nTry = 0;
     while (nTry < 10 && success === false) {
         try {
+            await bdd.rm("ChannelPartnerRank", {}, {id_channel: channel_id});
             const ret = await bdd.deleteChannelServices(channel_id);
             if (ret.success) {
                 try {

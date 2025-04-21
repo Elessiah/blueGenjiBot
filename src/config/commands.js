@@ -7,9 +7,13 @@ const {listPartner} = require("../commandsHandlers/services/listPartner");
 const ban = require("../commandsHandlers/ban/ban");
 const banlist = require("../commandsHandlers/ban/banlist");
 const unban = require("../commandsHandlers/ban/unban");
-const {areaFilter} = require("../utils/enums");
+const {areaFilter} = require("../utils/globals");
 const setChannelFilter = require("../commandsHandlers/services/setChannelFilter");
 const displayChannelFilter = require("../commandsHandlers/services/displayChannelFilter");
+const rankChoices = require("./rankChoices");
+const servicesChoices = require("./servicesChoices");
+const setChannelRankFilter = require("../commandsHandlers/services/setChannelRankFilter");
+const displayChannelRankFilter = require("../commandsHandlers/services/displayChannelRankFilter");
 
 const commands = {
     "help": {
@@ -46,36 +50,7 @@ const commands = {
                     description: "Service you want to list",
                     type: ApplicationCommandOptionType.String,
                     required: true,
-                    choices: [
-                        {
-                            name: "LookForScrim",
-                            value: "lfs"
-                        },
-                        {
-                            name: "TournamentAnnouncement",
-                            value: "ta"
-                        },
-                        {
-                            name: "LookForSub",
-                            value: "lfsub"
-                        },
-                        {
-                            name: "LookForTeam",
-                            value: "lft"
-                        },
-                        {
-                            name: "LookForPlayer",
-                            value: "lfp"
-                        },
-                        {
-                            name: "LookForStaff",
-                            value: "lfstaff"
-                        },
-                        {
-                            name: "LookForCast",
-                            value: "lfcast"
-                        }
-                    ]
+                    choices: servicesChoices
                 }
             ]
         }
@@ -96,39 +71,10 @@ const commands = {
                     description: "Service you want to assign",
                     type: ApplicationCommandOptionType.String, // 3 for string
                     required: true,
-                    choices: [
-                        {
-                            name: "LookForScrim",
-                            value: "lfs"
-                        },
-                        {
-                            name: "TournamentAnnouncement",
-                            value: "ta"
-                        },
-                        {
-                            name: "LookForSub",
-                            value: "lfsub"
-                        },
-                        {
-                            name: "LookForTeam",
-                            value: "lft"
-                        },
-                        {
-                            name: "LookForPlayer",
-                            value: "lfp"
-                        },
-                        {
-                            name: "LookForStaff",
-                            value: "lfstaff"
-                        },
-                        {
-                            name: "LookForCast",
-                            value: "lfcast"
-                        }
-                    ]
+                    choices: servicesChoices
                 },
                 {
-                    name: "filter",
+                    name: "region-filter",
                     description: "Region you want to receive",
                     type: ApplicationCommandOptionType.Integer,
                     required: true,
@@ -154,11 +100,25 @@ const commands = {
                             value: areaFilter.ASIA
                         }
                     ]
+                },
+                {
+                    name: "rank-min",
+                    description: "The lowest rank you want to receive",
+                    type: ApplicationCommandOptionType.String,
+                    required: false,
+                    choices: rankChoices
+                },
+                {
+                    name: "rank-max",
+                    description: "The biggest rank you want to receive",
+                    type: ApplicationCommandOptionType.String,
+                    required: false,
+                    choices: rankChoices
                 }
             ]
         }
     },
-    "edit-channel-filter": {
+    "edit-channel-filter-region": {
         handler: setChannelFilter,
         parameters: {
             description: "Edit the area that the channel receive (ADMIN ONLY)",
@@ -200,10 +160,10 @@ const commands = {
             ]
         }
     },
-    "display-channel-filter": {
+    "display-channel-filter-region": {
       handler: displayChannelFilter,
       parameters: {
-          description: "Display channel filter (EVERYONE)",
+          description: "Display the channel region filter (EVERYONE)",
           options: [
               {
                   name: "channel",
@@ -213,6 +173,48 @@ const commands = {
               }
           ]
       }
+    },
+    "edit-channel-filter-rank": {
+        handler: setChannelRankFilter,
+        parameters: {
+            description: "Edit the rank filter of the channel",
+            options: [
+                {
+                    name: "channel",
+                    description: "Channel you want to edit",
+                    type: ApplicationCommandOptionType.Channel,
+                    required: true,
+                },
+                {
+                    name: "rank-min",
+                    description: "The lowest rank you want to receive",
+                    type: ApplicationCommandOptionType.String,
+                    required: true,
+                    choices: rankChoices
+                },
+                {
+                    name: "rank-max",
+                    description: "The biggest rank you want to receive",
+                    type: ApplicationCommandOptionType.String,
+                    required: true,
+                    choices: rankChoices
+                }
+            ]
+        }
+    },
+    "display-channel-filter-rank": {
+        handler: displayChannelRankFilter,
+        parameters: {
+            description: "Display the region rank filter (EVERYONE)",
+            options: [
+                {
+                    name: "channel",
+                    description: "Channel you want to display the filter",
+                    type: ApplicationCommandOptionType.Channel,
+                    required: true,
+                }
+            ]
+        }
     },
     "reset-channel": {
         handler: resetChannel,

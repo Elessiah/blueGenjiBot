@@ -16,6 +16,7 @@ const _resetServer = async(client, guild_id) => {
         let message = "";
         let success = true;
         for (const channel_id of channels_id) {
+            await bdd.rm("ChannelPartnerRank", {}, {id_channel: channel_id});
             const ret = await bdd.deleteChannelServices(channel_id.id_channel);
             if (ret.success === false) {
                 success = false;
@@ -28,14 +29,14 @@ const _resetServer = async(client, guild_id) => {
                 await sendLog(client, `Server "${guild.name}" has deleted all services.`);
                 return {success: true, message: "Server reseted."};
             } catch (error) {
-                console.log(error);
+                console.error(error);
                 return {success: false, message: error.message};
             }
         } else {
             return {success: false, message: message};
         }
     } catch (err) {
-        console.log(err);
+        console.error(err);
         await sendLog(client, "_resetServer failed : \n" + err);
         return {success: false, message: "An error occurred while trying to reset server : " + err.message};
     }

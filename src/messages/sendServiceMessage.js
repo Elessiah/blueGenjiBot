@@ -1,10 +1,10 @@
 const safeChannel = require("../safe/safeChannel");
 const sendLog = require("../safe/sendLog");
 
-async function sendServiceMessage(client, targets, message, embed, bdd) {
+async function sendServiceMessage(client, targets, message, embed, bdd, ranks) {
     let nbPartner = 0;
     for (const target of targets) {
-        if (target.id_channel === message.channel.id) {
+        if (target.id_channel === message.channel.id || !(await bdd.partnerHasRanks(target.id_channel, ranks))) {
             continue;
         }
         const channel = await client.channels.fetch(target.id_channel);

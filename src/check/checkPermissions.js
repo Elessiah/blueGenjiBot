@@ -10,7 +10,7 @@ async function checkPermissions(interaction) {
             return true;
     } catch (e) {
         // await sendLog(interaction.client, "Error while checking permissions : " + e.message);
-        console.log("Error while checking permissions : " + e.message);
+        console.error("Error while checking permissions : " + e.message);
     }
     return false;
 }

@@ -22,7 +22,6 @@ async function unban(client, interaction) {
         return false;
     }
     const target = interaction.options.getString("id_ban");
-    console.log("Target: ", target);
     const user = bdd.get("Ban", ["*"], {}, {id_user: target});
     if (user == null || user.length === 0) {
         await safeReply(interaction, "Unknown ID ban !");

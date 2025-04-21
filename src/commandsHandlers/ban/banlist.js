@@ -15,7 +15,6 @@ async function banlist(client, interaction) {
     }
     let msg = "Banned users :\n";
     for (const user of ban_users) {
-        console.log(user);
         let banned;
         let moderator;
         let reason;

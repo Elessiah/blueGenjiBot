@@ -24,7 +24,7 @@ async function sendLog(client = null, message = "Error", idMsg = null) {
             }
             success = true;
         } catch (error) {
-            console.log(error);
+            console.error(error);
         }
         nTry++;
     }

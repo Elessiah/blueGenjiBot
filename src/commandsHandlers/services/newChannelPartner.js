@@ -4,7 +4,9 @@ const checkPermissions = require("../../check/checkPermissions");
 const safeReply = require("../../safe/safeReply");
 const safeChannelEmbed = require("../../safe/safeChannel");
 const sendLog = require("../../safe/sendLog");
-const {regions} = require("../../utils/enums");
+const {regions} = require("../../utils/globals");
+const defineRankRange = require("../../utils/defineRankRange");
+const setRankFilter = require("../../utils/setRankFilter");
 
 /**
  * @param client
@@ -17,7 +19,8 @@ const newChannelPartner = async(client, interaction) => {
         }
         const channel_id = interaction.options.getChannel("channel").id;
         const service_name = interaction.options.getString("service");
-        const region = interaction.options.getInteger("filter");
+        const region = interaction.options.getInteger("region-filter");
+        const rank_range = await defineRankRange(interaction.options.getString("rank-min"), interaction.options.getString("rank-max"));
 
         const bdd = await getBddInstance();
         if (!bdd) {
@@ -26,6 +29,7 @@ const newChannelPartner = async(client, interaction) => {
         await interaction.deferReply({ephemeral: true});
         const result = await bdd.setNewPartnerChannel(channel_id, interaction.guild.id, service_name, region);
         if (result.success === true) {
+            await setRankFilter(bdd, channel_id, rank_range);
             const channel = await interaction.guild.channels.cache.get(channel_id);
             await safeReply(interaction, `Service "${service_name}" added on "${channel.name}"`, true, true);
             const message = `This channel is now linked to the service \`${service_name.toUpperCase()}\` on region \`${regions[region]}\`.\nTo be shared, your message must contain the word \`${service_name.toUpperCase()}\``

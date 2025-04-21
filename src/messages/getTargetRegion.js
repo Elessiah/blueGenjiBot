@@ -1,4 +1,4 @@
-const {regions} = require("../utils/enums");
+const {regions} = require("../utils/globals");
 const {searchString} = require("../utils/searchString");
 
 async function getTargetRegion(currentRegion, messageContentLower) {
