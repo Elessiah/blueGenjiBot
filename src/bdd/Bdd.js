@@ -245,7 +245,6 @@ class Bdd {
     } catch (e) {
       console.error('ChannelPartnerRank: ', e);
     }
-    await updateOldPartner(this);
   }
 
   async set(tableName, elemName, value) {
