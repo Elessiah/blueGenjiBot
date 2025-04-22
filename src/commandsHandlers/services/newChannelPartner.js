@@ -7,6 +7,7 @@ const sendLog = require("../../safe/sendLog");
 const {regions} = require("../../utils/globals");
 const defineRankRange = require("../../utils/defineRankRange");
 const setRankFilter = require("../../utils/setRankFilter");
+const checkChannelMinPermissions = require("../../check/checkChannelMinPermissions");
 
 /**
  * @param client
@@ -17,7 +18,17 @@ const newChannelPartner = async(client, interaction) => {
         if (!await checkPermissions(interaction)) {
             return await safeReply(interaction, "You don't have the permission to do this.", true);
         }
-        const channel_id = interaction.options.getChannel("channel").id;
+        const channel = interaction.options.getChannel("channel");
+        if (!channel) {
+            return await safeReply(interaction, "An error occured while trying to retrieve the channel targeted !");
+        }
+        const hasPerm = await checkChannelMinPermissions(client, channel);
+        if (hasPerm === false) {
+            return await safeReply(interaction, "An error occured, please try again !", true);
+        } else if (hasPerm !== true) {
+            return await safeReply(interaction, "Missing Permission: " + hasPerm, true);
+        }
+        const channel_id = channel.id;
         const service_name = interaction.options.getString("service");
         const region = interaction.options.getInteger("region-filter");
         const rank_range = await defineRankRange(interaction.options.getString("rank-min"), interaction.options.getString("rank-max"));
