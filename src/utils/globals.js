@@ -27,6 +27,7 @@ const ranksMatch = {
     'gm': 'gm',
     'celestial': 'cel',
     'cel': 'cel',
+    'cels': 'cel',
     'celeste': 'cel',
     'eternity': 'et',
     'eternels': 'et',
