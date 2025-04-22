@@ -12,6 +12,12 @@ async function getBddInstance() {
   return bdd;
 }
 
+async function closeBddInstance() {
+  if (!bdd)
+    return true;
+
+}
+
 class Bdd {
   constructor(name = './database.sqlite') {
     this.name = name;
@@ -22,6 +28,10 @@ class Bdd {
     const instance = new Bdd(name);
     await instance.init();
     return instance;
+  }
+
+  async delete(){
+    this.Database.close();
   }
 
   async init() {
@@ -445,4 +455,4 @@ class Bdd {
   }
 }
 
-module.exports = { Bdd, getBddInstance };
+module.exports = { Bdd, getBddInstance, closeBddInstance };

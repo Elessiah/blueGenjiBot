@@ -1,4 +1,4 @@
-import sendLog from "../safe/sendLog";
+const sendLog = require("../safe/sendLog");
 
 async function checkChannelMinPermissions(client, channel) {
     const permissions = channel.permissionsFor(channel.guild.members.me);

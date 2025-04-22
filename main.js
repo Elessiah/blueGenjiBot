@@ -1,6 +1,6 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits, EmbedBuilder} = require("discord.js");
-const {getBddInstance} = require("./src/bdd/Bdd");
+const {getBddInstance, closeBddInstance} = require("./src/bdd/Bdd");
 const {updateCommands} = require("./src/utils/updateCommands.js");
 const commands = require("./src/config/commands");
 const manageDistribution = require("./src/messages/manageDistribution");
@@ -124,5 +124,19 @@ client.on("guildDelete", async guild => {
 client.on("channelDelete", async channel => {
     await _resetChannel(client, channel.id);
 })
+
+process.on('SIGINT', async () => {
+    console.log('Arrêt du bot...');
+    await client.destroy();
+    await closeBddInstance();
+    process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+    console.log('Arrêt du bot...');
+    await client.destroy();
+    await closeBddInstance();
+    process.exit(0);
+});
 
 client.login(process.env.TOKEN);
