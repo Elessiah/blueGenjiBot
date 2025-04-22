@@ -17,7 +17,7 @@ async function manageDistribution(message, client, bdd, channelId, services) {
             await safeMsgReply(client, message, "You cannot send more than one attachment ! Cancel your Distribution.");
             return false;
         };
-        const ranks = await extractRanks(message.content);
+        const ranks = await extractRanks(client, message);
         const embed = await buildServiceMessage(client, message, channelId, attachement);
         const messageContentLower = message.content.toLowerCase();
         const current_region = (await bdd.get("ChannelPartner", ["region"], {}, {id_channel: channelId}))[0].region;
