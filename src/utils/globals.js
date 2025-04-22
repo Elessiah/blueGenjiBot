@@ -25,6 +25,8 @@ const ranksMatch = {
     'd': 'diam',
     'grandmaster': 'gm',
     'grand master': 'gm',
+    'grandmaitre': 'gm',
+    'grand maitre': 'gm',
     'gm': 'gm',
     'celestial': 'cel',
     'cel': 'cel',
