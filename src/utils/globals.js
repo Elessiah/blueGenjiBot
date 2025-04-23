@@ -33,12 +33,14 @@ const ranksMatch = {
     'cels': 'cel',
     'c': 'cel',
     'celeste': 'cel',
+    'celest': 'cel',
     'eternal': 'et',
     'eternity': 'et',
     'eternels': 'et',
     'et': 'et',
     'oaa': 'oaa',
-    'OneAboveAll': 'oneAboveAll',
+    'OneAboveAll': 'oaa',
+    'one above all': 'oaa'
 };
 
 module.exports = {areaFilter, regions, services, ranks, ranksMatch};

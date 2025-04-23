@@ -5,7 +5,7 @@ async function buildServiceMessage(client, message, channelId, attachement) {
     const channelOG = await client.channels.fetch(channelId);
     const origin = "*Sent from : [" + channelOG.guild.name + "](" + await getInviteFromMessage(client, message) + ")*";
     let embed;
-    if (attachement.length > 0) {
+    if (attachement && attachement.length > 0) {
         embed = new EmbedBuilder().setAuthor({
             name: `${message.author.username}`,
             iconURL: message.author.displayAvatarURL(),

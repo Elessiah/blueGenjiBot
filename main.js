@@ -12,6 +12,7 @@ const fillBlueCommands = require("./src/config/fillBlueCommands");
 const getInviteFromMessage = require("./src/utils/getInviteFromMessage");
 const deleteDPMsgs = require("./src/bdd/deleteDPMsgs");
 const checkBan = require("./src/check/checkBan");
+const buildServiceMessage = require("./src/messages/buildServiceMessage");
 
 const client = new Client({
             intents: [
@@ -71,15 +72,9 @@ client.on("messageUpdate", async (oldMessage, newMessage) => {
         let embed;
         if (oldMessage.attachments.size === 1) {
             const attachement = oldMessage.attachments.values().next().value.attachment;
-            embed = new EmbedBuilder().setAuthor({
-                name: oldMessage.author.username,
-                iconURL: oldMessage.author.displayAvatarURL(),
-            }).setDescription(newMessage.content + "\n\n" + origin).setImage(attachement);
+            embed = await buildServiceMessage(client, newMessage, newMessage.channel.id, attachement);
         } else {
-            embed = new EmbedBuilder().setAuthor({
-                name: oldMessage.author.username,
-                iconURL: oldMessage.author.displayAvatarURL(),
-            }).setDescription(newMessage.content + "\n\n" + origin);
+            embed = await buildServiceMessage(client, newMessage, newMessage.channel.id, null);
         }
         for (let dPMsg of DPMsgs) {
             let msg = await client.channels.fetch(dPMsg.id_channel);
