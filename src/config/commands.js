@@ -237,7 +237,7 @@ const commands = {
             description: "Remove all the service of the server (SERVER ADMIN ONLY)",
         }
     },
-    "ban-user-on-this-server": {
+    "ban-user-of-this-server": {
         handler: ban_id,
         parameters: {
             description: "Ban user from the bot services (ONLY SERVER 50+ members) (SERVER ADMIN ONLY)",
