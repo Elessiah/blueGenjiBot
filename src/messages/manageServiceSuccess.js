@@ -1,7 +1,5 @@
 const sendLog = require("../safe/sendLog");
-const safeMsgReply = require("../safe/safeMsgReply");
-const {regions} = require("../utils/globals");
-const delay = require("../utils/delay");
+const answerTmp = require("../utils/answerTmp");
 
 async function manageServiceSuccess(client, bdd, message, target_region, nbPartner, usedServices) {
     const ret = await bdd.set("OGMsg", ['id_msg', 'id_author'], [message.id, message.author.id]);
@@ -9,9 +7,7 @@ async function manageServiceSuccess(client, bdd, message, target_region, nbPartn
         await sendLog(client, "In manageDistribution: " + ret.message);
     }
     await message.react("🛰️");
-    const temp_msg = await safeMsgReply(client, message, "Your message has been sent to " + nbPartner + " channels of " + regions[target_region] + "/ALL region as " + usedServices.join(', '));
-    await delay(30000);
-    await temp_msg.delete();
+    await answerTmp(client, message, "Your message has been sent to " + nbPartner + " channels of " + regions[target_region] + "/ALL region as " + usedServices.join(', '), 30000)
 }
 
 module.exports = manageServiceSuccess;
