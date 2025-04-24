@@ -94,7 +94,6 @@ client.on("messageDelete", async (message) => {
 })
 
 client.on("ready", async () => {
-    const bdd = await getBddInstance();
     for (const guild of client.guilds.cache.values()) {
         await updateCommands(client, guild.id);
     }

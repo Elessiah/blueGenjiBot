@@ -25,6 +25,7 @@ async function manageDistribution(message, client, bdd, channelId, services) {
         const embed = await buildServiceMessage(client, message, channelId, attachement);
         const messageContentLower = message.content.toLowerCase();
         const current_region = (await bdd.get("ChannelPartner", ["region"], {}, {id_channel: channelId}))[0].region;
+        await sendLog(client, "Current region is : " + current_region);
         const target_region = await getTargetRegion(current_region, messageContentLower);
         if (target_region === 0) {
             await answerTmp(client,
