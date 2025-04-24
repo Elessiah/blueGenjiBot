@@ -1,5 +1,6 @@
 const sendLog = require("../safe/sendLog");
 const answerTmp = require("../utils/answerTmp");
+const { regions } = require("../utils/globals");
 
 async function manageServiceSuccess(client, bdd, message, target_region, nbPartner, usedServices) {
     const ret = await bdd.set("OGMsg", ['id_msg', 'id_author'], [message.id, message.author.id]);
