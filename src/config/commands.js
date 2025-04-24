@@ -4,7 +4,7 @@ const { resetChannel } = require("../commandsHandlers/services/resetChannel");
 const {resetServer} = require("../commandsHandlers/services/resetServer");
 const printHelp = require("../commandsHandlers/printHelp");
 const {listPartner} = require("../commandsHandlers/services/listPartner");
-const ban = require("../commandsHandlers/ban/ban");
+const ban_id = require("../commandsHandlers/ban/ban_id");
 const banlist = require("../commandsHandlers/ban/banlist");
 const unban = require("../commandsHandlers/ban/unban");
 const {areaFilter} = require("../utils/globals");
@@ -14,6 +14,7 @@ const rankChoices = require("./rankChoices");
 const servicesChoices = require("./servicesChoices");
 const setChannelRankFilter = require("../commandsHandlers/services/setChannelRankFilter");
 const displayChannelRankFilter = require("../commandsHandlers/services/displayChannelRankFilter");
+const ban_username = require("../commandsHandlers/ban/ban_username");
 
 const commands = {
     "help": {
@@ -236,8 +237,8 @@ const commands = {
             description: "Remove all the service of the server (SERVER ADMIN ONLY)",
         }
     },
-    "ban": {
-        handler: ban,
+    "ban-user-on-this-server": {
+        handler: ban_id,
         parameters: {
             description: "Ban user from the bot services (ONLY SERVER 50+ members) (SERVER ADMIN ONLY)",
             options: [
@@ -245,6 +246,26 @@ const commands = {
                     name: "user",
                     description: "User you want to ban",
                     type: ApplicationCommandOptionType.User,
+                    required: true
+                },
+                {
+                    name: "reason",
+                    description: "Reason for the ban",
+                    type: ApplicationCommandOptionType.String,
+                    required: true
+                }
+            ]
+        }
+    },
+    "ban-user-of-another-server": {
+        handler: ban_username,
+        parameters: {
+            description: "Ban user from the bot services (ONLY SERVER 50+ members) (SERVER ADMIN ONLY)",
+            options: [
+                {
+                    name: "username",
+                    description: "Username of the user you want to ban",
+                    type: ApplicationCommandOptionType.String,
                     required: true
                 },
                 {

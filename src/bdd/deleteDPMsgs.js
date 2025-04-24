@@ -16,7 +16,11 @@ async function deleteDPMsgs(client, OGMessageID) {
     }
     for (let dPMsg of DPMsgs) {
         let msg = await client.channels.fetch(dPMsg.id_channel);
-        msg = await msg.messages.fetch(dPMsg.id_msg);
+        try {
+            msg = await msg.messages.fetch(dPMsg.id_msg);
+        } catch (error) {
+            continue;
+        }
         try {
             await msg.delete();
         } catch (err) {
