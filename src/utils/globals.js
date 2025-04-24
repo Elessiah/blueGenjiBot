@@ -41,7 +41,8 @@ const ranksMatch = {
     'et': 'et',
     'oaa': 'oaa',
     'OneAboveAll': 'oaa',
-    'one above all': 'oaa'
+    'one above all': 'oaa',
+    'ooa': 'oaa'
 };
 
 module.exports = {areaFilter, regions, services, ranks, ranksMatch};
