@@ -1,10 +1,9 @@
 const { ranksMatch, ranks} = require('./globals');
 const normalizeText = require("./normalizeText");
 const sendLog = require("../safe/sendLog");
-const safeMsgReply = require("../safe/safeMsgReply");
 const answerTmp = require("./answerTmp");
 
-async function extractRanks(client, message) {
+async function extractRanks(client, message, silence=false) {
     let matchs = [];
     const cleanMessage = normalizeText(message.content);
     for (const [key, value] of Object.entries(ranksMatch)) {
@@ -14,7 +13,7 @@ async function extractRanks(client, message) {
             matchs.push(value);
         }
     }
-    if (matchs.length === 0) {
+    if (matchs.length === 0 && !silence) {
         await sendLog(client, "Did not find any rank : " + message.content);
         answerTmp(client,
             message,

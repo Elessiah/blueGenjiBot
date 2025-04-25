@@ -8,6 +8,7 @@ const sendServiceMessage = require("./sendServiceMessage");
 const manageServiceSuccess = require("./manageServiceSuccess");
 const extractRanks = require("../utils/extractRanks");
 const answerTmp = require("../utils/answerTmp");
+const servicesWithNoRanks = require("../utils/servicesWithNoRanks");
 
 async function manageDistribution(message, client, bdd, channelId, services) {
     try {
@@ -20,8 +21,9 @@ async function manageDistribution(message, client, bdd, channelId, services) {
                 "You cannot send more than one attachment ! Cancel your Distribution.",
                 30000);
             return false;
-        };
-        const ranks = await extractRanks(client, message);
+        }
+        const silence = await servicesWithNoRanks(services);
+        const ranks = await extractRanks(client, message, silence);
         const embed = await buildServiceMessage(client, message, channelId, attachement);
         const messageContentLower = message.content.toLowerCase();
         const current_region = (await bdd.get("ChannelPartner", ["region"], {}, {id_channel: channelId}))[0].region;
