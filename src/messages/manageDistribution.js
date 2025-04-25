@@ -48,13 +48,13 @@ async function manageDistribution(message, client, bdd, channelId, services) {
                 hasTried = true;
                 await bdd.set('MessageService', ['id_msg', 'id_service'], [message.id, service.id_service]);
                 const targets = await bdd.Database.all(`SELECT ChannelPartnerService.id_channel
-                                            FROM ChannelPartnerService
-                                                     JOIN Service ON ChannelPartnerService.id_service = Service.id_service
-                                                     JOIN ChannelPartner
-                                                          ON ChannelPartnerService.id_channel = ChannelPartner.id_channel
-                                            WHERE Service.name = ?
-                                              AND (ChannelPartner.region = ? OR ChannelPartner.region = 0)`,
-                                        [service.name, target_region]);
+                                                        FROM ChannelPartnerService
+                                                                 JOIN Service ON ChannelPartnerService.id_service = Service.id_service
+                                                                 JOIN ChannelPartner
+                                                                      ON ChannelPartnerService.id_channel = ChannelPartner.id_channel
+                                                        WHERE Service.name = ?
+                                                          AND (ChannelPartner.region = ? OR ChannelPartner.region = 0);`,
+                    [service.name, target_region]);
                 nbPartner += await sendServiceMessage(client, targets, message, embed, bdd, ranks);
             }
         }
