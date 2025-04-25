@@ -2,7 +2,7 @@ const {regions} = require("../utils/globals");
 const {searchString} = require("../utils/searchString");
 
 async function getTargetRegion(currentRegion, messageContentLower) {
-    for (let i = regions.length - 1; i >= 0; i--) {
+    for (let i = 1; i < regions.length; i++) { // 1 pour éviter de check ALL
         if (await searchString(regions[i].toLowerCase(), messageContentLower)) {
             return i;
         }
