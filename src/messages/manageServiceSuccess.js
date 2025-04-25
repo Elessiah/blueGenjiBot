@@ -8,7 +8,7 @@ async function manageServiceSuccess(client, bdd, message, target_region, nbPartn
         await sendLog(client, "In manageDistribution: " + ret.message);
     }
     await message.react("🛰️");
-    await answerTmp(client, message, "Your message has been sent to " + nbPartner + " channels of " + regions[target_region] + "/ALL region as " + usedServices.join(', '), 30000)
+    answerTmp(client, message, "Your message has been sent to " + nbPartner + " channels of " + regions[target_region] + "/ALL region as " + usedServices.join(', '), 30000)
 }
 
 module.exports = manageServiceSuccess;
