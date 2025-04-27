@@ -1,5 +1,4 @@
 const sendLog = require("../safe/sendLog");
-const safeMsgReply = require("../safe/safeMsgReply");
 const manageMsgExpiration = require("./manageMsgExpiration");
 const checkMessageValidity = require("./checkMessageValidity");
 const getTargetRegion = require("./getTargetRegion");
@@ -9,8 +8,9 @@ const manageServiceSuccess = require("./manageServiceSuccess");
 const extractRanks = require("../utils/extractRanks");
 const answerTmp = require("../utils/answerTmp");
 const servicesWithNoRanks = require("../utils/servicesWithNoRanks");
+const getServicesAndID = require("../utils/getServiceAndID");
 
-async function manageDistribution(message, client, bdd, channelId, services) {
+async function manageDistribution(message, client, bdd, channelId, channelServices) {
     try {
         let attachement = "";
         if (message.attachments.size === 1) {
@@ -22,7 +22,8 @@ async function manageDistribution(message, client, bdd, channelId, services) {
                 30000);
             return false;
         }
-        const silence = await servicesWithNoRanks(services);
+        const services = await getServicesAndID();
+        const silence = await servicesWithNoRanks(channelServices);
         const ranks = await extractRanks(client, message, silence);
         const embed = await buildServiceMessage(client, message, channelId, attachement);
         const messageContentLower = message.content.toLowerCase();
@@ -37,13 +38,10 @@ async function manageDistribution(message, client, bdd, channelId, services) {
         }
         let nbPartner = 0;
         let hasTried = false;
-        let checkKeyword = true;
-        if (services.length === 1) {
-            checkKeyword = false;
-        }
+        let hasValidService = {value: false};
         const usedServices = [];
         for (const service of services) {
-            if (await checkMessageValidity(client, service, messageContentLower, message, checkKeyword)) {
+            if (await checkMessageValidity(client, service, messageContentLower, message, hasValidService)) {
                 usedServices.push(service.name);
                 hasTried = true;
                 await bdd.set('MessageService', ['id_msg', 'id_service'], [message.id, service.id_service]);
@@ -57,6 +55,20 @@ async function manageDistribution(message, client, bdd, channelId, services) {
                     [service.name, target_region]);
                 nbPartner += await sendServiceMessage(client, targets, message, embed, bdd, ranks);
             }
+        }
+        if (!hasValidService.value) {
+            answerTmp(client,
+                message,
+                "Your message has no keyword for a targeted service. Please, next time, use these keywords:\n" +
+                " - `lfs`: If you are looking for a scrim.\n" +
+                " - `lfp`: If you are looking for **players for your team to play tournaments and scrims**.\n" +
+                " - `lfg`: If you are looking for **players to play ranked, quickplay, or chill with**.\n" +
+                " - `lft`: If you are looking for **a team to play tournaments and scrims**.\n" +
+                " - `lfsub`: If you are looking for a last-minute player for tournaments or scrims.\n" +
+                " - `ta`: If you want to promote your tournament.\n" +
+                " - `lfstaff`: If you are looking for staff for a team or organization, like a coach or admin.\n" +
+                " - `lfcast`: If you are looking for casters to animate your tournament.\n",
+                120000);
         }
         if (nbPartner > 0) {
             await manageServiceSuccess(client, bdd, message, target_region, nbPartner, usedServices);

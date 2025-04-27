@@ -5,9 +5,11 @@ const safeMsgReply = require("../safe/safeMsgReply");
 const delay = require("../utils/delay");
 const answerTmp = require("../utils/answerTmp");
 
-async function checkMessageValidity(client, service, messageContentLower, message, checkKeyword=true) {
-    if (checkKeyword && await searchString(service.name.toLowerCase(), messageContentLower) === false) {
+async function checkMessageValidity(client, service, messageContentLower, message, hasValidService) {
+    if (await searchString(service.name, messageContentLower) === false) {
         return false;
+    } else {
+        hasValidService.value = true;
     }
     if (await checkBan(client, message.author.id) === true) {
         await message.react("🚫");
