@@ -15,7 +15,7 @@ async function extractRanks(client, message, silence=false) {
     }
     if (matchs.length === 0) {
         if (!silence) {
-            await sendLog(client, "Did not find any rank : " + message.content);
+            // await sendLog(client, "Did not find any rank : " + message.content);
             answerTmp(client,
                 message,
                 "It seems that you didn't specify any rank. To get more responses from other users, I recommend specifying the rank range you're looking for.",
