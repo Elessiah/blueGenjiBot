@@ -13,6 +13,7 @@ const getInviteFromMessage = require("./src/utils/getInviteFromMessage");
 const deleteDPMsgs = require("./src/bdd/deleteDPMsgs");
 const checkBan = require("./src/check/checkBan");
 const buildServiceMessage = require("./src/messages/buildServiceMessage");
+let { messageCounter } = require("./src/utils/globals");
 
 const client = new Client({
             intents: [
@@ -97,6 +98,7 @@ client.on("ready", async () => {
     for (const guild of client.guilds.cache.values()) {
         await updateCommands(client, guild.id);
     }
+    messageCounter = 0;
     await sendLog(client, 'Bot just started! (If it\'s not a restart it\'s a crash)');
 });
 

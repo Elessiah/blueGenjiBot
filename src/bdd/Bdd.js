@@ -15,7 +15,8 @@ async function getBddInstance() {
 async function closeBddInstance() {
   if (!bdd)
     return true;
-
+  await bdd.delete();
+  return true;
 }
 
 class Bdd {
