@@ -2,49 +2,56 @@
 
 ## Status
 
-This bot is currently in development, so you may encounter some issues. Don't hesitate to contact me on Discord (elessiah).
+This bot is currently in development, so you may encounter some issues. Feel free to contact me on Discord (elessiah).
 
-For the moment, only the primary function of the inter-server shared space has been finished. It will evolve later, and on my list are:
+## How It Works
 
-- Updating messages if the original has been edited
-- Adding a cooldown by author (Don't start spamming after reading this line...)
-- Increasing security to avoid crashes
+You can add a `service` *(list below)* to a text channel, and any message sent in that channel with the service's `signature` will be shared with all other channels added by the community using the same service, and you'll receive their messages too.
 
-For BlueGenji, there are some updates incoming:
+To personalize the experience for each server, filters are available. To reach users you're interested in, add a region (`EU`, `NA`, `LATAM`, `ASIA`) and one or more ranks you're looking for.
 
-- Registering a candidature
-- And more...
+## List of Services:
 
-## How it works
+* **Scrim Search**
 
-*All the commands except `/help` and `/list-partner` require administrator permission to be used*.
+  * Signature: `LFS`
+  * Description: Send your scrim search.
+  * Recommended Message:
+    `LFS Plat 3 Tuesday 9PM CET`
 
-`/list-partner` allow you to see all the channels link to a service.
+* **Tournament Announcement**
 
-You can add a `service` *(list below)* to a text channel, then any message sent in this channel with the `signature` of the service will be sent to all the other channels added by the community with the same service, and you will receive their messages.
+  * Signature: `TA`
+  * Description: Share your tournament announcements.
 
-## Service list:
+* **Substitute Search**
 
-- Look For Scrim:
-    - Signature: `LFS`
-    - Description: Send or pick a scrim request
-    - Recommended Message: ```LFS Plat 3 Tuesday 9 PM CET```
-- Tournament Announcement:
-    - Signature: `TA`
-    - Description: Send ads for your tournaments or look for one
-- Look For Sub:
-    - Signature: `LFSub`
-    - Description: Send or search for a substitute request
-    - Recommended Message: ```LFSub Tank Plat 3 Tuesday 9 PM CET```
-- Look For Team:
-    - Signature: `LFT`
-    - Description: Post your player resume to join a team or search for one
-- Look For Player:
-    - Signature: `LFP`
-    - Description: Post the available positions in your team or search for one
-- Look For Staff:
-    - Signature: `LFStaff`
-    - Description: Post your request for staff or search for one
-- Look For Cast:
-    - Signature: `LFCast`
-    - Description: Post your request for a caster or search for one
+  * Signature: `LFSub`
+  * Description: Post a substitute request.
+  * Recommended Message:
+    `LFSub Tank Plat 3 Tuesday 9PM CET`
+
+* **Looking For Team**
+
+  * Signature: `LFT`
+  * Description: Post your player resume to join a **competitive** team.
+
+* **Looking For Player**
+
+  * Signature: `LFP`
+  * Description: Post an open position in your **competitive** team.
+
+* **Looking For Group**
+
+  * Signature: `LFG`
+  * Description: Find a group to play quickplay, competitive, or other non-competitive modes.
+
+* **Looking For Staff**
+
+  * Signature: `LFStaff`
+  * Description: Post a request for staff members.
+
+* **Looking For Caster**
+
+  * Signature: `LFCast`
+  * Description: Post a request for a caster.
