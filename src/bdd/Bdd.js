@@ -312,7 +312,6 @@ class Bdd {
       const stringValues = values.join(", ");
       const baseQuery = `SELECT ${stringValues} FROM ${tableName}`;
       const query = (await this.queryBuilder(baseQuery, joinOptions, whereConditions, is_ascending, index_elem, whereSupConditions, whereInfConditions));
-      // console.log("End get query", query.query, query.ret_array);
       return await this.Database.all(query.query, query.ret_array);
   }
 
