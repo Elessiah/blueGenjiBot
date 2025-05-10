@@ -4,6 +4,7 @@ const buildServerChoices = require("../utils/buildServerChoices");
 const contactAdminServer = require("../commandsHandlers/contactAdminServer");
 const remoteServerReset = require("../commandsHandlers/services/remoteServerReset");
 const restartBot = require("../commandsHandlers/restartBot");
+const {ApplicationCommandOptionType} = require("discord.js");
 
 async function fillBlueCommands(client) {
     const serverChoices = await buildServerChoices(client);
@@ -16,7 +17,7 @@ async function fillBlueCommands(client) {
                     {
                         name: "message",
                         description: "Message d'accompagnement",
-                        type: 3, // 3 for string
+                        type: ApplicationCommandOptionType.String, // 3 for string
                         required: false
                     },
                     {
@@ -48,7 +49,7 @@ async function fillBlueCommands(client) {
                     {
                         name: "message",
                         description: "Broadcast message",
-                        type: 3,
+                        type: ApplicationCommandOptionType.String,
                         required: true
                     }
                 ]
@@ -62,14 +63,14 @@ async function fillBlueCommands(client) {
                     {
                         name: "server",
                         description: "Server targeted",
-                        type: 3,
+                        type: ApplicationCommandOptionType.String,
                         required: true,
                         choices: serverChoices,
                     },
                     {
                         name: "message",
                         description: "Content of your message",
-                        type: 3,
+                        type: ApplicationCommandOptionType.String,
                         required: true,
                     }
                 ]
@@ -83,7 +84,7 @@ async function fillBlueCommands(client) {
                     {
                         name: "server",
                         description: "Server targeted",
-                        type: 3,
+                        type: ApplicationCommandOptionType.String,
                         required: true,
                         choices: serverChoices,
                     }
@@ -93,12 +94,12 @@ async function fillBlueCommands(client) {
         "restart-bot": {
             handler: restartBot,
             parameters: {
-                description: "Restart bot and update it",
+                description: "Restart bot and update it (Ne marche pas et éteint le BOT!!)",
                 options: [
                     {
                         name: "password",
                         description: "Password, le grand amour d'Elessiah",
-                        type: 3,
+                        type: ApplicationCommandOptionType.String,
                         required: true,
                     }
                 ]

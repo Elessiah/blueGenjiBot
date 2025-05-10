@@ -30,6 +30,49 @@ const messages = [
     "**FR 🇫🇷 :** Le rang que vous avez écrit n’est parfois pas détecté ? Assurez-vous d’utiliser une des variantes valides (insensible à la casse) :\n" +
     "(liste identique en français ci-dessus)",
 
+    "# Tips: Using the different services properly\n" +
+    " - `lfs`: If you are looking for a scrim.\n" +
+    " - `lfp`: If you are looking for **players for your team to play tournaments and scrims**.\n" +
+    " - `lfg`: If you are looking for **players to play ranked, quickplay, or chill with**.\n" +
+    " - `lft`: If you are looking for **a team to play tournaments and scrims**.\n" +
+    " - `lfsub`: If you are looking for a last-minute player for tournaments or scrims.\n" +
+    " - `ta`: If you want to promote your tournament.\n" +
+    " - `lfstaff`: If you are looking for staff for a team or organization, like a coach or admin.\n" +
+    " - `lfcast`: If you are looking for casters to animate your tournament.\n\n" +
+    "**FR 🇫🇷 : Utiliser correctement les différents services**\n" +
+    " - `lfs` : Si tu cherches un scrim.\n" +
+    " - `lfp` : Si tu cherches **des joueurs pour ta team (scrims ou tournois)**.\n" +
+    " - `lfg` : Si tu cherches **des joueurs pour classé, rapide ou jouer chill**.\n" +
+    " - `lft` : Si tu cherches **une team pour faire des tournois ou des scrims**.\n" +
+    " - `lfsub` : Si tu cherches un joueur de dernière minute (scrim/tournoi).\n" +
+    " - `ta` : Si tu veux faire la promo de ton tournoi.\n" +
+    " - `lfstaff` : Si tu cherches du staff (coach, admin, etc).\n" +
+    " - `lfcast` : Si tu cherches des casters pour ton tournoi.",
+
+    "# Tips: More information = more efficiency\n" +
+    "## The right service\n" +
+    "Be aware of the different services that exist on the bot network (you can use `/help`) and be sure to use the right one!\n" +
+    "Otherwise, you'll flood unrelated channels, reach the wrong audience, and your message will be useless — even for you.\n" +
+    "## Rank\n" +
+    "Many different ranks are looking for something — not just yours. Be sure to specify the **rank range you're looking for**!\n" +
+    "## When?\n" +
+    "Save time: write the **date and hour** directly in your message. It avoids back-and-forth with your future partner.\n" +
+    "## Timezone\n" +
+    "The bot network is international — 9pm is not the same everywhere. Always **mention your timezone**!\n" +
+    "## Other details\n" +
+    "Map pool? Rules? Anything relevant — **write it down** to attract the right people.\n\n" +
+    "**FR 🇫🇷 : Plus d'infos = plus d'efficacité**\n" +
+    "## Le bon service\n" +
+    "Connaissez les différents services du bot (`/help`) et utilisez **le bon**, sinon vous spammez les autres et le message devient inutile.\n" +
+    "## Rang\n" +
+    "Beaucoup de joueurs cherchent des choses, pas que dans votre rang. **Précisez la plage de rang recherchée** !\n" +
+    "## Quand ?\n" +
+    "Gagnez du temps : indiquez **directement la date et l'heure**, ça évite les allers-retours.\n" +
+    "## Fuseau horaire\n" +
+    "Le réseau est mondial — **21h n’est pas la même heure pour tout le monde**. Précisez votre timezone !\n" +
+    "## Autres détails\n" +
+    "Map pool ? Règles ? Tout ce qui peut être utile — **écrivez-le** pour attirer les bonnes personnes.",
+
     "# Tips: Setting Region Filter\n" +
     "Not happy with the current region filter?\n" +
     "Change it using the command: `/edit-channel-filter-region`.\n" +
@@ -103,7 +146,7 @@ class Tips {
                 this.messageCounter[regions[region]][service] = 0;
             }
             this.messageCounter[regions[region]][service] += 1;
-            if (this.messageCounter[regions[region]][service] % 10 === 0) {
+            if (this.messageCounter[regions[region]][service] % 5 === 0) {
                     const targets = await bdd.get(
                         "ChannelPartnerService",
                         ["*"],
