@@ -146,7 +146,7 @@ class Tips {
                 this.messageCounter[regions[region]][service] = 0;
             }
             this.messageCounter[regions[region]][service] += 1;
-            if (this.messageCounter[regions[region]][service] % 5 === 0) {
+            if (this.messageCounter[regions[region]][service] % 15 === 0) {
                     const targets = await bdd.get(
                         "ChannelPartnerService",
                         ["*"],
