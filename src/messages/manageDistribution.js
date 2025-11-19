@@ -1,7 +1,7 @@
 const sendLog = require("../safe/sendLog");
 const manageMsgExpiration = require("./manageMsgExpiration");
 const checkMessageValidity = require("./checkMessageValidity");
-const getTargetRegion = require("./getTargetRegion");
+const getTargetRegion = require("./getTargetRegions");
 const buildServiceMessage = require("./buildServiceMessage");
 const sendServiceMessage = require("./sendServiceMessage");
 const manageServiceSuccess = require("./manageServiceSuccess");
@@ -9,6 +9,7 @@ const extractRanks = require("../utils/extractRanks");
 const answerTmp = require("../utils/answerTmp");
 const servicesWithNoRanks = require("../utils/servicesWithNoRanks");
 const getServicesAndID = require("../utils/getServiceAndID");
+const safeMsgReply = require("../safe/safeMsgReply");
 
 async function manageDistribution(message, client, bdd, channelId, channelServices) {
     try {
@@ -28,8 +29,8 @@ async function manageDistribution(message, client, bdd, channelId, channelServic
         const embed = await buildServiceMessage(client, message, channelId, attachement);
         const messageContentLower = message.content.toLowerCase();
         const current_region = (await bdd.get("ChannelPartner", ["region"], {}, {id_channel: channelId}))[0].region;
-        const target_region = await getTargetRegion(current_region, messageContentLower);
-        if (target_region === 0) {
+        const targetedRegions = await getTargetRegion(current_region, messageContentLower);
+        if (targetedRegions === null) {
             answerTmp(client,
                 message,
                 "Note that your message will only be delivered to channels without filters.\n" +
@@ -51,8 +52,8 @@ async function manageDistribution(message, client, bdd, channelId, channelServic
                                                                  JOIN ChannelPartner
                                                                       ON ChannelPartnerService.id_channel = ChannelPartner.id_channel
                                                         WHERE Service.name = ?
-                                                          AND (ChannelPartner.region = ? OR ChannelPartner.region = 0);`,
-                    [service.name, target_region]);
+                                                          AND (${targetedRegions.query} OR ChannelPartner.region = 0);`,
+                    [service.name]);
                 nbPartner += await sendServiceMessage(client, targets, message, embed, bdd, ranks);
             }
         }
@@ -71,7 +72,7 @@ async function manageDistribution(message, client, bdd, channelId, channelServic
                 120000);
         }
         if (nbPartner > 0) {
-            await manageServiceSuccess(client, bdd, message, target_region, nbPartner, usedServices);
+            await manageServiceSuccess(client, bdd, message, targetedRegions, nbPartner, usedServices);
         } else if (hasTried) {
             answerTmp(client,
                 message,

@@ -256,6 +256,22 @@ class Bdd {
     } catch (e) {
       console.error('ChannelPartnerRank: ', e);
     }
+    try {
+      await this.Database.exec(
+          `CREATE TABLE IF NOT EXISTS AdhesionInterval
+            (
+                id TEXT NOT NULL,
+                message TEXT,
+                channel_id TEXT,
+                member_id TEXT,
+                role_id TEXT,
+                author_id TEXT,
+                interval number
+           );`
+      );
+    } catch (e) {
+      console.error("AdhesionInterval error: ", e);
+    }
   }
 
   async set(tableName, elemName, value) {

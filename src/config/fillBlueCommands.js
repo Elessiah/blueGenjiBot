@@ -1,4 +1,4 @@
-const getAdhesion = require("../commandsHandlers/getAdhesion");
+const getAdhesion = require("../commandsHandlers/adhesions/getAdhesion");
 const broadcast = require("../commandsHandlers/broadcast");
 const buildServerChoices = require("../utils/buildServerChoices");
 const contactAdminServer = require("../commandsHandlers/contactAdminServer");
@@ -37,9 +37,35 @@ async function fillBlueCommands(client) {
                         description: "Role à envoyer l'adhésion",
                         type: 8, // 8 for role
                         required: false
+                    },
+                    {
+                        name: "interval",
+                        description: "Intervalle en jour pour renvoi automatique, 20 jours max",
+                        type: ApplicationCommandOptionType.String,
+                        required: false
                     }
                 ]
             }
+        },
+        "show-programmed-rappel-adhesion": {
+            handler: displaySetupAdhesion,
+            parameters: {
+                descriptions: "Affiche les programmation de rappel d'adhésion"
+            }
+        },
+        "delete-programmed-rappel-adhesion": {
+          handler: deleteSetupAdhesion,
+          parameters: {
+              descriptions: "Supprime une programmation de rappel d'adhésion",
+              options: [
+                  {
+                      name: "id-rappel",
+                      description: "ID du rappel, voir la commande /display-programmed-rappel-adhesion",
+                      type: ApplicationCommandOptionType.String,
+                      required: true
+                  }
+              ]
+          }
         },
         "broadcast": {
             handler: broadcast,

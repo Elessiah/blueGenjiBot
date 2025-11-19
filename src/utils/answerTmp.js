@@ -1,12 +1,12 @@
 const safeMsgReply = require("../safe/safeMsgReply");
-const delay = require("./delay");
 
 async function answerTmp(client, message, content, time) {
     const temp_msg = await safeMsgReply(client, message, content);
     if (temp_msg == null)
         return;
-    await delay(time);
-    await temp_msg.delete();
+    setTimeout(async() => {
+        await temp_msg.delete();
+    }, time);
 }
 
-module.exports = answerTmp ;
+module.exports = answerTmp;
