@@ -38,26 +38,22 @@ async function manageDistribution(message, client, bdd, channelId, channelServic
                 30000);
         }
         let nbPartner = 0;
-        let hasTried = false;
         let hasValidService = {value: false};
-        const usedServices = [];
+        let targetedService = null;
         for (const service of services) {
             if (await checkMessageValidity(client, service, messageContentLower, message, hasValidService)) {
-                usedServices.push(service.name);
-                hasTried = true;
-                await bdd.set('MessageService', ['id_msg', 'id_service'], [message.id, service.id_service]);
-                const targets = await bdd.Database.all(`SELECT ChannelPartnerService.id_channel
-                                                        FROM ChannelPartnerService
-                                                                 JOIN Service ON ChannelPartnerService.id_service = Service.id_service
-                                                                 JOIN ChannelPartner
-                                                                      ON ChannelPartnerService.id_channel = ChannelPartner.id_channel
-                                                        WHERE Service.name = ?
-                                                          AND (${targetedRegions.query} OR ChannelPartner.region = 0);`,
-                    [service.name]);
-                nbPartner += await sendServiceMessage(client, targets, message, embed, bdd, ranks);
+                if (targetedService === null) {
+                    targetedService = service;
+                } else {
+                    await safeMsgReply(client, message, "Your message has not been sent ! \n" +
+                        "# Sending to multiple services is strictly prohibited.\n" +
+                        "If necessary, split your request and send it in parts. **Spamming may result in a bot ban.**");
+                    await message.react('🚫');
+                    return;
+                }
             }
         }
-        if (!hasValidService.value) {
+        if (targetedService === null) {
             answerTmp(client,
                 message,
                 "Your message has no keyword for a targeted service. Please, next time, use these keywords:\n" +
@@ -71,9 +67,19 @@ async function manageDistribution(message, client, bdd, channelId, channelServic
                 " - `lfcast`: If you are looking for casters to animate your tournament.\n",
                 120000);
         }
+        await bdd.set('MessageService', ['id_msg', 'id_service'], [message.id, targetedService.id_service]);
+        const targets = await bdd.Database.all(`SELECT ChannelPartnerService.id_channel
+                                                        FROM ChannelPartnerService
+                                                                 JOIN Service ON ChannelPartnerService.id_service = Service.id_service
+                                                                 JOIN ChannelPartner
+                                                                      ON ChannelPartnerService.id_channel = ChannelPartner.id_channel
+                                                        WHERE Service.name = ?
+                                                          AND (${targetedRegions.query} OR ChannelPartner.region = 0);`,
+                                                [targetedService.name]);
+        nbPartner += await sendServiceMessage(client, targets, message, embed, bdd, ranks);
         if (nbPartner > 0) {
             await manageServiceSuccess(client, bdd, message, targetedRegions, nbPartner, usedServices);
-        } else if (hasTried) {
+        } else if (targetedService) {
             answerTmp(client,
                 message,
                 "Your message was not delivered to any channel. " +
