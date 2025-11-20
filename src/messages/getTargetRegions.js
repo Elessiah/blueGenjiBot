@@ -14,7 +14,7 @@ async function getTargetRegions(currentRegion, messageContentLower) {
     }
     if (requestedRegions.length === 0 && currentRegion !== 0) {
         requestedRegions.push(currentRegion);
-        query += "ChannelParner.region = " + currentRegion;
+        query += "ChannelPartner.region = " + currentRegion;
     } else if (currentRegion === 0)
         return null;
     return {query: query, requestedRegions: requestedRegions};

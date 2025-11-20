@@ -78,7 +78,7 @@ async function manageDistribution(message, client, bdd, channelId, channelServic
                                                 [targetedService.name]);
         nbPartner += await sendServiceMessage(client, targets, message, embed, bdd, ranks);
         if (nbPartner > 0) {
-            await manageServiceSuccess(client, bdd, message, targetedRegions, nbPartner, usedServices);
+            await manageServiceSuccess(client, bdd, message, targetedRegions.requestedRegions, nbPartner, targetedService.name);
         } else if (targetedService) {
             answerTmp(client,
                 message,

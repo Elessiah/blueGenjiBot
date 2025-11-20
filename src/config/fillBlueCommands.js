@@ -47,26 +47,6 @@ async function fillBlueCommands(client) {
                 ]
             }
         },
-        "show-programmed-rappel-adhesion": {
-            handler: displaySetupAdhesion,
-            parameters: {
-                descriptions: "Affiche les programmation de rappel d'adhésion"
-            }
-        },
-        "delete-programmed-rappel-adhesion": {
-          handler: deleteSetupAdhesion,
-          parameters: {
-              descriptions: "Supprime une programmation de rappel d'adhésion",
-              options: [
-                  {
-                      name: "id-rappel",
-                      description: "ID du rappel, voir la commande /display-programmed-rappel-adhesion",
-                      type: ApplicationCommandOptionType.String,
-                      required: true
-                  }
-              ]
-          }
-        },
         "broadcast": {
             handler: broadcast,
             parameters: {
@@ -134,5 +114,27 @@ async function fillBlueCommands(client) {
     };
     return blueCommands;
 }
-
+/*
+,
+        "show-programmed-rappel-adhesion": {
+            handler: displaySetupAdhesion,
+            parameters: {
+                descriptions: "Affiche les programmation de rappel d'adhésion"
+            }
+        },
+        "delete-programmed-rappel-adhesion": {
+          handler: deleteSetupAdhesion,
+          parameters: {
+              descriptions: "Supprime une programmation de rappel d'adhésion",
+              options: [
+                  {
+                      name: "id-rappel",
+                      description: "ID du rappel, voir la commande /display-programmed-rappel-adhesion",
+                      type: ApplicationCommandOptionType.String,
+                      required: true
+                  }
+              ]
+          }
+        }
+ */
 module.exports = fillBlueCommands;

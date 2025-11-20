@@ -122,9 +122,9 @@ async function getTips() {
     return tips;
 }
 
-async function nextTips(client, services, region) {
+async function nextTips(client, service, region) {
     const myTips = await getTips();
-    await myTips.nextTips(client, services, region);
+    await myTips.nextTips(client, service, region);
 }
 
 class Tips {
@@ -137,36 +137,34 @@ class Tips {
         return (new Tips());
     }
 
-    async nextTips(client, services, region) {
+    async nextTips(client, service, region) {
         if (!(regions[region] in this.messageCounter))
             this.messageCounter[regions[region]] = {};
         const bdd = await getBddInstance();
-        for (const service of services) {
-            if (!(service in this.messageCounter[regions[region]])) {
-                this.messageCounter[regions[region]][service] = 0;
-            }
-            this.messageCounter[regions[region]][service] += 1;
-            if (this.messageCounter[regions[region]][service] % 15 === 0) {
-                    const targets = await bdd.get(
-                        "ChannelPartnerService",
-                        ["*"],
-                        {
-                            "Service": "ChannelPartnerService.id_service = Service.id_service",
-                            "ChannelPartner": "ChannelPartnerService.id_channel = ChannelPartner.id_channel",
-                        },
-                        {"Service.name": service, "ChannelPartner.region": region}
-                    );
-                    for (const target of targets) {
-                        const channel = await client.channels.fetch(target.id_channel);
-                        const lastMessage = (await channel.messages.fetch({limit: 1})).first();
-                        if (lastMessage == undefined || !(lastMessage.author.id === client.user.id && lastMessage.content.substring(0, 7) === "# Tips:")) {
-                            await safeChannel(client, channel, null, [], messages[this.tipsRoller]);
-                        }
+        if (!(service in this.messageCounter[regions[region]])) {
+            this.messageCounter[regions[region]][service] = 0;
+        }
+        this.messageCounter[regions[region]][service] += 1;
+        if (this.messageCounter[regions[region]][service] % 15 === 0) {
+                const targets = await bdd.get(
+                    "ChannelPartnerService",
+                    ["*"],
+                    {
+                        "Service": "ChannelPartnerService.id_service = Service.id_service",
+                        "ChannelPartner": "ChannelPartnerService.id_channel = ChannelPartner.id_channel",
+                    },
+                    {"Service.name": service, "ChannelPartner.region": region}
+                );
+                for (const target of targets) {
+                    const channel = await client.channels.fetch(target.id_channel);
+                    const lastMessage = (await channel.messages.fetch({limit: 1})).first();
+                    if (lastMessage == undefined || !(lastMessage.author.id === client.user.id && lastMessage.content.substring(0, 7) === "# Tips:")) {
+                        await safeChannel(client, channel, null, [], messages[this.tipsRoller]);
                     }
-                this.tipsRoller++;
-                if (this.tipsRoller === messages.length) {
-                    this.tipsRoller = 0;
                 }
+            this.tipsRoller++;
+            if (this.tipsRoller === messages.length) {
+                this.tipsRoller = 0;
             }
         }
     }
