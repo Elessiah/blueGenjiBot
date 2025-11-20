@@ -5,7 +5,8 @@ async function answerTmp(client, message, content, time) {
     if (temp_msg == null)
         return;
     setTimeout(async() => {
-        await temp_msg.delete();
+        if (temp_msg != null)
+            await temp_msg.delete();
     }, time);
 }
 
