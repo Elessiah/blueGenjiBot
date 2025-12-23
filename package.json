@@ -1,12 +1,16 @@
 {
   "name": "bluegenjibot",
-  "type": "commonjs",
   "version": "1.0.1",
-  "main": "index.js",
+  "type": "module",
+  "main": "dist/app.js",
   "license": "MIT",
   "dependencies": {
     "discord.js": "^14.16.3",
     "dotenv": "^16.4.5",
+    "eslint-config-standard": "^17.1.0",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-n": "^17.23.1",
+    "eslint-plugin-promise": "^7.2.1",
     "express": "^4.21.0",
     "gridfs-stream": "^1.1.1",
     "moment": "^2.30.1",
@@ -15,13 +19,19 @@
     "sqlite3": "^5.1.7"
   },
   "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.47.0",
+    "@typescript-eslint/parser": "^8.47.0",
+    "eslint": "^9.39.1",
+    "eslint-import-resolver-typescript": "^4.4.4",
     "globals": "^15.10.0",
-    "nodemon": "^3.1.7"
+    "nodemon": "^3.1.7",
+    "typescript": "^5.9.3"
   },
   "scripts": {
-    "start": "node src/app.js",
-    "genToken": "node src/genToken.js",
-    "dev": "nodemon src/app.js",
+    "build": "tsc",
+    "start": "node dist/app.js",
+    "dev": "nodemon --watch src --ext ts --exec \"node --loader ts-node/esm src/app.ts\"",
+    "genToken": "node dist/genToken.js",
     "lint": "eslint ."
   }
 }

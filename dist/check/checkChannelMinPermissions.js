@@ -1,0 +1,30 @@
+import { sendLog } from "../safe/sendLog.js";
+/**
+ *
+ * @param client
+ * @param channel
+ * @return string Retourne un message d'erreur. Si rien, pas d'erreur.
+ */
+async function checkChannelMinPermissions(client, channel) {
+    const me = channel.guild.members.me;
+    if (!me) {
+        await sendLog(client, "An error occured while trying to retrieve bot object for permissions !");
+        return "An error occured, while trying to retrieve bot object for permissions !";
+    }
+    const permissions = channel.permissionsFor(me);
+    if (!permissions) {
+        await sendLog(client, "An error occured while retrieving permissions of a channel !");
+        return "An error occured while retrieving permissions of a channel !";
+    }
+    const canRead = permissions.has('ViewChannel');
+    if (!canRead) {
+        return "Missing right to read the channel";
+    }
+    const canSend = permissions.has('SendMessages');
+    if (!canSend) {
+        return "Missing right to send messages to the channel";
+    }
+    return "";
+}
+export { checkChannelMinPermissions };
+//# sourceMappingURL=checkChannelMinPermissions.js.map

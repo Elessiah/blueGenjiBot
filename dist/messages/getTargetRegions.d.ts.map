@@ -1,0 +1,1 @@
+{"version":3,"file":"getTargetRegions.d.ts","sourceRoot":"","sources":["../../src/messages/getTargetRegions.ts"],"names":[],"mappings":"AAGA,iBAAe,gBAAgB,CAAC,aAAa,EAAE,MAAM,EACrB,mBAAmB,EAAE,MAAM,GAAG,OAAO,CAAC;IAAC,KAAK,EAAE,MAAM,CAAC;IAAC,gBAAgB,EAAE,MAAM,EAAE,CAAA;CAAC,GAAG,IAAI,CAAC,CAiBxH;AAED,OAAO,EAAC,gBAAgB,EAAC,CAAC"}

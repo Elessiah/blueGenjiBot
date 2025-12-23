@@ -1,0 +1,36 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+
+    "baseUrl": "./src",
+    "paths": {
+      "@/*": ["*"]
+    },
+
+    "lib": ["ESNext"],
+    "types": ["node"],
+
+    "outDir": "dist",
+    "rootDir": "src",
+    "sourceMap": true,
+    "declaration": true,
+    "declarationMap": true,
+
+    "strict": true,
+    "noImplicitAny": false,
+
+    "allowJs": false,
+    "checkJs": false,
+
+    "isolatedModules": false,
+    "verbatimModuleSyntax": false,
+
+    "skipLibCheck": true,
+    "allowSyntheticDefaultImports": true,
+
+    "esModuleInterop": true
+  },
+  "include": ["src"]
+}
