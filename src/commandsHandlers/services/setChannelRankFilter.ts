@@ -21,8 +21,9 @@ async function setChannelRankFilter(client: Client,
         await interaction.deferReply({flags: MessageFlags.Ephemeral});
         const bdd: Bdd = await getBddInstance();
         const channel: TextChannel = interaction.options.getChannel("channel") as TextChannel;
-        const rank_min: string | null = interaction.options.getString("rank_min");
-        const rank_max: string | null = interaction.options.getString("rank_max");
+        const rank_min: string | null = interaction.options.getString("rank-min");
+        const rank_max: string | null = interaction.options.getString("rank-max");
+        console.log("channel: ", channel, "rank_min: ", rank_min, "rank_max: ", rank_max);
         if (!channel || !rank_min || !rank_max) {
             await safeReply(interaction, "At least one parameter is missing ! channel, rank_min or rank_max !", true, true);
             return false;

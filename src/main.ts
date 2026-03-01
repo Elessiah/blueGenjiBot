@@ -111,8 +111,9 @@ client.on("messageDelete", async (message) => {
     await deleteDPMsgs(client, message.id);
 })
 
-client.on("ready", async () => {
+client.on("clientReady", async () => {
     for (const guild of client.guilds.cache.values()) {
+        console.log("Server ready : ", guild.name);
         await updateCommands(client, guild.id);
     }
     await sendLog(client, 'Bot just started! (If it\'s not a restart it\'s a crash)');

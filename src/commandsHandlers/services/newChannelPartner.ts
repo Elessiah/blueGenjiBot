@@ -47,8 +47,8 @@ async function newChannelPartner(client: Client,
             await safeReply(interaction, "Missing region filter !", true);
             return false;
         }
-        const rank_min: string | null = interaction.options.getString("rank_min");
-        const rank_max: string | null = interaction.options.getString("rank_max");
+        const rank_min: string | null = interaction.options.getString("rank-min");
+        const rank_max: string | null = interaction.options.getString("rank-max");
         const rank_range = await defineRankRange(rank_min, rank_max);
 
         const bdd = await getBddInstance();

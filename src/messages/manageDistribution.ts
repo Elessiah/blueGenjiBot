@@ -53,7 +53,6 @@ async function manageDistribution(message: Message,
                 30000);
             targetedRegions = {query: "ChannelPartner.region = 0", requestedRegions: [0]};
         }
-        console.log("Init");
         let nbPartner: number = 0;
         const hasValidService: {value: boolean} = {value: false};
         let targetedService: Service | null = null;
@@ -85,18 +84,14 @@ async function manageDistribution(message: Message,
                 120000);
             return false;
         }
-        console.log("Checked!");
         await bdd.set('MessageService', ['id_msg', 'id_service'], [message.id, targetedService.id_service]);
-        console.log("Set done !");
         const targets: {id_channel: string}[] = await bdd.get("ChannelPartnerService",
                                                                 ["ChannelPartner.id_channel"],
                                                                 {Service: "ChannelPartnerService.id_service = Service.id_service",
                                                                     ChannelPartner: "ChannelPartnerService.id_channel = ChannelPartner.id_channel"},
                                                                 {query: `Service.name = ? AND (${targetedRegions.query} OR ChannelPartner.region = 0)`,
                                                                     values: [targetedService.name]}) as {id_channel: string}[];
-        console.log("Retrieved targets !", targets);
         nbPartner += await sendServiceMessage(client, targets, message, embed, bdd, ranks);
-        console.log("Sent !");
         if (nbPartner > 0) {
             await manageServiceSuccess(client, bdd, message, targetedRegions.requestedRegions, nbPartner, targetedService.name);
         } else if (targetedService) {
