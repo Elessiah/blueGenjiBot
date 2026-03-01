@@ -49,10 +49,6 @@ async function newChannelPartner(client: Client,
         }
         const rank_min: string | null = interaction.options.getString("rank_min");
         const rank_max: string | null = interaction.options.getString("rank_max");
-        if (rank_min == null || rank_max == null) {
-            await safeReply(interaction, "Missing rank min and / or max", true);
-            return false;
-        }
         const rank_range = await defineRankRange(rank_min, rank_max);
 
         const bdd = await getBddInstance();

@@ -1,7 +1,7 @@
 import {ranks} from './globals.js';
 
-async function defineRankRange(rank_min: string,
-                               rank_max: string): Promise<number[]> {
+async function defineRankRange(rank_min: string | null,
+                               rank_max: string | null): Promise<number[]> {
     let limit_bottom: string;
     let limit_top: string;
     if (rank_min == null) {
