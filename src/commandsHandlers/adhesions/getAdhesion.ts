@@ -84,15 +84,15 @@ async function getAdhesion(client: Client,
             return;
         }
     }
-    let memberPermMissing = !(await checkPermissions(interaction));
+    let memberPermMissing = !checkPermissions(interaction);
     if (memberPermMissing && intInterval > 0) {
         await safeFollowUp(interaction, "Vous n'avez pas les permissions pour définir une intervalle", true, []);
         return;
     }
     if (await _getAdhesion(client, message, channel, member, role, memberPermMissing, interaction.user))
-        await safeFollowUp(interaction, "Premier envoi réussi, préparation de la répétition...", true, []);
+        await safeFollowUp(interaction, "Envoi réussi !", true, []);
     else
-        await safeFollowUp(interaction, "Premier envoi a échoué, pas de répétition programmé...", true, []);
+        await safeFollowUp(interaction, "Echec de l'envoi !", true, []);
     if (intInterval > 0) {
         const id = setInterval(() => _getAdhesion(client, message, channel, member, role, memberPermMissing, interaction.user), 86400000 * intInterval)
         const bdd: Bdd = await getBddInstance();
