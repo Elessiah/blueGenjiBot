@@ -1,5 +1,5 @@
 import {Client, REST, Routes} from 'discord.js';
-require('dotenv').config();
+import 'dotenv/config';
 import {commands} from '../config/commands.js';
 import {fillBlueCommands} from '../config/fillBlueCommands.js';
 import {sendLog} from "../safe/sendLog.js";

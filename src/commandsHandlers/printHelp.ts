@@ -1,7 +1,6 @@
 import {MessageFlags, Snowflake} from "discord.js";
 import type { Client, ChatInputCommandInteraction } from "discord.js";
-
-const fs = require('fs').promises;
+import fs from "node:fs/promises";
 import {safeReply} from '../safe/safeReply.js';
 import {sendLog} from "../safe/sendLog.js";
 import {safeFollowUp} from "../safe/safeFollowUp.js";

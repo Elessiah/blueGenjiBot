@@ -1,4 +1,4 @@
-import type { Client, ChatInputCommandInteraction,MessageFlags, type TextChannel} from "discord.js";
+import { Client, ChatInputCommandInteraction,MessageFlags, type TextChannel} from "discord.js";
 
 import type {Bdd} from "../bdd/Bdd.js";
 import { getBddInstance} from "../bdd/Bdd.js";
@@ -9,7 +9,7 @@ import {sendLog} from "../safe/sendLog.js";
 
 async function broadcast(client: Client,
                          interaction: ChatInputCommandInteraction): Promise<boolean> {
-    if (!await checkPermissions(interaction)) {
+    if (!checkPermissions(interaction)) {
         await safeReply(interaction, "You don't have permission to broadcast !");
         return false;
     }

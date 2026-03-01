@@ -1,1 +1,0 @@
-{"version":3,"file":"checkChannelMinPermissions.d.ts","sourceRoot":"","sources":["../../src/check/checkChannelMinPermissions.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAC,MAAM,EAAoC,WAAW,EAAC,MAAM,YAAY,CAAC;AAItF;;;;;GAKG;AACH,iBAAe,0BAA0B,CAAC,MAAM,EAAE,MAAM,EACd,OAAO,EAAE,WAAW,GAAG,OAAO,CAAC,MAAM,CAAC,CAqB/E;AAED,OAAO,EAAC,0BAA0B,EAAC,CAAC"}

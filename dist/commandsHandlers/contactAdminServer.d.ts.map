@@ -1,1 +1,0 @@
-{"version":3,"file":"contactAdminServer.d.ts","sourceRoot":"","sources":["../../src/commandsHandlers/contactAdminServer.ts"],"names":[],"mappings":"AACA,OAAO,KAAK,EAAE,MAAM,EAAE,2BAA2B,EAAgC,MAAM,YAAY,CAAC;AAOpG,iBAAe,kBAAkB,CAAC,MAAM,EAAE,MAAM,EACd,WAAW,EAAE,2BAA2B,GAAG,OAAO,CAAC,OAAO,CAAC,CA6C5F;AAED,OAAO,EAAC,kBAAkB,EAAC,CAAC"}

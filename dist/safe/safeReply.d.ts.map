@@ -1,1 +1,0 @@
-{"version":3,"file":"safeReply.d.ts","sourceRoot":"","sources":["../../src/safe/safeReply.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAC,2BAA2B,EAAC,MAAM,YAAY,CAAC;AAG5D,iBAAe,SAAS,CAAC,WAAW,EAAE,2BAA2B,EACxC,OAAO,GAAE,MAAsB,EAC/B,YAAY,GAAE,OAAc,EAC5B,SAAS,GAAE,OAAe,GAAI,OAAO,CAAC,OAAO,CAAC,CAqBtE;AAED,OAAO,EAAC,SAAS,EAAC,CAAC"}

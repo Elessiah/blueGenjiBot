@@ -82,6 +82,7 @@ async function manageDistribution(message: Message,
                 " - `lfstaff`: If you are looking for staff for a team or organization, like a coach or admin.\n" +
                 " - `lfcast`: If you are looking for casters to animate your tournament.\n",
                 120000);
+            return false;
         }
         await bdd.set('MessageService', ['id_msg', 'id_service'], [message.id, targetedService.id_service]);
         const targets: {id_channel: string}[] = await bdd.get("ChannelPartnerService",

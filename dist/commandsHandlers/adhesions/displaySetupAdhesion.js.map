@@ -1,1 +1,0 @@
-{"version":3,"file":"displaySetupAdhesion.js","sourceRoot":"","sources":["../../../src/commandsHandlers/adhesions/displaySetupAdhesion.ts"],"names":[],"mappings":"AAAA,OAAO,EAAC,cAAc,EAAC,MAAM,kBAAkB,CAAC;AAGhD,MAAM,CAAC,KAAK,UAAU,oBAAoB,CAAC,MAAc,EACd,WAAwC;IAC/E,MAAM,GAAG,GAAG,MAAM,cAAc,EAAE,CAAC;IACnC,MAAM,OAAO,GAAG,MAAM,GAAG,CAAC,GAAG,CACzB,mBAAmB,CACtB,CAAC;AACN,CAAC"}

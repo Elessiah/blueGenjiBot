@@ -45,4 +45,6 @@ const ranksMatch: { [key: string]: string } = {
     'ooa': 'oaa'
 };
 
+export let messageCounter: number;
+
 export {areaFilter, regions, services, ranks, ranksMatch};

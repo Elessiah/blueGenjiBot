@@ -1,4 +1,4 @@
-require('dotenv').config();
+import 'dotenv/config';
 import {
     Client,
     GatewayIntentBits,
@@ -20,7 +20,7 @@ import {getInviteFromMessage} from "./utils/getInviteFromMessage.js";
 import {deleteDPMsgs} from "./bdd/deleteDPMsgs.js";
 import {checkBan} from "./check/checkBan.js";
 import {buildServiceMessage} from "./messages/buildServiceMessage.js";
-let { messageCounter } = require("./utils/globals.ts");
+import { messageCounter } from "@/utils/globals.js";
 
 const client = new Client({
             intents: [

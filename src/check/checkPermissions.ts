@@ -1,6 +1,4 @@
-import type { GuildMember, TextChannel,type ChatInputCommandInteraction} from "discord.js";
-
-import {sendLog} from "../safe/sendLog.js";
+import { GuildMember, TextChannel,type ChatInputCommandInteraction} from "discord.js";
 
 function checkPermissions(interaction: ChatInputCommandInteraction): boolean {
     try {
