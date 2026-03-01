@@ -1,4 +1,4 @@
-import type {ChatInputCommandInteraction} from "discord.js";
+import {ChatInputCommandInteraction, MessageFlags} from "discord.js";
 import {sendLog} from "./sendLog.js";
 
 async function safeReply(interaction: ChatInputCommandInteraction,
@@ -10,8 +10,13 @@ async function safeReply(interaction: ChatInputCommandInteraction,
     let err_msg = "";
     while (nTry < 3 && !success) {
         try {
-            if (!lateReply)
-                await interaction.reply({content: content, ephemeral: is_ephemeral});
+            if (!lateReply) {
+                if (is_ephemeral) {
+                    await interaction.reply({content: content, flags: MessageFlags.Ephemeral });
+                } else {
+                    await interaction.reply({content: content});
+                }
+            }
             else
                 await interaction.editReply({content: content });
             success = true;
