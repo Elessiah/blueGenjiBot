@@ -1,8 +1,8 @@
 {
   "name": "bluegenjibot",
-  "version": "1.0.1",
+  "version": "2.0.0",
   "type": "module",
-  "main": "dist/app.js",
+  "main": "dist/main.js",
   "license": "MIT",
   "dependencies": {
     "discord.js": "^14.16.3",

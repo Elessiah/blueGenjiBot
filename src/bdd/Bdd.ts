@@ -175,8 +175,9 @@ class Bdd {
 
       for (const service of services) {
         const ret: Service[] = await this.get("Service", ["*"], {}, {query: "name = ?", values: [service]}) as Service[];
-        if (ret.length > 0)
-          {continue;}
+        if (ret.length > 0) {
+          continue;
+        }
         console.log(
             `Adding "${service}" to the database...`
         );
@@ -189,7 +190,7 @@ class Bdd {
         });
       }
     } catch (err) {
-      console.error("Service&Co", (err as TypeError).message);
+      console.error("Service&Co", (err as TypeError).message, err);
     }
     try {
       await this.Database?.exec(
@@ -367,7 +368,7 @@ class Bdd {
 
     // Handle WHERE conditions
       if (whereConditions) {
-          whereClause += ' WHERE ';
+          whereClause = " WHERE " + whereConditions.query;
           ret.push(...whereConditions.values);
       }
 

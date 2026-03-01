@@ -20,7 +20,6 @@ import {getInviteFromMessage} from "./utils/getInviteFromMessage.js";
 import {deleteDPMsgs} from "./bdd/deleteDPMsgs.js";
 import {checkBan} from "./check/checkBan.js";
 import {buildServiceMessage} from "./messages/buildServiceMessage.js";
-import { messageCounter } from "@/utils/globals.js";
 
 const client = new Client({
             intents: [
@@ -116,7 +115,6 @@ client.on("ready", async () => {
     for (const guild of client.guilds.cache.values()) {
         await updateCommands(client, guild.id);
     }
-    messageCounter = 0;
     await sendLog(client, 'Bot just started! (If it\'s not a restart it\'s a crash)');
 });
 

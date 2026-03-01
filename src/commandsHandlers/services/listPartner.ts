@@ -21,7 +21,10 @@ async function listPartner(client: Client,
             },
             {query: "name = ?", values: [service_name]}
         ) as {id_channel: string, region: number}[];
-        let guilds: string[][] = new Array<string[]>(regions.length);
+        let guilds: string[][] = new Array<Array<string>>(regions.length);
+        for (let i = 0; i < guilds.length; i++) {
+            guilds[i] = new Array<string>();
+        }
         for (const channel_info of channels) {
             const channel: TextChannel | null = await client.channels.fetch(channel_info.id_channel) as TextChannel | null;
             if (!channel) {
