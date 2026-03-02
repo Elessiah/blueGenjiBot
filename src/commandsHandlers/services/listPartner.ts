@@ -31,7 +31,7 @@ async function listPartner(client: Client,
                 await sendLog(client, "Failed to fetch channel : " + channel_info.id_channel);
                 continue;
             }
-            guilds[channel_info.region].push(" - [" + channel.guild.name + "](" + (await getInviteFromChannel(channel)) + ")");
+            guilds[channel_info.region].push(" - [" + channel.guild.name + "](" + (await getInviteFromChannel(client, channel)) + ")");
         }
         let subContent: string = "";
         for (let i: number = 0; i < regions.length; i++) {
