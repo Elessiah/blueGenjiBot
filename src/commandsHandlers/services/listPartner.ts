@@ -1,8 +1,8 @@
-import {Bdd, getBddInstance} from "../../bdd/Bdd.js";
-import {sendLog} from "../../safe/sendLog.js";
-import {safeReply} from "../../safe/safeReply.js";
-import {regions} from "../../utils/globals.js";
-import {getInviteFromChannel} from "../../utils/getInviteFromChannel.js";
+import {Bdd, getBddInstance} from "@/bdd/Bdd.js";
+import {sendLog} from "@/safe/sendLog.js";
+import {safeReply} from "@/safe/safeReply.js";
+import {regions} from "@/utils/globals.js";
+import {getInviteFromChannel} from "@/utils/getInviteFromChannel.js";
 
 import {MessageFlags} from "discord.js";
 import type {Client, TextChannel, ChatInputCommandInteraction} from "discord.js";

@@ -2,7 +2,6 @@ import 'dotenv/config';
 import {
     Client,
     GatewayIntentBits,
-    EmbedBuilder,
     Attachment,
     ChatInputCommandInteraction,
     TextChannel, Message
@@ -20,6 +19,8 @@ import {getInviteFromMessage} from "./utils/getInviteFromMessage.js";
 import {deleteDPMsgs} from "./bdd/deleteDPMsgs.js";
 import {checkBan} from "./check/checkBan.js";
 import {buildServiceMessage} from "./messages/buildServiceMessage.js";
+import cron from "node-cron";
+import {checkIntervalleAdhesion} from "@/adhesion/checkIntervalleAdhesion.js";
 
 const client = new Client({
             intents: [
@@ -115,17 +116,14 @@ client.on("clientReady", async () => {
     for (const guild of client.guilds.cache.values()) {
         console.log("Server ready : ", guild.name);
         await updateCommands(client, guild.id);
-        const invites = await guild.invites.fetch();
-
-        let delCounter: number = 0;
-        for (const invite of invites.values()) {
-            if (invite.inviter?.id === client.user?.id) {
-                await invite.delete("Deleting bot-created invite");
-                delCounter++;
-            }
-        }
-        await sendLog(client, "Nettoyage des invitations du serveur : " + guild.name + ". " + delCounter + "liens supprimés.");
     }
+    cron.schedule(
+        "0 10 * * *",
+        async () => {
+            await checkIntervalleAdhesion(client);
+        },
+        { timezone: "Europe/Paris" }
+    );
     await sendLog(client, 'Bot just started! (If it\'s not a restart it\'s a crash)');
 });
 

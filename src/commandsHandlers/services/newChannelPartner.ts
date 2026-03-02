@@ -22,7 +22,7 @@ import {status} from "../../types.js";
 async function newChannelPartner(client: Client,
                                  interaction: ChatInputCommandInteraction): Promise<boolean> {
     try {
-        if (!await checkPermissions(interaction)) {
+        if (!checkPermissions(interaction)) {
             await safeReply(interaction, "You don't have the permission to do this.", true);
             return false;
         }
@@ -43,7 +43,7 @@ async function newChannelPartner(client: Client,
             return false;
         }
         const region: number | null = interaction.options.getInteger("region-filter");
-        if (!region) {
+        if (region === null) {
             await safeReply(interaction, "Missing region filter !", true);
             return false;
         }

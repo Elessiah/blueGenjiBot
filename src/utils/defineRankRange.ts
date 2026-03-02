@@ -31,7 +31,6 @@ async function defineRankRange(rank_min: string | null,
         rank_range.push(i + 1);
     }
     rank_range.push(i + 1);
-    console.log("rank_range", rank_range);
     return rank_range;
 }
 

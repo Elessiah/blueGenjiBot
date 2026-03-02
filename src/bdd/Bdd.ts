@@ -274,13 +274,15 @@ class Bdd {
       await this.Database?.exec(
           `CREATE TABLE IF NOT EXISTS AdhesionInterval
             (
-                id TEXT NOT NULL,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
                 message TEXT,
+                guild_id TEXT,
                 channel_id TEXT,
                 member_id TEXT,
                 role_id TEXT,
                 author_id TEXT,
-                interval number
+                interval_days INTEGER NOT NULL,
+                nextTransmission DATETIME DEFAULT CURRENT_TIMESTAMP
            );`
       );
     } catch (e) {
