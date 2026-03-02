@@ -20,7 +20,7 @@ async function getInviteFromMessage(client: Client,
         if (!permissions.has(PermissionsBitField.Flags.CreateInstantInvite)) {
             return ("");
         }
-        return await getInviteFromChannel(channel);
+        return await getInviteFromChannel(client, channel);
     } catch (e) {
         await sendLog(client, "(getInviteFromMessage)Erreur pour : " + message.content + "\nMessage d'erreur : \n" + (e as TypeError).message);
         return ("");
