@@ -115,6 +115,16 @@ client.on("clientReady", async () => {
     for (const guild of client.guilds.cache.values()) {
         console.log("Server ready : ", guild.name);
         await updateCommands(client, guild.id);
+        const invites = await guild.invites.fetch();
+
+        let delCounter: number = 0;
+        for (const invite of invites.values()) {
+            if (invite.inviter?.id === client.user?.id) {
+                await invite.delete("Deleting bot-created invite");
+                delCounter++;
+            }
+        }
+        await sendLog(client, "Nettoyage des invitations du serveur : " + guild.name + ". " + delCounter + "liens supprimés.");
     }
     await sendLog(client, 'Bot just started! (If it\'s not a restart it\'s a crash)');
 });
