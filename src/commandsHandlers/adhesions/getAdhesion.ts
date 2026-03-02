@@ -54,7 +54,7 @@ async function getAdhesion(client: Client,
                 "member_id",
                 "role_id",
                 "author_id",
-                "interval",
+                "interval_days",
                 "nextTransmission",
             ],
             [
@@ -65,7 +65,7 @@ async function getAdhesion(client: Client,
                 role ? role.id : null,
                 interaction.user.id,
                 interval,
-                nextTransmission,
+                nextTransmission.toISOString(),
             ]
         );
         if (!status.success) {

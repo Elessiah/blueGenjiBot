@@ -298,10 +298,10 @@ class Bdd {
       return {success: false, message: "ElemName and value must be the same length."};
     }
     const names = "(" + elemName.join(", ") + ")";
-    const values = "(" + value.join(", ") + ")";
-    const query = `INSERT INTO ${tableName} ${names} VALUES ${values}`;
+    const strValues = "(" + value.map(v => v === null ? "NULL" : "?").join(",") + ")";
+    const query = `INSERT INTO ${tableName} ${names} VALUES ${strValues}`;
     try {
-      await this.Database?.run(query);
+      await this.Database?.run(query, value.filter(v => v !== null));
     } catch (e) {
       return {success: false, message: `Error while adding "${tableName}": ${(e as TypeError).message}`};
     }

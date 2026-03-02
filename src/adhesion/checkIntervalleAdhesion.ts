@@ -142,7 +142,7 @@ async function checkIntervalleAdhesion(client: Client) {
                 fetchedIntervalle.channel ? fetchedIntervalle.channel.id : null,
                 fetchedIntervalle.member ? fetchedIntervalle.member.id : null,
                 fetchedIntervalle.role ? fetchedIntervalle.role.id : null,
-                fetchedIntervalle.nextTransmission
+                fetchedIntervalle.nextTransmission.toISOString()
             ]
         );
     }
