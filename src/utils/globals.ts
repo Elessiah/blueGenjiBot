@@ -9,7 +9,7 @@ const areaFilter = Object.freeze({
 const YesNo = Object.freeze({
     YES: 0,
     NO: 1,
-})
+});
 
 const services: Array<string> = ['lfs', 'ta', 'lfsub', 'lft', 'lfp', 'lfg', 'lfstaff', 'lfcast'];
 const ranks: Array<string> = ['bronze', 'silver', 'gold', 'plat', 'diam', 'gm', 'cel', 'et', 'oaa'];

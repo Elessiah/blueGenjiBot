@@ -38,7 +38,7 @@ function updateRestart() {
 async function restartBot(client: Client,
                           interaction: ChatInputCommandInteraction): Promise<void> {
     const userTry: string | null = interaction.options.getString("password");
-    const userChoice: number | null = interaction.options.getNumber("update");
+    const userChoice: number | null = interaction.options.getInteger("update");
     if (!userTry || userChoice === null) {
         await safeReply(interaction, "Missing parameter 'password' or 'update' ! Please try again.");
         return;
