@@ -27,7 +27,7 @@ async function checkIntervalleAdhesion(client: Client) {
             false,
             fetchedIntervalle.author
         );
-        fetchedIntervalle.nextTransmission.setDate(fetchedIntervalle.nextTransmission.getDate() + fetchedIntervalle.intervalle);
+        fetchedIntervalle.nextTransmission.setDate(fetchedIntervalle.nextTransmission.getDate() + fetchedIntervalle.interval_days);
         await bdd.set(
             "AdhesionInterval",
             [

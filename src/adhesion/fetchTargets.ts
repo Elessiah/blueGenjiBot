@@ -84,8 +84,8 @@ async function fetchTargets(client: Client, bdd: Bdd, intervalle: adhesionInterv
         member: member,
         role: role,
         author: user,
-        intervalle: intervalle.intervalle,
-        nextTransmission: intervalle.nextTransmission,
+        interval_days: intervalle.interval_days,
+        nextTransmission: new Date(intervalle.nextTransmission),
     }
 }
 

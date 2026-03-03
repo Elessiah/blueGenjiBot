@@ -12,9 +12,12 @@ import {
 } from "discord.js";
 import {sendLog} from "@/safe/sendLog.js";
 
-
-function formatTarget(ai: adhesionIntervalObj): string {
+function formatUser(ai: adhesionIntervalObj): string {
     if (ai.member) return `<@${ai.member.id}>`;
+    return "—";
+}
+
+function formatRole(ai: adhesionIntervalObj): string {
     if (ai.role) return `<@&${ai.role.id}>`;
     return "—";
 }
@@ -41,16 +44,19 @@ function buildEmbedPage(items: adhesionIntervalObj[], page: number, pageSize: nu
                     const msg = ai.message.length > 60 ? ai.message.slice(0, 57) + "..." : ai.message;
 
                     return [
-                        `**#${ai.id}** — ${msg}`,
-                        `• Cible: ${formatTarget(ai)}  • Salon: ${formatChannel(ai)}`,
-                        `• Intervalle: **${ai.intervalle}j**  • Prochain: <t:${when}:F> (**<t:${when}:R>**)`,
+                        `N°**#${ai.id}** — ${msg}`,
+                        `• Utilisateur à envoyer : ${formatUser(ai)}`,
+                        `• Role à envoyer : ${formatRole(ai)}`,
+                        `• Salon à envoyer : ${formatChannel(ai)}`,
+                        `• Intervalle: **${ai.interval_days}j**`,
+                        `• Prochain envoi: <t:${when}:F> (**<t:${when}:R>**)`,
                     ].join("\n");
                 })
                 .join("\n\n");
 
     return {
         embed: new EmbedBuilder()
-            .setTitle("Rappels — AdhesionInterval")
+            .setTitle("Rappels Programmés")
             .setDescription(desc)
             .setFooter({ text: `Page ${p + 1}/${totalPages} • ${items.length} rappel(s)` }),
         page: p,

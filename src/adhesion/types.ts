@@ -8,7 +8,7 @@ type adhesionIntervalIds = {
     member_id: string | null,
     role_id: string | null,
     author_id: string,
-    intervalle: number,
+    interval_days: number,
     nextTransmission: Date,
 }
 
@@ -20,7 +20,7 @@ type adhesionIntervalObj = {
     member: GuildMember | null,
     role: Role | null,
     author: User,
-    intervalle: number,
+    interval_days: number,
     nextTransmission: Date,
 }
 

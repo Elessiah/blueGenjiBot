@@ -7,7 +7,7 @@ import {restartBot} from "../commandsHandlers/restartBot.js";
 import {ApplicationCommandOptionType, Client} from "discord.js";
 import {YesNo} from "@/utils/globals.js";
 import {displaySetupAdhesion} from "@/commandsHandlers/adhesions/displaySetupAdhesion.js";
-import {deleteSetupAdhesion} from "@/adhesion/deleteSetupAdhesion.js";
+import {deleteSetupAdhesion} from "@/commandsHandlers/adhesions/deleteSetupAdhesion.js";
 
 async function fillBlueCommands(client: Client) {
     const serverChoices = await buildServerChoices(client);
@@ -26,19 +26,19 @@ async function fillBlueCommands(client: Client) {
                     {
                         name: "channel",
                         description: "Channel à envoyer l'adhésion",
-                        type: 7, // 7 for channel
+                        type: ApplicationCommandOptionType.Channel, // 7 for channel
                         required: false
                     },
                     {
                         name: "membre",
                         description: "Membre à envoyer l'adhésion",
-                        type: 6, // 6 membre
+                        type: ApplicationCommandOptionType.User, // 6 membre
                         required: false
                     },
                     {
                         name: "role",
                         description: "Role à envoyer l'adhésion",
-                        type: 8, // 8 for role
+                        type: ApplicationCommandOptionType.Role, // 8 for role
                         required: false
                     },
                     {
@@ -130,21 +130,21 @@ async function fillBlueCommands(client: Client) {
                 ]
             }
         },
-        "show-programmed-rappel-adhesion": {
+        "show-rappel-adhesion": {
             handler: displaySetupAdhesion,
             parameters: {
-                descriptions: "Affiche les programmations de rappel d'adhésion"
+                description: "Affiche les programmations de rappel d'adhésion"
             }
         },
-        "delete-programmed-rappel-adhesion": {
+        "delete-rappel-adhesion": {
             handler: deleteSetupAdhesion,
             parameters: {
-                descriptions: "Supprime une programmation de rappel d'adhésion",
+                description: "Supprime une programmation de rappel d'adhésion",
                 options: [
                     {
                         name: "id-rappel",
                         description: "ID du rappel, voir la commande /display-programmed-rappel-adhesion",
-                        type: ApplicationCommandOptionType.String,
+                        type: ApplicationCommandOptionType.Integer,
                         required: true
                     }
                 ]
