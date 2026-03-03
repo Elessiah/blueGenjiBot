@@ -4,9 +4,10 @@ import {buildServerChoices} from "../utils/buildServerChoices.js";
 import {contactAdminServer} from "../commandsHandlers/contactAdminServer.js";
 import {remoteServerReset} from "../commandsHandlers/services/remoteServerReset.js";
 import {restartBot} from "../commandsHandlers/restartBot.js";
-import {ApplicationCommandOptionType} from "discord.js";
+import {ApplicationCommandOptionType, Client} from "discord.js";
+import {YesNo} from "@/utils/globals.js";
 
-async function fillBlueCommands(client) {
+async function fillBlueCommands(client: Client) {
     const serverChoices = await buildServerChoices(client);
     const blueCommands = {
         "get-adhesion": {
@@ -100,8 +101,24 @@ async function fillBlueCommands(client) {
         "restart-bot": {
             handler: restartBot,
             parameters: {
-                description: "Restart bot and update it (Ne marche pas et éteint le BOT!!)",
+                description: "Restart bot",
                 options: [
+                    {
+                      name: "update",
+                      description: "Choisi si tu mets à jour le bot pendant le redémarrage",
+                      type: ApplicationCommandOptionType.Integer,
+                      required: true,
+                      choices: [
+                          {
+                              name: "Mettre à jour",
+                              value: YesNo.YES
+                          },
+                          {
+                              name: "Ne pas mettre à jour",
+                              value: YesNo.NO
+                          }
+                      ]
+                    },
                     {
                         name: "password",
                         description: "Password, le grand amour d'Elessiah",

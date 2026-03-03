@@ -6,6 +6,11 @@ const areaFilter = Object.freeze({
     ASIA: 4,
 });
 
+const YesNo = Object.freeze({
+    YES: 0,
+    NO: 1,
+})
+
 const services: Array<string> = ['lfs', 'ta', 'lfsub', 'lft', 'lfp', 'lfg', 'lfstaff', 'lfcast'];
 const ranks: Array<string> = ['bronze', 'silver', 'gold', 'plat', 'diam', 'gm', 'cel', 'et', 'oaa'];
 const regions: Array<string> = ["ALL", "EU", "NA", "LATAM", "ASIA"];
@@ -45,4 +50,4 @@ const ranksMatch: { [key: string]: string } = {
     'ooa': 'oaa'
 };
 
-export {areaFilter, regions, services, ranks, ranksMatch};
+export {areaFilter, YesNo, regions, services, ranks, ranksMatch};
