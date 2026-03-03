@@ -1,5 +1,5 @@
 import {safeReply} from "../safe/safeReply.js";
-import {exec} from "child_process";
+import pm2 from "pm2";
 
 import type {Client, ChatInputCommandInteraction} from "discord.js";
 
@@ -12,7 +12,19 @@ async function restartBot(client: Client,
     }
     if (process.env.PASSWORD === userTry) {
         await safeReply(interaction, "See you soon ! Restarting...");
-        exec('reboot');
+        setTimeout(() => {
+            pm2.connect((err) => {
+                if (err) {
+                    console.error(err);
+                    process.exit(2);
+                }
+
+                pm2.restart("BlueGenjiBot", (err) => {
+                    pm2.disconnect();
+                    if (err) console.error(err);
+                });
+            });
+        }, 1000);
     } else {
         await safeReply(interaction, "Wrong password ! Are you sure you have right to do this ?");
     }
