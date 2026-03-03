@@ -6,6 +6,8 @@ import {remoteServerReset} from "../commandsHandlers/services/remoteServerReset.
 import {restartBot} from "../commandsHandlers/restartBot.js";
 import {ApplicationCommandOptionType, Client} from "discord.js";
 import {YesNo} from "@/utils/globals.js";
+import {displaySetupAdhesion} from "@/commandsHandlers/adhesions/displaySetupAdhesion.js";
+import {deleteSetupAdhesion} from "@/adhesion/deleteSetupAdhesion.js";
 
 async function fillBlueCommands(client: Client) {
     const serverChoices = await buildServerChoices(client);
@@ -127,31 +129,28 @@ async function fillBlueCommands(client: Client) {
                     }
                 ]
             }
+        },
+        "show-programmed-rappel-adhesion": {
+            handler: displaySetupAdhesion,
+            parameters: {
+                descriptions: "Affiche les programmations de rappel d'adhésion"
+            }
+        },
+        "delete-programmed-rappel-adhesion": {
+            handler: deleteSetupAdhesion,
+            parameters: {
+                descriptions: "Supprime une programmation de rappel d'adhésion",
+                options: [
+                    {
+                        name: "id-rappel",
+                        description: "ID du rappel, voir la commande /display-programmed-rappel-adhesion",
+                        type: ApplicationCommandOptionType.String,
+                        required: true
+                    }
+                ]
+            }
         }
     };
     return blueCommands;
 }
-/*
-,
-        "show-programmed-rappel-adhesion": {
-            handler: displaySetupAdhesion,
-            parameters: {
-                descriptions: "Affiche les programmation de rappel d'adhésion"
-            }
-        },
-        "delete-programmed-rappel-adhesion": {
-          handler: deleteSetupAdhesion,
-          parameters: {
-              descriptions: "Supprime une programmation de rappel d'adhésion",
-              options: [
-                  {
-                      name: "id-rappel",
-                      description: "ID du rappel, voir la commande /display-programmed-rappel-adhesion",
-                      type: ApplicationCommandOptionType.String,
-                      required: true
-                  }
-              ]
-          }
-        }
- */
 export { fillBlueCommands };

@@ -1,0 +1,159 @@
+import {ChatInputCommandInteraction, Client, Message, MessageFlags} from "discord.js";
+import {Bdd, getBddInstance} from "@/bdd/Bdd.js";
+import {safeReply} from "@/safe/safeReply.js";
+import {adhesionIntervalIds, adhesionIntervalObj} from "@/adhesion/types.js"
+import {fetchTargets} from "@/adhesion/fetchTargets.js";
+
+import {
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    EmbedBuilder
+} from "discord.js";
+import {sendLog} from "@/safe/sendLog.js";
+
+
+function formatTarget(ai: adhesionIntervalObj): string {
+    if (ai.member) return `<@${ai.member.id}>`;
+    if (ai.role) return `<@&${ai.role.id}>`;
+    return "—";
+}
+
+function formatChannel(ai: adhesionIntervalObj): string {
+    return ai.channel ? `<#${ai.channel.id}>` : "—";
+}
+
+function ts(d: Date): number {
+    return Math.floor(d.getTime() / 1000);
+}
+
+function buildEmbedPage(items: adhesionIntervalObj[], page: number, pageSize: number) {
+    const totalPages: number = Math.max(1, Math.ceil(items.length / pageSize));
+    const p: number = Math.min(Math.max(page, 0), totalPages - 1);
+    const slice: adhesionIntervalObj[] = items.slice(p * pageSize, p * pageSize + pageSize);
+
+    const desc: string =
+        slice.length === 0
+            ? "Aucun rappel programmé."
+            : slice
+                .map((ai: adhesionIntervalObj): string => {
+                    const when: number = ts(ai.nextTransmission);
+                    const msg = ai.message.length > 60 ? ai.message.slice(0, 57) + "..." : ai.message;
+
+                    return [
+                        `**#${ai.id}** — ${msg}`,
+                        `• Cible: ${formatTarget(ai)}  • Salon: ${formatChannel(ai)}`,
+                        `• Intervalle: **${ai.intervalle}j**  • Prochain: <t:${when}:F> (**<t:${when}:R>**)`,
+                    ].join("\n");
+                })
+                .join("\n\n");
+
+    return {
+        embed: new EmbedBuilder()
+            .setTitle("Rappels — AdhesionInterval")
+            .setDescription(desc)
+            .setFooter({ text: `Page ${p + 1}/${totalPages} • ${items.length} rappel(s)` }),
+        page: p,
+        totalPages,
+    };
+}
+
+async function sendInteractiveMsg(
+    client: Client,
+    interaction: ChatInputCommandInteraction,
+    items: adhesionIntervalObj[]
+): Promise<void> {
+    const pageSize = 5;
+    let page: number = 0;
+
+    const mkRow = (p: number, total: number) =>
+        new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder()
+                .setCustomId("ai_prev")
+                .setLabel("◀")
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(p <= 0),
+            new ButtonBuilder()
+                .setCustomId("ai_next")
+                .setLabel("▶")
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(p >= total - 1),
+            new ButtonBuilder()
+                .setCustomId("ai_close")
+                .setLabel("Fermer")
+                .setStyle(ButtonStyle.Danger)
+        );
+
+    const first = buildEmbedPage(items, page, pageSize);
+    const response = await interaction.reply({
+        embeds: [first.embed],
+        components: [mkRow(first.page, first.totalPages)],
+        flags: MessageFlags.Ephemeral,
+        withResponse: true,
+    });
+
+    if (!response.resource || !response.resource.message) {
+        await sendLog(client, "Echec de récupération du message de liste de rappels");
+        return;
+    }
+
+    const msg: Message<boolean> = response.resource.message;
+
+    const collector = msg.createMessageComponentCollector({
+        time: 2 * 60_000,
+        filter: (i) => i.user.id === interaction.user.id,
+    });
+
+    collector.on("collect", async (i) => {
+        if (i.customId === "ai_close") {
+            collector.stop("closed");
+            await i.update({ components: [] });
+            return;
+        }
+
+        if (i.customId === "ai_prev") page--;
+        if (i.customId === "ai_next") page++;
+
+        const built = buildEmbedPage(items, page, pageSize);
+        page = built.page;
+
+        await i.update({
+            embeds: [built.embed],
+            components: [mkRow(built.page, built.totalPages)],
+        });
+    });
+
+    collector.on("end", async () => {
+        // désactive les boutons à la fin
+        try {
+            const built = buildEmbedPage(items, page, pageSize);
+            await interaction.editReply({
+                embeds: [built.embed],
+                components: [mkRow(0, 1).setComponents()], // vide = plus de boutons
+            });
+        } catch {}
+    });
+}
+
+async function displaySetupAdhesion(client: Client,
+                                    interaction: ChatInputCommandInteraction): Promise<void> {
+    const bdd: Bdd = await getBddInstance();
+    const result: unknown[] = await bdd.get("AdhesionInterval", ["*"], undefined);
+    if (result.length == 0) {
+        await safeReply(interaction, "Pas de rappel paramétré !")
+        return;
+    }
+    const ids = result as adhesionIntervalIds[];
+    const intervals: adhesionIntervalObj[] = [];
+    for (const intervalID of ids)
+    {
+        const interval: adhesionIntervalObj | null = await fetchTargets(client, bdd, intervalID);
+        if (interval)
+        {
+            intervals.push(interval);
+        }
+    }
+    await sendInteractiveMsg(client, interaction, intervals);
+}
+
+export { displaySetupAdhesion };
