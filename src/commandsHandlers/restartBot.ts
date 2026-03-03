@@ -48,7 +48,8 @@ async function restartBot(client: Client,
         if (userChoice == YesNo.NO) {
             strictRestart();
         } else {
-            updateRestart();
+            await safeReply(interaction, "Mettre à jour ne fonctionne pas pour le moment. Essaie le redémarrage seule.");
+            // updateRestart();
         }
     } else {
         await safeReply(interaction, "Wrong password ! Are you sure you have right to do this ?");
