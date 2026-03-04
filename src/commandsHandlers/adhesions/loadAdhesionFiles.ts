@@ -56,7 +56,7 @@ async function downloadAttachment(interaction: ChatInputCommandInteraction,
         return false;
     const newPath: string = process.env.ADHESIONS_PATH + attachment.name;
     adhesion_file == ADHESION_FILES.ADHESION ? paths.adhesion = newPath : paths.status = newPath;
-    adhesion_file == ADHESION_FILES.ADHESION ? paths.adhesionName = attachment.name : paths.status = attachment.name;
+    adhesion_file == ADHESION_FILES.ADHESION ? paths.adhesionName = attachment.name : paths.statusName = attachment.name;
     const buf: Buffer<ArrayBuffer> = Buffer.from(await res.arrayBuffer());
     await writeFile(newPath, buf);
     await saveAdhesionPaths(paths, interaction);
