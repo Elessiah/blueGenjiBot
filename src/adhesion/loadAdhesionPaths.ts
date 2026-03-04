@@ -23,7 +23,7 @@ async function loadAdhesionPaths(interaction?: ChatInputCommandInteraction,
         if (client){
             await sendLog(client, errmsg + "\nCréation d'un nouveau fichier de conf.");
         }
-        const paths: PathsAdhesions = {adhesion: "", status: ""};
+        const paths: PathsAdhesions = {adhesion: "", adhesionName: "", status: "", statusName: ""};
         try {
             await saveAdhesionPaths(paths, interaction, client);
         } catch (e) {

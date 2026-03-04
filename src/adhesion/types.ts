@@ -26,7 +26,9 @@ type adhesionIntervalObj = {
 
 type PathsAdhesions = {
     adhesion: string,
+    adhesionName: string,
     status: string,
+    statusName: string,
 }
 
 export type {adhesionIntervalIds, adhesionIntervalObj, PathsAdhesions};
