@@ -31,11 +31,11 @@ async function sendAdhesion(client: Client,
     try {
         status = new AttachmentBuilder(
             paths.adhesion,
-            {name: paths.adhesion.replace(process.env.ADHESIONS_PATH ?? "", "")}
+            {name: paths.adhesionName},
         );
         adhesion = new AttachmentBuilder(
             paths.status,
-            {name: paths.status.replace(process.env.ADHESIONS_PATH ?? "", "")}
+            {name: paths.statusName}
         );
     } catch (err) {
         await sendLog(client, "Failed to fetch adhesion and/or status: " + (err as TypeError).message);
