@@ -10,7 +10,7 @@ async function checkIntervalleAdhesion(client: Client) {
         "AdhesionInterval",
         ["*"],
         undefined,
-        {query: "nextTransmission >= DATE('now')", values: []}
+        {query: "nextTransmission <= DATE('now')", values: []}
     ) as adhesionIntervalIds[];
     if (intervals.length == 0)
         return;
