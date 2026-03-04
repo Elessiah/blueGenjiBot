@@ -24,4 +24,9 @@ type adhesionIntervalObj = {
     nextTransmission: Date,
 }
 
-export type {adhesionIntervalIds, adhesionIntervalObj};
+type PathsAdhesions = {
+    adhesion: string,
+    status: string,
+}
+
+export type {adhesionIntervalIds, adhesionIntervalObj, PathsAdhesions};

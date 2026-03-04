@@ -8,6 +8,7 @@ import {ApplicationCommandOptionType, Client} from "discord.js";
 import {YesNo} from "@/utils/globals.js";
 import {displaySetupAdhesion} from "@/commandsHandlers/adhesions/displaySetupAdhesion.js";
 import {deleteSetupAdhesion} from "@/commandsHandlers/adhesions/deleteSetupAdhesion.js";
+import {loadAdhesionFiles} from "@/commandsHandlers/adhesions/loadAdhesionFiles.js";
 
 async function fillBlueCommands(client: Client) {
     const serverChoices = await buildServerChoices(client);
@@ -146,6 +147,26 @@ async function fillBlueCommands(client: Client) {
                         description: "ID du rappel, voir la commande /display-programmed-rappel-adhesion",
                         type: ApplicationCommandOptionType.Integer,
                         required: true
+                    }
+                ]
+            }
+        },
+        "load-adhesion-files": {
+            handler: loadAdhesionFiles,
+            parameters: {
+                description: "Charge un nouveau fichier d'adhésion et/ou de status d'association",
+                options: [
+                    {
+                        name: "adhesion",
+                        description: "Nouveau fichier d'adhésion à charger",
+                        type: ApplicationCommandOptionType.Attachment,
+                        required: false,
+                    },
+                    {
+                        name: "status",
+                        description: "Nouveau fichier de status d'association à charger",
+                        type: ApplicationCommandOptionType.Attachment,
+                        required: false,
                     }
                 ]
             }

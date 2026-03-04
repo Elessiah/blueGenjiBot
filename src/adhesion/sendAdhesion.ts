@@ -2,6 +2,9 @@ import {AttachmentBuilder, Client, GuildMember, type Role, TextChannel, User} fr
 import {sendLog} from "@/safe/sendLog.js";
 import {safeUser} from "@/safe/safeUser.js";
 import {safeChannel} from "@/safe/safeChannel.js";
+import {PathsAdhesions} from "@/adhesion/types.js";
+import {loadAdhesionPaths} from "@/adhesion/loadAdhesionPaths.js";
+import * as path from "node:path";
 
 async function sendAdhesion(client: Client,
                             message: string | null,
@@ -13,14 +16,26 @@ async function sendAdhesion(client: Client,
     let success: boolean = true;
     let status: AttachmentBuilder;
     let adhesion: AttachmentBuilder;
+    const paths: PathsAdhesions | null = await loadAdhesionPaths(undefined, client);
+    if (!paths) {
+        await safeUser(
+            client,
+            author,
+            undefined,
+            [],
+            "Echec de l'envoie des adhésions, impossible de récupérer les fichiers. Admin en cours de contact..."
+        );
+        await sendLog(client, "Echec de l'envoi d'adhésion car non récupération des chemins");
+        return false;
+    }
     try {
         status = new AttachmentBuilder(
-            'res/bulletin_adhesion_bluegenji.docx',
-            {name: 'bulletin_adhesion_bluegenji.docx'}
+            paths.adhesion,
+            {name: paths.adhesion.replace(process.env.ADHESIONS_PATH ?? "", "")}
         );
         adhesion = new AttachmentBuilder(
-            'res/status_association_bluegenji_esport.docx',
-            {name: 'status_association_bluegenji_esport.docx'}
+            paths.status,
+            {name: paths.status.replace(process.env.ADHESIONS_PATH ?? "", "")}
         );
     } catch (err) {
         await sendLog(client, "Failed to fetch adhesion and/or status: " + (err as TypeError).message);
