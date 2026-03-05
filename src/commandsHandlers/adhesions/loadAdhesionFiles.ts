@@ -6,6 +6,7 @@ import {loadAdhesionPaths} from "@/adhesion/loadAdhesionPaths.js";
 import {saveAdhesionPaths} from "@/adhesion/saveAdhesionPaths.js";
 import {checkPermissions} from "@/check/checkPermissions.js";
 import {safeReply} from "@/safe/safeReply.js";
+import {sendLog} from "@/safe/sendLog.js";
 
 const ADHESION_FILES = Object.freeze({
     ADHESION: 0,
@@ -93,6 +94,7 @@ async function loadAdhesionFiles(client: Client,
         await safeFollowUp(interaction, "Pas de fichier à charger", true, []);
     } else if (!hasError) {
         await safeFollowUp(interaction, "Fichier(s) chargé(s) !", true, []);
+        await sendLog(client, "Les fichiers d'adhésions ont été modifié");
     }
 }
 
