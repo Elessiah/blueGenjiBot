@@ -71,7 +71,7 @@ async function loadAdhesionFiles(client: Client,
     let hasLoad: boolean = false;
     let hasError: boolean = false;
 
-    if (!checkPermissions(interaction)) {
+    if (interaction.user.id != process.env.OWNER_ID && interaction.user.id != process.env.PRESIDENT) {
         await safeReply(interaction, "You are not allowed to load adhesion files.");
         return;
     }
