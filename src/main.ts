@@ -149,7 +149,7 @@ client.on("channelDelete", async channel => {
 process.on('SIGINT', async () => {
     console.log('Arrêt du bot...');
     await client.destroy();
-    await closeBddInstance();
+    closeBddInstance();
     process.exit(0);
 });
 

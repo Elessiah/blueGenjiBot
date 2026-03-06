@@ -8,23 +8,35 @@ import {removeIntervalle} from "@/adhesion/removeIntervalle.js";
 import {checkTargets} from "@/adhesion/checkTargets.js";
 
 async function fetchTargets(client: Client, bdd: Bdd, intervalle: adhesionIntervalIds): Promise<adhesionIntervalObj | null> {
-    const guild: Guild | undefined = client.guilds.cache.get(intervalle.guild_id);
-    const user: User | undefined = client.users.cache.get(intervalle.author_id)
-    if (user === undefined)
-    {
+    let user: User;
+    try {
+        user = await client.users.fetch(intervalle.author_id);
+    } catch(e) {
         await sendLog(client, "L'auteur de l'intervalle " + intervalle.guild_id + " est perdu. Suppression de l'interval...");
         await removeIntervalle(client, bdd, undefined, intervalle.id,"");
         return null;
     }
-    if (!guild)
-    {
+    let guild: Guild;
+    try {
+        guild = await client.guilds.fetch(intervalle.guild_id);
+    } catch (e) {
         const msg: string = "Intervale n°" + intervalle.id + " annulée car le bot n'est plus sur le serveur concerné.";
         await removeIntervalle(client, bdd, user, intervalle.id, msg);
         return null;
     }
+
+    if (!guild)
+    {
+
+    }
     let channel: TextChannel | null = null;
     if (intervalle.channel_id != null) {
-        const fetchResult: GuildBasedChannel | undefined = guild.channels.cache.get(intervalle.channel_id);
+        let fetchResult: GuildBasedChannel | null;
+        try {
+            fetchResult = await guild.channels.fetch(intervalle.channel_id);
+        } catch (e) {
+            fetchResult = null;
+        }
         if (fetchResult) {
             channel = fetchResult as TextChannel;
         } else {
@@ -42,7 +54,7 @@ async function fetchTargets(client: Client, bdd: Bdd, intervalle: adhesionInterv
     }
     let role: Role | null = null;
     if (intervalle.role_id != null) {
-        const fetchResult: Role | undefined = guild.roles.cache.get(intervalle.role_id);
+        const fetchResult: Role | null = await guild.roles.fetch(intervalle.role_id);
         if (fetchResult) {
             role = fetchResult;
         } else {
@@ -60,10 +72,9 @@ async function fetchTargets(client: Client, bdd: Bdd, intervalle: adhesionInterv
     }
     let member: GuildMember | null = null;
     if (intervalle.member_id != null) {
-        const fetchResult: GuildMember | undefined = await guild.members.fetch(intervalle.member_id);
-        if (fetchResult) {
-            member = fetchResult;
-        } else {
+        try {
+            member = await guild.members.fetch(intervalle.member_id);
+        } catch (e) {
             if (user) {
                 await safeUser(
                     client,

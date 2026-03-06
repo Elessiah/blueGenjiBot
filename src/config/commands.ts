@@ -18,7 +18,6 @@ import {areaFilter} from "../utils/globals.js";
 import {rankChoices} from "./rankChoices.js";
 import {servicesChoices} from "./servicesChoices.js";
 
-
 const commands = {
     "help": {
         handler: printHelp,
