@@ -8,6 +8,14 @@ import {sendLog} from "../safe/sendLog.js";
 
 import type {BanInfo} from "./types.js";
 
+/**
+ * Vérifie si un utilisateur est banni avant de poursuivre le traitement.
+ * @param client Client Discord utilisé pour les appels API.
+ * @param id_author Identifiant Discord de l'utilisateur à vérifier.
+ * @param alertUser Si `true`, tente d'envoyer au banni un message privé avec la raison.
+ * @returns `true` si l'utilisateur est banni (notification optionnelle), `false` s'il ne l'est pas ou en cas d'erreur de vérification.
+ */
+
 async function checkBan(client: Client,
                         id_author: string,
                         alertUser: boolean = true): Promise<boolean> {

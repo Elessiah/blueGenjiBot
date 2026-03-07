@@ -6,6 +6,11 @@ import {fetchTargets} from "@/adhesion/fetchTargets.js";
 import {sendLog} from "@/safe/sendLog.js";
 import { status } from "@/types.js";
 
+/**
+ * Vérifie les rappels d'adhésion arrives a échéance puis les envoie.
+ * Met ensuite à jour la date du prochain envoi pour chaque intervalle traite.
+ * @param client Client Discord utilisé pour récupérer les cibles et envoyer les messages.
+ */
 async function checkIntervalleAdhesion(client: Client) {
     const bdd: Bdd = await getBddInstance();
     const intervals = await bdd.get(

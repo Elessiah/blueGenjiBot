@@ -1,6 +1,14 @@
 import { sendLog } from "./sendLog.js";
 import {Attachment, ChatInputCommandInteraction, Message, MessageFlags} from "discord.js";
 
+/**
+ * Envoie un follow-up d'interaction en gérant les erreurs Discord.
+ * @param interaction Interaction utilisateur en cours.
+ * @param content Contenu texte du follow-up à envoyer.
+ * @param is_ephemeral Si `true`, envoie la réponse en éphémère.
+ * @param attachements Fichiers à joindre au message.
+ * @returns Message Discord créé si l'envoi réussit, sinon `null` après 3 échecs.
+ */
 async function safeFollowUp(interaction: ChatInputCommandInteraction,
                             content: string = "Empty FollowUp",
                             is_ephemeral: boolean = true,

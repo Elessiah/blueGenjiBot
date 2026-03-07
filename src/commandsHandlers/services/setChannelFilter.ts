@@ -5,15 +5,21 @@ import {
     TextChannel
 } from "discord.js";
 
-import {Bdd, getBddInstance} from "../../bdd/Bdd.js";
-import {sendLog} from "../../safe/sendLog.js";
-import {checkPermissions} from "../../check/checkPermissions.js";
-import {safeReply} from "../../safe/safeReply.js";
+import {Bdd, getBddInstance} from "@/bdd/Bdd.js";
+import {sendLog} from "@/safe/sendLog.js";
+import {checkPermissions} from "@/check/checkPermissions.js";
+import {safeReply} from "@/safe/safeReply.js";
 
+/**
+ * Configure la liste des services autorisés pour un salon.
+ * @param client Client Discord utilisé pour les appels API.
+ * @param interaction Interaction utilisateur en cours.
+ * @returns `true` quand la commande est traitée (inchangée ou mise à jour), `false` uniquement si région absente ou en cas d'exception.
+ */
 async function setChannelFilter(client: Client,
                                 interaction: ChatInputCommandInteraction): Promise<boolean> {
     try {
-        if (!await checkPermissions(interaction)) {
+        if (!checkPermissions(interaction)) {
             await safeReply(interaction, "You don't have the permission to edit channel filter.");
             return true;
         }

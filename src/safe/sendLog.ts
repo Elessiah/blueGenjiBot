@@ -1,6 +1,13 @@
 import type {Client, TextChannel, User} from "discord.js";
 import {idSendLogMsg} from "./types.js";
 
+/**
+ * Envoie un log technique vers le canal de supervision.
+ * @param client Client Discord utilisé pour les appels API.
+ * @param message Contenu du log à envoyer aux canaux owner/admin.
+ * @param idMsg Objet optionnel recevant les IDs des messages de log envoyés (owner/admin).
+ * @returns `true` dès qu'un envoi de log aboutit; `false` si les tentatives échouent ou si le canal admin est inaccessible.
+ */
 async function sendLog(client: Client,
                        message: string = "Error",
                        idMsg?: idSendLogMsg) : Promise<boolean> {

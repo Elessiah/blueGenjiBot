@@ -1,20 +1,26 @@
-import {Bdd, getBddInstance} from "../../bdd/Bdd.js";
+import {Bdd, getBddInstance} from "@/bdd/Bdd.js";
 
-import {defineRankRange} from "../../utils/defineRankRange.js";
-import {setRankFilter} from "../../utils/setRankFilter.js";
+import {defineRankRange} from "@/utils/defineRankRange.js";
+import {setRankFilter} from "@/utils/setRankFilter.js";
 
-import {sendLog} from "../../safe/sendLog.js";
-import {safeReply} from "../../safe/safeReply.js";
+import {sendLog} from "@/safe/sendLog.js";
+import {safeReply} from "@/safe/safeReply.js";
 
-import {checkPermissions} from "../../check/checkPermissions.js";
+import {checkPermissions} from "@/check/checkPermissions.js";
 
-import {MessageFlags, Snowflake} from "discord.js";
+import {MessageFlags} from "discord.js";
 import type {Client, ChatInputCommandInteraction, TextChannel} from "discord.js";
 
 
+/**
+ * Met à jour le filtre de rangs d'un salon partenaire.
+ * @param client Client Discord utilisé pour les appels API.
+ * @param interaction Interaction utilisateur en cours.
+ * @returns `true` si le filtre de rang est appliqué; `false` en cas de refus de permission, paramètres manquants ou erreur.
+ */
 async function setChannelRankFilter(client: Client,
                                     interaction: ChatInputCommandInteraction): Promise<boolean> {
-    if (!await checkPermissions(interaction)) {
+    if (!checkPermissions(interaction)) {
         return await safeReply(interaction, "You don't have the permission to do that.", true);
     }
     try {

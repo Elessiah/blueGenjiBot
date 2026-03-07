@@ -1,21 +1,22 @@
-import {getBddInstance} from "../../bdd/Bdd.js";
+﻿import {getBddInstance} from "@/bdd/Bdd.js";
 
-import {checkPermissions} from "../../check/checkPermissions.js";
-import {checkChannelMinPermissions} from "../../check/checkChannelMinPermissions.js";
+import {checkPermissions} from "@/check/checkPermissions.js";
+import {checkChannelMinPermissions} from "@/check/checkChannelMinPermissions.js";
 
-import {safeReply} from "../../safe/safeReply.js";
-import {safeChannel} from "../../safe/safeChannel.js";
-import {sendLog} from "../../safe/sendLog.js";
+import {safeReply} from "@/safe/safeReply.js";
+import {safeChannel} from "@/safe/safeChannel.js";
+import {sendLog} from "@/safe/sendLog.js";
 
-import {regions} from "../../utils/globals.js";
-import {defineRankRange} from "../../utils/defineRankRange.js";
-import {setRankFilter} from "../../utils/setRankFilter.js";
+import {regions} from "@/utils/globals.js";
+import {defineRankRange} from "@/utils/defineRankRange.js";
+import {setRankFilter} from "@/utils/setRankFilter.js";
 
 import {Client, ChatInputCommandInteraction, TextChannel, MessageFlags} from "discord.js";
-import { Snowflake, EmbedBuilder } from 'discord.js';
-import {status} from "../../types.js";
+import { EmbedBuilder } from 'discord.js';
+import {status} from "@/types.js";
 
 /**
+ * Interaction handler pour assigner un nouveau channel au réseau
  * @param client
  * @param {ChatInputCommandInteraction<Cache>} interaction
  */

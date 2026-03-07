@@ -1,11 +1,17 @@
 import {type ChatInputCommandInteraction, type Client, type Guild, MessageFlags, Snowflake} from "discord.js";
 
-import {Bdd, getBddInstance} from "../../bdd/Bdd.js";
-import {checkPermissions} from "../../check/checkPermissions.js";
-import {sendLog} from "../../safe/sendLog.js";
-import {safeReply} from "../../safe/safeReply.js";
-import {status} from "../../types.js";
+import {Bdd, getBddInstance} from "@/bdd/Bdd.js";
+import {checkPermissions} from "@/check/checkPermissions.js";
+import {sendLog} from "@/safe/sendLog.js";
+import {safeReply} from "@/safe/safeReply.js";
+import {status} from "@/types.js";
 
+/**
+ * Réinitialise en base la configuration d'un serveur complet.
+ * @param client Client Discord utilisé pour les appels API.
+ * @param guild_id Identifiant du serveur.
+ * @returns Objet `status` agrégé: succès si tous les salons du serveur sont réinitialisés, sinon échec avec message détaillé.
+ */
 async function _resetServer(client: Client,
                             guild_id: string): Promise<status> {
     const bdd: Bdd = await getBddInstance();
@@ -42,9 +48,15 @@ async function _resetServer(client: Client,
     }
 }
 
+/**
+ * Traite la commande de réinitialisation d'un serveur.
+ * @param client Client Discord utilisé pour les appels API.
+ * @param interaction Interaction utilisateur en cours.
+ * @returns `false` si permissions refusées ou `guildId` absent; sinon `true` après notification utilisateur (y compris "already reseted").
+ */
 async function resetServer(client: Client,
                            interaction: ChatInputCommandInteraction): Promise<boolean> {
-    if (!await checkPermissions(interaction)) {
+    if (!checkPermissions(interaction)) {
         return await safeReply(interaction, "You don't have the permission to do this.", true);
     }
     await interaction.deferReply({flags: MessageFlags.Ephemeral});

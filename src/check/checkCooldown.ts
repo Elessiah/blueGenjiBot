@@ -1,5 +1,11 @@
 import {getBddInstance} from "../bdd/Bdd.js";
 
+/**
+ * Applique la règle de cooldown avant d'autoriser la commande.
+ * @param author Utilisateur concerne.
+ * @param service Information de service à traiter.
+ * @returns `""` si aucun cooldown n'est actif; sinon le nombre de minutes restantes (formaté sur 1 décimale).
+ */
 async function checkCooldown(author: string,
                              service: number): Promise<string> {
     if (author === process.env.OWNER_ID)

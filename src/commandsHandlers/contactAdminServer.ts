@@ -6,6 +6,14 @@ import {safeReply} from "../safe/safeReply.js";
 import {safeUser} from "../safe/safeUser.js";
 import {sendLog} from "../safe/sendLog.js";
 
+/**
+ * Transmet un message à l'équipe d'administration du serveur concerné.
+ * @param client Client Discord utilisé pour les appels API.
+ * @param interaction Interaction utilisateur en cours.
+ * @param guildID Identifiant du serveur cible (utilisé en appel interne sans interaction).
+ * @param msg Contenu à transmettre aux administrateurs (fourni directement hors interaction).
+ * @returns `true` si la demande est traitée jusqu'à la phase d'envoi; `false` si paramètres, permissions ou serveur sont invalides.
+ */
 async function contactAdminServer(client: Client,
                                   interaction?: ChatInputCommandInteraction,
                                   guildID?: string,

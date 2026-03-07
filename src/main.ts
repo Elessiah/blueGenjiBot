@@ -119,6 +119,10 @@ client.on("clientReady", async () => {
     }
     cron.schedule(
         "0 10 * * *",
+        /**
+         * Callback quotidien qui déclenche l'envoi automatique des adhésions.
+         */
+
         async () => {
             await checkIntervalleAdhesion(client);
         },

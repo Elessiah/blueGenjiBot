@@ -3,6 +3,13 @@ import {normalizeText} from "./normalizeText.js";
 import {answerTmp} from "./answerTmp.js";
 import type {Client, Message} from "discord.js";
 
+/**
+ * Extrait et nettoie les rangs depuis la saisie utilisateur.
+ * @param client Client Discord utilisé pour les appels API.
+ * @param message Message Discord à analyser pour extraire les rangs.
+ * @param silence Si `true`, n'envoie pas de message d'aide quand aucun rang n'est détecté.
+ * @returns Rangs détectés dans le message, ou tous les rangs si aucun n'est trouvé.
+ */
 async function extractRanks(client: Client,
                             message: Message,
                             silence: boolean = false): Promise<string[]> {

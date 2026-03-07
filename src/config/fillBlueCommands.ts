@@ -10,6 +10,11 @@ import {displaySetupAdhesion} from "@/commandsHandlers/adhesions/displaySetupAdh
 import {deleteSetupAdhesion} from "@/commandsHandlers/adhesions/deleteSetupAdhesion.js";
 import {loadAdhesionFiles} from "@/commandsHandlers/adhesions/loadAdhesionFiles.js";
 
+/**
+ * Construit la liste des commandes slash Blue et les enregistre côté client Discord.
+ * @param client Client Discord utilisé pour les appels API.
+ * @returns Objet dictionnaire des commandes Blue (nom -> handler + paramètres) fusionnable avec les commandes globales.
+ */
 async function fillBlueCommands(client: Client) {
     const serverChoices = await buildServerChoices(client);
     const blueCommands = {

@@ -7,6 +7,11 @@ import {getInviteFromChannel} from "@/utils/getInviteFromChannel.js";
 import {MessageFlags} from "discord.js";
 import type {Client, TextChannel, ChatInputCommandInteraction} from "discord.js";
 
+/**
+ * Liste les salons partenaires configurés pour le serveur.
+ * @param client Client Discord utilisé pour les appels API.
+ * @param interaction Interaction utilisateur en cours.
+ */
 async function listPartner(client: Client,
                            interaction: ChatInputCommandInteraction): Promise<void> {
     try {

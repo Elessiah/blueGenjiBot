@@ -2,6 +2,11 @@ import {ChatInputCommandInteraction, Client} from "discord.js";
 import {safeReply} from "@/safe/safeReply.js";
 import {Bdd, getBddInstance} from "@/bdd/Bdd.js";
 
+/**
+ * Supprime la configuration d'adhésion enregistrée pour le serveur.
+ * @param client Client Discord utilisé pour les appels API.
+ * @param interaction Interaction utilisateur en cours.
+ */
 async function deleteSetupAdhesion(client: Client,
                                    interaction: ChatInputCommandInteraction): Promise<void> {
     const targetId: number | null = interaction.options.getInteger("id-rappel");

@@ -1,6 +1,15 @@
 import { sendLog } from "./sendLog.js";
-import type {Attachment, Client, Embed, User, Message, AttachmentBuilder} from "discord.js";
+import type {Client, Embed, User, Message, AttachmentBuilder} from "discord.js";
 
+/**
+ * Récupère un utilisateur Discord avec gestion d'erreurs.
+ * @param client Client Discord utilisé pour les appels API.
+ * @param user Utilisateur concerne.
+ * @param embed Embed prêt à être envoyé (optionnel selon le contexte).
+ * @param attachements Fichiers à joindre au message.
+ * @param content Contenu texte du message privé à envoyer.
+ * @returns Message privé envoyé si succès; `null` en cas d'échec après 3 tentatives.
+ */
 async function safeUser(client: Client,
                         user: User,
                         embed?: Embed,

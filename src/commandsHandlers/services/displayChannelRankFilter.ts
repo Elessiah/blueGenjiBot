@@ -1,12 +1,18 @@
-import {sendLog} from "../../safe/sendLog.js";
-import {safeReply} from "../../safe/safeReply.js";
+import {sendLog} from "@/safe/sendLog.js";
+import {safeReply} from "@/safe/safeReply.js";
 
-import {Bdd, getBddInstance} from "../../bdd/Bdd.js";
+import {Bdd, getBddInstance} from "@/bdd/Bdd.js";
 
-import {formatRawRanks} from "../../utils/formatRawRanks.js";
+import {formatRawRanks} from "@/utils/formatRawRanks.js";
 
-import {ChatInputCommandInteraction, Client, Channel, MessageFlags, TextChannel} from "discord.js";
+import {ChatInputCommandInteraction, Client, MessageFlags, TextChannel} from "discord.js";
 
+/**
+ * Affiche le filtre de rangs actif pour un salon.
+ * @param client Client Discord utilisé pour les appels API.
+ * @param interaction Interaction utilisateur en cours.
+ * @returns `true` si une réponse utilisateur est produite; `false` si salon manquant ou erreur durant la requête.
+ */
 async function displayChannelRankFilter(client: Client,
                                         interaction: ChatInputCommandInteraction): Promise<boolean> {
     try {

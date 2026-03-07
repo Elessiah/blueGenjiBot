@@ -4,8 +4,19 @@ import {safeUser} from "@/safe/safeUser.js";
 import {safeChannel} from "@/safe/safeChannel.js";
 import {PathsAdhesions} from "@/adhesion/types.js";
 import {loadAdhesionPaths} from "@/adhesion/loadAdhesionPaths.js";
-import * as path from "node:path";
 
+/**
+ * Envoie les fichiers d'adhésion (et message associé) vers les cibles fournies.
+ * Peut envoyer dans un canal, en MP à un membre, ou à tous les membres d'un rôle.
+ * @param client Client Discord utilisé pour les envois et logs.
+ * @param message Message personnalisé à joindre; un message par défaut est utilisé si `null`.
+ * @param channel Canal cible, ou `null` si aucun envoi en canal n'est prévu.
+ * @param member Membre cible, ou `null` si aucun envoi individuel n'est prévu.
+ * @param role Rôle cible, ou `null` si aucun envoi par rôle n'est prévu.
+ * @param memberPermMissing Indique si l'auteur manque de permissions pour des envois hors MP.
+ * @param author Auteur du rappel, notifie en cas de succès/échec.
+ * @returns `true` si tous les envois demandés aux cibles sélectionnées réussissent; `false` dès qu'au moins un envoi échoue.
+ */
 async function sendAdhesion(client: Client,
                             message: string | null,
                             channel: TextChannel | null,

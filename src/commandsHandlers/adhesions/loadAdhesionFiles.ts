@@ -1,10 +1,9 @@
 import {Attachment, ChatInputCommandInteraction, Client, MessageFlags} from "discord.js";
-import {readFile, unlink, writeFile} from "fs/promises";
+import {unlink, writeFile} from "fs/promises";
 import {safeFollowUp} from "@/safe/safeFollowUp.js";
 import {PathsAdhesions} from "@/adhesion/types.js";
 import {loadAdhesionPaths} from "@/adhesion/loadAdhesionPaths.js";
 import {saveAdhesionPaths} from "@/adhesion/saveAdhesionPaths.js";
-import {checkPermissions} from "@/check/checkPermissions.js";
 import {safeReply} from "@/safe/safeReply.js";
 import {sendLog} from "@/safe/sendLog.js";
 
@@ -13,6 +12,12 @@ const ADHESION_FILES = Object.freeze({
     STATUS: 1,
 });
 
+/**
+ * Supprime un ancien fichier d'adhésion stocké localement.
+ * @param interaction Interaction utilisateur en cours.
+ * @param path Chemin(s) de fichier utilisé(s).
+ * @returns `true` si le fichier local ciblé est supprimé; `false` si la suppression échoue.
+ */
 async function deleteOldAttachment(interaction: ChatInputCommandInteraction,
                                    path: string): Promise<boolean> {
     try {
@@ -29,6 +34,12 @@ async function deleteOldAttachment(interaction: ChatInputCommandInteraction,
     }
 }
 
+/**
+ * Nettoie les anciens fichiers avant enregistrement des nouveaux.
+ * @param interaction Interaction utilisateur en cours.
+ * @param adhesion_file Type de fichier ciblé (`ADHESION` ou `STATUS`).
+ * @returns Chemins d'adhésion mis à jour si tout se passe bien; `null` si lecture/suppression/sauvegarde échoue.
+ */
 async function manageOldFiles(interaction: ChatInputCommandInteraction,
                               adhesion_file: number): Promise<PathsAdhesions | null> {
     const paths: PathsAdhesions | null = await loadAdhesionPaths(interaction);
@@ -44,6 +55,13 @@ async function manageOldFiles(interaction: ChatInputCommandInteraction,
     return await saveAdhesionPaths(paths, interaction) ? paths : null;
 }
 
+/**
+ * Télécharge et sauvegarde une pièce jointe d'adhésion.
+ * @param interaction Interaction utilisateur en cours.
+ * @param attachment Pièce jointe Discord à télécharger et stocker.
+ * @param adhesion_file Type de fichier ciblé (`ADHESION` ou `STATUS`).
+ * @returns `true` si téléchargement, écriture disque et sauvegarde de la configuration réussissent; sinon `false`.
+ */
 async function downloadAttachment(interaction: ChatInputCommandInteraction,
                                   attachment: Attachment,
                                   adhesion_file: number): Promise<boolean> {
@@ -64,6 +82,11 @@ async function downloadAttachment(interaction: ChatInputCommandInteraction,
     return true;
 }
 
+/**
+ * Charge les nouvelles pièces jointes et met à jour la configuration.
+ * @param client Client Discord utilisé pour les appels API.
+ * @param interaction Interaction utilisateur en cours.
+ */
 async function loadAdhesionFiles(client: Client,
                                  interaction: ChatInputCommandInteraction): Promise<void> {
     const adhesionFile: Attachment | null = interaction.options.getAttachment("adhesion");

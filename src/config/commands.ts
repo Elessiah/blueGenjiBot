@@ -1,4 +1,4 @@
-import {ApplicationCommandOptionType} from "discord.js";
+﻿import {ApplicationCommandOptionType} from "discord.js";
 
 import {ban_id} from "../commandsHandlers/ban/ban_id.js";
 import {ban_username} from "../commandsHandlers/ban/ban_username.js";

@@ -8,6 +8,11 @@ import {Bdd, getBddInstance} from "@/bdd/Bdd.js";
 import {status} from "@/types.js";
 import {sendAdhesion} from "@/adhesion/sendAdhesion.js";
 
+/**
+ * Récupère et envoie les fichiers d'adhésion configurés.
+ * @param client Client Discord utilisé pour les appels API.
+ * @param interaction Interaction utilisateur en cours.
+ */
 async function getAdhesion(client: Client,
                            interaction: ChatInputCommandInteraction): Promise<void> {
     if (!interaction.guild) {

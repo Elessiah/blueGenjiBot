@@ -14,6 +14,15 @@ import type {Attachment, Client, EmbedBuilder, Message} from "discord.js";
 import type {Bdd} from "../bdd/Bdd.js";
 import type {Service} from "../bdd/types.js";
 
+/**
+ * Orchestre la distribution d'un service vers tous les salons cibles.
+ * @param message Message source à distribuer vers le réseau de partenaires.
+ * @param client Client Discord utilisé pour les appels API.
+ * @param bdd Instance de base de données.
+ * @param channelId Identifiant du salon d'origine du message.
+ * @param channelServices Services actuellement configurés sur le salon source.
+ * @returns `true` quand le flux de distribution termine (même si 0 diffusion), `false` en cas d'entrée invalide, multi-service, service absent ou erreur bloquante.
+ */
 async function manageDistribution(message: Message,
                                   client: Client,
                                   bdd: Bdd,
