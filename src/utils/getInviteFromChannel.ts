@@ -7,7 +7,6 @@ async function getInviteFromChannel(client: Client, channel: TextChannel): Promi
         const invites = await channel.guild.invites.fetch();
 
         let existing = invites.find(inv =>
-            inv.inviter?.id === client.user?.id &&
             inv.maxAge === 0 &&
             inv.maxUses === 0
         );
@@ -40,7 +39,7 @@ async function getInviteFromChannel(client: Client, channel: TextChannel): Promi
                 "Best regards,  \n" +
                 "Elessiah\n" +
                 "\n");
-            await sendLog(client, "Message envoyé au admin pour manque de permission pour créer une invitation.");
+            await sendLog(client, "Message envoyé au admin du serveur : " + channel.guild.name + "pour manque de permission pour créer une invitation.");
         }
         return "";
     }
