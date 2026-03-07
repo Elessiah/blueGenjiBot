@@ -113,7 +113,11 @@ const messages = [
     "Feeling lonely? Depressed? Or just want to chat?\n" +
     "Don't hesitate to reach out — my Discord: `elessiah`.\n\n" +
     "**FR 🇫🇷 :** Vous vous sentez seul ? Déprimé ? Ou vous voulez juste discuter ?\n" +
-    "N’hésitez pas à venir me parler — mon Discord : `elessiah`."
+    "N’hésitez pas à venir me parler — mon Discord : `elessiah`.",
+
+    "# Tips: Have an issue or a question? \n" +
+    "Fill in a ticket here: https://bluegenjiesport.on.spiceworks.com/portal \n"+
+    "**FR 🇫🇷 :** Un problème ? Une question ? Remplissez un ticket ici : https://bluegenjiesport.on.spiceworks.com/portal\n"
 ];
 
 
