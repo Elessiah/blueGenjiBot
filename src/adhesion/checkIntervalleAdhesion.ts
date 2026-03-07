@@ -4,6 +4,7 @@ import {Client} from "discord.js";
 import {sendAdhesion} from "@/adhesion/sendAdhesion.js";
 import {fetchTargets} from "@/adhesion/fetchTargets.js";
 import {sendLog} from "@/safe/sendLog.js";
+import { status } from "@/types.js";
 
 async function checkIntervalleAdhesion(client: Client) {
     const bdd: Bdd = await getBddInstance();
@@ -33,21 +34,18 @@ async function checkIntervalleAdhesion(client: Client) {
         fetchedIntervalle.nextTransmission.setDate(fetchedIntervalle.nextTransmission.getDate() + fetchedIntervalle.interval_days);
         fetchedIntervalle.nextTransmission.setHours(10, 0, 0,0);
         console.log("fetched intervalleNextTransmission: ", fetchedIntervalle.nextTransmission, fetchedIntervalle.nextTransmission.toISOString());
-        console.log(await bdd.set(
+        await bdd.update(
             "AdhesionInterval",
-            [
-                "channel_id",
-                "member_id",
-                "role_id",
-                "nextTransmission",
-            ],
-            [
-                fetchedIntervalle.channel ? fetchedIntervalle.channel.id : null,
-                fetchedIntervalle.member ? fetchedIntervalle.member.id : null,
-                fetchedIntervalle.role ? fetchedIntervalle.role.id : null,
-                fetchedIntervalle.nextTransmission.toISOString()
-            ]
-        ));
+            {
+                "channel_id" : fetchedIntervalle.channel ? fetchedIntervalle.channel.id : null,
+                "member_id" : fetchedIntervalle.member ? fetchedIntervalle.member.id : null,
+                "role_id" : fetchedIntervalle.role ? fetchedIntervalle.role.id : null,
+                "nextTransmission" : fetchedIntervalle.nextTransmission.toISOString(),
+            },
+            {
+                "id": fetchedIntervalle.id,
+            }
+        );
     }
 }
 
