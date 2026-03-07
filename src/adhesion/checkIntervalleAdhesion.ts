@@ -3,6 +3,7 @@ import {adhesionIntervalIds, adhesionIntervalObj} from "@/adhesion/types.js";
 import {Client} from "discord.js";
 import {sendAdhesion} from "@/adhesion/sendAdhesion.js";
 import {fetchTargets} from "@/adhesion/fetchTargets.js";
+import {sendLog} from "@/safe/sendLog.js";
 
 async function checkIntervalleAdhesion(client: Client) {
     const bdd: Bdd = await getBddInstance();
@@ -15,6 +16,7 @@ async function checkIntervalleAdhesion(client: Client) {
     if (intervals.length == 0)
         return;
     for (const intervalle of intervals) {
+        await sendLog(client, "Manage auto adhésion : " + intervalle.id);
         const fetchedIntervalle: adhesionIntervalObj | null = await fetchTargets(client, bdd, intervalle);
         if (!fetchedIntervalle)
             continue;
@@ -30,6 +32,7 @@ async function checkIntervalleAdhesion(client: Client) {
         fetchedIntervalle.nextTransmission = new Date();
         fetchedIntervalle.nextTransmission.setDate(fetchedIntervalle.nextTransmission.getDate() + fetchedIntervalle.interval_days);
         fetchedIntervalle.nextTransmission.setHours(10, 0, 0,0);
+        console.log("fetched intervalleNextTransmission: ", fetchedIntervalle.nextTransmission);
         await bdd.set(
             "AdhesionInterval",
             [
