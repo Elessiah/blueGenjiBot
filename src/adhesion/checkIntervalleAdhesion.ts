@@ -33,7 +33,6 @@ async function checkIntervalleAdhesion(client: Client) {
         fetchedIntervalle.nextTransmission = new Date();
         fetchedIntervalle.nextTransmission.setDate(fetchedIntervalle.nextTransmission.getDate() + fetchedIntervalle.interval_days);
         fetchedIntervalle.nextTransmission.setHours(10, 0, 0,0);
-        console.log("fetched intervalleNextTransmission: ", fetchedIntervalle.nextTransmission, fetchedIntervalle.nextTransmission.toISOString());
         await bdd.update(
             "AdhesionInterval",
             {
