@@ -1,6 +1,4 @@
 import type {Client, TextChannel} from "discord.js";
-import {contactAdminServer} from "@/commandsHandlers/contactAdminServer.js";
-import {sendLog} from "@/safe/sendLog.js";
 
 async function getInviteFromChannel(client: Client, channel: TextChannel): Promise<string> {
     try {
