@@ -414,7 +414,7 @@ class Bdd {
    * @param whereConditions Clause `WHERE` et ses valeurs.
    * @param is_ascending Sens de tri pour `ORDER BY`.
    * @param index_elem Colonne utilisée pour le tri.
-   * @returns Objet `{ query, ret_array }` prêt à être exécuté.
+   * @returns Objet contenant `query` (SQL final) et `ret_array` (valeurs bindées), prêt à être exécuté.
    */
   async queryBuilder(baseQuery: string,
                      joinOptions?: joinOptions,

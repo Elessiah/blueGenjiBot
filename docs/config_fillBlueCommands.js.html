@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: config/fillBlueCommands.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: config/fillBlueCommands.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>import { getAdhesion } from "../commandsHandlers/adhesions/getAdhesion.js";
+import { broadcast } from "../commandsHandlers/broadcast.js";
+import { buildServerChoices } from "../utils/buildServerChoices.js";
+import { contactAdminServer } from "../commandsHandlers/contactAdminServer.js";
+import { remoteServerReset } from "../commandsHandlers/services/remoteServerReset.js";
+import { restartBot } from "../commandsHandlers/restartBot.js";
+import { ApplicationCommandOptionType } from "discord.js";
+import { YesNo } from "../utils/globals.js";
+import { displaySetupAdhesion } from "../commandsHandlers/adhesions/displaySetupAdhesion.js";
+import { deleteSetupAdhesion } from "../commandsHandlers/adhesions/deleteSetupAdhesion.js";
+import { loadAdhesionFiles } from "../commandsHandlers/adhesions/loadAdhesionFiles.js";
+/**
+ * Construit la liste des commandes slash Blue et les enregistre côté client Discord.
+ * @param client Client Discord utilisé pour les appels API.
+ * @returns Objet dictionnaire des commandes Blue (nom -> handler + paramètres) fusionnable avec les commandes globales.
+ */
+async function fillBlueCommands(client) {
+    const serverChoices = await buildServerChoices(client);
+    const blueCommands = {
+        "get-adhesion": {
+            handler: getAdhesion,
+            parameters: {
+                description: "Envoie l'adhésion (Disponible uniquement sur les serveurs BlueGenji)",
+                options: [
+                    {
+                        name: "message",
+                        description: "Message d'accompagnement",
+                        type: ApplicationCommandOptionType.String, // 3 for string
+                        required: false
+                    },
+                    {
+                        name: "channel",
+                        description: "Channel à envoyer l'adhésion",
+                        type: ApplicationCommandOptionType.Channel, // 7 for channel
+                        required: false
+                    },
+                    {
+                        name: "membre",
+                        description: "Membre à envoyer l'adhésion",
+                        type: ApplicationCommandOptionType.User, // 6 membre
+                        required: false
+                    },
+                    {
+                        name: "role",
+                        description: "Role à envoyer l'adhésion",
+                        type: ApplicationCommandOptionType.Role, // 8 for role
+                        required: false
+                    },
+                    {
+                        name: "interval",
+                        description: "Intervalle en jour pour renvoi automatique, 20 jours max",
+                        type: ApplicationCommandOptionType.String,
+                        required: false
+                    }
+                ]
+            }
+        },
+        "broadcast": {
+            handler: broadcast,
+            parameters: {
+                description: "Send a message on all services. Use with precautions ! (Admin only)",
+                options: [
+                    {
+                        name: "message",
+                        description: "Broadcast message",
+                        type: ApplicationCommandOptionType.String,
+                        required: true
+                    }
+                ]
+            }
+        },
+        "contact-admin-server": {
+            handler: contactAdminServer,
+            parameters: {
+                description: "Send a message to the admins of a specific server using the bot (Admin only)",
+                options: [
+                    {
+                        name: "server",
+                        description: "Server targeted",
+                        type: ApplicationCommandOptionType.String,
+                        required: true,
+                        choices: serverChoices,
+                    },
+                    {
+                        name: "message",
+                        description: "Content of your message",
+                        type: ApplicationCommandOptionType.String,
+                        required: true,
+                    }
+                ]
+            }
+        },
+        "remote-server-reset": {
+            handler: remoteServerReset,
+            parameters: {
+                description: "Admin only ! Remotely reset a server",
+                options: [
+                    {
+                        name: "server",
+                        description: "Server targeted",
+                        type: ApplicationCommandOptionType.String,
+                        required: true,
+                        choices: serverChoices,
+                    }
+                ]
+            }
+        },
+        "restart-bot": {
+            handler: restartBot,
+            parameters: {
+                description: "Restart bot",
+                options: [
+                    {
+                        name: "update",
+                        description: "Choisi si tu mets à jour le bot pendant le redémarrage",
+                        type: ApplicationCommandOptionType.Integer,
+                        required: true,
+                        choices: [
+                            {
+                                name: "Mettre à jour",
+                                value: YesNo.YES
+                            },
+                            {
+                                name: "Ne pas mettre à jour",
+                                value: YesNo.NO
+                            }
+                        ]
+                    },
+                    {
+                        name: "password",
+                        description: "Password, le grand amour d'Elessiah",
+                        type: ApplicationCommandOptionType.String,
+                        required: true,
+                    }
+                ]
+            }
+        },
+        "show-rappel-adhesion": {
+            handler: displaySetupAdhesion,
+            parameters: {
+                description: "Affiche les programmations de rappel d'adhésion"
+            }
+        },
+        "delete-rappel-adhesion": {
+            handler: deleteSetupAdhesion,
+            parameters: {
+                description: "Supprime une programmation de rappel d'adhésion",
+                options: [
+                    {
+                        name: "id-rappel",
+                        description: "ID du rappel, voir la commande /display-programmed-rappel-adhesion",
+                        type: ApplicationCommandOptionType.Integer,
+                        required: true
+                    }
+                ]
+            }
+        },
+        "load-adhesion-files": {
+            handler: loadAdhesionFiles,
+            parameters: {
+                description: "Charge un nouveau fichier d'adhésion et/ou de status d'association",
+                options: [
+                    {
+                        name: "adhesion",
+                        description: "Nouveau fichier d'adhésion à charger",
+                        type: ApplicationCommandOptionType.Attachment,
+                        required: false,
+                    },
+                    {
+                        name: "status",
+                        description: "Nouveau fichier de status d'association à charger",
+                        type: ApplicationCommandOptionType.Attachment,
+                        required: false,
+                    }
+                ]
+            }
+        }
+    };
+    return blueCommands;
+}
+export { fillBlueCommands };
+//# sourceMappingURL=fillBlueCommands.js.map</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Classes</h3><ul><li><a href="Bdd.html">Bdd</a></li><li><a href="Tips.html">Tips</a></li></ul><h3>Global</h3><ul><li><a href="global.html#_deleteTempMsg">_deleteTempMsg</a></li><li><a href="global.html#_resetChannel">_resetChannel</a></li><li><a href="global.html#_resetServer">_resetServer</a></li><li><a href="global.html#answerTmp">answerTmp</a></li><li><a href="global.html#ban">ban</a></li><li><a href="global.html#ban_id">ban_id</a></li><li><a href="global.html#ban_username">ban_username</a></li><li><a href="global.html#banlist">banlist</a></li><li><a href="global.html#broadcast">broadcast</a></li><li><a href="global.html#buildEmbedPage">buildEmbedPage</a></li><li><a href="global.html#buildServerChoices">buildServerChoices</a></li><li><a href="global.html#buildServiceMessage">buildServiceMessage</a></li><li><a href="global.html#checkBan">checkBan</a></li><li><a href="global.html#checkChannelMinPermissions">checkChannelMinPermissions</a></li><li><a href="global.html#checkCooldown">checkCooldown</a></li><li><a href="global.html#checkIntervalleAdhesion">checkIntervalleAdhesion</a></li><li><a href="global.html#checkMessageValidity">checkMessageValidity</a></li><li><a href="global.html#checkPermissions">checkPermissions</a></li><li><a href="global.html#checkTargets">checkTargets</a></li><li><a href="global.html#closeBddInstance">closeBddInstance</a></li><li><a href="global.html#contactAdminServer">contactAdminServer</a></li><li><a href="global.html#defineRankRange">defineRankRange</a></li><li><a href="global.html#delay">delay</a></li><li><a href="global.html#deleteDPMsgs">deleteDPMsgs</a></li><li><a href="global.html#deleteOldAttachment">deleteOldAttachment</a></li><li><a href="global.html#deleteSetupAdhesion">deleteSetupAdhesion</a></li><li><a href="global.html#displayChannelFilter">displayChannelFilter</a></li><li><a href="global.html#displayChannelRankFilter">displayChannelRankFilter</a></li><li><a href="global.html#displaySetupAdhesion">displaySetupAdhesion</a></li><li><a href="global.html#downloadAttachment">downloadAttachment</a></li><li><a href="global.html#extractRanks">extractRanks</a></li><li><a href="global.html#fetchTargets">fetchTargets</a></li><li><a href="global.html#fillBlueCommands">fillBlueCommands</a></li><li><a href="global.html#formatChannel">formatChannel</a></li><li><a href="global.html#formatRawRanks">formatRawRanks</a></li><li><a href="global.html#formatRole">formatRole</a></li><li><a href="global.html#formatUser">formatUser</a></li><li><a href="global.html#getAdhesion">getAdhesion</a></li><li><a href="global.html#getBddInstance">getBddInstance</a></li><li><a href="global.html#getInviteFromChannel">getInviteFromChannel</a></li><li><a href="global.html#getInviteFromMessage">getInviteFromMessage</a></li><li><a href="global.html#getServicesAndID">getServicesAndID</a></li><li><a href="global.html#getTargetRegions">getTargetRegions</a></li><li><a href="global.html#getTips">getTips</a></li><li><a href="global.html#listPartner">listPartner</a></li><li><a href="global.html#loadAdhesionFiles">loadAdhesionFiles</a></li><li><a href="global.html#loadAdhesionPaths">loadAdhesionPaths</a></li><li><a href="global.html#manageDistribution">manageDistribution</a></li><li><a href="global.html#manageMsgExpiration">manageMsgExpiration</a></li><li><a href="global.html#manageOldFiles">manageOldFiles</a></li><li><a href="global.html#manageServiceSuccess">manageServiceSuccess</a></li><li><a href="global.html#newChannelPartner">newChannelPartner</a></li><li><a href="global.html#nextTips">nextTips</a></li><li><a href="global.html#normalizeText">normalizeText</a></li><li><a href="global.html#printHelp">printHelp</a></li><li><a href="global.html#remoteServerReset">remoteServerReset</a></li><li><a href="global.html#removeIntervalle">removeIntervalle</a></li><li><a href="global.html#resetChannel">resetChannel</a></li><li><a href="global.html#resetServer">resetServer</a></li><li><a href="global.html#restartBot">restartBot</a></li><li><a href="global.html#safeChannel">safeChannel</a></li><li><a href="global.html#safeFollowUp">safeFollowUp</a></li><li><a href="global.html#safeMsgReply">safeMsgReply</a></li><li><a href="global.html#safeReply">safeReply</a></li><li><a href="global.html#safeUser">safeUser</a></li><li><a href="global.html#saveAdhesionPaths">saveAdhesionPaths</a></li><li><a href="global.html#searchString">searchString</a></li><li><a href="global.html#sendAdhesion">sendAdhesion</a></li><li><a href="global.html#sendInteractiveMsg">sendInteractiveMsg</a></li><li><a href="global.html#sendLog">sendLog</a></li><li><a href="global.html#sendServiceMessage">sendServiceMessage</a></li><li><a href="global.html#servicesWithNoRanks">servicesWithNoRanks</a></li><li><a href="global.html#setChannelFilter">setChannelFilter</a></li><li><a href="global.html#setChannelRankFilter">setChannelRankFilter</a></li><li><a href="global.html#setRankFilter">setRankFilter</a></li><li><a href="global.html#strictRestart">strictRestart</a></li><li><a href="global.html#ts">ts</a></li><li><a href="global.html#unban">unban</a></li><li><a href="global.html#updateCommands">updateCommands</a></li><li><a href="global.html#updateRestart">updateRestart</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Sat Mar 07 2026 21:08:38 GMT+0100 (Central European Standard Time)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

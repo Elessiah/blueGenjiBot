@@ -56,7 +56,7 @@ function ts(d: Date): number {
  * @param items Liste complète des rappels à paginer.
  * @param page Index de page demandé (base 0).
  * @param pageSize Nombre d'éléments à afficher par page.
- * @returns Objet { embed, page, totalPages } avec page bornée dans l'intervalle valide.
+ * @returns Objet de pagination contenant `embed`, `page` et `totalPages`, avec page bornée sur l'intervalle valide.
  */
 function buildEmbedPage(items: adhesionIntervalObj[], page: number, pageSize: number) {
     const totalPages: number = Math.max(1, Math.ceil(items.length / pageSize));

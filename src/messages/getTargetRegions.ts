@@ -5,7 +5,7 @@ import {searchString} from "../utils/searchString.js";
  * Calcule les régions cibles de diffusion à partir de la région source et des règles de relais.
  * @param currentRegion Région du salon source (0 = ALL).
  * @param messageContentLower Contenu du message en minuscules, utilisé pour détecter les mots-clés.
- * @returns `{ query, requestedRegions }` si au moins une région est ciblée; `null` si aucune région n'est détectée et que la région source vaut `0` (ALL).
+ * @returns Objet de ciblage avec `query` (SQL) et `requestedRegions` (indices de régions), ou `null` si aucune région n'est détectée et que la source vaut `0` (ALL).
  */
 async function getTargetRegions(currentRegion: number,
                                 messageContentLower: string): Promise<{query: string, requestedRegions: number[]} | null> {
