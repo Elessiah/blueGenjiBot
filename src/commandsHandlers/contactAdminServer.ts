@@ -1,4 +1,4 @@
-import {Snowflake, PermissionsBitField, MessageFlags} from "discord.js";
+import {PermissionsBitField, MessageFlags} from "discord.js";
 import type { Client, ChatInputCommandInteraction, Guild, User, Collection, Role} from "discord.js";
 
 import {checkPermissions} from "../check/checkPermissions.js";
@@ -7,23 +7,39 @@ import {safeUser} from "../safe/safeUser.js";
 import {sendLog} from "../safe/sendLog.js";
 
 async function contactAdminServer(client: Client,
-                                  interaction: ChatInputCommandInteraction): Promise<boolean> {
-    if (!await checkPermissions(interaction)) {
-        await safeReply(interaction, "You don't have permission to ban users.\n" +
+                                  interaction?: ChatInputCommandInteraction,
+                                  guildID?: string,
+                                  msg?: string): Promise<boolean> {
+    if (interaction == undefined && (guildID == undefined || msg == undefined)) {
+        await sendLog(client, "Missing parameters for contactAdminServer!");
+        return false;
+    }
+    if (interaction && !checkPermissions(interaction, true)) {
+        await safeReply(interaction, "You don't have permission to contact admin users.\n" +
             "Please contact 'Elessiah' or your server administrators to take appropriate action if needed.\n");
         return false;
     }
-    await interaction.deferReply({flags: MessageFlags.Ephemeral});
-    const serverId: string | null = interaction.options.getString("server");
+    let serverId: string | null = null;
+    if (interaction) {
+        await interaction.deferReply({flags: MessageFlags.Ephemeral});
+        serverId = interaction.options.getString("server");
+    } else if (guildID) {
+        serverId = guildID;
+    }
     if (!serverId) {
-        await safeReply(interaction, "Failed to retrieve the parameter 'server'. Please try again !");
+        if (interaction)
+            await safeReply(interaction, "Failed to retrieve the parameter 'server'. Please try again !");
         return false;
     }
     let server: Guild;
     try {
         server = await client.guilds.fetch(serverId);
     } catch (err) {
-        await safeReply(interaction, "Internal error : Failed to fetch the targeted server ! Please try again.");
+        if (interaction)
+            await safeReply(
+                interaction,
+                "Internal error : Failed to fetch the targeted server ! Please try again."
+            );
         await sendLog(client, "Failed to fetch the targeted server : " + (err as TypeError).message);
         return false;
     }
@@ -37,9 +53,14 @@ async function contactAdminServer(client: Client,
     if (targets.length === 0) {
         targets.push(await client.users.fetch(server.ownerId));
     }
-    const msg: string | null = interaction.options.getString("message");
+    if (interaction) {
+        msg = interaction.options.getString("message") ?? undefined;
+    }
     if (!msg) {
-        await safeReply(interaction, "Parameter 'message' not found. Please try again.");
+        if (interaction)
+            await safeReply(interaction, "Parameter 'message' not found. Please try again.");
+        else
+            await sendLog(client, "Parameter 'message' not found. Please try again.");
         return false;
     }
     let errMsg: string = "";
@@ -50,7 +71,8 @@ async function contactAdminServer(client: Client,
     if (errMsg.length > 0) {
         await sendLog(client, "Erreur pour l'envoies au admins : \n" + errMsg);
     }
-    await safeReply(interaction, `Message successfully sent to ${targets.length} admin(s) !`, true, true);
+    if (interaction)
+        await safeReply(interaction, `Message successfully sent to ${targets.length} admin(s) !`, true, true);
     return true;
 }
 
