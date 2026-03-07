@@ -22,25 +22,6 @@ async function getInviteFromChannel(client: Client, channel: TextChannel): Promi
         return existing.url;
     } catch (error) {
         console.log("Erreur getInviteFromChannel: ", (error as TypeError).message);
-        if ((error as TypeError).message.includes("Missing Permissions")) {
-            await contactAdminServer(
-                client,
-                undefined,
-                channel.guild.id,
-                "\n" +
-                "@silent Sorry to bother you.\n" +
-                "\n" +
-                "I updated the bot to clean the invite channels it accidentally created. However, it now seems that the permission to create invitation links has been removed. The bot will now only create one invitation link.\n" +
-                "\n" +
-                "You received this message because the bot attempted to create an invitation link for a message footer or for the `listPartner` command.\n" +
-                "\n" +
-                "Sorry again for the disturbance. If needed, you can contact me: elessiah.\n" +
-                "\n" +
-                "Best regards,  \n" +
-                "Elessiah\n" +
-                "\n");
-            await sendLog(client, "Message envoyé au admin du serveur : " + channel.guild.name + "pour manque de permission pour créer une invitation.");
-        }
         return "";
     }
 }
