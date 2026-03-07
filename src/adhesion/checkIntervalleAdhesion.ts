@@ -33,7 +33,7 @@ async function checkIntervalleAdhesion(client: Client) {
         fetchedIntervalle.nextTransmission.setDate(fetchedIntervalle.nextTransmission.getDate() + fetchedIntervalle.interval_days);
         fetchedIntervalle.nextTransmission.setHours(10, 0, 0,0);
         console.log("fetched intervalleNextTransmission: ", fetchedIntervalle.nextTransmission, fetchedIntervalle.nextTransmission.toISOString());
-        await bdd.set(
+        console.log(await bdd.set(
             "AdhesionInterval",
             [
                 "channel_id",
@@ -47,7 +47,7 @@ async function checkIntervalleAdhesion(client: Client) {
                 fetchedIntervalle.role ? fetchedIntervalle.role.id : null,
                 fetchedIntervalle.nextTransmission.toISOString()
             ]
-        );
+        ));
     }
 }
 
