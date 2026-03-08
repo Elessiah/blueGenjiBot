@@ -61,7 +61,7 @@ function ts(d: Date): number {
 function buildEmbedPage(items: adhesionIntervalObj[], page: number, pageSize: number) {
     const totalPages: number = Math.max(1, Math.ceil(items.length / pageSize));
     const p: number = Math.min(Math.max(page, 0), totalPages - 1);
-    const slice: adhesionIntervalObj[] = items.slice(p * pageSize, p * pageSize + pageSize);
+    const slice: adhesionIntervalObj[] = items.filter(i => i.iteration == -1).slice(p * pageSize, p * pageSize + pageSize);
 
     const desc: string =
         slice.length === 0

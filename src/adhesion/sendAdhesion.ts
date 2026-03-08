@@ -27,18 +27,38 @@ async function sendAdhesion(client: Client,
     let success: boolean = true;
     let status: AttachmentBuilder;
     let adhesion: AttachmentBuilder;
-    const paths: PathsAdhesions | null = await loadAdhesionPaths(undefined, client);
-    if (!paths) {
-        await safeUser(
-            client,
-            author,
-            undefined,
-            [],
-            "Echec de l'envoie des adhésions, impossible de récupérer les fichiers. Admin en cours de contact..."
-        );
-        await sendLog(client, "Echec de l'envoi d'adhésion car non récupération des chemins");
+
+    let paths: PathsAdhesions | null = null;
+    try {
+        paths = await loadAdhesionPaths(undefined, client);
+    } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        try {
+            await sendLog(client, "sendAdhesion loadAdhesionPaths: " + msg);
+        } catch { /* ignore */ }
         return false;
     }
+    if (!paths) {
+        try {
+            await safeUser(
+                client,
+                author,
+                undefined,
+                [],
+                "Echec de l'envoie des adhésions, impossible de récupérer les fichiers. Admin en cours de contact..."
+            );
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            try {
+                await sendLog(client, "sendAdhesion safeUser (no paths): " + msg);
+            } catch { /* ignore */ }
+        }
+        try {
+            await sendLog(client, "Echec de l'envoi d'adhésion car non récupération des chemins");
+        } catch { /* ignore */ }
+        return false;
+    }
+
     try {
         status = new AttachmentBuilder(
             paths.adhesion,
@@ -49,59 +69,132 @@ async function sendAdhesion(client: Client,
             {name: paths.statusName}
         );
     } catch (err) {
-        await sendLog(client, "Failed to fetch adhesion and/or status: " + (err as TypeError).message);
+        const msg = err instanceof Error ? err.message : String(err);
+        try {
+            await sendLog(client, "Failed to fetch adhesion and/or status: " + msg);
+        } catch { /* ignore */ }
         return false;
     }
+
     if (!message) {
         message = "Voici les papiers pour l'adhésion à l'association BlueGenji :"
     }
+
     if (!memberPermMissing) {
         if (channel !== null) {
-            if (!await safeChannel(client, channel, undefined, [status, adhesion], message)) {
-                await safeUser(
-                    client,
-                    author,
-                    undefined,
-                    [],
-                    "Echec de l'envoie des adhésions, vérifiez les permissions, avant de réessayer !"
-                );
+            let channelOk: boolean;
+            try {
+                channelOk = (await safeChannel(client, channel, undefined, [status, adhesion], message)) !== null;
+            } catch (err) {
+                const msg = err instanceof Error ? err.message : String(err);
+                try {
+                    await sendLog(client, "sendAdhesion safeChannel: " + msg);
+                } catch { /* ignore */ }
+                channelOk = false;
+            }
+            if (!channelOk) {
+                try {
+                    await safeUser(
+                        client,
+                        author,
+                        undefined,
+                        [],
+                        "Echec de l'envoie des adhésions, vérifiez les permissions, avant de réessayer !"
+                    );
+                } catch (err) {
+                    const msg = err instanceof Error ? err.message : String(err);
+                    try {
+                        await sendLog(client, "sendAdhesion safeUser (channel fail): " + msg);
+                    } catch { /* ignore */ }
+                }
                 success = false;
             } else {
-                await safeUser(
-                    client,
-                    author,
-                    undefined,
-                    [],
-                    "Adhésion envoyé avec succès dans le channel cible !"
-                );
+                try {
+                    await safeUser(
+                        client,
+                        author,
+                        undefined,
+                        [],
+                        "Adhésion envoyé avec succès dans le channel " + channel.name + " !"
+                    );
+                } catch (err) {
+                    const msg = err instanceof Error ? err.message : String(err);
+                    try {
+                        await sendLog(client, "sendAdhesion safeUser (channel ok): " + msg);
+                    } catch { /* ignore */ }
+                }
             }
         }
+
         if (role !== null || member !== null) {
             let targets: User[] = [];
-            if (role !== null) {
-                targets = role.members.map(member => member.user);
-            }
-            if (member) {
-                targets.push(member.user);
+            try {
+                if (role !== null) {
+                    targets = role.members.map(m => m.user);
+                }
+                if (member) {
+                    targets.push(member.user);
+                }
+            } catch (err) {
+                const msg = err instanceof Error ? err.message : String(err);
+                try {
+                    await sendLog(client, "sendAdhesion targets: " + msg);
+                } catch { /* ignore */ }
             }
             let errMsg: string = "";
-            for (let target of targets) {
-                if (!await safeUser(client, target, undefined, [status, adhesion], message)) {
+            for (const target of targets) {
+                let ok: boolean;
+                try {
+                    ok = (await safeUser(client, target, undefined, [status, adhesion], message)) !== null;
+                } catch (err) {
+                    const msg = err instanceof Error ? err.message : String(err);
+                    try {
+                        await sendLog(client, "sendAdhesion safeUser target: " + msg);
+                    } catch { /* ignore */ }
+                    ok = false;
+                }
+                if (!ok) {
                     errMsg += "Echec de l'envoi pour " + target.globalName + "\n";
                 }
             }
             if (errMsg.length > 0) {
-                await safeUser(client, author, undefined, [], errMsg);
+                try {
+                    await safeUser(client, author, undefined, [], errMsg);
+                } catch (err) {
+                    const msg = err instanceof Error ? err.message : String(err);
+                    try {
+                        await sendLog(client, "sendAdhesion safeUser author errMsg: " + msg);
+                    } catch { /* ignore */ }
+                }
                 success = false;
             } else {
-                await safeUser(client, author, undefined, [], "Adhésions envoyés avec succès !");
+                try {
+                    if (targets.length > 1) {
+                        await safeUser(client, author, undefined, [], "Adhésions envoyés avec succès à plusieurs membres !");
+                    } else {
+                        await safeUser(client, author, undefined, [], "Adhésion envoyée avec succès à " + targets[0].globalName + " !");
+                    }
+                } catch (err) {
+                    const msg = err instanceof Error ? err.message : String(err);
+                    try {
+                        await sendLog(client, "sendAdhesion safeUser author success: " + msg);
+                    } catch { /* ignore */ }
+                }
             }
         }
     }
+
     if (memberPermMissing || (channel === null && role === null && member === null)) {
         if (memberPermMissing && (channel || role || member))
             message += "\nVous n'avez pas les permissions pour envoyer un message ailleurs que dans vos MP !";
-        await safeUser(client, author, undefined, [status, adhesion], message);
+        try {
+            await safeUser(client, author, undefined, [status, adhesion], message);
+        } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            try {
+                await sendLog(client, "sendAdhesion safeUser (memberPermMissing): " + msg);
+            } catch { /* ignore */ }
+        }
     }
     return success;
 }

@@ -100,6 +100,7 @@ async function fetchTargets(client: Client, bdd: Bdd, interval: adhesionInterval
         role: role,
         author: user,
         interval_days: interval.interval_days,
+        iteration: interval.iteration,
         nextTransmission: new Date(interval.nextTransmission),
     }
 }

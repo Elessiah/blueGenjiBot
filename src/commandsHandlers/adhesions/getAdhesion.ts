@@ -1,12 +1,10 @@
 import {type ChatInputCommandInteraction, GuildMember} from "discord.js";
 import type { Client, TextChannel, Role } from "discord.js";
-import {sendLog} from "@/safe/sendLog.js";
 import {checkPermissions} from "@/check/checkPermissions.js";
 import {safeFollowUp} from "@/safe/safeFollowUp.js";
 import {safeReply} from "@/safe/safeReply.js";
-import {Bdd, getBddInstance} from "@/bdd/Bdd.js";
-import {status} from "@/types.js";
 import {sendAdhesion} from "@/adhesion/sendAdhesion.js";
+import {setupIntervalAdhesion} from "@/adhesion/setupIntervalAdhesion.js";
 
 /**
  * Récupère et envoie les fichiers d'adhésion configurés.
@@ -46,48 +44,18 @@ async function getAdhesion(client: Client,
     else
         await safeFollowUp(interaction, "Echec de l'envoi !", true, []);
     if (intInterval > 0) {
-        const nextTransmission: Date = new Date();
+        const nextTransmission = new Date();
         nextTransmission.setHours(10, 0, 0, 0);
         nextTransmission.setDate(nextTransmission.getDate() + intInterval);
-        const bdd: Bdd = await getBddInstance();
-        const status: status = await bdd.set(
-            "AdhesionInterval",
-            [
-                "message",
-                "guild_id",
-                "channel_id",
-                "member_id",
-                "role_id",
-                "author_id",
-                "interval_days",
-                "nextTransmission",
-            ],
-            [
-                message,
-                interaction.guild.id,
-                channel ? channel.id : null,
-                member ? member.id : null,
-                role ? role.id : null,
-                interaction.user.id,
-                interval,
-                nextTransmission.toISOString(),
-            ]
-        );
-        if (!status.success) {
-            await sendLog(client, "Erreur lors de la programmation d'un rappel : " + status.message);
-            await safeFollowUp(
-                interaction,
-                "Echec de la programmation ! Veuillez réessayer !",
-                true,
-                []
-            );
-            return;
-        }
-        await safeFollowUp(
+        await setupIntervalAdhesion(
+            client,
             interaction,
-            `Programmation réussi du rappel. Envoi des adhésions dans ${interval} jours`,
-            false,
-            []
+            message,
+            channel,
+            member,
+            role,
+            intInterval,
+            nextTransmission
         );
     }
 }

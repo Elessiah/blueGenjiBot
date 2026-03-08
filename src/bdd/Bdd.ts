@@ -309,6 +309,7 @@ class Bdd {
                 role_id TEXT,
                 author_id TEXT,
                 interval_days INTEGER NOT NULL,
+                iteration INTEGER NOT NULL DEFAULT -1,
                 nextTransmission DATETIME DEFAULT CURRENT_TIMESTAMP
            );`
       );

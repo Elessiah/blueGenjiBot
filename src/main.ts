@@ -117,12 +117,12 @@ client.on("clientReady", async () => {
         console.log("Server ready : ", guild.name);
         await updateCommands(client, guild.id);
     }
+    checkIntervalleAdhesion(client);
     cron.schedule(
         "0 10 * * *",
         /**
          * Callback quotidien qui déclenche l'envoi automatique des adhésions.
          */
-
         async () => {
             await checkIntervalleAdhesion(client);
         },
@@ -160,7 +160,7 @@ process.on('SIGINT', async () => {
 process.on('SIGTERM', async () => {
     console.log('Arrêt du bot...');
     await client.destroy();
-    await closeBddInstance();
+    closeBddInstance();
     process.exit(0);
 });
 

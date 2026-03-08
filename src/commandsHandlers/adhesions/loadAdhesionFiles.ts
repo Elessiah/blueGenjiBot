@@ -48,8 +48,7 @@ async function manageOldFiles(interaction: ChatInputCommandInteraction,
     const path: string = adhesion_file == ADHESION_FILES.ADHESION ? paths.adhesion : paths.status;
     if (!path || path.length == 0)
         return paths;
-    if (!await deleteOldAttachment(interaction, path))
-        return null;
+    await deleteOldAttachment(interaction, path);
     adhesion_file == ADHESION_FILES.ADHESION ? paths.adhesion = "" : paths.status = "";
     adhesion_file == ADHESION_FILES.ADHESION ? paths.adhesionName = "" : paths.statusName = "";
     return await saveAdhesionPaths(paths, interaction) ? paths : null;

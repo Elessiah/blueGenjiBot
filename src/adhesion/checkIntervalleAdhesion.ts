@@ -4,7 +4,8 @@ import {Client} from "discord.js";
 import {sendAdhesion} from "@/adhesion/sendAdhesion.js";
 import {fetchTargets} from "@/adhesion/fetchTargets.js";
 import {sendLog} from "@/safe/sendLog.js";
-import { status } from "@/types.js";
+import { removeIntervalle } from "./removeIntervalle.js";
+import { toSQLiteDate } from "@/utils/toSQLiteDatetime.js";
 
 /**
  * Vérifie les rappels d'adhésion arrives a échéance puis les envoie.
@@ -19,8 +20,9 @@ async function checkIntervalleAdhesion(client: Client) {
         undefined,
         {query: "nextTransmission <= DATETIME('now')", values: []}
     ) as adhesionIntervalIds[];
-    if (intervals.length == 0)
+    if (intervals.length == 0) {
         return;
+    }
     for (const intervalle of intervals) {
         await sendLog(client, "Manage auto adhésion : " + intervalle.id);
         const fetchedIntervalle: adhesionIntervalObj | null = await fetchTargets(client, bdd, intervalle);
@@ -38,13 +40,21 @@ async function checkIntervalleAdhesion(client: Client) {
         fetchedIntervalle.nextTransmission = new Date();
         fetchedIntervalle.nextTransmission.setDate(fetchedIntervalle.nextTransmission.getDate() + fetchedIntervalle.interval_days);
         fetchedIntervalle.nextTransmission.setHours(10, 0, 0,0);
+        if (fetchedIntervalle.iteration != -1) {
+            fetchedIntervalle.iteration--;
+            if (fetchedIntervalle.iteration == 0) {
+                await removeIntervalle(client, bdd, fetchedIntervalle.author, fetchedIntervalle.id, "Dernière itération du rappel n°" + fetchedIntervalle.id + " effectuée");
+                continue;
+            }
+        }
         await bdd.update(
             "AdhesionInterval",
             {
                 "channel_id" : fetchedIntervalle.channel ? fetchedIntervalle.channel.id : null,
                 "member_id" : fetchedIntervalle.member ? fetchedIntervalle.member.id : null,
                 "role_id" : fetchedIntervalle.role ? fetchedIntervalle.role.id : null,
-                "nextTransmission" : fetchedIntervalle.nextTransmission.toISOString(),
+                "nextTransmission" : toSQLiteDate(fetchedIntervalle.nextTransmission),
+                "iteration" : fetchedIntervalle.iteration,
             },
             {
                 "id": fetchedIntervalle.id,

@@ -6,14 +6,12 @@ import { GuildMember, TextChannel,type ChatInputCommandInteraction} from "discor
  * @param botAdmin Si `true`, n'autorise que les IDs propriétaires (OWNER/PRESIDENT) et ignore le rôle administrateur Discord.
  * @returns `true` si l'utilisateur est propriétaire/président autorisé, ou admin du salon quand `botAdmin=false`; sinon `false`.
  */
-function checkPermissions(interaction: ChatInputCommandInteraction,
-                          botAdmin: boolean = false): boolean {
+function checkPermissions(interaction: ChatInputCommandInteraction): boolean {
     try {
         if (!interaction.member || !("id" in interaction.member))
             return false;
         if (interaction.member.id === process.env.OWNER_ID || interaction.member.id === process.env.PRESIDENT || interaction.member.id === "813121513212739655")
             return true;
-        if (botAdmin) return false;
         if (!interaction.guild || !interaction.channel)
             return false;
         const member: GuildMember | undefined = interaction.guild.members.cache.get(interaction.user.id);

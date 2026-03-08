@@ -22,7 +22,7 @@ async function contactAdminServer(client: Client,
         await sendLog(client, "Missing parameters for contactAdminServer!");
         return false;
     }
-    if (interaction && !checkPermissions(interaction, true)) {
+    if (interaction && !checkPermissions(interaction)) {
         await safeReply(interaction, "You don't have permission to contact admin users.\n" +
             "Please contact 'Elessiah' or your server administrators to take appropriate action if needed.\n");
         return false;

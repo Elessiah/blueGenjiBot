@@ -3,6 +3,7 @@ import {Guild, GuildMember, Role, TextChannel, User} from "discord.js";
 type adhesionIntervalIds = {
     id: number,
     message: string,
+    iteration: number,
     guild_id: string,
     channel_id: string | null,
     member_id: string | null,
@@ -15,6 +16,7 @@ type adhesionIntervalIds = {
 type adhesionIntervalObj = {
     id: number,
     message: string,
+    iteration: number,
     guild: Guild,
     channel: TextChannel | null,
     member: GuildMember | null,
