@@ -29,7 +29,7 @@ async function extractRanks(client: Client,
                 "It seems that you didn't specify any rank. To get more responses from other users, I recommend specifying the rank range you're looking for.",
                 30000);
         }
-        matchs = ranks;
+        matchs = [...ranks];
     }
     return matchs;
 }

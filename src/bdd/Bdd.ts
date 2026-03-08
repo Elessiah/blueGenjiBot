@@ -547,6 +547,9 @@ class Bdd {
    */
   async partnerHasRanks(channel_id: string,
                         ranks: Array<string>): Promise<boolean> {
+    if (ranks.length === 0) {
+        return true;
+    }
     const ranksFilter: Array<string> = [];
     ranks.forEach((rank) => {ranksFilter.push(` Ranks.name='${rank}' `)});
     const queryFilter: string = ranksFilter.join(' OR ');
