@@ -15,7 +15,7 @@ import {sendLog} from "../safe/sendLog.js";
  */
 async function broadcast(client: Client,
                          interaction: ChatInputCommandInteraction): Promise<boolean> {
-    if (!checkPermissions(interaction)) {
+    if (!await checkPermissions(interaction)) {
         await safeReply(interaction, "You don't have permission to broadcast !");
         return false;
     }

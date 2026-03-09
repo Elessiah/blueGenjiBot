@@ -23,7 +23,7 @@ import {status} from "@/types.js";
 async function newChannelPartner(client: Client,
                                  interaction: ChatInputCommandInteraction): Promise<boolean> {
     try {
-        if (!checkPermissions(interaction)) {
+        if (!(await checkPermissions(interaction))) {
             await safeReply(interaction, "You don't have the permission to do this.", true);
             return false;
         }

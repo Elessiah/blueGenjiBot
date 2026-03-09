@@ -13,7 +13,7 @@ import {status} from "@/types.js";
  */
 async function remoteServerReset(client: Client,
                                  interaction: ChatInputCommandInteraction): Promise<boolean> {
-    if (!checkPermissions(interaction)) {
+    if (!(await checkPermissions(interaction))) {
         await safeReply(interaction, "You don't have permission to ban users.\n" +
             "Please contact 'Elessiah' or your server administrators to take appropriate action if needed.\n");
         return false;

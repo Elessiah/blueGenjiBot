@@ -23,7 +23,7 @@ async function unban(client: Client,
             "If necessary, please contact 'Elessiah' or the administrators of a server that meets the requirements to take appropriate measures.\n");
         return false;
     }
-    if (!await checkPermissions(interaction)) {
+    if (!(await checkPermissions(interaction))) {
         await safeReply(interaction, "You don't have permission to unban users.\n" +
             "Please contact 'Elessiah' or your server administrators to take appropriate action if needed.\n");
         return false;

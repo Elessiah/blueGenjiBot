@@ -182,6 +182,7 @@ async function sendInteractiveMsg(
  */
 async function displaySetupAdhesion(client: Client,
                                     interaction: ChatInputCommandInteraction): Promise<void> {
+    console.log("Ouille");
     const bdd: Bdd = await getBddInstance();
     const result: unknown[] = await bdd.get("AdhesionInterval", ["*"], undefined);
     if (result.length == 0) {

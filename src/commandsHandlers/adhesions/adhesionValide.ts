@@ -6,7 +6,7 @@ import { checkPermissions } from "@/check/checkPermissions.js";
 
 async function adhesionValide(client: Client, interaction: ChatInputCommandInteraction): Promise<void> {
     const user: GuildMember | null = interaction.options.getMember("user") as GuildMember | null;
-    if (!checkPermissions(interaction))
+    if (!(await checkPermissions(interaction)))
         return;
     if (!user) {
         await safeReply(interaction, "Membre non trouvé");
@@ -29,7 +29,7 @@ async function adhesionValide(client: Client, interaction: ChatInputCommandInter
     if (await safeUser(client, user.user, undefined, adhesion ? [new AttachmentBuilder(adhesion.url)] : undefined, messageValide)) {
         await interaction.followUp({ content: user.user.globalName + " a été prévenu avec succès !", flags: MessageFlags.Ephemeral });
     } else {
-        await interaction.followUp({ content: "Erreur lors de l'envoi du message à " + user.user.globalName + " ! Essaie de nouveau s'il te plait.", ephemeral: true });
+        await interaction.followUp({ content: "Erreur lors de l'envoi du message à " + user.user.globalName + " ! Essaie de nouveau s'il te plait.", flags: MessageFlags.Ephemeral });
         return;
     }
 

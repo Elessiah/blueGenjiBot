@@ -52,7 +52,7 @@ async function _resetChannel(client: Client, channel_id: string): Promise<status
  */
 
 async function resetChannel(client: Client, interaction: ChatInputCommandInteraction): Promise<boolean> {
-    if (!await checkPermissions(interaction)) {
+    if (!(await checkPermissions(interaction))) {
         return await safeReply(interaction, "You don't have the permission to do this.", true);
     }
     await interaction.deferReply({flags: MessageFlags.Ephemeral});

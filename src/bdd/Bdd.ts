@@ -15,6 +15,7 @@ import type {
     whereConditions,
     ChannelPartnerRank
 } from "./types.js";
+import e from "express";
 
 let bdd: Bdd;
 
@@ -302,12 +303,12 @@ class Bdd {
           `CREATE TABLE IF NOT EXISTS AdhesionInterval
             (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                message TEXT,
-                guild_id TEXT,
+                message TEXT NOT NULL ,
+                guild_id TEXT NOT NULL,
                 channel_id TEXT,
                 member_id TEXT,
                 role_id TEXT,
-                author_id TEXT,
+                author_id TEXT NOT NULL,
                 interval_days INTEGER NOT NULL,
                 iteration INTEGER NOT NULL DEFAULT -1,
                 nextTransmission DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -315,6 +316,18 @@ class Bdd {
       );
     } catch (e) {
       console.error("AdhesionInterval error: ", (e as TypeError).message);
+    }
+    try {
+      await this.Database?.exec(
+        `CREATE TABLE IF NOT EXISTS RoleAdmin
+          ( 
+            guild_id TEXT NOT NULL PRIMARY KEY,
+            role_id TEXT NOT NULL
+          );
+        `
+      );
+    } catch (e) {
+      console.error("RoleAdmin error: ", (e as TypeError).message);
     }
   }
 

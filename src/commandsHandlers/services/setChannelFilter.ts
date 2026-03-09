@@ -19,7 +19,7 @@ import {safeReply} from "@/safe/safeReply.js";
 async function setChannelFilter(client: Client,
                                 interaction: ChatInputCommandInteraction): Promise<boolean> {
     try {
-        if (!checkPermissions(interaction)) {
+        if (!(await checkPermissions(interaction))) {
             await safeReply(interaction, "You don't have the permission to edit channel filter.");
             return true;
         }

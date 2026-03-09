@@ -56,7 +56,7 @@ async function _resetServer(client: Client,
  */
 async function resetServer(client: Client,
                            interaction: ChatInputCommandInteraction): Promise<boolean> {
-    if (!checkPermissions(interaction)) {
+    if (!(await checkPermissions(interaction))) {
         return await safeReply(interaction, "You don't have the permission to do this.", true);
     }
     await interaction.deferReply({flags: MessageFlags.Ephemeral});

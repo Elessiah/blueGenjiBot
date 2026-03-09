@@ -29,7 +29,7 @@ async function getAdhesion(client: Client,
     if (interval != null) {
         intInterval = parseInt(interval, 10);
     }
-    let memberPermMissing = !checkPermissions(interaction);
+    let memberPermMissing = !(await checkPermissions(interaction));
     if (memberPermMissing && intInterval > 0) {
         await safeFollowUp(
             interaction,

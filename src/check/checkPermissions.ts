@@ -1,4 +1,5 @@
 import { GuildMember, TextChannel,type ChatInputCommandInteraction} from "discord.js";
+import {checkAdminRole} from "@/check/checkAdminRole.js";
 
 /**
  * Contrôle que l'utilisateur et le bot possèdent les permissions requises.
@@ -6,7 +7,7 @@ import { GuildMember, TextChannel,type ChatInputCommandInteraction} from "discor
  * @param botAdmin Si `true`, n'autorise que les IDs propriétaires (OWNER/PRESIDENT) et ignore le rôle administrateur Discord.
  * @returns `true` si l'utilisateur est propriétaire/président autorisé, ou admin du salon quand `botAdmin=false`; sinon `false`.
  */
-function checkPermissions(interaction: ChatInputCommandInteraction): boolean {
+async function checkPermissions(interaction: ChatInputCommandInteraction): Promise<boolean> {
     try {
         if (!interaction.member || !("id" in interaction.member))
             return false;
@@ -17,6 +18,8 @@ function checkPermissions(interaction: ChatInputCommandInteraction): boolean {
         const member: GuildMember | undefined = interaction.guild.members.cache.get(interaction.user.id);
         if (!member)
             return false;
+        if (await checkAdminRole(member))
+            return true;
         const targetChannel: TextChannel = interaction.channel as TextChannel;
         if (!targetChannel)
             return false;

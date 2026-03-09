@@ -20,7 +20,7 @@ import type {Client, ChatInputCommandInteraction, TextChannel} from "discord.js"
  */
 async function setChannelRankFilter(client: Client,
                                     interaction: ChatInputCommandInteraction): Promise<boolean> {
-    if (!checkPermissions(interaction)) {
+    if (!(await checkPermissions(interaction))) {
         return await safeReply(interaction, "You don't have the permission to do that.", true);
     }
     try {
