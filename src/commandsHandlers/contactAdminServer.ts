@@ -5,6 +5,7 @@ import {checkPermissions} from "../check/checkPermissions.js";
 import {safeReply} from "../safe/safeReply.js";
 import {safeUser} from "../safe/safeUser.js";
 import {sendLog} from "../safe/sendLog.js";
+import {getAdminRole} from "../utils/getAdminRole.js";
 
 /**
  * Transmet un message à l'équipe d'administration du serveur concerné.
@@ -54,12 +55,32 @@ async function contactAdminServer(client: Client,
     const adminRoles: Collection<string, Role> = server.roles.cache.filter(r =>
         r.permissions.has(PermissionsBitField.Flags.Administrator)
     );
-    const targets: User[] = [];
-    for (const [roleId, role] of adminRoles) {
-        targets.push(...(role.members.map(member => member.user)));
+    const targets: Map<string, User> = new Map();
+    for (const role of adminRoles.values()) {
+        for (const member of role.members.values()) {
+            targets.set(member.user.id, member.user);
+        }
     }
-    if (targets.length === 0) {
-        targets.push(await client.users.fetch(server.ownerId));
+
+    const adminRoleId = await getAdminRole(server);
+    if (adminRoleId) {
+        try {
+            const configuredRole = await server.roles.fetch(adminRoleId);
+            if (configuredRole) {
+                for (const member of configuredRole.members.values()) {
+                    targets.set(member.user.id, member.user);
+                }
+            } else {
+                await sendLog(client, `Configured admin role with id '${adminRoleId}' not found on guild '${server.id}'.`);
+            }
+        } catch (err) {
+            await sendLog(client, "Failed to fetch configured admin role : " + (err as TypeError).message);
+        }
+    }
+
+    const targetsArray: User[] = Array.from(targets.values());
+    if (targetsArray.length === 0) {
+        targetsArray.push(await client.users.fetch(server.ownerId));
     }
     if (interaction) {
         msg = interaction.options.getString("message") ?? undefined;
@@ -72,7 +93,7 @@ async function contactAdminServer(client: Client,
         return false;
     }
     let errMsg: string = "";
-    for (const target of targets) {
+    for (const target of targetsArray) {
         if (!await safeUser(client, target, undefined, [], msg))
             {errMsg += "Echec de l'envoi pour " + target.globalName + "\n";}
     }
@@ -80,7 +101,7 @@ async function contactAdminServer(client: Client,
         await sendLog(client, "Erreur pour l'envoies au admins : \n" + errMsg);
     }
     if (interaction)
-        await safeReply(interaction, `Message successfully sent to ${targets.length} admin(s) !`, true, true);
+        await safeReply(interaction, `Message successfully sent to ${targetsArray.length} admin(s) !`, true, true);
     return true;
 }
 

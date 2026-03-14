@@ -11,7 +11,7 @@ async function checkPermissions(interaction: ChatInputCommandInteraction): Promi
     try {
         if (!interaction.member || !("id" in interaction.member))
             return false;
-        if (interaction.member.id === process.env.OWNER_ID || interaction.member.id === process.env.PRESIDENT || interaction.member.id === "813121513212739655")
+        if (interaction.member.id === process.env.OWNER_ID || interaction.member.id === process.env.PRESIDENT)
             return true;
         if (!interaction.guild || !interaction.channel)
             return false;
