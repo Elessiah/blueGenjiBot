@@ -6,6 +6,11 @@ import type {Ban} from "@/bdd/types.js";
 import {safeReply} from "@/safe/safeReply.js";
 import {sendLog} from "@/safe/sendLog.js";
 
+/**
+ * Affiche la liste paginée des utilisateurs bannis.
+ * @param client Client Discord utilisé pour les appels API.
+ * @param interaction Interaction utilisateur en cours.
+ */
 async function banlist(client: Client,
                        interaction: ChatInputCommandInteraction): Promise<void> {
     const bdd: Bdd = await getBddInstance();

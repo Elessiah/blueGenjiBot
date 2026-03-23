@@ -113,12 +113,20 @@ const messages = [
     "Feeling lonely? Depressed? Or just want to chat?\n" +
     "Don't hesitate to reach out — my Discord: `elessiah`.\n\n" +
     "**FR 🇫🇷 :** Vous vous sentez seul ? Déprimé ? Ou vous voulez juste discuter ?\n" +
-    "N’hésitez pas à venir me parler — mon Discord : `elessiah`."
+    "N’hésitez pas à venir me parler — mon Discord : `elessiah`.",
+
+    "# Tips: Have an issue or a question? \n" +
+    "Fill in a ticket here: https://bluegenjiesport.on.spiceworks.com/portal \n"+
+    "**FR 🇫🇷 :** Un problème ? Une question ? Remplissez un ticket ici : https://bluegenjiesport.on.spiceworks.com/portal\n"
 ];
 
 
 let tips: Tips;
 
+/**
+ * Retourne une astuce aléatoire adaptée au contexte d'utilisation.
+ * @returns Instance singleton de `Tips` (créée au premier appel si nécessaire).
+ */
 function getTips(): Tips {
     if (!tips) {
         tips = Tips.create();
@@ -126,6 +134,12 @@ function getTips(): Tips {
     return tips;
 }
 
+/**
+ * Prépare l'astuce suivante et met à jour l'index de rotation.
+ * @param client Client Discord utilisé pour les appels API.
+ * @param service Information de service à traiter.
+ * @param region Index numérique de région (table `regions`).
+ */
 async function nextTips(client: Client,
                         service: string,
                         region: number): Promise<void> {
@@ -136,15 +150,29 @@ async function nextTips(client: Client,
 class Tips {
     private messageCounter: number[][];
     private tipsRoller: number;
+
+    /**
+     * Initialise une nouvelle instance de la classe.
+     */
     constructor() {
         this.messageCounter = new Array<number[]>();
         this.tipsRoller = 0;
     }
 
+    /**
+     * Instancie le gestionnaire de tips et initialise son état interne.
+     * @returns Nouvelle instance de `Tips` prête à être utilisée.
+     */
     static create(): Tips {
         return (new Tips());
     }
 
+    /**
+     * Prépare l'astuce suivante et met à jour l'index de rotation.
+     * @param client Client Discord utilisé pour les appels API.
+     * @param service Information de service à traiter.
+     * @param region Index numérique de région (table `regions`).
+     */
     async nextTips(client: Client,
                    service: string,
                    region: number): Promise<void> {
@@ -175,7 +203,7 @@ class Tips {
                     if (!channel.messages)
                         continue;
                     const options: FetchMessagesOptions = {limit: 1};
-                    // Force comme un gros bourin parce que TypeScript ne voit pas la deuxième surcharge de channel.messages.fetch();
+                    // Force comme un gros bourin parce que TypeScript ne voit pas la deuxième surchargé de channel.messages.fetch();
                     const messages: Collection<unknown, Message<true>> = await channel.messages.fetch(options as FetchMessagesOptions) as unknown as Collection<unknown, Message<true>>;
                     const lastMessage = messages.first();
                     if (lastMessage == undefined || !(client.user && lastMessage.author.id === client.user.id && lastMessage.content.substring(0, 7) === "# Tips:")) {
@@ -191,3 +219,5 @@ class Tips {
 }
 
 export {getTips, nextTips};
+
+

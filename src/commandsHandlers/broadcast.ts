@@ -7,9 +7,15 @@ import {safeChannel} from "../safe/safeChannel.js";
 import {safeReply} from "../safe/safeReply.js";
 import {sendLog} from "../safe/sendLog.js";
 
+/**
+ * Diffuse un message administratif vers tous les channels partenaires
+ * @param client Client Discord utilisé pour les appels API.
+ * @param interaction Interaction utilisateur en cours.
+ * @returns `false` si permissions insuffisantes; sinon `true` après tentative de diffusion globale (même avec erreurs partielles).
+ */
 async function broadcast(client: Client,
                          interaction: ChatInputCommandInteraction): Promise<boolean> {
-    if (!checkPermissions(interaction)) {
+    if (!await checkPermissions(interaction)) {
         await safeReply(interaction, "You don't have permission to broadcast !");
         return false;
     }

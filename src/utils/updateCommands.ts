@@ -4,6 +4,11 @@ import {commands} from '../config/commands.js';
 import {fillBlueCommands} from '../config/fillBlueCommands.js';
 import {sendLog} from "../safe/sendLog.js";
 
+/**
+ * Synchronise les commandes slash de l'application auprès de Discord.
+ * @param client Client Discord utilisé pour les appels API.
+ * @param guildId Identifiant du serveur cible (utilisé en appel interne sans interaction).
+ */
 async function updateCommands(client: Client,
                               guildId: string): Promise<void> {
     const { TOKEN, CLIENT_ID, SERV_GENJI, SERV_RIVALS } = process.env;

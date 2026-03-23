@@ -1,4 +1,4 @@
-import {ApplicationCommandOptionType} from "discord.js";
+﻿import {ApplicationCommandOptionType} from "discord.js";
 
 import {ban_id} from "../commandsHandlers/ban/ban_id.js";
 import {ban_username} from "../commandsHandlers/ban/ban_username.js";
@@ -17,7 +17,8 @@ import {areaFilter} from "../utils/globals.js";
 
 import {rankChoices} from "./rankChoices.js";
 import {servicesChoices} from "./servicesChoices.js";
-
+import {setBotAdminRole} from "@/commandsHandlers/admin/setBotAdminRole.js";
+import {showBotAdminRole} from "@/commandsHandlers/admin/showBotAdminRole.js";
 
 const commands = {
     "help": {
@@ -298,6 +299,26 @@ const commands = {
                     required: true,
                 }
             ]
+        }
+    },
+    "set-bot-admin": {
+        handler: setBotAdminRole,
+        parameters: {
+            description: "Sets the bot admin role",
+            options: [
+                {
+                    name: "role",
+                    description: "Role admin for the bot service",
+                    type: ApplicationCommandOptionType.Role,
+                    required: true,
+                }
+            ]
+        }
+    },
+    "show-bot-admin": {
+        handler: showBotAdminRole,
+        parameters: {
+            description: "Display the bot admin role",
         }
     }
 }

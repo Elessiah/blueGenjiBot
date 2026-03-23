@@ -1,4 +1,4 @@
-const rankChoices = [
+﻿const rankChoices = [
     {
         name: "Bronze",
         value: "bronze"

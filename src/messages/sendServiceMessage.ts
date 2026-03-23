@@ -3,7 +3,16 @@ import {safeChannel} from "../safe/safeChannel.js";
 import type {TextChannel, Client, Embed, EmbedBuilder, Message} from "discord.js";
 import type {Bdd} from "../bdd/Bdd.js";
 
-
+/**
+ * Envoie le message de service dans les salons cibles après filtrage.
+ * @param client Client Discord utilisé pour les appels API.
+ * @param targets Liste des salons cibles à contacter (`id_channel`).
+ * @param message Message original à relayer (utilisé pour éviter l'envoi vers le salon source).
+ * @param embed Embed prêt à être envoyé (optionnel selon le contexte).
+ * @param bdd Instance de base de données.
+ * @param ranks Rang(s) utilisés pour le filtrage.
+ * @returns Nombre de salons ayant reçu le message; `-1` si un salon cible est introuvable (arrêt anticipé).
+ */
 async function sendServiceMessage(client: Client,
                                   targets: {id_channel: string}[],
                                   message: Message,

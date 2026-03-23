@@ -3,18 +3,28 @@ import {adhesionIntervalIds, adhesionIntervalObj} from "@/adhesion/types.js";
 import {Client} from "discord.js";
 import {sendAdhesion} from "@/adhesion/sendAdhesion.js";
 import {fetchTargets} from "@/adhesion/fetchTargets.js";
+import {sendLog} from "@/safe/sendLog.js";
+import { removeIntervalle } from "./removeIntervalle.js";
+import { toSQLiteDate } from "@/utils/toSQLiteDatetime.js";
 
+/**
+ * Vérifie les rappels d'adhésion arrives a échéance puis les envoie.
+ * Met ensuite à jour la date du prochain envoi pour chaque intervalle traite.
+ * @param client Client Discord utilisé pour récupérer les cibles et envoyer les messages.
+ */
 async function checkIntervalleAdhesion(client: Client) {
     const bdd: Bdd = await getBddInstance();
     const intervals = await bdd.get(
         "AdhesionInterval",
         ["*"],
         undefined,
-        {query: "nextTransmission <= DATE('now')", values: []}
+        {query: "nextTransmission <= DATETIME('now')", values: []}
     ) as adhesionIntervalIds[];
-    if (intervals.length == 0)
+    if (intervals.length == 0) {
         return;
+    }
     for (const intervalle of intervals) {
+        await sendLog(client, "Manage auto adhésion : " + intervalle.id);
         const fetchedIntervalle: adhesionIntervalObj | null = await fetchTargets(client, bdd, intervalle);
         if (!fetchedIntervalle)
             continue;
@@ -27,21 +37,28 @@ async function checkIntervalleAdhesion(client: Client) {
             false,
             fetchedIntervalle.author
         );
+        fetchedIntervalle.nextTransmission = new Date();
         fetchedIntervalle.nextTransmission.setDate(fetchedIntervalle.nextTransmission.getDate() + fetchedIntervalle.interval_days);
-        await bdd.set(
+        fetchedIntervalle.nextTransmission.setHours(10, 0, 0,0);
+        if (fetchedIntervalle.iteration != -1) {
+            fetchedIntervalle.iteration--;
+            if (fetchedIntervalle.iteration == 0) {
+                await removeIntervalle(client, bdd, fetchedIntervalle.author, fetchedIntervalle.id, "Dernière itération du rappel n°" + fetchedIntervalle.id + " effectuée");
+                continue;
+            }
+        }
+        await bdd.update(
             "AdhesionInterval",
-            [
-                "channel_id",
-                "member_id",
-                "role_id",
-                "nextTransmission",
-            ],
-            [
-                fetchedIntervalle.channel ? fetchedIntervalle.channel.id : null,
-                fetchedIntervalle.member ? fetchedIntervalle.member.id : null,
-                fetchedIntervalle.role ? fetchedIntervalle.role.id : null,
-                fetchedIntervalle.nextTransmission.toISOString()
-            ]
+            {
+                "channel_id" : fetchedIntervalle.channel ? fetchedIntervalle.channel.id : null,
+                "member_id" : fetchedIntervalle.member ? fetchedIntervalle.member.id : null,
+                "role_id" : fetchedIntervalle.role ? fetchedIntervalle.role.id : null,
+                "nextTransmission" : toSQLiteDate(fetchedIntervalle.nextTransmission),
+                "iteration" : fetchedIntervalle.iteration,
+            },
+            {
+                "id": fetchedIntervalle.id,
+            }
         );
     }
 }

@@ -1,14 +1,22 @@
 import type {ChatInputCommandInteraction, Client, Guild, User} from "discord.js";
 import { MessageFlags } from "discord.js";
 
-import {getBddInstance} from "../../bdd/Bdd.js";
-import {deleteDPMsgs} from "../../bdd/deleteDPMsgs.js";
-import {checkBan} from "../../check/checkBan.js";
-import {checkPermissions} from "../../check/checkPermissions.js";
-import {safeReply} from "../../safe/safeReply.js";
-import {sendLog} from "../../safe/sendLog.js";
-import type {idSendLogMsg} from "../../safe/types.js";
+import {getBddInstance} from "@/bdd/Bdd.js";
+import {deleteDPMsgs} from "@/bdd/deleteDPMsgs.js";
+import {checkBan} from "@/check/checkBan.js";
+import {checkPermissions} from "@/check/checkPermissions.js";
+import {safeReply} from "@/safe/safeReply.js";
+import {sendLog} from "@/safe/sendLog.js";
+import type {idSendLogMsg} from "@/safe/types.js";
 
+/**
+ * Ban un utilisateur des utilisations du bot discord.
+ * @param client Client Discord utilisé pour les appels API.
+ * @param interaction Interaction utilisateur en cours.
+ * @param user Utilisateur concerne.
+ * @param reason Motif fourni pour le bannissement.
+ * @returns `true` si l'utilisateur est déjà banni ou banni avec succès; `false` si préconditions/permissions échouent ou erreur base/log.
+ */
 async function ban(client: Client,
                    interaction: ChatInputCommandInteraction,
                    user: User,
@@ -27,7 +35,7 @@ async function ban(client: Client,
             true);
         return false;
     }
-    if (!checkPermissions(interaction)) {
+    if (!(await checkPermissions(interaction))) {
         await safeReply(interaction, "You don't have permission to ban users.\n" +
             "Please contact 'Elessiah' or your server administrators to take appropriate action if needed.\n",
             true,

@@ -15,9 +15,15 @@ import type {
     whereConditions,
     ChannelPartnerRank
 } from "./types.js";
+import e from "express";
 
 let bdd: Bdd;
 
+/**
+ * Retourne l'instance singleton de la base de données.
+ * Crée et initialise la connexion SQLite si nécessaire.
+ * @returns Instance Bdd prête à être utilisée.
+ */
 async function getBddInstance(): Promise<Bdd> {
   if (!bdd) {
     bdd = await Bdd.create('./database.sqlite');
@@ -25,6 +31,10 @@ async function getBddInstance(): Promise<Bdd> {
   return bdd;
 }
 
+/**
+ * Ferme l'instance singleton courante si elle existe.
+ * @returns `true` si une instance était ouverte, sinon `false`.
+ */
 function closeBddInstance(): boolean {
   if (!bdd)
     {return false;}
@@ -36,21 +46,36 @@ class Bdd {
     private name: string;
     private Database: Database | null;
 
+  /**
+   * Initialise l'instance avec le chemin du fichier SQLite.
+   * @param name Chemin de la base SQLite.
+   */
   constructor(name = './database.sqlite') {
     this.name = name;
     this.Database = null;
   }
 
+  /**
+   * Crée une instance Bdd puis Exécute son initialisation SQL.
+   * @param name Chemin de la base SQLite.
+   * @returns Instance Bdd initialisée.
+   */
   static async create(name = './database.sqlite'): Promise<Bdd> {
     const instance = new Bdd(name);
     await instance.init();
     return instance;
   }
 
+  /**
+   * Ferme la connexion SQLite associée à cette instance.
+   */
   delete(): void {
     void this.Database?.close();
   }
 
+  /**
+   * Ouvre la connexion SQLite puis initialise/met à jour le schéma.
+   */
   async init(): Promise<void> {
     this.Database = await open({
       filename: this.name,
@@ -60,6 +85,9 @@ class Bdd {
     await this.initDatabase();
   }
 
+  /**
+   * Crée les tables nécessaires et injecte les données statiques manquantes.
+   */
   async initDatabase(): Promise<void> {
     try {
       await this.Database?.exec(
@@ -275,21 +303,41 @@ class Bdd {
           `CREATE TABLE IF NOT EXISTS AdhesionInterval
             (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                message TEXT,
-                guild_id TEXT,
+                message TEXT NOT NULL ,
+                guild_id TEXT NOT NULL,
                 channel_id TEXT,
                 member_id TEXT,
                 role_id TEXT,
-                author_id TEXT,
+                author_id TEXT NOT NULL,
                 interval_days INTEGER NOT NULL,
+                iteration INTEGER NOT NULL DEFAULT -1,
                 nextTransmission DATETIME DEFAULT CURRENT_TIMESTAMP
            );`
       );
     } catch (e) {
       console.error("AdhesionInterval error: ", (e as TypeError).message);
     }
+    try {
+      await this.Database?.exec(
+        `CREATE TABLE IF NOT EXISTS RoleAdmin
+          ( 
+            guild_id TEXT NOT NULL PRIMARY KEY,
+            role_id TEXT NOT NULL
+          );
+        `
+      );
+    } catch (e) {
+      console.error("RoleAdmin error: ", (e as TypeError).message);
+    }
   }
 
+    /**
+     * insère une ligne dans la table cible.
+     * @param tableName Nom de la table.
+     * @param elemName Colonnes à renseigner.
+     * @param value Valeurs à insérer dans le même ordre que `elemName`.
+     * @returns Objet `status` (`success=true` si insertion réussie, sinon `success=false` avec message SQL).
+     */
     async set(tableName: string,
             elemName: unknown[],
             value: unknown[]) : Promise<status> {
@@ -308,6 +356,12 @@ class Bdd {
     return {success: true, message: "Successfully added "};
   }
 
+  /**
+   * Met à jour des lignes dans une table selon une clause `WHERE`.
+   * @param tableName Nom de la table.
+   * @param update Paires colonne/valeur à modifier.
+   * @param where Paires colonne/valeur de filtrage.
+   */
   async update(tableName: string,
                update: Record<string, unknown>,
                where: Record<string, unknown>) : Promise<void> {
@@ -331,6 +385,16 @@ class Bdd {
     await this.Database?.run(query, query_values);
   }
 
+  /**
+   * Lit des lignes avec options de JOIN, WHERE et ORDER BY.
+   * @param tableName Table principale.
+   * @param values Colonnes à retourner (`*` par défaut).
+   * @param joinOptions Jointures SQL à appliquer.
+   * @param whereConditions Clause `WHERE` paramétrée.
+   * @param is_ascending Sens du tri (`true` ASC, `false` DESC).
+   * @param index_elem Colonne de tri pour `ORDER BY`.
+   * @returns Tableau typé des lignes correspondant à la requête (tableau vide si aucun résultat).
+   */
   async get(tableName: string,
             values: string[] = ["*"],
             joinOptions?: joinOptions,
@@ -343,6 +407,12 @@ class Bdd {
       return this.Database!.all(query.query, query.ret_array);
   }
 
+  /**
+   * Supprime des lignes d'une table selon les filtres fournis.
+   * @param tableName Table principale.
+   * @param joinOptions Jointures éventuelles.
+   * @param whereConditions Clause `WHERE` paramétrée.
+   */
   async rm(tableName: string,
            joinOptions?: joinOptions,
            whereConditions?: whereConditions): Promise<void> {
@@ -351,6 +421,15 @@ class Bdd {
     await this.Database?.run(query.query, query.ret_array);
   }
 
+  /**
+   * Construit la requête SQL finale et sa liste de paramètres.
+   * @param baseQuery Base de requête (`SELECT ...` ou `DELETE ...`).
+   * @param joinOptions Jointures SQL à ajouter.
+   * @param whereConditions Clause `WHERE` et ses valeurs.
+   * @param is_ascending Sens de tri pour `ORDER BY`.
+   * @param index_elem Colonne utilisée pour le tri.
+   * @returns Objet contenant `query` (SQL final) et `ret_array` (valeurs bindées), prêt à être exécuté.
+   */
   async queryBuilder(baseQuery: string,
                      joinOptions?: joinOptions,
                      whereConditions?: whereConditions,
@@ -390,6 +469,15 @@ class Bdd {
     return ({ ret_array: ret_array, query: query });
   }
 
+  /**
+   * Associe un salon partenaire à un service et à une région.
+   * Crée le salon si nécessaire puis enregistre le lien service.
+   * @param id_channel Identifiant du salon.
+   * @param id_guild Identifiant du serveur.
+   * @param service_name Nom du service à associer.
+   * @param region Code région à stocker.
+   * @returns Objet `status` indiquant succès/échec de l'association, avec message explicite en cas d'erreur.
+   */
   async setNewPartnerChannel(id_channel: string,
                              id_guild: string,
                              service_name: string,
@@ -413,6 +501,11 @@ class Bdd {
     }
   }
 
+  /**
+   * Retire tous les services d'un salon puis supprime le salon partenaire.
+   * @param channel_id Identifiant du salon.
+   * @returns Objet `status` indiquant si la dissociation/suppression du salon partenaire a réussi.
+   */
   async deleteChannelServices(channel_id: string): Promise<status> {
     try {
       const channelPartners: ChannelPartner[] = await this.get("ChannelPartner", ["*"], {}, {query: "id_channel = ?", values: [channel_id]}) as ChannelPartner[];
@@ -433,6 +526,11 @@ class Bdd {
     }
   }
 
+  /**
+   * Supprime une table SQL.
+   * @param table_name Nom de la table à supprimer.
+   * @returns Objet `status` avec `success=true` si la table est supprimée, sinon `success=false` et message d'erreur.
+   */
   async dropTable(table_name: string): Promise<status> {
     try {
       await this.Database?.run(`drop table ${table_name}`);
@@ -442,6 +540,10 @@ class Bdd {
     }
   }
 
+  /**
+   * Récupère l'horodatage courant retourné par SQLite.
+   * @returns Date courante de la base, ou epoch en fallback.
+   */
   async getCurrentTimestamp(): Promise<Date> {
     const ret: {CURRENT_TIMESTAMP: number}[] = await this.Database?.all('SELECT CURRENT_TIMESTAMP') as {CURRENT_TIMESTAMP: number}[];
     if (ret) {
@@ -451,8 +553,17 @@ class Bdd {
     }
   }
 
+  /**
+   * Vérifie si un salon partenaire possède au moins un rang de la liste.
+   * @param channel_id Identifiant du salon partenaire.
+   * @param ranks Noms de rangs à vérifier.
+   * @returns `true` dès qu'au moins un rang demandé est lié au salon; sinon `false`.
+   */
   async partnerHasRanks(channel_id: string,
                         ranks: Array<string>): Promise<boolean> {
+    if (ranks.length === 0) {
+        return true;
+    }
     const ranksFilter: Array<string> = [];
     ranks.forEach((rank) => {ranksFilter.push(` Ranks.name='${rank}' `)});
     const queryFilter: string = ranksFilter.join(' OR ');
@@ -466,3 +577,5 @@ class Bdd {
 }
 
 export { Bdd, getBddInstance, closeBddInstance };
+
+

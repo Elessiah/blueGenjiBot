@@ -5,6 +5,13 @@ import {safeFollowUp} from "@/safe/safeFollowUp.js";
 import {sendLog} from "@/safe/sendLog.js";
 import {saveAdhesionPaths} from "@/adhesion/saveAdhesionPaths.js";
 
+/**
+ * Charge la configuration des fichiers d'adhésion depuis `paths.json`.
+ * Si le fichier est absent/invalide, tente de créer une configuration vide par défaut.
+ * @param interaction Interaction slash optionnelle pour répondre à l'utilisateur.
+ * @param client Client Discord optionnel pour envoyer les logs.
+ * @returns Les chemins configurés (chargés ou créés par défaut), ou `null` si lecture/écriture échouent.
+ */
 async function loadAdhesionPaths(interaction?: ChatInputCommandInteraction,
                                  client?: Client): Promise<PathsAdhesions | null> {
     try {

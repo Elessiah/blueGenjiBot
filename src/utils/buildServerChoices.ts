@@ -5,6 +5,11 @@ import {sendLog} from "../safe/sendLog.js";
 
 import type {ServerChoice} from "./types.js";
 
+/**
+ * Construit les options de sélection de serveurs pour l'autocomplétion.
+ * @param client Client Discord utilisé pour les appels API.
+ * @returns Liste des choix de serveurs partenaires (objets avec `name` et `value`), ou tableau vide si aucun résultat.
+ */
 async function buildServerChoices(client: Client): Promise<ServerChoice[]> {
     const bdd = await getBddInstance()
     if (!bdd) {

@@ -4,7 +4,14 @@ import { spawn } from "child_process";
 import type {Client, ChatInputCommandInteraction} from "discord.js";
 import {YesNo} from "@/utils/globals.js";
 
+/**
+ * Relance immédiatement le bot via PM2, sans étape de mise à jour.
+ */
 function strictRestart() {
+    /**
+     * Callback différé qui relance le processus PM2.
+     */
+
     setTimeout(() => {
         pm2.connect((err) => {
             if (err) {
@@ -20,7 +27,14 @@ function strictRestart() {
     }, 1000);
 }
 
+/**
+ * Lance le script de mise à jour puis redémarre le bot.
+ */
 function updateRestart() {
+    /**
+     * Callback différé qui lance le script de mise à jour.
+     */
+
     setTimeout(() => {
         const child = spawn(
             "bash",
@@ -35,6 +49,11 @@ function updateRestart() {
     }, 1000);
 }
 
+/**
+ * Choisit la stratégie de redémarrage selon les options de la commande.
+ * @param client Client Discord utilisé pour les appels API.
+ * @param interaction Interaction utilisateur en cours.
+ */
 async function restartBot(client: Client,
                           interaction: ChatInputCommandInteraction): Promise<void> {
     const userTry: string | null = interaction.options.getString("password");

@@ -1,6 +1,10 @@
 import {Bdd, getBddInstance} from "../bdd/Bdd.js";
 import type {Client} from "discord.js";
 
+/**
+ * Supprime ou invalide les messages de service expirés.
+ * @param client Client Discord utilisé pour les appels API.
+ */
 async function manageMsgExpiration(client: Client): Promise<void> {
     const bdd: Bdd = await getBddInstance();
     const expiration = new Date(await bdd.getCurrentTimestamp());

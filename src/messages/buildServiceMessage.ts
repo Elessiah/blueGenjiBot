@@ -3,6 +3,14 @@ import {EmbedBuilder} from "discord.js";
 
 import {getInviteFromMessage} from "../utils/getInviteFromMessage.js";
 
+/**
+ * Construit le contenu final (texte et embeds) à publier pour un service.
+ * @param client Client Discord utilisé pour les appels API.
+ * @param message Message Discord d'origine à transformer en embed.
+ * @param channelId Identifiant du salon d'origine du message.
+ * @param attachement Pièce jointe optionnelle à intégrer à l'embed.
+ * @returns Embed final prêt à être diffusé, avec auteur, contenu, lien d'origine et image si pièce jointe.
+ */
 async function buildServiceMessage(client: Client,
                                    message: Message,
                                    channelId: string,

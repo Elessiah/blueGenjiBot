@@ -142,6 +142,7 @@ client.on("clientReady", async () => {
     await updateCommands(client, guild.id);
   }
 
+    await checkIntervalleAdhesion(client);
   cron.schedule(
     "0 10 * * *",
     async () => {
@@ -175,26 +176,18 @@ client.on("channelDelete", async (channel) => {
 async function shutdown(): Promise<void> {
   console.log("Arrêt du bot...");
 
-  await new Promise<void>((resolve) => {
-    if (!internalApiServer) {
-      resolve();
-      return;
-    }
-
-    internalApiServer.close(() => resolve());
-  });
-
-  await client.destroy();
-  closeBddInstance();
-  process.exit(0);
-}
-
-process.on("SIGINT", () => {
-  void shutdown();
+process.on('SIGINT', async () => {
+    console.log('Arrêt du bot...');
+    await client.destroy();
+    await closeBddInstance();
+    process.exit(0);
 });
 
-process.on("SIGTERM", () => {
-  void shutdown();
+process.on('SIGTERM', async () => {
+    console.log('Arrêt du bot...');
+    await client.destroy();
+    await closeBddInstance();
+    process.exit(0);
 });
 
-void client.login(process.env.TOKEN);
+client.login(process.env.TOKEN);

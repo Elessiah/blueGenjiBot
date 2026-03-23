@@ -1,6 +1,15 @@
 import { sendLog } from "./sendLog.js";
 import type {Attachment, AttachmentBuilder, Client, Embed, EmbedBuilder, Message, TextChannel} from "discord.js";
 
+/**
+ * Récupère un salon Discord de manière sûre avec gestion d'erreurs.
+ * @param client Client Discord utilisé pour les appels API.
+ * @param channel Salon cible.
+ * @param embed Embed prêt à être envoyé (optionnel selon le contexte).
+ * @param attachements Fichiers à joindre au message.
+ * @param content Contenu texte à envoyer dans le salon (optionnel).
+ * @returns Message envoyé si succès; `null` si l'envoi échoue après 3 tentatives ou paramètres invalides.
+ */
 async function safeChannel(client: Client,
                            channel: TextChannel,
                            embed?: Embed | EmbedBuilder,

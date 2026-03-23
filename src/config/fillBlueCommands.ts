@@ -9,7 +9,14 @@ import {YesNo} from "@/utils/globals.js";
 import {displaySetupAdhesion} from "@/commandsHandlers/adhesions/displaySetupAdhesion.js";
 import {deleteSetupAdhesion} from "@/commandsHandlers/adhesions/deleteSetupAdhesion.js";
 import {loadAdhesionFiles} from "@/commandsHandlers/adhesions/loadAdhesionFiles.js";
+import {adhesionValide} from "@/commandsHandlers/adhesions/adhesionValide.js";
+import { adhesionPerimee } from "@/commandsHandlers/adhesions/adhesionPerimee.js";
 
+/**
+ * Construit la liste des commandes slash Blue et les enregistre côté client Discord.
+ * @param client Client Discord utilisé pour les appels API.
+ * @returns Objet dictionnaire des commandes Blue (nom -> handler + paramètres) fusionnable avec les commandes globales.
+ */
 async function fillBlueCommands(client: Client) {
     const serverChoices = await buildServerChoices(client);
     const blueCommands = {
@@ -166,6 +173,64 @@ async function fillBlueCommands(client: Client) {
                         name: "status",
                         description: "Nouveau fichier de status d'association à charger",
                         type: ApplicationCommandOptionType.Attachment,
+                        required: false,
+                    }
+                ]
+            }
+        },
+        "adhesion-valide": {
+            handler: adhesionValide,
+            parameters: {
+                description: "Envoie un message avec l'adhésion validée passé en paramètre",
+                options: [
+                    {
+                        name: "user",
+                        description: "Membre à l'adhésion validé",
+                        type: ApplicationCommandOptionType.User,
+                        required: true,
+                    },
+                    {
+                        name: "date-peremption",
+                        description: "Date de péremption de l'adhésion (format DD/MM/YYYY)",
+                        type: ApplicationCommandOptionType.String,
+                        required: true,
+                    },
+                    {
+                        name: "adhesion",
+                        description: "Fichier à envoyer avec le message automatique",
+                        type: ApplicationCommandOptionType.Attachment,
+                        required: false,
+                    },
+                    {
+                        name: "message-valide",
+                        description: "Message à envoyer pour l'annonce de bulletin d'adhésion valide",
+                        type: ApplicationCommandOptionType.String,
+                        required: false,
+                    },
+                    {
+                        name: "message-perimee",
+                        description: "Message à envoyer pour l'annonce de bulletin d'adhésion périmée",
+                        type: ApplicationCommandOptionType.String,
+                        required: false,
+                    }
+                ]
+            }
+        },
+        "adhesion-perimee": {
+            handler: adhesionPerimee,
+            parameters: {
+                description: "Envoie un message avec l'adhésion périmée passé en paramètre",
+                options: [
+                    {
+                        name: "user",
+                        description: "Membre à l'adhésion refusé",
+                        type: ApplicationCommandOptionType.User,
+                        required: true,
+                    },
+                    {
+                        name: "message",
+                        description: "Message à envoyer avec le message automatique",
+                        type: ApplicationCommandOptionType.String,
                         required: false,
                     }
                 ]

@@ -6,6 +6,15 @@ import type {Client, Message} from "discord.js";
 import type {Bdd} from "../bdd/Bdd.js";
 import {status} from "../types.js";
 
+/**
+ * Gère la fin réussie d'un traitement de service (logs, feedback et nettoyages).
+ * @param client Client Discord utilisé pour les appels API.
+ * @param bdd Instance de base de données.
+ * @param message Message d'origine qui vient d'être diffusé.
+ * @param targetedRegions Indices des régions réellement ciblées pour la diffusion.
+ * @param nbPartner Nombre de salons partenaires ayant reçu le message.
+ * @param service Information de service à traiter.
+ */
 async function manageServiceSuccess(client: Client,
                                     bdd: Bdd,
                                     message: Message,

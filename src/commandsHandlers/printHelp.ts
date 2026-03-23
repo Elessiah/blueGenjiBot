@@ -1,10 +1,15 @@
-import {MessageFlags, Snowflake} from "discord.js";
+import {MessageFlags} from "discord.js";
 import type { Client, ChatInputCommandInteraction } from "discord.js";
 import fs from "node:fs/promises";
 import {safeReply} from '../safe/safeReply.js';
 import {sendLog} from "../safe/sendLog.js";
 import {safeFollowUp} from "../safe/safeFollowUp.js";
 
+/**
+ * Affiche l'aide contextualisée des commandes disponibles.
+ * @param client Client Discord utilisé pour les appels API.
+ * @param interaction Interaction utilisateur en cours.
+ */
 async function printHelp(client: Client, interaction: ChatInputCommandInteraction): Promise<void> {
     try {
         await interaction.deferReply({flags: MessageFlags.Ephemeral});

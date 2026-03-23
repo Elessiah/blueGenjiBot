@@ -1,10 +1,16 @@
-import {Bdd, getBddInstance} from "../../bdd/Bdd.js";
-import {checkPermissions} from "../../check/checkPermissions.js";
-import {sendLog} from "../../safe/sendLog.js";
-import {safeReply} from "../../safe/safeReply.js";
+﻿import {Bdd, getBddInstance} from "@/bdd/Bdd.js";
+import {checkPermissions} from "@/check/checkPermissions.js";
+import {sendLog} from "@/safe/sendLog.js";
+import {safeReply} from "@/safe/safeReply.js";
 import {type ChatInputCommandInteraction, type Client, type Guild, MessageFlags, type TextChannel} from "discord.js";
-import {status} from "../../types.js";
+import {status} from "@/types.js";
 
+/**
+ * Réinitialise en base la configuration d'un salon cible.
+ * @param client Client Discord utilisé pour les appels API.
+ * @param channel_id Identifiant du salon cible.
+ * @returns Objet `status` avec `success=true` si la suppression des liens du salon réussit, sinon `success=false` et un message d'erreur.
+ */
 async function _resetChannel(client: Client, channel_id: string): Promise<status> {
     const bdd: Bdd = await getBddInstance();
     let err_msg: string = "";
@@ -38,8 +44,15 @@ async function _resetChannel(client: Client, channel_id: string): Promise<status
     return {success: true, message: ""};
 }
 
+/**
+ * Traite la commande de réinitialisation d'un salon.
+ * @param client Client Discord utilisé pour les appels API.
+ * @param interaction Interaction utilisateur en cours.
+ * @returns `false` si permissions refusées, salon manquant ou échec d'envoi de la réponse finale; `true` sinon.
+ */
+
 async function resetChannel(client: Client, interaction: ChatInputCommandInteraction): Promise<boolean> {
-    if (!await checkPermissions(interaction)) {
+    if (!(await checkPermissions(interaction))) {
         return await safeReply(interaction, "You don't have the permission to do this.", true);
     }
     await interaction.deferReply({flags: MessageFlags.Ephemeral});
@@ -58,3 +71,4 @@ async function resetChannel(client: Client, interaction: ChatInputCommandInterac
 }
 
 export { resetChannel, _resetChannel };
+

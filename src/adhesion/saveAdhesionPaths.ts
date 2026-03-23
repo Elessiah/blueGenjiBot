@@ -4,6 +4,13 @@ import {writeFile} from "fs/promises";
 import {safeFollowUp} from "@/safe/safeFollowUp.js";
 import {sendLog} from "@/safe/sendLog.js";
 
+/**
+ * Enregistre la configuration des fichiers d'adhésion dans `paths.json`.
+ * @param paths Objet de configuration contenant les chemins et noms de fichiers.
+ * @param interaction Interaction slash optionnelle pour signaler les erreurs à l'utilisateur.
+ * @param client Client Discord optionnel pour journaliser l'erreur.
+ * @returns `true` si `paths.json` est écrit avec succès; `false` si l'écriture échoue.
+ */
 async function saveAdhesionPaths(paths: PathsAdhesions,
                                  interaction?: ChatInputCommandInteraction,
                                  client?: Client): Promise<boolean> {

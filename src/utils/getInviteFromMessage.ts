@@ -1,8 +1,14 @@
-import type {Client, Message, TextChannel} from "discord.js";
+﻿import type {Client, Message, TextChannel} from "discord.js";
 import {PermissionsBitField} from "discord.js";
 import {getInviteFromChannel} from "./getInviteFromChannel.js";
 import {sendLog} from "@/safe/sendLog.js";
 
+/**
+ * Extrait un lien d'invitation à partir d'un message.
+ * @param client Client Discord utilisé pour les appels API.
+ * @param message Message dont le salon sert de base pour récupérer/créer une invitation.
+ * @returns URL d'invitation du salon source, ou chaîne vide si impossible (permissions/canal/erreur).
+ */
 async function getInviteFromMessage(client: Client,
                                     message: Message) {
     try {
@@ -28,3 +34,4 @@ async function getInviteFromMessage(client: Client,
 }
 
 export { getInviteFromMessage }
+

@@ -12,28 +12,56 @@ import {
 } from "discord.js";
 import {sendLog} from "@/safe/sendLog.js";
 
+/**
+ * Formate l'affichage d'une cible utilisateur pour l'embed.
+ * @param ai Objet de configuration d'un rappel d'adhésion.
+ * @returns Mention utilisateur (`<@id>`) si définie, sinon `—`.
+ */
+
 function formatUser(ai: adhesionIntervalObj): string {
     if (ai.member) return `<@${ai.member.id}>`;
     return "—";
 }
 
+/**
+ * Formate l'affichage d'une cible rôle pour l'embed.
+ * @param ai Objet de configuration d'un rappel d'adhésion.
+ * @returns Mention rôle (`<@&id>`) si défini, sinon `—`.
+ */
 function formatRole(ai: adhesionIntervalObj): string {
     if (ai.role) return `<@&${ai.role.id}>`;
     return "—";
 }
 
+/**
+ * Formate l'affichage d'une cible salon pour l'embed.
+ * @param ai Objet de configuration d'un rappel d'adhésion.
+ * @returns Mention salon (`<#id>`) si défini, sinon `—`.
+ */
 function formatChannel(ai: adhesionIntervalObj): string {
     return ai.channel ? `<#${ai.channel.id}>` : "—";
 }
 
+/**
+ * Convertit un horodatage en format Discord lisible.
+ * @param d Date à convertir en timestamp Discord.
+ * @returns Timestamp Unix en secondes utilisable dans les balises temporelles Discord.
+ */
 function ts(d: Date): number {
     return Math.floor(d.getTime() / 1000);
 }
 
+/**
+ * Construit une page d'embed pour la pagination des configurations d'adhésion.
+ * @param items Liste complète des rappels à paginer.
+ * @param page Index de page demandé (base 0).
+ * @param pageSize Nombre d'éléments à afficher par page.
+ * @returns Objet de pagination contenant `embed`, `page` et `totalPages`, avec page bornée sur l'intervalle valide.
+ */
 function buildEmbedPage(items: adhesionIntervalObj[], page: number, pageSize: number) {
     const totalPages: number = Math.max(1, Math.ceil(items.length / pageSize));
     const p: number = Math.min(Math.max(page, 0), totalPages - 1);
-    const slice: adhesionIntervalObj[] = items.slice(p * pageSize, p * pageSize + pageSize);
+    const slice: adhesionIntervalObj[] = items.filter(i => i.iteration == -1).slice(p * pageSize, p * pageSize + pageSize);
 
     const desc: string =
         slice.length === 0
@@ -64,6 +92,12 @@ function buildEmbedPage(items: adhesionIntervalObj[], page: number, pageSize: nu
     };
 }
 
+/**
+ * Envoie le message paginé et gère les interactions de navigation.
+ * @param client Client Discord utilisé pour les appels API.
+ * @param interaction Interaction utilisateur en cours.
+ * @param items Liste complète des rappels à paginer.
+ */
 async function sendInteractiveMsg(
     client: Client,
     interaction: ChatInputCommandInteraction,
@@ -141,8 +175,14 @@ async function sendInteractiveMsg(
     });
 }
 
+/**
+ * Affiche la configuration des adhésions avec pagination interactive.
+ * @param client Client Discord utilisé pour les appels API.
+ * @param interaction Interaction utilisateur en cours.
+ */
 async function displaySetupAdhesion(client: Client,
                                     interaction: ChatInputCommandInteraction): Promise<void> {
+    console.log("Ouille");
     const bdd: Bdd = await getBddInstance();
     const result: unknown[] = await bdd.get("AdhesionInterval", ["*"], undefined);
     if (result.length == 0) {

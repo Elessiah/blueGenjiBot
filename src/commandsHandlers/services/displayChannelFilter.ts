@@ -1,9 +1,14 @@
-import {sendLog} from "../../safe/sendLog.js";
-import {Bdd, getBddInstance} from "../../bdd/Bdd.js";
-import {safeReply} from "../../safe/safeReply.js";
-import {regions} from "../../utils/globals.js";
+import {sendLog} from "@/safe/sendLog.js";
+import {Bdd, getBddInstance} from "@/bdd/Bdd.js";
+import {safeReply} from "@/safe/safeReply.js";
+import {regions} from "@/utils/globals.js";
 import type {Channel, ChatInputCommandInteraction, Client} from "discord.js";
 
+/**
+ * Affiche le filtre de services actuellement configuré pour un salon.
+ * @param client Client Discord utilisé pour les appels API.
+ * @param interaction Interaction utilisateur en cours.
+ */
 async function displayChannelFilter(client: Client, interaction: ChatInputCommandInteraction) {
     try {
         const bdd: Bdd = await getBddInstance();

@@ -1,9 +1,15 @@
-import {safeReply} from "../../safe/safeReply.js";
-import {checkPermissions} from "../../check/checkPermissions.js";
-import {Bdd, getBddInstance} from "../../bdd/Bdd.js";
+import {safeReply} from "@/safe/safeReply.js";
+import {checkPermissions} from "@/check/checkPermissions.js";
+import {Bdd, getBddInstance} from "@/bdd/Bdd.js";
 import type {ChatInputCommandInteraction, Client, Guild} from "discord.js";
-import {Ban} from "../../bdd/types.js";
+import {Ban} from "@/bdd/types.js";
 
+/**
+ * Retire un utilisateur de la liste de bannissement.
+ * @param client Client Discord utilisé pour les appels API.
+ * @param interaction Interaction utilisateur en cours.
+ * @returns `false` si préconditions/permissions/paramètres invalides; `true` quand la commande est traitée (ID inconnu ou débannissement effectué).
+ */
 async function unban(client: Client,
                      interaction: ChatInputCommandInteraction): Promise<boolean> {
     const guild: Guild | null = interaction.guild;
@@ -17,7 +23,7 @@ async function unban(client: Client,
             "If necessary, please contact 'Elessiah' or the administrators of a server that meets the requirements to take appropriate measures.\n");
         return false;
     }
-    if (!await checkPermissions(interaction)) {
+    if (!(await checkPermissions(interaction))) {
         await safeReply(interaction, "You don't have permission to unban users.\n" +
             "Please contact 'Elessiah' or your server administrators to take appropriate action if needed.\n");
         return false;

@@ -1,5 +1,11 @@
 import {ranks} from './globals.js';
 
+/**
+ * Détermine la plage de rangs à appliquer pour le filtrage.
+ * @param rank_min Borne basse de rang (incluse). `null` applique la borne par défaut `bronze`.
+ * @param rank_max Borne haute de rang (incluse). `null` applique la borne par défaut `oaa`.
+ * @returns Tableau des IDs de rang inclus entre les bornes (ordre corrigé automatiquement, bornes par défaut si `null`).
+ */
 async function defineRankRange(rank_min: string | null,
                                rank_max: string | null): Promise<number[]> {
     let limit_bottom: string;
