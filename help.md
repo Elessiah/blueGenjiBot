@@ -1,57 +1,52 @@
-# BlueGenjiBot developed by Elessiah
+# BlueGenjiBot - Help
 
-## Status
+## What this bot does
+BlueGenjiBot links partner servers through shared services.
+If you post in an assigned channel with the right prefix, your message is forwarded to other partner servers using the same service.
 
-This bot is currently in development, so you may encounter some issues. Feel free to contact me on Discord (elessiah).
+## Services (prefixes)
+- `LFS`: Looking for scrim.
+- `TA`: Tournament announcement.
+- `LFSub`: Looking for a substitute player.
+- `LFT`: Looking for a competitive team.
+- `LFP`: Looking for players for a competitive team.
+- `LFG`: Looking for a casual/ranked group.
+- `LFStaff`: Looking for staff (coach, manager, admin, etc.).
+- `LFCast`: Looking for casters.
 
-## How It Works
+## Good message format
+Include these details to get better matches:
+- Region: `EU`, `NA`, `LATAM`, `ASIA`
+- Rank or rank range
+- Date + hour
+- Timezone
+- Useful context (format, role, map pool, etc.)
 
-You can add a `service` *(list below)* to a text channel, and any message sent in that channel with the service's `signature` will be shared with all other channels added by the community using the same service, and you'll receive their messages too.
+Example:
+`LFS EU Diamond Tuesday 21:00 CET - BO3 scrim`
 
-To personalize the experience for each server, filters are available. To reach users you're interested in, add a region (`EU`, `NA`, `LATAM`, `ASIA`) and one or more ranks you're looking for.
+## Slash commands
+Everyone:
+- `/help language:<English|Francais>`
+- `/list-partner service:<service>`
+- `/display-channel-filter-region channel:<channel>`
+- `/display-channel-filter-rank channel:<channel>`
+- `/ban-list`
+- `/show-bot-admin`
 
-## List of Services:
+Server admins:
+- `/assign-channel channel:<channel> service:<service> region-filter:<region> [rank-min] [rank-max]`
+- `/edit-channel-filter-region channel:<channel> region:<region>`
+- `/edit-channel-filter-rank channel:<channel> rank-min:<rank> rank-max:<rank>`
+- `/reset-channel channel:<channel>`
+- `/reset-all`
+- `/set-bot-admin role:<role>`
 
-* **Scrim Search**
+Moderation (servers with 50+ members):
+- `/ban-user-of-this-server user:<user> reason:<reason>`
+- `/ban-user-of-another-server username:<username> reason:<reason>`
+- `/unban id_ban:<id>`
 
-  * Signature: `LFS`
-  * Description: Send your scrim search.
-  * Recommended Message:
-    `LFS Plat 3 Tuesday 9PM CET`
-
-* **Tournament Announcement**
-
-  * Signature: `TA`
-  * Description: Share your tournament announcements.
-
-* **Substitute Search**
-
-  * Signature: `LFSub`
-  * Description: Post a substitute request.
-  * Recommended Message:
-    `LFSub Tank Plat 3 Tuesday 9PM CET`
-
-* **Looking For Team**
-
-  * Signature: `LFT`
-  * Description: Post your player resume to join a **competitive** team.
-
-* **Looking For Player**
-
-  * Signature: `LFP`
-  * Description: Post an open position in your **competitive** team.
-
-* **Looking For Group**
-
-  * Signature: `LFG`
-  * Description: Find a group to play quickplay, competitive, or other non-competitive modes.
-
-* **Looking For Staff**
-
-  * Signature: `LFStaff`
-  * Description: Post a request for staff members.
-
-* **Looking For Caster**
-
-  * Signature: `LFCast`
-  * Description: Post a request for a caster.
+## Support
+Need help, have feedback, or found an issue?
+Contact: `elessiah`
