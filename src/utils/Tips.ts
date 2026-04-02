@@ -191,7 +191,7 @@ class Tips {
                         "Service": "ChannelPartnerService.id_service = Service.id_service",
                         "ChannelPartner": "ChannelPartnerService.id_channel = ChannelPartner.id_channel",
                     },
-                    {query: "Service.name = ?, ChannelPartner.region = ?", values: [service, region]}
+                    {query: "Service.name = ? AND ChannelPartner.region = ?", values: [service, region]}
                 ) as ChannelPartnerService[];
                 for (const target of targets) {
                     const channel: TextChannel = await client.channels.fetch(target.id_channel) as TextChannel;
