@@ -346,10 +346,10 @@ class Bdd {
       return {success: false, message: "ElemName and value must be the same length."};
     }
     const names = "(" + elemName.join(", ") + ")";
-    const strValues = "(" + value.map(v => v === null ? "NULL" : "?").join(",") + ")";
+    const strValues = "(" + value.map(v => (v === null || v === undefined) ? "NULL" : "?").join(", ") + ")";
     const query = `INSERT INTO ${tableName} ${names} VALUES ${strValues}`;
     try {
-      await this.Database?.run(query, value.filter(v => v !== null));
+      await this.Database?.run(query, value.filter(v => v !== null && v !== undefined));
     } catch (e) {
       return {success: false, message: `Error while adding "${tableName}": ${(e as TypeError).message}`};
     }
@@ -564,15 +564,15 @@ class Bdd {
     if (ranks.length === 0) {
         return true;
     }
-    const ranksFilter: Array<string> = [];
-    ranks.forEach((rank) => {ranksFilter.push(` Ranks.name='${rank}' `)});
-    const queryFilter: string = ranksFilter.join(' OR ');
     if (!this.Database) {
         return false;
     }
-    const request_result: ChannelPartnerRank[] = await this.Database.all(`SELECT * FROM ChannelPartnerRank JOIN Ranks ON ChannelPartnerRank.id_rank = Ranks.id_rank
-      WHERE ChannelPartnerRank.id_channel=${channel_id} AND (${queryFilter});`);
-    return !(request_result.length === 0);
+    const placeholders: string = ranks.map(() => '?').join(', ');
+    const request_result: ChannelPartnerRank[] = await this.Database.all(
+      `SELECT * FROM ChannelPartnerRank JOIN Ranks ON ChannelPartnerRank.id_rank = Ranks.id_rank
+       WHERE ChannelPartnerRank.id_channel = ? AND Ranks.name IN (${placeholders})`,
+      [channel_id, ...ranks]);
+    return request_result.length > 0;
   }
 }
 
