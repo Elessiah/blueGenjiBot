@@ -175,6 +175,7 @@ client.on("channelDelete", async (channel) => {
 
 async function shutdown(): Promise<void> {
   console.log("Arrêt du bot...");
+}
 
 process.on('SIGINT', async () => {
     console.log('Arrêt du bot...');
