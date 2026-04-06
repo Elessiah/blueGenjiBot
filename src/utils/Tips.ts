@@ -204,8 +204,8 @@ class Tips {
                         continue;
                     const options: FetchMessagesOptions = {limit: 1};
                     // Force comme un gros bourin parce que TypeScript ne voit pas la deuxième surchargé de channel.messages.fetch();
-                    const messages: Collection<unknown, Message<true>> = await channel.messages.fetch(options as FetchMessagesOptions) as unknown as Collection<unknown, Message<true>>;
-                    const lastMessage = messages.first();
+                    const fetchedMessages: Collection<unknown, Message<true>> = await channel.messages.fetch(options as FetchMessagesOptions) as unknown as Collection<unknown, Message<true>>;
+                    const lastMessage = fetchedMessages.first();
                     if (lastMessage == undefined || !(client.user && lastMessage.author.id === client.user.id && lastMessage.content.substring(0, 7) === "# Tips:")) {
                         await safeChannel(client, channel, undefined, [], messages[this.tipsRoller]);
                     }
