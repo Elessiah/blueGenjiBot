@@ -47,6 +47,19 @@ Moderation (serveurs de 50+ membres) :
 - `/ban-user-of-another-server username:<username> reason:<reason>`
 - `/unban id_ban:<id>`
 
+## Nouvelles commandes (v2)
+
+Publiques :
+- `/ping` : verifie la latence du bot.
+- `/scrim <jeu> <niveau>` : publie une recherche de scrim (Marvel Rivals ou Overwatch 2).
+- `/recrute <role>` : publie une recherche de joueurs ou staff.
+- `/link` : recoit en DM un code pour lier ton compte Discord au site BlueGenji.
+- `/stats [joueur]` : affiche les stats 30j d'un joueur (toi par defaut).
+
+Admin :
+- `/relay <channel>` : ajoute ou retire un salon de relais inter-serveurs.
+- `/config <module>` : active/desactive un module (annonces, scrims, recrutement, notifications, stats).
+
 ## Support
 Besoin d'aide, une suggestion ou un probleme ?
 Contact : `elessiah`

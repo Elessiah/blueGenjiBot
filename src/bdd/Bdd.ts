@@ -26,7 +26,7 @@ let bdd: Bdd;
  */
 async function getBddInstance(): Promise<Bdd> {
   if (!bdd) {
-    bdd = await Bdd.create('./database.sqlite');
+    bdd = await Bdd.create(process.env.BDD_PATH || './database.sqlite');
   }
   return bdd;
 }
@@ -320,7 +320,7 @@ class Bdd {
     try {
       await this.Database?.exec(
         `CREATE TABLE IF NOT EXISTS RoleAdmin
-          ( 
+          (
             guild_id TEXT NOT NULL PRIMARY KEY,
             role_id TEXT NOT NULL
           );
@@ -328,6 +328,96 @@ class Bdd {
       );
     } catch (e) {
       console.error("RoleAdmin error: ", (e as TypeError).message);
+    }
+    try {
+      await this.Database?.exec(
+        `CREATE TABLE IF NOT EXISTS ServerModule
+          (
+            id_guild TEXT NOT NULL,
+            module_key TEXT NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            PRIMARY KEY (id_guild, module_key)
+          );
+        `
+      );
+    } catch (e) {
+      console.error("ServerModule error: ", (e as TypeError).message);
+    }
+    try {
+      await this.Database?.exec(
+        `CREATE TABLE IF NOT EXISTS FeedEvent
+          (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts DATETIME DEFAULT CURRENT_TIMESTAMP,
+            type TEXT NOT NULL,
+            source TEXT,
+            target TEXT,
+            summary TEXT NOT NULL
+          );
+        `
+      );
+    } catch (e) {
+      console.error("FeedEvent error: ", (e as TypeError).message);
+    }
+    try {
+      await this.Database?.exec(
+        `CREATE TABLE IF NOT EXISTS DailySnapshot
+          (
+            date TEXT PRIMARY KEY,
+            servers_count INTEGER NOT NULL DEFAULT 0,
+            channels_count INTEGER NOT NULL DEFAULT 0,
+            messages_count INTEGER NOT NULL DEFAULT 0,
+            relays_count INTEGER NOT NULL DEFAULT 0
+          );
+        `
+      );
+    } catch (e) {
+      console.error("DailySnapshot error: ", (e as TypeError).message);
+    }
+    try {
+      await this.Database?.exec(
+        `CREATE TABLE IF NOT EXISTS Scrim
+          (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id_author TEXT NOT NULL,
+            game TEXT NOT NULL,
+            level TEXT NOT NULL,
+            id_guild TEXT,
+            date DATETIME DEFAULT CURRENT_TIMESTAMP
+          );
+        `
+      );
+    } catch (e) {
+      console.error("Scrim error: ", (e as TypeError).message);
+    }
+    try {
+      await this.Database?.exec(
+        `CREATE TABLE IF NOT EXISTS Recrute
+          (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id_author TEXT NOT NULL,
+            role TEXT NOT NULL,
+            id_guild TEXT,
+            date DATETIME DEFAULT CURRENT_TIMESTAMP
+          );
+        `
+      );
+    } catch (e) {
+      console.error("Recrute error: ", (e as TypeError).message);
+    }
+    try {
+      await this.Database?.exec(
+        `CREATE TABLE IF NOT EXISTS UserLink
+          (
+            id_user TEXT PRIMARY KEY,
+            code TEXT NOT NULL,
+            expires_at DATETIME NOT NULL,
+            linked_at DATETIME
+          );
+        `
+      );
+    } catch (e) {
+      console.error("UserLink error: ", (e as TypeError).message);
     }
   }
 
@@ -573,6 +663,17 @@ class Bdd {
        WHERE ChannelPartnerRank.id_channel = ? AND Ranks.name IN (${placeholders})`,
       [channel_id, ...ranks]);
     return request_result.length > 0;
+  }
+
+  /**
+   * Exécute une requête SQL paramétrée brute (escape hatch pour analytics, GROUP BY, agrégats).
+   * @param query Requête SQL avec placeholders `?`.
+   * @param values Valeurs à binder (défaut: []).
+   * @returns Tableau typé des résultats.
+   */
+  async raw<T = unknown>(query: string, values: unknown[] = []): Promise<T[]> {
+    if (!this.Database) { return []; }
+    return this.Database.all(query, values) as Promise<T[]>;
   }
 }
 

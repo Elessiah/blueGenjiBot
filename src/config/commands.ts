@@ -19,6 +19,13 @@ import {rankChoices} from "./rankChoices.js";
 import {servicesChoices} from "./servicesChoices.js";
 import {setBotAdminRole} from "@/commandsHandlers/admin/setBotAdminRole.js";
 import {showBotAdminRole} from "@/commandsHandlers/admin/showBotAdminRole.js";
+import {ping} from "../commandsHandlers/ping.js";
+import {scrim} from "../commandsHandlers/scrim.js";
+import {recrute} from "../commandsHandlers/recrute.js";
+import {link} from "../commandsHandlers/link.js";
+import {statsPlayer} from "../commandsHandlers/statsPlayer.js";
+import {relay} from "../commandsHandlers/admin/relay.js";
+import {configModule} from "../commandsHandlers/admin/configModule.js";
 
 const commands = {
     "help": {
@@ -319,6 +326,105 @@ const commands = {
         handler: showBotAdminRole,
         parameters: {
             description: "Display the bot admin role",
+        }
+    },
+    "ping": {
+        handler: ping,
+        parameters: {
+            description: "Verifie la latence du bot (TOUS)"
+        }
+    },
+    "scrim": {
+        handler: scrim,
+        parameters: {
+            description: "Propose une equipe pour un scrim (TOUS)",
+            options: [
+                {
+                    name: "jeu",
+                    description: "Jeu pour le scrim",
+                    type: ApplicationCommandOptionType.String,
+                    required: true,
+                    choices: [
+                        { name: "Marvel Rivals", value: "marvel_rivals" },
+                        { name: "Overwatch 2", value: "overwatch2" }
+                    ]
+                },
+                {
+                    name: "niveau",
+                    description: "Niveau (debutant, intermediaire, avance...)",
+                    type: ApplicationCommandOptionType.String,
+                    required: true
+                }
+            ]
+        }
+    },
+    "recrute": {
+        handler: recrute,
+        parameters: {
+            description: "Publie une recherche d'equipe ou staff (TOUS)",
+            options: [
+                {
+                    name: "role",
+                    description: "Role recherche",
+                    type: ApplicationCommandOptionType.String,
+                    required: true
+                }
+            ]
+        }
+    },
+    "link": {
+        handler: link,
+        parameters: {
+            description: "Lie ton compte Discord au site BlueGenji (TOUS)"
+        }
+    },
+    "stats": {
+        handler: statsPlayer,
+        parameters: {
+            description: "Affiche les stats 30j d'un joueur (TOUS)",
+            options: [
+                {
+                    name: "joueur",
+                    description: "Joueur (optionnel, sinon vous-meme)",
+                    type: ApplicationCommandOptionType.User,
+                    required: false
+                }
+            ]
+        }
+    },
+    "relay": {
+        handler: relay,
+        parameters: {
+            description: "Configure ou retire un salon de relais (ADMIN UNIQUEMENT)",
+            options: [
+                {
+                    name: "channel",
+                    description: "Salon a configurer",
+                    type: ApplicationCommandOptionType.Channel,
+                    required: true
+                }
+            ]
+        }
+    },
+    "config": {
+        handler: configModule,
+        parameters: {
+            description: "Active/desactive un module sur ce serveur (ADMIN UNIQUEMENT)",
+            options: [
+                {
+                    name: "module",
+                    description: "Module a basculer",
+                    type: ApplicationCommandOptionType.String,
+                    required: true,
+                    choices: [
+                        { name: "Annonces", value: "annonces" },
+                        { name: "Scrims", value: "scrims" },
+                        { name: "Recrutement", value: "recrutement" },
+                        { name: "Notifications", value: "notifications" },
+                        { name: "Stats", value: "stats" }
+                    ]
+                }
+            ]
         }
     }
 }

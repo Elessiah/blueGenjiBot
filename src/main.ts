@@ -22,6 +22,7 @@ import { sendLog } from "./safe/sendLog.js";
 import { safeReply } from "./safe/safeReply.js";
 import { updateCommands } from "./utils/updateCommands.js";
 import { startInternalApi } from "@/internalApi.js";
+import { recordDailySnapshot } from "@/snapshots/dailySnapshot.js";
 
 const client = new Client({
   intents: [
@@ -143,6 +144,14 @@ client.on("clientReady", async () => {
   }
 
     await checkIntervalleAdhesion(client);
+  await recordDailySnapshot(client);
+  cron.schedule(
+    "5 0 * * *",
+    async () => {
+      await recordDailySnapshot(client);
+    },
+    { timezone: "Europe/Paris" },
+  );
   cron.schedule(
     "0 10 * * *",
     async () => {
@@ -158,6 +167,8 @@ client.on("guildCreate", async (guild) => {
   for (const currentGuild of client.guilds.cache.values()) {
     await updateCommands(client, currentGuild.id);
   }
+  const { runSetupWizard } = await import("@/utils/setupWizard.js");
+  await runSetupWizard(guild, client);
   await sendLog(client, `Bot has join : ${guild.name}`);
 });
 

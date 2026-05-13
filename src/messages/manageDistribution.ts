@@ -10,6 +10,8 @@ import {answerTmp} from "../utils/answerTmp.js";
 import {servicesWithNoRanks} from "../utils/servicesWithNoRanks.js";
 import {getServicesAndID} from "../utils/getServiceAndID.js";
 import {safeMsgReply} from "../safe/safeMsgReply.js";
+import {recordEvent} from "@/feed/feedBus.js";
+import {isModuleEnabled} from "@/modules/moduleGuard.js";
 import type {Attachment, Client, EmbedBuilder, Message} from "discord.js";
 import type {Bdd} from "../bdd/Bdd.js";
 import type {Service} from "../bdd/types.js";
@@ -62,6 +64,10 @@ async function manageDistribution(message: Message,
                 30000);
             targetedRegions = {query: "ChannelPartner.region = 0", requestedRegions: [0]};
         }
+        if (message.guildId && !await isModuleEnabled(message.guildId, 'annonces')) {
+            answerTmp(client, message, 'Le module Annonces est desactive sur ce serveur.', 10);
+            return false;
+        }
         let nbPartner: number = 0;
         const hasValidService: {value: boolean} = {value: false};
         let targetedService: Service | null = null;
@@ -103,6 +109,7 @@ async function manageDistribution(message: Message,
         nbPartner += await sendServiceMessage(client, targets, message, embed, bdd, ranks);
         if (nbPartner > 0) {
             await manageServiceSuccess(client, bdd, message, targetedRegions.requestedRegions, nbPartner, targetedService.name);
+            await recordEvent(client, 'relay', `${targetedService.name} vers ${nbPartner} salon(s)`, message.guild?.name ?? null, null);
         } else if (targetedService) {
             answerTmp(client,
                 message,
