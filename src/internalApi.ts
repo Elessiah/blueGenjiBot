@@ -213,6 +213,61 @@ export function startInternalApi(client: Client) {
     }
   });
 
+  app.post("/internal/auth/resolve", async (req: Request, res: Response) => {
+    const handle = String(req.body?.handle || "").trim();
+    if (!handle) {
+      res.status(400).json({ error: "INVALID_PAYLOAD" });
+      return;
+    }
+
+    // ID numérique : renvoyé tel quel (option de repli côté app).
+    if (/^\d{5,32}$/.test(handle)) {
+      res.json({ discordId: handle, matchedBy: "id" });
+      return;
+    }
+
+    // Tag : supporte "pseudo" (nouveau format unique) et legacy "pseudo#1234".
+    let username = handle.replace(/^@/, "");
+    let discriminator: string | null = null;
+    const hashIdx = username.lastIndexOf("#");
+    if (hashIdx > 0 && /^\d{4}$/.test(username.slice(hashIdx + 1))) {
+      discriminator = username.slice(hashIdx + 1);
+      username = username.slice(0, hashIdx);
+    }
+    const normalized = username.toLowerCase();
+
+    try {
+      for (const guild of client.guilds.cache.values()) {
+        let members;
+        try {
+          members = await guild.members.fetch({ query: username, limit: 100 });
+        } catch {
+          continue; // guilde momentanément injoignable : on tente les suivantes.
+        }
+
+        const match = members.find((m) => {
+          const uname = m.user.username?.toLowerCase() ?? "";
+          if (discriminator) {
+            return uname === normalized && m.user.discriminator === discriminator;
+          }
+          const gname = m.user.globalName?.toLowerCase() ?? "";
+          const nick = m.nickname?.toLowerCase() ?? "";
+          return uname === normalized || gname === normalized || nick === normalized;
+        });
+
+        if (match) {
+          res.json({ discordId: match.id, matchedBy: "tag" });
+          return;
+        }
+      }
+
+      res.status(404).json({ error: "DISCORD_USER_NOT_FOUND" });
+    } catch (error) {
+      await sendLog(client, `Failed to resolve discord handle "${handle}": ${(error as Error).message}`);
+      res.status(500).json({ error: "INTERNAL_RESOLVE_ERROR" });
+    }
+  });
+
   app.post("/internal/auth/send-code", async (req: Request, res: Response) => {
     const discordId = String(req.body?.discordId || "").trim();
     const code = String(req.body?.code || "").trim();
