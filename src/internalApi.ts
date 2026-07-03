@@ -245,14 +245,14 @@ export function startInternalApi(client: Client) {
           continue; // guilde momentanément injoignable : on tente les suivantes.
         }
 
+        // On matche uniquement le username (unique globalement) : globalName et
+        // nickname ne le sont pas et résoudraient vers le mauvais compte.
         const match = members.find((m) => {
           const uname = m.user.username?.toLowerCase() ?? "";
           if (discriminator) {
             return uname === normalized && m.user.discriminator === discriminator;
           }
-          const gname = m.user.globalName?.toLowerCase() ?? "";
-          const nick = m.nickname?.toLowerCase() ?? "";
-          return uname === normalized || gname === normalized || nick === normalized;
+          return uname === normalized;
         });
 
         if (match) {
