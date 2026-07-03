@@ -23,6 +23,7 @@ import { safeReply } from "./safe/safeReply.js";
 import { updateCommands } from "./utils/updateCommands.js";
 import { startInternalApi } from "@/internalApi.js";
 import { recordDailySnapshot } from "@/snapshots/dailySnapshot.js";
+import { sendDatabaseBackup } from "@/backup/weeklyBackup.js";
 
 const client = new Client({
   intents: [
@@ -156,6 +157,14 @@ client.on("clientReady", async () => {
     "0 10 * * *",
     async () => {
       await checkIntervalleAdhesion(client);
+    },
+    { timezone: "Europe/Paris" },
+  );
+  // Sauvegarde hebdomadaire de la base envoyée en MP au propriétaire (lundi 04h00).
+  cron.schedule(
+    "0 4 * * 1",
+    async () => {
+      await sendDatabaseBackup(client);
     },
     { timezone: "Europe/Paris" },
   );

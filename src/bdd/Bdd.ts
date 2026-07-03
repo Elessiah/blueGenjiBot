@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import {open} from 'sqlite';
 import type {Database} from 'sqlite';
 // eslint-disable-next-line import/no-named-as-default
@@ -71,6 +72,18 @@ class Bdd {
    */
   delete(): void {
     void this.Database?.close();
+  }
+
+  /**
+   * Écrit un snapshot cohérent de la base dans un fichier séparé via `VACUUM INTO`.
+   * Garantit une copie non corrompue même si des écritures sont en cours.
+   * @param destPath Chemin du fichier de sauvegarde (écrasé s'il existe déjà).
+   */
+  async backupTo(destPath: string): Promise<void> {
+    if (fs.existsSync(destPath)) {
+      fs.unlinkSync(destPath);
+    }
+    await this.Database?.exec(`VACUUM INTO '${destPath.replace(/'/g, "''")}'`);
   }
 
   /**

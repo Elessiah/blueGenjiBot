@@ -1,0 +1,23 @@
+# Dépendances
+node_modules/
+
+# Build
+dist/
+
+# Secrets & environnement
+.env
+.env.*
+*.env
+*~
+
+# Base de données locale / données runtime
+data/
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+database.sqlite
+
+# Logs
+*.log
+npm-debug.log*
