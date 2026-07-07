@@ -69,7 +69,8 @@ function buildEmbedPage(items: adhesionIntervalObj[], page: number, pageSize: nu
             : slice
                 .map((ai: adhesionIntervalObj): string => {
                     const when: number = ts(ai.nextTransmission);
-                    const msg = ai.message.length > 60 ? ai.message.slice(0, 57) + "..." : ai.message;
+                    const rawMsg: string = ai.message ?? "";
+                    const msg = rawMsg.length > 60 ? rawMsg.slice(0, 57) + "..." : rawMsg;
 
                     return [
                         `N°**#${ai.id}** — ${msg}`,
