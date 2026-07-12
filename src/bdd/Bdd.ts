@@ -6,6 +6,7 @@ import sqlite3 from 'sqlite3';
 
 import type {status, Query} from "../types.js";
 import {ranks, services} from '../utils/globals.js';
+import {toSQLiteDate} from '../utils/toSQLiteDatetime.js';
 
 import type {
     Ranks,
@@ -14,7 +15,8 @@ import type {
     ChannelPartnerService,
     joinOptions,
     whereConditions,
-    ChannelPartnerRank
+    ChannelPartnerRank,
+    ServerInvite
 } from "./types.js";
 import e from "express";
 
@@ -432,6 +434,20 @@ class Bdd {
     } catch (e) {
       console.error("UserLink error: ", (e as TypeError).message);
     }
+    try {
+      await this.Database?.exec(
+        `CREATE TABLE IF NOT EXISTS ServerInvite
+          (
+            id_guild TEXT PRIMARY KEY,
+            invite_url TEXT NOT NULL,
+            set_by TEXT,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          );
+        `
+      );
+    } catch (e) {
+      console.error("ServerInvite error: ", (e as TypeError).message);
+    }
   }
 
     /**
@@ -676,6 +692,55 @@ class Bdd {
        WHERE ChannelPartnerRank.id_channel = ? AND Ranks.name IN (${placeholders})`,
       [channel_id, ...ranks]);
     return request_result.length > 0;
+  }
+
+  /**
+   * Récupère le lien d'invitation personnalisé associé à un serveur.
+   * @param guildId Identifiant du serveur.
+   * @returns URL d'invitation custom, ou `null` si aucune n'est configurée.
+   */
+  async getServerInvite(guildId: string): Promise<string | null> {
+    const rows: ServerInvite[] = await this.get("ServerInvite", ["invite_url"], {}, {query: "id_guild = ?", values: [guildId]}) as ServerInvite[];
+    if (rows.length === 0) {
+      return null;
+    }
+    return rows[0].invite_url;
+  }
+
+  /**
+   * Enregistre ou met à jour le lien d'invitation personnalisé d'un serveur.
+   * @param guildId Identifiant du serveur.
+   * @param inviteUrl Lien d'invitation à stocker (déjà validé/normalisé par l'appelant).
+   * @param setBy Identifiant de l'utilisateur ayant défini le lien.
+   * @returns Objet `status` indiquant le succès de l'insertion/mise à jour.
+   */
+  async setServerInvite(guildId: string,
+                        inviteUrl: string,
+                        setBy: string): Promise<status> {
+    try {
+      const existing: ServerInvite[] = await this.get("ServerInvite", ["id_guild"], {}, {query: "id_guild = ?", values: [guildId]}) as ServerInvite[];
+      if (existing.length === 0) {
+        return await this.set("ServerInvite", ["id_guild", "invite_url", "set_by", "updated_at"], [guildId, inviteUrl, setBy, toSQLiteDate(new Date())]);
+      }
+      await this.update("ServerInvite", {invite_url: inviteUrl, set_by: setBy, updated_at: toSQLiteDate(new Date())}, {id_guild: guildId});
+      return {success: true, message: "Server invite updated."};
+    } catch (e) {
+      return {success: false, message: `Error while setting server invite: ${(e as TypeError).message}`};
+    }
+  }
+
+  /**
+   * Supprime le lien d'invitation personnalisé d'un serveur (retour au lien auto-généré).
+   * @param guildId Identifiant du serveur.
+   * @returns `true` si un lien existait et a été supprimé; sinon `false`.
+   */
+  async removeServerInvite(guildId: string): Promise<boolean> {
+    const existing: ServerInvite[] = await this.get("ServerInvite", ["id_guild"], {}, {query: "id_guild = ?", values: [guildId]}) as ServerInvite[];
+    if (existing.length === 0) {
+      return false;
+    }
+    await this.rm("ServerInvite", {}, {query: "id_guild = ?", values: [guildId]});
+    return true;
   }
 
   /**

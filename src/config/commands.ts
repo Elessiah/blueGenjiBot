@@ -19,6 +19,9 @@ import {rankChoices} from "./rankChoices.js";
 import {servicesChoices} from "./servicesChoices.js";
 import {setBotAdminRole} from "@/commandsHandlers/admin/setBotAdminRole.js";
 import {showBotAdminRole} from "@/commandsHandlers/admin/showBotAdminRole.js";
+import {setServerInvite} from "@/commandsHandlers/admin/setServerInvite.js";
+import {showServerInvite} from "@/commandsHandlers/admin/showServerInvite.js";
+import {resetServerInvite} from "@/commandsHandlers/admin/resetServerInvite.js";
 import {ping} from "../commandsHandlers/ping.js";
 import {scrim} from "../commandsHandlers/scrim.js";
 import {recrute} from "../commandsHandlers/recrute.js";
@@ -326,6 +329,32 @@ const commands = {
         handler: showBotAdminRole,
         parameters: {
             description: "Display the bot admin role",
+        }
+    },
+    "set-server-invite": {
+        handler: setServerInvite,
+        parameters: {
+            description: "Set a custom invite link used for this server (SERVER ADMIN ONLY)",
+            options: [
+                {
+                    name: "invite",
+                    description: "Discord invite link (ex: https://discord.gg/xxxxxx)",
+                    type: ApplicationCommandOptionType.String,
+                    required: true,
+                }
+            ]
+        }
+    },
+    "show-server-invite": {
+        handler: showServerInvite,
+        parameters: {
+            description: "Display the custom invite link of this server (EVERYONE)",
+        }
+    },
+    "reset-server-invite": {
+        handler: resetServerInvite,
+        parameters: {
+            description: "Remove the custom invite link of this server (SERVER ADMIN ONLY)",
         }
     },
     "ping": {

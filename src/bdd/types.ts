@@ -49,6 +49,13 @@ export type Service = {
     name: string,
 };
 
+export type ServerInvite = {
+    id_guild: string,
+    invite_url: string,
+    set_by: string | null,
+    updated_at: Date,
+};
+
 export type joinOptions = Record<string, string>;
 export type whereConditions = {
     query: string,
