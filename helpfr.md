@@ -33,6 +33,7 @@ Pour tout le monde :
 - `/display-channel-filter-rank channel:<channel>`
 - `/ban-list`
 - `/show-bot-admin`
+- `/show-server-invite`
 
 Admins du serveur :
 - `/assign-channel channel:<channel> service:<service> region-filter:<region> [rank-min] [rank-max]`
@@ -41,6 +42,8 @@ Admins du serveur :
 - `/reset-channel channel:<channel>`
 - `/reset-all`
 - `/set-bot-admin role:<role>`
+- `/set-server-invite invite:<lien>` : definit un lien d'invitation personnalise pour ce serveur (prioritaire sur le lien auto-genere).
+- `/reset-server-invite` : retire le lien personnalise (retour au lien auto-genere).
 
 Moderation (serveurs de 50+ membres) :
 - `/ban-user-of-this-server user:<user> reason:<reason>`
