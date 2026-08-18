@@ -58,6 +58,7 @@ Publiques :
 - `/recrute <role>` : publie une recherche de joueurs ou staff.
 - `/link` : recoit en DM un code pour lier ton compte Discord au site BlueGenji.
 - `/stats [joueur]` : affiche les stats 30j d'un joueur (toi par defaut).
+- `/stats-site` : affiche la frequentation du site BlueGenji (visites totales et visiteurs uniques).
 
 Admin :
 - `/relay <channel>` : ajoute ou retire un salon de relais inter-serveurs.
