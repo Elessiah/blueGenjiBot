@@ -27,6 +27,7 @@ import {scrim} from "../commandsHandlers/scrim.js";
 import {recrute} from "../commandsHandlers/recrute.js";
 import {link} from "../commandsHandlers/link.js";
 import {statsPlayer} from "../commandsHandlers/statsPlayer.js";
+import {statsSite} from "../commandsHandlers/statsSite.js";
 import {relay} from "../commandsHandlers/admin/relay.js";
 import {configModule} from "../commandsHandlers/admin/configModule.js";
 
@@ -405,6 +406,12 @@ const commands = {
         handler: link,
         parameters: {
             description: "Lie ton compte Discord au site BlueGenji (TOUS)"
+        }
+    },
+    "stats-site": {
+        handler: statsSite,
+        parameters: {
+            description: "Affiche la frequentation du site BlueGenji (TOUS)"
         }
     },
     "stats": {

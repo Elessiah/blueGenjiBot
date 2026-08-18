@@ -448,6 +448,32 @@ class Bdd {
     } catch (e) {
       console.error("ServerInvite error: ", (e as TypeError).message);
     }
+    try {
+      // Instantane de frequentation du site, pousse par l'app web sur
+      // /internal/site-visits. Une seule ligne (id = 1) : le bot ne conserve
+      // que la derniere mesure, l'historique restant du cote du site.
+      await this.Database?.exec(
+        `CREATE TABLE IF NOT EXISTS SiteVisit
+          (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            total_visits INTEGER NOT NULL DEFAULT 0,
+            unique_visitors INTEGER NOT NULL DEFAULT 0,
+            visits_24h INTEGER NOT NULL DEFAULT 0,
+            unique_24h INTEGER NOT NULL DEFAULT 0,
+            visits_7d INTEGER NOT NULL DEFAULT 0,
+            unique_7d INTEGER NOT NULL DEFAULT 0,
+            visits_30d INTEGER NOT NULL DEFAULT 0,
+            unique_30d INTEGER NOT NULL DEFAULT 0,
+            identified_visitors INTEGER NOT NULL DEFAULT 0,
+            first_visit_at DATETIME,
+            last_visit_at DATETIME,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          );
+        `
+      );
+    } catch (e) {
+      console.error("SiteVisit error: ", (e as TypeError).message);
+    }
   }
 
     /**

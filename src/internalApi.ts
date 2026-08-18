@@ -10,6 +10,7 @@ import { recordEvent, getBacklog, subscribe } from "@/feed/feedBus.js";
 import { getSnapshotsBetween } from "@/snapshots/dailySnapshot.js";
 import { listModules, isValidModule, setModuleEnabled, MODULE_KEYS, type ModuleKey } from "@/modules/moduleGuard.js";
 import { pctDelta, absDelta, deterministicColor } from "@/internalApi/helpers.js";
+import { parseSiteVisitStats, saveSiteVisitStats } from "@/siteVisits/siteVisits.js";
 
 function authorize(req: Request, res: Response, next: NextFunction): void {
   const expectedToken = process.env.INTERNAL_API_TOKEN;
@@ -297,6 +298,26 @@ export function startInternalApi(client: Client) {
 
     await sendLog(client, `[AppBlueGenji] ${message}`);
     res.json({ success: true });
+  });
+
+  /**
+   * Frequentation du site, poussee par l'app web (elle seule mesure les visites).
+   * Le bot conserve le dernier instantane et le sert a la commande /stats-site.
+   */
+  app.post("/internal/site-visits", async (req: Request, res: Response) => {
+    const stats = parseSiteVisitStats(req.body);
+    if (!stats) {
+      res.status(400).json({ error: "INVALID_SITE_VISIT_STATS" });
+      return;
+    }
+
+    try {
+      await saveSiteVisitStats(stats);
+      res.json({ success: true });
+    } catch (error) {
+      await sendLog(client, `site-visits save error: ${(error as Error).message}`);
+      res.status(500).json({ error: "SITE_VISIT_STATS_SAVE_FAILED" });
+    }
   });
 
   app.get("/internal/kpis", async (_req: Request, res: Response) => {
