@@ -7,6 +7,8 @@ import {
   truncateMessage,
   MAX_MESSAGE_LENGTH,
   MAX_RECIPIENTS,
+  MAX_REFEREE_DMS,
+  capRefereeTargets,
   type DirectMessageRecipient,
 } from "../../notifications/notifications.js";
 
@@ -136,4 +138,35 @@ test("parseRefereeAlert refuse un message vide ou un corps invalide", () => {
 test("parseRefereeAlert tronque un message trop long", () => {
   const alert = parseRefereeAlert({ message: "b".repeat(MAX_MESSAGE_LENGTH + 10) });
   assert.equal(alert?.message.length, MAX_MESSAGE_LENGTH);
+});
+
+test("capRefereeTargets laisse passer une equipe d'arbitrage normale", () => {
+  const targets = ["a", "b", "c"];
+  const { kept, skipped } = capRefereeTargets(targets);
+  assert.deepEqual(kept, targets);
+  assert.equal(skipped, 0);
+});
+
+test("capRefereeTargets accepte pile le plafond", () => {
+  const targets = Array.from({ length: MAX_REFEREE_DMS }, (_, i) => i);
+  const { kept, skipped } = capRefereeTargets(targets);
+  assert.equal(kept.length, MAX_REFEREE_DMS);
+  assert.equal(skipped, 0);
+});
+
+test("capRefereeTargets borne un role trop large et compte les ecartes", () => {
+  const targets = Array.from({ length: MAX_REFEREE_DMS + 40 }, (_, i) => i);
+  const { kept, skipped } = capRefereeTargets(targets);
+  assert.equal(kept.length, MAX_REFEREE_DMS);
+  assert.equal(skipped, 40);
+  assert.deepEqual(kept, targets.slice(0, MAX_REFEREE_DMS));
+});
+
+test("capRefereeTargets ne rend jamais le tableau d'origine", () => {
+  const targets = ["a"];
+  assert.notEqual(capRefereeTargets(targets).kept, targets);
+});
+
+test("capRefereeTargets supporte une liste vide", () => {
+  assert.deepEqual(capRefereeTargets([]), { kept: [], skipped: 0 });
 });

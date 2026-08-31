@@ -1,4 +1,4 @@
-import {ChatInputCommandInteraction, Client, Role} from "discord.js";
+import {ChatInputCommandInteraction, Client} from "discord.js";
 import {safeReply} from "@/safe/safeReply.js";
 import {checkPermissions} from "@/check/checkPermissions.js";
 import {Bdd, getBddInstance} from "@/bdd/Bdd.js";
@@ -24,7 +24,16 @@ async function setRefereeRole(client: Client,
         await safeReply(interaction, "Vous devez être administrateur du serveur pour définir le rôle arbitre.");
         return;
     }
-    const role: Role = interaction.options.getRole("role", true) as Role;
+    // `getRole` rend un `Role` sur un serveur, un `APIRole` sur une commande
+    // installée hors guilde : seuls `id` et `name` sont lus, communs aux deux.
+    const role = interaction.options.getRole("role", true);
+    // `@everyone` porte l'identifiant du serveur. L'accepter ferait envoyer un
+    // message privé à TOUT le serveur à chaque signalement — du spam de masse,
+    // que Discord sanctionne par une suspension du bot.
+    if (role.id === interaction.guild.id) {
+        await safeReply(interaction, "`@everyone` ne peut pas être le rôle arbitre : chaque signalement enverrait un message privé à tout le serveur. Choisissez un rôle dédié.");
+        return;
+    }
     const bdd: Bdd = await getBddInstance();
     const result: status = await bdd.setRefereeRole(interaction.guild.id, role.id, interaction.user.id);
     if (!result.success) {

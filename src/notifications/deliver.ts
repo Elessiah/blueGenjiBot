@@ -2,6 +2,7 @@ import type { Client, Guild, GuildMember, Role } from "discord.js";
 import { getBddInstance } from "@/bdd/Bdd.js";
 import { sendLog } from "@/safe/sendLog.js";
 import { findGuildMemberByHandle, parseDiscordHandle } from "@/notifications/resolveHandle.js";
+import { capRefereeTargets, MAX_REFEREE_DMS } from "@/notifications/notifications.js";
 import type { DirectMessageRecipient } from "@/notifications/notifications.js";
 
 /**
@@ -161,8 +162,21 @@ export async function alertReferees(client: Client, message: string): Promise<De
       continue;
     }
 
-    for (const member of members) {
-      if (member.user.bot || alreadyNotified.has(member.id)) { continue; }
+    // Borne dure, indépendante de ce qu'a choisi l'administrateur du serveur :
+    // un rôle large transformerait chaque signalement en envoi de masse, que
+    // Discord traite comme du spam.
+    const humans = members.filter((member) => !member.user.bot);
+    const { kept, skipped } = capRefereeTargets(humans);
+    if (skipped > 0) {
+      report.unresolved.push(`${guild.name}: ${skipped} membre(s) au-delà du plafond de ${MAX_REFEREE_DMS}`);
+      await sendLog(
+        client,
+        `notify/referees: role arbitre de ${guild.name} trop large (${humans.length} membres), ${skipped} non prevenu(s).`,
+      );
+    }
+
+    for (const member of kept) {
+      if (alreadyNotified.has(member.id)) { continue; }
       alreadyNotified.add(member.id);
       try {
         await member.send(message);

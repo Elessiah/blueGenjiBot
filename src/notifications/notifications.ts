@@ -49,6 +49,34 @@ export const MAX_MESSAGE_LENGTH = 1800;
  */
 export const MAX_RECIPIENTS = 100;
 
+/**
+ * Plafond de messages privés par alerte arbitres.
+ *
+ * Le rôle arbitre est choisi à la main par un administrateur de serveur : rien
+ * n'empêche de désigner un rôle très large — `@everyone` est refusé à la
+ * configuration, mais un rôle « Membre » ne l'est pas. Sans borne ici, un seul
+ * signalement ferait écrire le bot à des centaines de comptes d'un coup, ce que
+ * Discord traite comme du spam et sanctionne par une suspension. Vingt-cinq
+ * suffisent largement à une équipe d'arbitrage.
+ */
+export const MAX_REFEREE_DMS = 25;
+
+/**
+ * Borne une liste de destinataires d'alerte, et dit combien ont été écartés.
+ *
+ * Pur, donc testable sans Discord : c'est la règle qui compte, pas le canal.
+ *
+ * @param targets Membres du rôle arbitre, dans l'ordre où Discord les rend.
+ * @returns Les destinataires retenus et le nombre d'écartés.
+ */
+export function capRefereeTargets<T>(targets: readonly T[]): { kept: T[]; skipped: number } {
+  if (targets.length <= MAX_REFEREE_DMS) { return { kept: [...targets], skipped: 0 }; }
+  return {
+    kept: targets.slice(0, MAX_REFEREE_DMS),
+    skipped: targets.length - MAX_REFEREE_DMS,
+  };
+}
+
 /** Un ID Discord (snowflake) tel que l'app peut en transmettre. */
 const DISCORD_ID_RE = /^\d{5,32}$/;
 

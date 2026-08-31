@@ -77,6 +77,12 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     défini un (`/set-referee-role`). Les deux canaux, pas l'un ou l'autre : le
     log garde la trace même si aucun arbitre n'est joignable.
   - Sans rôle configuré, seul le log part — l'endpoint répond quand même 200.
+  - **Au plus 25 messages privés par serveur.** Le rôle est choisi à la main :
+    `@everyone` est refusé à la configuration, mais rien n'empêche de désigner
+    un rôle « Membre ». Sans cette borne, un seul signalement ferait écrire le
+    bot à des centaines de comptes d'un coup — ce que Discord traite comme du
+    spam et sanctionne par une suspension. Les membres écartés apparaissent dans
+    `unresolved`, et le canal de logs le dit.
   - Même bilan de retour que `/internal/notify/dm`.
 
 ## Rôle arbitre
@@ -85,6 +91,8 @@ Le rôle destinataire des signalements se configure par commande, serveur par
 serveur (table `RefereeRole`, une ligne par serveur) :
 
 - `/set-referee-role role:@Arbitres` — administrateur du serveur uniquement.
+  `@everyone` est refusé : chaque signalement enverrait un message privé à tout
+  le serveur.
 - `/show-referee-role` — affiche le rôle configuré (tout le monde).
 - `/reset-referee-role` — retire le rôle ; les signalements n'arrivent plus que
   dans le canal de logs.
