@@ -5,7 +5,6 @@ import {contactAdminServer} from "../commandsHandlers/contactAdminServer.js";
 import {remoteServerReset} from "../commandsHandlers/services/remoteServerReset.js";
 import {restartBot} from "../commandsHandlers/restartBot.js";
 import {ApplicationCommandOptionType, Client} from "discord.js";
-import {YesNo} from "@/utils/globals.js";
 import {displaySetupAdhesion} from "@/commandsHandlers/adhesions/displaySetupAdhesion.js";
 import {deleteSetupAdhesion} from "@/commandsHandlers/adhesions/deleteSetupAdhesion.js";
 import {loadAdhesionFiles} from "@/commandsHandlers/adhesions/loadAdhesionFiles.js";
@@ -113,22 +112,6 @@ async function fillBlueCommands(client: Client) {
             parameters: {
                 description: "Restart bot",
                 options: [
-                    {
-                      name: "update",
-                      description: "Choisi si tu mets à jour le bot pendant le redémarrage",
-                      type: ApplicationCommandOptionType.Integer,
-                      required: true,
-                      choices: [
-                          {
-                              name: "Mettre à jour",
-                              value: YesNo.YES
-                          },
-                          {
-                              name: "Ne pas mettre à jour",
-                              value: YesNo.NO
-                          }
-                      ]
-                    },
                     {
                         name: "password",
                         description: "Password, le grand amour d'Elessiah",

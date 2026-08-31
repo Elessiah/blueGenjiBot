@@ -1,13 +1,11 @@
 import {safeReply} from "../safe/safeReply.js";
 import pm2 from "pm2";
-import { spawn } from "child_process";
 import type {Client, ChatInputCommandInteraction} from "discord.js";
-import {YesNo} from "@/utils/globals.js";
 
 /**
- * Relance immédiatement le bot via PM2, sans étape de mise à jour.
+ * Relance le bot via PM2.
  */
-function strictRestart() {
+function restartProcess() {
     /**
      * Callback différé qui relance le processus PM2.
      */
@@ -28,51 +26,20 @@ function strictRestart() {
 }
 
 /**
- * Lance le script de mise à jour puis redémarre le bot.
- */
-// Pas encore branché à une commande : conservé tel quel plutôt que supprimé,
-// la mise à jour par script étant une intention explicite du projet.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function updateRestart() {
-    /**
-     * Callback différé qui lance le script de mise à jour.
-     */
-
-    setTimeout(() => {
-        const child = spawn(
-            "bash",
-            ["/home/elessiah/work/blueGenjiBot/updateBot.sh"],
-            {
-                detached: true,
-                stdio: "ignore",
-            }
-        );
-
-        child.unref();
-    }, 1000);
-}
-
-/**
- * Choisit la stratégie de redémarrage selon les options de la commande.
- * @param client Client Discord utilisé pour les appels API.
+ * Redémarre le bot après vérification du mot de passe.
+ * @param _client Client Discord (non utilisé, signature commune aux handlers).
  * @param interaction Interaction utilisateur en cours.
  */
-async function restartBot(client: Client,
+async function restartBot(_client: Client,
                           interaction: ChatInputCommandInteraction): Promise<void> {
     const userTry: string | null = interaction.options.getString("password");
-    const userChoice: number | null = interaction.options.getInteger("update");
-    if (!userTry || userChoice === null) {
-        await safeReply(interaction, "Missing parameter 'password' or 'update' ! Please try again.");
+    if (!userTry) {
+        await safeReply(interaction, "Missing parameter 'password' ! Please try again.");
         return;
     }
     if (process.env.PASSWORD === userTry) {
         await safeReply(interaction, "See you soon ! Restarting...");
-        if (userChoice == YesNo.NO) {
-            strictRestart();
-        } else {
-            await safeReply(interaction, "Mettre à jour ne fonctionne pas pour le moment. Essaie le redémarrage seule.");
-            // updateRestart();
-        }
+        restartProcess();
     } else {
         await safeReply(interaction, "Wrong password ! Are you sure you have right to do this ?");
     }
