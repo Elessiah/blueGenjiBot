@@ -18,7 +18,7 @@ async function displayChannelFilter(client: Client, interaction: ChatInputComman
             return;
         }
         const channel_id: string = channel.id;
-        let region: {region: number}[] = await bdd.get("ChannelPartner", ["region"], {}, {query: "id_channel = ?", values: [channel_id]}) as {region: number}[];
+        const region: {region: number}[] = await bdd.get("ChannelPartner", ["region"], {}, {query: "id_channel = ?", values: [channel_id]}) as {region: number}[];
         if (region.length === 0) {
             await safeReply(interaction, "This channel is not connected to any service.");
         } else {

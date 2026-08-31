@@ -1,7 +1,6 @@
 import {Client, Guild, GuildBasedChannel, GuildMember, Role, TextChannel, User} from "discord.js";
-import {Bdd, getBddInstance} from "@/bdd/Bdd.js";
+import {Bdd} from "@/bdd/Bdd.js";
 import {adhesionIntervalIds, adhesionIntervalObj} from "@/adhesion/types.js";
-import {sendAdhesion} from "@/adhesion/sendAdhesion.js";
 import {sendLog} from "@/safe/sendLog.js";
 import {safeUser} from "@/safe/safeUser.js";
 import {removeIntervalle} from "@/adhesion/removeIntervalle.js";

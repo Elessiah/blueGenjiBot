@@ -26,7 +26,7 @@ async function manageServiceSuccess(client: Client,
         await sendLog(client, "In manageDistribution: " + ret.message);
     }
     await message.react("🛰️");
-    let notifiedRegions: string[] = [];
+    const notifiedRegions: string[] = [];
     for (const region of targetedRegions)
         notifiedRegions.push(regions[region]);
     answerTmp(client, message, "Your message has been sent to " + nbPartner + " channels of " + notifiedRegions.join('/') + "/ALL region as " + service, 30000);

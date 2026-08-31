@@ -1,4 +1,4 @@
-import {type ChatInputCommandInteraction, type Client, type Guild, MessageFlags, Snowflake} from "discord.js";
+import {type ChatInputCommandInteraction, type Client, type Guild, MessageFlags} from "discord.js";
 
 import {Bdd, getBddInstance} from "@/bdd/Bdd.js";
 import {checkPermissions} from "@/check/checkPermissions.js";

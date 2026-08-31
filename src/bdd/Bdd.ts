@@ -19,7 +19,6 @@ import type {
     ServerInvite,
     RefereeRole
 } from "./types.js";
-import e from "express";
 
 let bdd: Bdd;
 

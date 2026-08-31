@@ -1,4 +1,4 @@
-import {type ChatInputCommandInteraction, type Client, MessageFlags, Snowflake} from "discord.js";
+import {type ChatInputCommandInteraction, type Client, MessageFlags} from "discord.js";
 
 import {checkPermissions} from "@/check/checkPermissions.js";
 import {safeReply} from "@/safe/safeReply.js";

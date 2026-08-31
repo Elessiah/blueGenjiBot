@@ -30,6 +30,9 @@ function strictRestart() {
 /**
  * Lance le script de mise à jour puis redémarre le bot.
  */
+// Pas encore branché à une commande : conservé tel quel plutôt que supprimé,
+// la mise à jour par script étant une intention explicite du projet.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function updateRestart() {
     /**
      * Callback différé qui lance le script de mise à jour.

@@ -26,7 +26,7 @@ async function listPartner(client: Client,
             },
             {query: "name = ?", values: [service_name]}
         ) as {id_channel: string, region: number}[];
-        let guilds: string[][] = new Array<Array<string>>(regions.length);
+        const guilds: string[][] = new Array<Array<string>>(regions.length);
         for (let i = 0; i < guilds.length; i++) {
             guilds[i] = new Array<string>();
         }

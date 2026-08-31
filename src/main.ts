@@ -193,10 +193,6 @@ client.on("channelDelete", async (channel) => {
   await _resetChannel(client, channel.id);
 });
 
-async function shutdown(): Promise<void> {
-  console.log("Arrêt du bot...");
-}
-
 process.on('SIGINT', async () => {
     console.log('Arrêt du bot...');
     await client.destroy();

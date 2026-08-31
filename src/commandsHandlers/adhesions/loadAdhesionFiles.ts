@@ -49,8 +49,13 @@ async function manageOldFiles(interaction: ChatInputCommandInteraction,
     if (!path || path.length == 0)
         return paths;
     await deleteOldAttachment(interaction, path);
-    adhesion_file == ADHESION_FILES.ADHESION ? paths.adhesion = "" : paths.status = "";
-    adhesion_file == ADHESION_FILES.ADHESION ? paths.adhesionName = "" : paths.statusName = "";
+    if (adhesion_file == ADHESION_FILES.ADHESION) {
+        paths.adhesion = "";
+        paths.adhesionName = "";
+    } else {
+        paths.status = "";
+        paths.statusName = "";
+    }
     return await saveAdhesionPaths(paths, interaction) ? paths : null;
 }
 
@@ -73,8 +78,13 @@ async function downloadAttachment(interaction: ChatInputCommandInteraction,
     if (!paths)
         return false;
     const newPath: string = process.env.ADHESIONS_PATH + attachment.name;
-    adhesion_file == ADHESION_FILES.ADHESION ? paths.adhesion = newPath : paths.status = newPath;
-    adhesion_file == ADHESION_FILES.ADHESION ? paths.adhesionName = attachment.name : paths.statusName = attachment.name;
+    if (adhesion_file == ADHESION_FILES.ADHESION) {
+        paths.adhesion = newPath;
+        paths.adhesionName = attachment.name;
+    } else {
+        paths.status = newPath;
+        paths.statusName = attachment.name;
+    }
     const buf: Buffer<ArrayBuffer> = Buffer.from(await res.arrayBuffer());
     await writeFile(newPath, buf);
     await saveAdhesionPaths(paths, interaction);
