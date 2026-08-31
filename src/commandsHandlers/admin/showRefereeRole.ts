@@ -26,7 +26,11 @@ async function showRefereeRole(_client: Client,
         await safeReply(interaction, `Le rôle arbitre configuré (\`${roleId}\`) n'existe plus sur ce serveur. Redéfinissez-le avec \`/set-referee-role\`.`);
         return;
     }
-    await safeReply(interaction, `Rôle arbitre : ${role.name} (${role.members.size} membre(s) en cache).`);
+    // Pas de décompte de membres : `role.members` ne reflète que le cache, et
+    // afficher « 0 membre » sur un rôle bien peuplé ferait douter d'une
+    // configuration pourtant correcte. Forcer la récupération complète des
+    // membres sur une commande ouverte à tous serait, elle, disproportionnée.
+    await safeReply(interaction, `Rôle arbitre : ${role.name}. Ses membres reçoivent les signalements du site en message privé.`);
 }
 
 export {showRefereeRole};
