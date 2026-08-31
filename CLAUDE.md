@@ -24,6 +24,8 @@ npm run docs         # build + jsdoc
 
 Test ciblé après build : `node --test "dist/tests/path/to/file.test.js"`.
 
+`npm test` **se place dans `dist/` et laisse Node découvrir** les fichiers, plutôt que de lui passer un motif `dist/tests/**/*.test.js` : ce motif n'est développé ni par bash sans `globstar`, ni par `--test` avant Node 22 — la commande passait donc en local (Node 24) et échouait en CI (Node 20).
+
 ## Stack
 
 - **Node.js + TypeScript ESM** (strict). Imports avec extension `.js` obligatoire.
