@@ -1,5 +1,5 @@
 import { PermissionFlagsBits, ChannelType } from "discord.js";
-import type { Client, ChatInputCommandInteraction, GuildMember, TextChannel } from "discord.js";
+import type { Client, ChatInputCommandInteraction, GuildMember } from "discord.js";
 import { safeReply } from "@/safe/safeReply.js";
 import { sendLog } from "@/safe/sendLog.js";
 import { getBddInstance } from "@/bdd/Bdd.js";

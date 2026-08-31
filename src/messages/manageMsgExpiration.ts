@@ -3,9 +3,11 @@ import type {Client} from "discord.js";
 
 /**
  * Supprime ou invalide les messages de service expirés.
- * @param client Client Discord utilisé pour les appels API.
+ * @param _client Client Discord. Inutilisé : le ménage est purement en base.
+ *                Gardé dans la signature, que l'appelant renseigne déjà et qui
+ *                servira dès qu'il faudra effacer les messages côté Discord.
  */
-async function manageMsgExpiration(client: Client): Promise<void> {
+async function manageMsgExpiration(_client: Client): Promise<void> {
     const bdd: Bdd = await getBddInstance();
     const expiration = new Date(await bdd.getCurrentTimestamp());
     expiration.setHours(expiration.getHours() - 72);

@@ -9,7 +9,7 @@ import {searchString} from "../utils/searchString.js";
  */
 async function getTargetRegions(currentRegion: number,
                                 messageContentLower: string): Promise<{query: string, requestedRegions: number[]} | null> {
-    let requestedRegions: number[] = [];
+    const requestedRegions: number[] = [];
     let query: string = "";
     for (let i: number = 1; i < regions.length; i++) { // 1 pour éviter de check ALL
         if (await searchString(regions[i].toLowerCase(), messageContentLower)) {

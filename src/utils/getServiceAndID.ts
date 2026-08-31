@@ -9,7 +9,7 @@ let servicesAndID: Service[];
  */
 async function getServicesAndID(): Promise<Service[]> {
     if (servicesAndID === undefined) {
-        let bdd: Bdd = await getBddInstance();
+        const bdd: Bdd = await getBddInstance();
         servicesAndID = await bdd.get("Service", ["*"]) as Service[];
         return servicesAndID;
     }

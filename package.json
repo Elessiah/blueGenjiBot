@@ -39,7 +39,7 @@
     "lint": "eslint .",
     "docs:gen": "jsdoc -c jsdoc.json",
     "docs": "npm run build && npm run docs:gen",
-    "test": "npm run build && node --test \"dist/tests/**/*.test.js\"",
-    "test:coverage": "npm run build && node --test --experimental-test-coverage \"dist/tests/**/*.test.js\""
+    "test": "npm run build && cd dist && node --test",
+    "test:coverage": "npm run build && cd dist && node --test --experimental-test-coverage"
   }
 }

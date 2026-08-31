@@ -20,7 +20,7 @@ async function getAdhesion(client: Client,
         return;
     }
     await safeReply(interaction, "Envoie des adhésions en cours...", true);
-    let message: string | null = interaction.options.getString("message");
+    const message: string | null = interaction.options.getString("message");
     const channel: TextChannel | null = interaction.options.getChannel("channel");
     const member: GuildMember | null = interaction.options.getMember("membre") as GuildMember | null;
     const role: Role | null = interaction.options.getRole("role") as Role | null;
@@ -29,7 +29,7 @@ async function getAdhesion(client: Client,
     if (interval != null) {
         intInterval = parseInt(interval, 10);
     }
-    let memberPermMissing = !(await checkPermissions(interaction));
+    const memberPermMissing = !(await checkPermissions(interaction));
     if (memberPermMissing && intInterval > 0) {
         await safeFollowUp(
             interaction,

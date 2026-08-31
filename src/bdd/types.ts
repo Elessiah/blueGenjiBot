@@ -56,6 +56,13 @@ export type ServerInvite = {
     updated_at: Date,
 };
 
+export type RefereeRole = {
+    id_guild: string,
+    id_role: string,
+    set_by: string | null,
+    updated_at: Date,
+};
+
 export type joinOptions = Record<string, string>;
 export type whereConditions = {
     query: string,

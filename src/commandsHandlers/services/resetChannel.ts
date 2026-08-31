@@ -14,14 +14,14 @@ import {status} from "@/types.js";
 async function _resetChannel(client: Client, channel_id: string): Promise<status> {
     const bdd: Bdd = await getBddInstance();
     let err_msg: string = "";
-    let success: boolean = false;
+    const success: boolean = false;
     let nTry: number = 0;
     while (nTry < 10 && !success) {
         try {
             await bdd.rm("ChannelPartnerRank", {}, {query: "id_channel = ?", values: [channel_id]});
             const ret: status = await bdd.deleteChannelServices(channel_id);
             if (ret.success) {
-                let channel: TextChannel | null = await client.channels.fetch(channel_id) as TextChannel | null;
+                const channel: TextChannel | null = await client.channels.fetch(channel_id) as TextChannel | null;
                 if (!channel) {
                     await sendLog(client, "Failed to retrieve the targeted channel to reset");
                     return {success: false, message: "Failed, retrieving targeted channel to reset!"};
@@ -62,7 +62,7 @@ async function resetChannel(client: Client, interaction: ChatInputCommandInterac
         return false;
     }
     const channel_id: string = channel.id;
-    let ret: status = await _resetChannel(client, channel_id);
+    const ret: status = await _resetChannel(client, channel_id);
     if (!ret.success) {
         if (ret.message !== "Channel has no services to delete.")
             await sendLog(interaction.client, "resetChannel failed : \n" + ret.message);

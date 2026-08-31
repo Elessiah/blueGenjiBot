@@ -16,9 +16,9 @@ import type {
     joinOptions,
     whereConditions,
     ChannelPartnerRank,
-    ServerInvite
+    ServerInvite,
+    RefereeRole
 } from "./types.js";
-import e from "express";
 
 let bdd: Bdd;
 
@@ -449,6 +449,23 @@ class Bdd {
       console.error("ServerInvite error: ", (e as TypeError).message);
     }
     try {
+      // Role arbitre d'un serveur : destinataires des signalements de probleme
+      // pousses par l'app web sur /internal/notify/referees. Une ligne par
+      // serveur, definie par la commande /set-referee-role.
+      await this.Database?.exec(
+        `CREATE TABLE IF NOT EXISTS RefereeRole
+          (
+            id_guild TEXT PRIMARY KEY,
+            id_role TEXT NOT NULL,
+            set_by TEXT,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          );
+        `
+      );
+    } catch (e) {
+      console.error("RefereeRole error: ", (e as TypeError).message);
+    }
+    try {
       // Instantane de frequentation du site, pousse par l'app web sur
       // /internal/site-visits. Une seule ligne (id = 1) : le bot ne conserve
       // que la derniere mesure, l'historique restant du cote du site.
@@ -766,6 +783,55 @@ class Bdd {
       return false;
     }
     await this.rm("ServerInvite", {}, {query: "id_guild = ?", values: [guildId]});
+    return true;
+  }
+
+  /**
+   * Récupère le rôle arbitre configuré pour un serveur.
+   * @param guildId Identifiant du serveur.
+   * @returns Identifiant du rôle, ou `null` si aucun n'est configuré.
+   */
+  async getRefereeRole(guildId: string): Promise<string | null> {
+    const rows: RefereeRole[] = await this.get("RefereeRole", ["id_role"], {}, {query: "id_guild = ?", values: [guildId]}) as RefereeRole[];
+    if (rows.length === 0) {
+      return null;
+    }
+    return rows[0].id_role;
+  }
+
+  /**
+   * Enregistre ou met à jour le rôle arbitre d'un serveur.
+   * @param guildId Identifiant du serveur.
+   * @param roleId Identifiant du rôle Discord à alerter.
+   * @param setBy Identifiant de l'utilisateur ayant défini le rôle.
+   * @returns Objet `status` indiquant le succès de l'insertion/mise à jour.
+   */
+  async setRefereeRole(guildId: string,
+                       roleId: string,
+                       setBy: string): Promise<status> {
+    try {
+      const existing: RefereeRole[] = await this.get("RefereeRole", ["id_guild"], {}, {query: "id_guild = ?", values: [guildId]}) as RefereeRole[];
+      if (existing.length === 0) {
+        return await this.set("RefereeRole", ["id_guild", "id_role", "set_by", "updated_at"], [guildId, roleId, setBy, toSQLiteDate(new Date())]);
+      }
+      await this.update("RefereeRole", {id_role: roleId, set_by: setBy, updated_at: toSQLiteDate(new Date())}, {id_guild: guildId});
+      return {success: true, message: "Referee role updated."};
+    } catch (e) {
+      return {success: false, message: `Error while setting referee role: ${(e as TypeError).message}`};
+    }
+  }
+
+  /**
+   * Supprime le rôle arbitre d'un serveur (plus aucun DM de signalement).
+   * @param guildId Identifiant du serveur.
+   * @returns `true` si un rôle était configuré et a été supprimé; sinon `false`.
+   */
+  async removeRefereeRole(guildId: string): Promise<boolean> {
+    const existing: RefereeRole[] = await this.get("RefereeRole", ["id_guild"], {}, {query: "id_guild = ?", values: [guildId]}) as RefereeRole[];
+    if (existing.length === 0) {
+      return false;
+    }
+    await this.rm("RefereeRole", {}, {query: "id_guild = ?", values: [guildId]});
     return true;
   }
 
