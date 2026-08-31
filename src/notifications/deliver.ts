@@ -1,7 +1,7 @@
-import type { Client, GuildMember, Role } from "discord.js";
+import type { Client, Guild, GuildMember, Role } from "discord.js";
 import { getBddInstance } from "@/bdd/Bdd.js";
 import { sendLog } from "@/safe/sendLog.js";
-import { resolveDiscordHandle } from "@/notifications/resolveHandle.js";
+import { findGuildMemberByHandle, parseDiscordHandle } from "@/notifications/resolveHandle.js";
 import type { DirectMessageRecipient } from "@/notifications/notifications.js";
 
 /**
@@ -9,7 +9,7 @@ import type { DirectMessageRecipient } from "@/notifications/notifications.js";
  *
  * Séparé du module pur `notifications.ts` : ici seulement les effets — Discord,
  * la base, le canal de logs. Rien n'y lève : un DM refusé (compte fermé aux
- * messages privés, joueur absent du serveur) est un **résultat**, pas une
+ * messages privés, joueur parti du serveur) est un **résultat**, pas une
  * panne — l'app doit pouvoir dire au staff qui n'a pas été joint.
  */
 
@@ -17,14 +17,69 @@ import type { DirectMessageRecipient } from "@/notifications/notifications.js";
 export interface DeliveryReport {
   /** Messages effectivement remis. */
   sent: number;
-  /** Destinataires dont le tag n'a été trouvé sur aucun serveur du bot. */
+  /** Destinataires absents du serveur BlueGenji : aucun envoi n'est tenté. */
   unresolved: string[];
-  /** Destinataires trouvés mais injoignables (DM fermés, compte supprimé). */
+  /** Membres du serveur mais injoignables (DM fermés, compte supprimé). */
   failed: string[];
 }
 
 /**
- * Envoie un message privé à chaque destinataire.
+ * Serveur BlueGenji, seule population que le bot démarche.
+ *
+ * Un rappel de match ne s'envoie qu'à un joueur du serveur : c'est la règle
+ * posée côté site (« ils devront être sur le serveur Discord »), et elle borne
+ * aussi le risque — sans elle, un tag mal saisi pourrait faire écrire le bot à
+ * un inconnu croisé sur un serveur partenaire.
+ *
+ * @param client Client Discord.
+ * @returns La guilde, ou `null` si `GUILD_ID` n'est pas configuré ou injoignable.
+ */
+async function fetchHomeGuild(client: Client): Promise<Guild | null> {
+  const guildId = process.env.GUILD_ID?.trim();
+  if (!guildId) { return null; }
+  try {
+    return await client.guilds.fetch(guildId);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Retrouve un destinataire **parmi les membres du serveur BlueGenji**.
+ *
+ * L'ID prime quand l'app le connaît (compte lié par code Discord) : il évite la
+ * recherche par tag. Dans les deux cas, la réponse vaut appartenance — un
+ * `null` signifie « pas sur le serveur », donc pas d'envoi.
+ */
+async function findHomeMember(
+  guild: Guild,
+  recipient: DirectMessageRecipient,
+): Promise<GuildMember | null> {
+  if (recipient.discordId) {
+    try {
+      return await guild.members.fetch(recipient.discordId);
+    } catch {
+      // Membre inconnu de la guilde : on ne retombe pas sur le tag, l'ID est
+      // l'identité la plus sûre et son absence tranche déjà la question.
+      return null;
+    }
+  }
+
+  const parsed = recipient.handle ? parseDiscordHandle(recipient.handle) : null;
+  if (!parsed) { return null; }
+  if (parsed.kind === "id") {
+    try {
+      return await guild.members.fetch(parsed.discordId);
+    } catch {
+      return null;
+    }
+  }
+
+  return findGuildMemberByHandle(guild, parsed);
+}
+
+/**
+ * Envoie un message privé à chaque destinataire présent sur le serveur BlueGenji.
  *
  * @param client Client Discord.
  * @param message Texte déjà rédigé et borné par l'app.
@@ -38,21 +93,24 @@ export async function deliverDirectMessages(
 ): Promise<DeliveryReport> {
   const report: DeliveryReport = { sent: 0, unresolved: [], failed: [] };
 
-  for (const recipient of recipients) {
-    let discordId: string | null = recipient.discordId;
-    if (!discordId && recipient.handle) {
-      const resolved = await resolveDiscordHandle(client, recipient.handle);
-      discordId = resolved?.discordId ?? null;
-    }
+  const guild = await fetchHomeGuild(client);
+  if (!guild) {
+    // Sans serveur de référence, l'appartenance est invérifiable : on n'écrit à
+    // personne plutôt que d'écrire à n'importe qui.
+    report.unresolved.push(...recipients.map((r) => r.label));
+    await sendLog(client, "notify/dm: GUILD_ID absent ou injoignable, aucun message envoyé.");
+    return report;
+  }
 
-    if (!discordId) {
+  for (const recipient of recipients) {
+    const member = await findHomeMember(guild, recipient);
+    if (!member) {
       report.unresolved.push(recipient.label);
       continue;
     }
 
     try {
-      const user = await client.users.fetch(discordId);
-      await user.send(message);
+      await member.send(message);
       report.sent += 1;
     } catch {
       report.failed.push(recipient.label);

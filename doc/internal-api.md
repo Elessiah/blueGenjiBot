@@ -44,6 +44,9 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     (`DISCORD_USER_NOT_FOUND`) si aucun membre des serveurs du bot ne
     correspond. Seul le `username` est comparé : `globalName` et le surnom de
     serveur ne sont pas uniques.
+  - Balaye **tous** les serveurs du bot, contrairement à `/internal/notify/dm` :
+    un membre d'un serveur partenaire doit pouvoir se connecter au site sans
+    être sur le serveur BlueGenji.
 
 - `POST /internal/notify/dm`
   - Body: `{ "message": "...", "recipients": [{ "discordId": "123...", "handle":
@@ -53,14 +56,19 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     joindre les comptes. Un destinataire sans `discordId` est résolu par son
     `handle` (même résolution que `/internal/auth/resolve`) — les joueurs sont
     sur le serveur BlueGenji, l'ID n'est donc pas requis.
+  - **Seuls les membres du serveur BlueGenji sont démarchés** (`GUILD_ID`) : le
+    destinataire est d'abord retrouvé dans cette guilde, par ID quand l'app le
+    connaît, par tag sinon. Absent de la guilde, aucun envoi n'est tenté — un
+    tag mal saisi ne doit pas faire écrire le bot à un inconnu croisé sur un
+    serveur partenaire. Sans `GUILD_ID` configuré, rien n'est envoyé du tout.
   - Le message est tronqué à 1800 caractères, les destinataires dédoublonnés
     (par ID, à défaut par tag en minuscules) et bornés à 100 par appel. Un corps
     sans message ou sans destinataire joignable est refusé en 400
     (`INVALID_NOTIFICATION_PAYLOAD`).
   - Retourne `{ "sent": n, "unresolved": ["..."], "failed": ["..."] }` :
-    `unresolved` = tag introuvable sur les serveurs du bot, `failed` = compte
-    trouvé mais injoignable (DM fermés). Un échec de remise est un **résultat**,
-    pas une erreur : l'app peut dire au staff qui n'a pas été prévenu.
+    `unresolved` = absent du serveur BlueGenji, `failed` = membre du serveur mais
+    injoignable (DM fermés). Un échec de remise est un **résultat**, pas une
+    erreur : l'app peut dire au staff qui n'a pas été prévenu.
 
 - `POST /internal/notify/referees`
   - Body: `{ "message": "...", "context": "issue-report" }`
