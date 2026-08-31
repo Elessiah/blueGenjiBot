@@ -22,6 +22,9 @@ import {showBotAdminRole} from "@/commandsHandlers/admin/showBotAdminRole.js";
 import {setServerInvite} from "@/commandsHandlers/admin/setServerInvite.js";
 import {showServerInvite} from "@/commandsHandlers/admin/showServerInvite.js";
 import {resetServerInvite} from "@/commandsHandlers/admin/resetServerInvite.js";
+import {setRefereeRole} from "@/commandsHandlers/admin/setRefereeRole.js";
+import {showRefereeRole} from "@/commandsHandlers/admin/showRefereeRole.js";
+import {resetRefereeRole} from "@/commandsHandlers/admin/resetRefereeRole.js";
 import {ping} from "../commandsHandlers/ping.js";
 import {scrim} from "../commandsHandlers/scrim.js";
 import {recrute} from "../commandsHandlers/recrute.js";
@@ -356,6 +359,32 @@ const commands = {
         handler: resetServerInvite,
         parameters: {
             description: "Remove the custom invite link of this server (SERVER ADMIN ONLY)",
+        }
+    },
+    "set-referee-role": {
+        handler: setRefereeRole,
+        parameters: {
+            description: "Set the role notified of site issue reports (SERVER ADMIN ONLY)",
+            options: [
+                {
+                    name: "role",
+                    description: "Role whose members receive the reports by DM",
+                    type: ApplicationCommandOptionType.Role,
+                    required: true,
+                }
+            ]
+        }
+    },
+    "show-referee-role": {
+        handler: showRefereeRole,
+        parameters: {
+            description: "Display the referee role of this server (EVERYONE)",
+        }
+    },
+    "reset-referee-role": {
+        handler: resetRefereeRole,
+        parameters: {
+            description: "Remove the referee role of this server (SERVER ADMIN ONLY)",
         }
     },
     "ping": {

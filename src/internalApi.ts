@@ -11,6 +11,9 @@ import { getSnapshotsBetween } from "@/snapshots/dailySnapshot.js";
 import { listModules, isValidModule, setModuleEnabled, MODULE_KEYS, type ModuleKey } from "@/modules/moduleGuard.js";
 import { pctDelta, absDelta, deterministicColor } from "@/internalApi/helpers.js";
 import { parseSiteVisitStats, saveSiteVisitStats } from "@/siteVisits/siteVisits.js";
+import { parseDirectMessageRequest, parseRefereeAlert } from "@/notifications/notifications.js";
+import { deliverDirectMessages, alertReferees } from "@/notifications/deliver.js";
+import { resolveDiscordHandle } from "@/notifications/resolveHandle.js";
 
 function authorize(req: Request, res: Response, next: NextFunction): void {
   const expectedToken = process.env.INTERNAL_API_TOKEN;
@@ -221,48 +224,15 @@ export function startInternalApi(client: Client) {
       return;
     }
 
-    // ID numérique : renvoyé tel quel (option de repli côté app).
-    if (/^\d{5,32}$/.test(handle)) {
-      res.json({ discordId: handle, matchedBy: "id" });
-      return;
-    }
-
-    // Tag : supporte "pseudo" (nouveau format unique) et legacy "pseudo#1234".
-    let username = handle.replace(/^@/, "");
-    let discriminator: string | null = null;
-    const hashIdx = username.lastIndexOf("#");
-    if (hashIdx > 0 && /^\d{4}$/.test(username.slice(hashIdx + 1))) {
-      discriminator = username.slice(hashIdx + 1);
-      username = username.slice(0, hashIdx);
-    }
-    const normalized = username.toLowerCase();
-
     try {
-      for (const guild of client.guilds.cache.values()) {
-        let members;
-        try {
-          members = await guild.members.fetch({ query: username, limit: 100 });
-        } catch {
-          continue; // guilde momentanément injoignable : on tente les suivantes.
-        }
-
-        // On matche uniquement le username (unique globalement) : globalName et
-        // nickname ne le sont pas et résoudraient vers le mauvais compte.
-        const match = members.find((m) => {
-          const uname = m.user.username?.toLowerCase() ?? "";
-          if (discriminator) {
-            return uname === normalized && m.user.discriminator === discriminator;
-          }
-          return uname === normalized;
-        });
-
-        if (match) {
-          res.json({ discordId: match.id, matchedBy: "tag" });
-          return;
-        }
+      // Resolution partagee avec l'envoi de messages prives : meme traitement
+      // des ID numeriques, des tags et du legacy "pseudo#1234".
+      const resolved = await resolveDiscordHandle(client, handle);
+      if (!resolved) {
+        res.status(404).json({ error: "DISCORD_USER_NOT_FOUND" });
+        return;
       }
-
-      res.status(404).json({ error: "DISCORD_USER_NOT_FOUND" });
+      res.json(resolved);
     } catch (error) {
       await sendLog(client, `Failed to resolve discord handle "${handle}": ${(error as Error).message}`);
       res.status(500).json({ error: "INTERNAL_RESOLVE_ERROR" });
@@ -317,6 +287,56 @@ export function startInternalApi(client: Client) {
     } catch (error) {
       await sendLog(client, `site-visits save error: ${(error as Error).message}`);
       res.status(500).json({ error: "SITE_VISIT_STATS_SAVE_FAILED" });
+    }
+  });
+
+  /**
+   * Messages prives pousses par l'app web (rappels de match).
+   *
+   * L'app redige le texte : elle seule connait le tournoi, le match et les
+   * equipes. Le bot ne sait que joindre les comptes Discord, par ID quand
+   * l'app le connait, par tag sinon.
+   */
+  app.post("/internal/notify/dm", async (req: Request, res: Response) => {
+    const request = parseDirectMessageRequest(req.body);
+    if (!request) {
+      res.status(400).json({ error: "INVALID_NOTIFICATION_PAYLOAD" });
+      return;
+    }
+
+    try {
+      const report = await deliverDirectMessages(client, request.message, request.recipients);
+      if (report.unresolved.length > 0 || report.failed.length > 0) {
+        await sendLog(
+          client,
+          `[AppBlueGenji] ${request.context}: ${report.sent} envoye(s), ` +
+          `${report.unresolved.length} introuvable(s), ${report.failed.length} injoignable(s).`,
+        );
+      }
+      res.json(report);
+    } catch (error) {
+      await sendLog(client, `notify/dm error (${request.context}): ${(error as Error).message}`);
+      res.status(500).json({ error: "NOTIFICATION_DELIVERY_FAILED" });
+    }
+  });
+
+  /**
+   * Signalement d'un probleme depuis le site : canal de logs **et** message
+   * prive a chaque membre du role arbitre configure par /set-referee-role.
+   */
+  app.post("/internal/notify/referees", async (req: Request, res: Response) => {
+    const request = parseRefereeAlert(req.body);
+    if (!request) {
+      res.status(400).json({ error: "INVALID_NOTIFICATION_PAYLOAD" });
+      return;
+    }
+
+    try {
+      const report = await alertReferees(client, `[AppBlueGenji] ${request.message}`);
+      res.json(report);
+    } catch (error) {
+      await sendLog(client, `notify/referees error (${request.context}): ${(error as Error).message}`);
+      res.status(500).json({ error: "NOTIFICATION_DELIVERY_FAILED" });
     }
   });
 
