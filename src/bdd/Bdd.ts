@@ -45,6 +45,21 @@ function closeBddInstance(): boolean {
   return true;
 }
 
+/**
+ * Ferme la connexion courante et oublie le singleton.
+ *
+ * `closeBddInstance()` laisse la référence en place : le prochain
+ * `getBddInstance()` rendrait alors une instance fermée. La restauration d'une
+ * sauvegarde a besoin de relâcher le fichier SQLite puis de le rouvrir, d'où ce
+ * variant qui remet le singleton à zéro.
+ * @returns `true` si une instance était ouverte, sinon `false`.
+ */
+function resetBddInstance(): boolean {
+  const wasOpen = closeBddInstance();
+  bdd = undefined as unknown as Bdd;
+  return wasOpen;
+}
+
 class Bdd {
     private name: string;
     private Database: Database | null;
@@ -847,6 +862,6 @@ class Bdd {
   }
 }
 
-export { Bdd, getBddInstance, closeBddInstance };
+export { Bdd, getBddInstance, closeBddInstance, resetBddInstance };
 
 

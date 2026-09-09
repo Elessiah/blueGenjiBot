@@ -33,6 +33,7 @@ import {statsPlayer} from "../commandsHandlers/statsPlayer.js";
 import {statsSite} from "../commandsHandlers/statsSite.js";
 import {relay} from "../commandsHandlers/admin/relay.js";
 import {configModule} from "../commandsHandlers/admin/configModule.js";
+import {restoreBackup} from "@/commandsHandlers/admin/restoreBackup.js";
 
 const commands = {
     "help": {
@@ -488,6 +489,26 @@ const commands = {
                         { name: "Notifications", value: "notifications" },
                         { name: "Stats", value: "stats" }
                     ]
+                }
+            ]
+        }
+    },
+    "restore-backup": {
+        handler: restoreBackup,
+        parameters: {
+            description: "Restaure la base du bot depuis une sauvegarde (PROPRIETAIRE UNIQUEMENT)",
+            options: [
+                {
+                    name: "fichier",
+                    description: "Fichier database.sqlite dechiffre a restaurer",
+                    type: ApplicationCommandOptionType.Attachment,
+                    required: true
+                },
+                {
+                    name: "confirmer",
+                    description: "Confirme l'ecrasement de la base de production",
+                    type: ApplicationCommandOptionType.Boolean,
+                    required: true
                 }
             ]
         }
