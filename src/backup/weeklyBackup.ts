@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { AttachmentBuilder, type Client, type User } from "discord.js";
 import { getBddInstance } from "@/bdd/Bdd.js";
+import { formatDiskUsage, getDiskUsage } from "@/backup/diskSpace.js";
 
 // Limite de taille d'une pièce jointe pour un bot sans Nitro (marge sous les 25 Mo).
 const MAX_ATTACHMENT_SIZE = 24 * 1024 * 1024;
@@ -36,11 +37,14 @@ export async function sendDatabaseBackup(client: Client): Promise<boolean> {
 
     const owner: User = await client.users.fetch(ownerId);
     const size = (await fs.promises.stat(snapshotPath)).size;
+    // L'état du disque intéresse surtout quand la place manque : on le joint dans les deux cas.
+    const diskLine = formatDiskUsage(await getDiskUsage(dbPath));
 
     if (size > MAX_ATTACHMENT_SIZE) {
       await owner.send(
         `⚠️ Sauvegarde hebdomadaire impossible via Discord : la base fait ` +
-          `${(size / 1024 / 1024).toFixed(1)} Mo (> 24 Mo). Prévoir une autre méthode de sauvegarde.`,
+          `${(size / 1024 / 1024).toFixed(1)} Mo (> 24 Mo). Prévoir une autre méthode de sauvegarde.\n` +
+          diskLine,
       );
       return false;
     }
@@ -49,7 +53,7 @@ export async function sendDatabaseBackup(client: Client): Promise<boolean> {
       name: `database-${stamp}.sqlite`,
     });
     await owner.send({
-      content: `🗄️ Sauvegarde hebdomadaire de la base BlueGenji — ${stamp}`,
+      content: `🗄️ Sauvegarde hebdomadaire de la base BlueGenji — ${stamp}\n${diskLine}`,
       files: [attachment],
     });
 
