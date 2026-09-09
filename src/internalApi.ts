@@ -6,6 +6,7 @@ import express, { type Request, type Response, type NextFunction } from "express
 import type { Client } from "discord.js";
 import { getBddInstance } from "@/bdd/Bdd.js";
 import { sendLog } from "@/safe/sendLog.js";
+import { describeError } from "@/safe/errorGuards.js";
 import { recordEvent, getBacklog, subscribe } from "@/feed/feedBus.js";
 import { getSnapshotsBetween } from "@/snapshots/dailySnapshot.js";
 import { listModules, isValidModule, setModuleEnabled, MODULE_KEYS, type ModuleKey } from "@/modules/moduleGuard.js";
@@ -594,6 +595,21 @@ export function startInternalApi(client: Client) {
 
   const server = app.listen(port, host, () => {
     console.log(`Internal API listening on http://${host}:${port}`);
+  });
+
+  // Sans écouteur, une erreur de socket remonte en exception non capturée et
+  // emporte le bot Discord avec l'API. Mais un port déjà pris est
+  // irrécupérable : l'avaler laisserait un bot que pm2 croit sain alors que
+  // l'app web a définitivement perdu l'API interne. On sort pour que pm2
+  // relance avec son backoff, le temps que le process précédent lâche le port.
+  server.on("error", (error: unknown) => {
+    const description = describeError(error);
+    console.error(`Internal API : ${description}`);
+    if ((error as { code?: string }).code === "EADDRINUSE") {
+      console.error(`Internal API : port ${port} deja occupe, arret pour relance.`);
+      process.exit(1);
+    }
+    void sendLog(client, `Internal API : ${description}`);
   });
 
   return server;

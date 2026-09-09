@@ -29,8 +29,14 @@ async function sendLog(client: Client,
                     await admin_channel.send(message);
                 }
             } catch (error) {
-                if ((error as TypeError).message == "Missing Access")
-                    owner.send("Missing Access to admin channel");
+                // `await` obligatoire : un envoi flottant qui échoue devient un
+                // rejet non capturé, donc un arrêt du process. Et l'échec est
+                // sans issue ici — on est déjà dans la voie de secours.
+                if ((error as TypeError).message == "Missing Access") {
+                    try {
+                        await owner.send("Missing Access to admin channel");
+                    } catch { /* le canal de secours est lui aussi injoignable */ }
+                }
             }
             success = true;
         } catch (error) {

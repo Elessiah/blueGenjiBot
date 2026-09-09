@@ -10,6 +10,7 @@ import {answerTmp} from "../utils/answerTmp.js";
 import {servicesWithNoRanks} from "../utils/servicesWithNoRanks.js";
 import {getServicesAndID} from "../utils/getServiceAndID.js";
 import {safeMsgReply} from "../safe/safeMsgReply.js";
+import {safeReact} from "../safe/safeReact.js";
 import {recordEvent} from "@/feed/feedBus.js";
 import {isModuleEnabled} from "@/modules/moduleGuard.js";
 import type {Attachment, Client, EmbedBuilder, Message} from "discord.js";
@@ -79,7 +80,7 @@ async function manageDistribution(message: Message,
                     await safeMsgReply(client, message, "Your message has not been sent ! \n" +
                         "# Sending to multiple services is strictly prohibited.\n" +
                         "If necessary, split your request and send it in parts. **Spamming may result in a bot ban.**");
-                    await message.react('🚫');
+                    await safeReact(client, message, '🚫');
                     return false;
                 }
             }
