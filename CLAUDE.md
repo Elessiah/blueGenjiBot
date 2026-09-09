@@ -85,6 +85,15 @@ LOG_CHANNEL_ID=                 # channel Discord pour sendLog
 - **Imports ESM** : toujours suffixer `.js` (même pour les fichiers `.ts`), TypeScript ESM l'exige.
 - **Requêtes SQL** : exclusivement paramétrées via `Bdd.get/set/...`. Jamais de concat de strings.
 - **Erreurs runtime** : try/catch + `sendLog()` ; ne jamais laisser une exception planter le bot.
+  `installProcessGuards()` (`safe/processGuards.ts`) capte `unhandledRejection`,
+  `uncaughtException` et les événements `error`/`shardError` du client — sans quoi une
+  coupure DNS suffit à tuer le process. `reportError()` trie les erreurs via
+  `safe/errorGuards.ts` : les pannes réseau et les cibles Discord disparues (10008,
+  10062, 50013…) restent en console, le reste part au canal de supervision.
+  **Tout listener `client.on(...)` et tout callback `cron`/`setTimeout` doit avoir sa
+  propre garde** : ils s'exécutent hors de toute pile applicative.
+- **Réactions Discord** : `safeReact()` plutôt que `message.react()` — un message
+  supprimé entre-temps lève un `10008` qui interromprait la diffusion en cours.
 - **Commandes Discord** : enregistrer via `updateCommands()`, déclarer dans `config/commands.ts` (statiques) ou `fillBlueCommands()` (dynamiques).
 - **Tests** : runner natif `node:test` sur le build (`dist/`), pas de transpil à la volée.
 - **Lint** : configuration `.eslintrc.cjs` (format eslintrc — ESLint 8 ne lit la « flat config » que derrière un drapeau). Le périmètre est **`src/` seul** (`.eslintignore`) : sans lui, `eslint .` partait analyser `dist/`. `src/main.js` est ignoré — ancien point d'entrée, ni compilé (`allowJs: false`) ni référencé.

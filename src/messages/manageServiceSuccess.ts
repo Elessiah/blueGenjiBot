@@ -1,3 +1,4 @@
+import {safeReact} from "../safe/safeReact.js";
 import {sendLog} from "../safe/sendLog.js";
 import {answerTmp} from "../utils/answerTmp.js";
 import {regions} from "../utils/globals.js";
@@ -25,7 +26,9 @@ async function manageServiceSuccess(client: Client,
     if (!ret.success) {
         await sendLog(client, "In manageDistribution: " + ret.message);
     }
-    await message.react("🛰️");
+    // Le message peut avoir été supprimé pendant la diffusion : la réaction ne
+    // doit pas interrompre les tips ni le feedback utilisateur qui suivent.
+    await safeReact(client, message, "🛰️");
     const notifiedRegions: string[] = [];
     for (const region of targetedRegions)
         notifiedRegions.push(regions[region]);

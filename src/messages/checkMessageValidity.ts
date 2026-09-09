@@ -3,6 +3,7 @@ import type {Client, Message} from "discord.js";
 import type {Service} from "../bdd/types.js";
 import {checkBan} from "../check/checkBan.js";
 import {checkCooldown} from "../check/checkCooldown.js";
+import {safeReact} from "../safe/safeReact.js";
 import {answerTmp} from "../utils/answerTmp.js";
 import {searchString} from "../utils/searchString.js";
 
@@ -26,7 +27,7 @@ async function checkMessageValidity(client: Client,
         hasValidService.value = true;
     }
     if (await checkBan(client, message.author.id)) {
-        await message.react("🚫");
+        await safeReact(client, message, "🚫");
         return false;
     }
     const cooldown: string = await checkCooldown(message.author.id, service.id_service);

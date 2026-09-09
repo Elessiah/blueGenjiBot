@@ -19,6 +19,8 @@ import { checkIntervalleAdhesion } from "@/adhesion/checkIntervalleAdhesion.js";
 import { buildServiceMessage } from "./messages/buildServiceMessage.js";
 import { manageDistribution } from "./messages/manageDistribution.js";
 import { sendLog } from "./safe/sendLog.js";
+import { installProcessGuards, reportError } from "./safe/processGuards.js";
+import { safeReact } from "./safe/safeReact.js";
 import { safeReply } from "./safe/safeReply.js";
 import { updateCommands } from "./utils/updateCommands.js";
 import { startInternalApi } from "@/internalApi.js";
@@ -34,163 +36,215 @@ const client = new Client({
   ],
 });
 
+installProcessGuards(client);
+
 let internalApiServer: ReturnType<typeof startInternalApi> | null = null;
 
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isCommand()) return;
 
-  if (await checkBan(client, interaction.user.id, false)) {
-    await safeReply(
-      interaction as ChatInputCommandInteraction,
-      "Banned members cannot use commands ! Contact `elessiah` for any moderation problem !",
-    );
-    return;
-  }
-
+  // La garde couvre tout le corps, pas seulement le handler : `checkBan` et
+  // `fillBlueCommands` touchent SQLite et peuvent lever (base verrouillée
+  // pendant la sauvegarde, par exemple).
   const { commandName } = interaction;
-  let command = commands[commandName];
-  if (!command) {
-    command = (await fillBlueCommands(client))[commandName];
-    if (!command) {
-      await safeReply(interaction as ChatInputCommandInteraction, "Command not found");
+  try {
+    if (await checkBan(client, interaction.user.id, false)) {
+      await safeReply(
+        interaction as ChatInputCommandInteraction,
+        "Banned members cannot use commands ! Contact `elessiah` for any moderation problem !",
+      );
       return;
     }
-  }
 
-  await command.handler(client, interaction, interaction.guildId);
+    let command = commands[commandName];
+    if (!command) {
+      command = (await fillBlueCommands(client))[commandName];
+      if (!command) {
+        await safeReply(interaction as ChatInputCommandInteraction, "Command not found");
+        return;
+      }
+    }
+
+    await command.handler(client, interaction, interaction.guildId);
+  } catch (error) {
+    await reportError(client, `commande /${commandName}`, error);
+  }
 });
 
 client.on("messageCreate", async (message) => {
-  if (message.author.bot || message.author.system) return;
-
-  const bdd = await getBddInstance();
-  let services: { name: string; id_service: number }[];
-
   try {
-    services = (await bdd.get(
-      "ChannelPartnerService",
-      ["Service.name", "Service.id_service"],
-      {
-        Service: "ChannelPartnerService.id_service = Service.id_service",
-        ChannelPartner: "ChannelPartnerService.id_channel = ChannelPartner.id_channel",
-      },
-      { query: "ChannelPartner.id_channel = ?", values: [message.channelId] },
-    )) as { name: string; id_service: number }[];
-  } catch (error) {
-    await sendLog(client, `Error while getting services : ${(error as Error).message}`);
-    return;
-  }
+    if (message.author.bot || message.author.system) return;
 
-  if (services.length > 0) {
-    await manageDistribution(message, client, bdd, message.channelId, services);
+    const bdd = await getBddInstance();
+    let services: { name: string; id_service: number }[];
+
+    try {
+      services = (await bdd.get(
+        "ChannelPartnerService",
+        ["Service.name", "Service.id_service"],
+        {
+          Service: "ChannelPartnerService.id_service = Service.id_service",
+          ChannelPartner: "ChannelPartnerService.id_channel = ChannelPartner.id_channel",
+        },
+        { query: "ChannelPartner.id_channel = ?", values: [message.channelId] },
+      )) as { name: string; id_service: number }[];
+    } catch (error) {
+      await sendLog(client, `Error while getting services : ${(error as Error).message}`);
+      return;
+    }
+
+    if (services.length > 0) {
+      await manageDistribution(message, client, bdd, message.channelId, services);
+    }
+  } catch (error) {
+    await reportError(client, "messageCreate", error);
   }
 });
 
 client.on("messageUpdate", async (oldMessage, newMessage) => {
-  const bdd = await getBddInstance();
-  const duplicatedMessages = (await bdd.get(
-    "DPMsg",
-    ["id_msg", "id_channel"],
-    {},
-    { query: "id_og = ?", values: [oldMessage.id] },
-  )) as { id_msg: string; id_channel: string }[];
+  try {
+    const bdd = await getBddInstance();
+    const duplicatedMessages = (await bdd.get(
+      "DPMsg",
+      ["id_msg", "id_channel"],
+      {},
+      { query: "id_og = ?", values: [oldMessage.id] },
+    )) as { id_msg: string; id_channel: string }[];
 
-  if (!newMessage.guild || duplicatedMessages.length === 0) return;
+    if (!newMessage.guild || duplicatedMessages.length === 0) return;
 
-  let embed;
-  if (oldMessage.attachments.size === 1) {
-    const attachment: Attachment | undefined = oldMessage.attachments.values().next().value;
-    embed = await buildServiceMessage(client, newMessage, newMessage.channel.id, attachment);
-  } else {
-    embed = await buildServiceMessage(client, newMessage, newMessage.channel.id);
+    let embed;
+    if (oldMessage.attachments.size === 1) {
+      const attachment: Attachment | undefined = oldMessage.attachments.values().next().value;
+      embed = await buildServiceMessage(client, newMessage, newMessage.channel.id, attachment);
+    } else {
+      embed = await buildServiceMessage(client, newMessage, newMessage.channel.id);
+    }
+
+    for (const duplicate of duplicatedMessages) {
+      const channel = (await client.channels.fetch(duplicate.id_channel)) as TextChannel | null;
+      if (!channel) {
+        await sendLog(client, "Failed to retrieve message channel to update it !");
+        continue;
+      }
+
+      let targetMessage: Message;
+      try {
+        targetMessage = (await channel.messages.fetch(duplicate.id_msg)) as Message;
+      } catch (error) {
+        await sendLog(client, `Failed to fetch duplicated message to update it ! ${(error as Error).message}`);
+        continue;
+      }
+
+      try {
+        await targetMessage.edit({ embeds: [embed] });
+      } catch (error) {
+        await sendLog(client, `Error while edit : ${(error as Error).message}`);
+      }
+    }
+
+    // Le message d'origine peut avoir été supprimé entre l'édition et ici.
+    await safeReact(client, newMessage, "📝");
+  } catch (error) {
+    await reportError(client, "messageUpdate", error);
   }
-
-  for (const duplicate of duplicatedMessages) {
-    const channel = (await client.channels.fetch(duplicate.id_channel)) as TextChannel | null;
-    if (!channel) {
-      await sendLog(client, "Failed to retrieve message channel to update it !");
-      continue;
-    }
-
-    let targetMessage: Message;
-    try {
-      targetMessage = (await channel.messages.fetch(duplicate.id_msg)) as Message;
-    } catch (error) {
-      await sendLog(client, `Failed to fetch duplicated message to update it ! ${(error as Error).message}`);
-      continue;
-    }
-
-    try {
-      await targetMessage.edit({ embeds: [embed] });
-    } catch (error) {
-      await sendLog(client, `Error while edit : ${(error as Error).message}`);
-    }
-  }
-
-  await newMessage.react("📝");
 });
 
 client.on("messageDelete", async (message) => {
-  await deleteDPMsgs(client, message.id);
+  try {
+    await deleteDPMsgs(client, message.id);
+  } catch (error) {
+    await reportError(client, "messageDelete", error);
+  }
 });
 
 client.on("clientReady", async () => {
-  if (!internalApiServer) {
-    internalApiServer = startInternalApi(client);
-  }
+  try {
+    if (!internalApiServer) {
+      internalApiServer = startInternalApi(client);
+    }
 
-  for (const guild of client.guilds.cache.values()) {
-    console.log("Server ready : ", guild.name);
-    await updateCommands(client, guild.id);
-  }
+    for (const guild of client.guilds.cache.values()) {
+      console.log("Server ready : ", guild.name);
+      await updateCommands(client, guild.id);
+    }
 
     await checkIntervalleAdhesion(client);
-  await recordDailySnapshot(client);
-  cron.schedule(
-    "5 0 * * *",
-    async () => {
-      await recordDailySnapshot(client);
-    },
-    { timezone: "Europe/Paris" },
-  );
-  cron.schedule(
-    "0 10 * * *",
-    async () => {
-      await checkIntervalleAdhesion(client);
-    },
-    { timezone: "Europe/Paris" },
-  );
-  // Sauvegarde hebdomadaire de la base envoyée en MP au propriétaire (lundi 04h00).
-  cron.schedule(
-    "0 4 * * 1",
-    async () => {
-      await sendDatabaseBackup(client);
-    },
-    { timezone: "Europe/Paris" },
-  );
+    await recordDailySnapshot(client);
+    // Une tâche cron s'exécute hors de toute pile applicative : sans garde, son
+    // échec devient un rejet non capturé, donc un arrêt du process.
+    cron.schedule(
+      "5 0 * * *",
+      async () => {
+        try {
+          await recordDailySnapshot(client);
+        } catch (error) {
+          await reportError(client, "cron recordDailySnapshot", error);
+        }
+      },
+      { timezone: "Europe/Paris" },
+    );
+    cron.schedule(
+      "0 10 * * *",
+      async () => {
+        try {
+          await checkIntervalleAdhesion(client);
+        } catch (error) {
+          await reportError(client, "cron checkIntervalleAdhesion", error);
+        }
+      },
+      { timezone: "Europe/Paris" },
+    );
+    // Sauvegarde hebdomadaire de la base envoyée en MP au propriétaire (lundi 04h00).
+    cron.schedule(
+      "0 4 * * 1",
+      async () => {
+        try {
+          await sendDatabaseBackup(client);
+        } catch (error) {
+          await reportError(client, "cron sendDatabaseBackup", error);
+        }
+      },
+      { timezone: "Europe/Paris" },
+    );
 
-  await sendLog(client, "Bot just started! (If it's not a restart it's a crash)");
+    await sendLog(client, "Bot just started! (If it's not a restart it's a crash)");
+  } catch (error) {
+    await reportError(client, "clientReady", error);
+  }
 });
 
 client.on("guildCreate", async (guild) => {
-  for (const currentGuild of client.guilds.cache.values()) {
-    await updateCommands(client, currentGuild.id);
+  try {
+    for (const currentGuild of client.guilds.cache.values()) {
+      await updateCommands(client, currentGuild.id);
+    }
+    const { runSetupWizard } = await import("@/utils/setupWizard.js");
+    await runSetupWizard(guild, client);
+    await sendLog(client, `Bot has join : ${guild.name}`);
+  } catch (error) {
+    await reportError(client, "guildCreate", error);
   }
-  const { runSetupWizard } = await import("@/utils/setupWizard.js");
-  await runSetupWizard(guild, client);
-  await sendLog(client, `Bot has join : ${guild.name}`);
 });
 
 client.on("guildDelete", async (guild) => {
-  await _resetServer(client, guild.id);
-  for (const currentGuild of client.guilds.cache.values()) {
-    await updateCommands(client, currentGuild.id);
+  try {
+    await _resetServer(client, guild.id);
+    for (const currentGuild of client.guilds.cache.values()) {
+      await updateCommands(client, currentGuild.id);
+    }
+    await sendLog(client, `Bot has leave : ${guild.name}`);
+  } catch (error) {
+    await reportError(client, "guildDelete", error);
   }
-  await sendLog(client, `Bot has leave : ${guild.name}`);
 });
 
 client.on("channelDelete", async (channel) => {
-  await _resetChannel(client, channel.id);
+  try {
+    await _resetChannel(client, channel.id);
+  } catch (error) {
+    await reportError(client, "channelDelete", error);
+  }
 });
 
 process.on('SIGINT', async () => {
@@ -207,4 +261,10 @@ process.on('SIGTERM', async () => {
     process.exit(0);
 });
 
-client.login(process.env.TOKEN);
+// Contrairement aux erreurs de runtime, un échec de connexion laisse un process
+// vivant mais inutile : on journalise puis on sort en erreur pour que pm2
+// relance avec son backoff.
+client.login(process.env.TOKEN).catch(async (error: unknown) => {
+  await reportError(client, "login", error);
+  process.exit(1);
+});

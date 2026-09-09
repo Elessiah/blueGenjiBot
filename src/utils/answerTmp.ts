@@ -1,15 +1,25 @@
 import type {Client, Message, OmitPartialGroupDMChannel} from "discord.js";
 
+import {describeError} from "@/safe/errorGuards.js";
 import {safeMsgReply} from "@/safe/safeMsgReply.js";
 
 /**
  * Supprime un message temporaire si celui-ci existe encore.
  * Utilisée en callback différé pour nettoyer les réponses éphémères "manuelles".
+ *
+ * L'échec est avalé volontairement : le callback s'exécute depuis un
+ * `setTimeout`, hors de toute pile applicative, donc un rejet ici deviendrait
+ * un `unhandledRejection` — c'est-à-dire un arrêt du process. Et le cas
+ * nominal de cet échec est justement que le message a déjà été supprimé.
+ *
  * @param target Message temporaire à supprimer, ou `null` si l'envoi a échoué.
  */
 async function _deleteTempMsg(target: OmitPartialGroupDMChannel<Message> | null): Promise<void> {
-    if (target) {
+    if (!target) return;
+    try {
         await target.delete();
+    } catch (error) {
+        console.error("Suppression du message temporaire impossible :", describeError(error));
     }
 }
 
