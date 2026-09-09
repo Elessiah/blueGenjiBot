@@ -21,7 +21,25 @@ dès qu'aucune sauvegarde réussie n'a moins de huit jours.
 ### 1. Outils
 
 ```bash
-sudo apt update && sudo apt install -y rclone age sqlite3 mariadb-client
+sudo apt update && sudo apt install -y age sqlite3 mariadb-client
+```
+
+**`rclone` ne doit pas venir d'APT.** Sur un OneDrive personnel, Graph redirige
+l'envoi vers `my.microsoftpersonalcontent.com`, un hôte auquel le jeton Graph ne
+doit plus être présenté ; les versions antérieures au correctif l'envoient quand
+même et récoltent un `401 Unauthorized`. La lecture continue de fonctionner, si
+bien que `rclone lsd` réussit et que seul l'envoi échoue — le symptôme est
+trompeur. Debian trixie livre encore une 1.60 de 2022. Installe le binaire
+officiel à côté du paquet :
+
+```bash
+cd /tmp
+curl -fsSLO https://downloads.rclone.org/rclone-current-linux-arm64.zip
+VNUM=$(curl -fsSL https://downloads.rclone.org/version.txt | sed 's/^rclone //')
+curl -fsSL "https://downloads.rclone.org/$VNUM/SHA256SUMS" | grep linux-arm64.zip
+sha256sum rclone-current-linux-arm64.zip   # doit correspondre à la ligne ci-dessus
+unzip -q rclone-current-linux-arm64.zip
+sudo install -m 755 rclone-*/rclone /usr/local/bin/rclone
 ```
 
 ### 2. Connexion OneDrive
@@ -75,20 +93,29 @@ echo 'age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxx' > scripts/backup-recipients.txt
 
 ### 4. Accès MySQL en lecture seule
 
+MariaDB sait authentifier par socket Unix : l'utilisateur système est reconnu
+sans mot de passe, et il n'y a donc aucun secret à poser sur le disque. C'est
+strictement préférable à un mot de passe dans un fichier de configuration.
+
 ```sql
-CREATE USER 'backup'@'localhost' IDENTIFIED BY '<mot de passe>';
-GRANT SELECT, LOCK TABLES, SHOW VIEW, EVENT, TRIGGER ON appbluegenji.* TO 'backup'@'localhost';
+CREATE USER IF NOT EXISTS 'elessiah'@'localhost' IDENTIFIED VIA unix_socket;
+GRANT SELECT, SHOW VIEW, EVENT, TRIGGER ON bluegenji_arena.* TO 'elessiah'@'localhost';
 FLUSH PRIVILEGES;
 ```
 
+Les droits sont ceux dont `mysqldump` a besoin, pas un de plus : `LOCK TABLES`
+est inutile avec `--single-transaction`, et rien n'autorise l'écriture.
+
 ```bash
-cat > ~/.mysql-backup.cnf <<'CNF'
-[client]
-user=backup
-password=<mot de passe>
-CNF
+printf '[client]
+user=elessiah
+' > ~/.mysql-backup.cnf
 chmod 600 ~/.mysql-backup.cnf
 ```
+
+Ne pas renseigner `host` : c'est ce qui garde la connexion sur le socket local.
+Avec `host=127.0.0.1`, mysqldump passerait en TCP et l'authentification par
+socket ne s'appliquerait plus.
 
 ### 5. Configuration du script
 
@@ -111,10 +138,14 @@ Premier essai à la main :
 
 ### 6. Cron
 
-`crontab -e`, tous les lundis à 3 h (avant le rapport du bot, à 4 h) :
+`crontab -e`, tous les lundis à 3 h (avant le rapport du bot, à 4 h). La ligne
+`PATH` n'est pas décorative : cron ne voit que `/usr/bin:/bin` par défaut, donc
+sans elle c'est la `rclone` d'APT — celle qui ne sait plus écrire — qui serait
+appelée, et l'échec ne se manifesterait qu'en production.
 
 ```cron
-0 3 * * 1 /home/pi/blueGenjiBot/scripts/backup-onedrive.sh >> /var/log/bluegenji-backup.log 2>&1
+PATH=/usr/local/bin:/usr/bin:/bin
+0 3 * * 1 /home/elessiah/apps/blueGenjiBot/scripts/backup-onedrive.sh >> /home/elessiah/apps/logs/bluegenji-backup.log 2>&1
 ```
 
 ## Restauration

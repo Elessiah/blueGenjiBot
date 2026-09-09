@@ -118,4 +118,11 @@ rclone delete "$RCLONE_REMOTE:$REMOTE_DIR" \
 
 STATUS_OK=true
 write_status
-echo "[backup] Sauvegarde $STATUS_PARTS envoyée ($((STATUS_SIZE / 1024 / 1024)) Mo)."
+# Une archive de quelques centaines de kilo-octets s'affichait « 0 Mo », ce qui
+# se lit comme un échec alors que la sauvegarde est bonne.
+if [[ "$STATUS_SIZE" -ge 1048576 ]]; then
+  SIZE_TEXT="$((STATUS_SIZE / 1048576)) Mo"
+else
+  SIZE_TEXT="$((STATUS_SIZE / 1024)) Ko"
+fi
+echo "[backup] Sauvegarde $STATUS_PARTS envoyée ($SIZE_TEXT)."
