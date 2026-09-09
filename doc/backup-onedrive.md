@@ -59,18 +59,31 @@ rclone lsd onedrive:
 ### 3. Clé de chiffrement
 
 ```bash
-age-keygen -o ~/.bluegenji-backup.key      # chmod 600, à sauvegarder AILLEURS
-grep 'public key' ~/.bluegenji-backup.key  # -> age1...
+age-keygen -o ~/.bluegenji-backup.key   # chmod 600, à sauvegarder AILLEURS
 ```
 
-Place la clé publique dans le fichier des destinataires :
+Le fichier produit contient deux choses : deux lignes de commentaire dont la
+clé **publique** (`age1…`), puis la clé **privée** (`AGE-SECRET-KEY-1…`).
+
+Le fichier des destinataires ne reçoit que la clé publique. `age-keygen -y` la
+redérive sans risque de recopier la mauvaise ligne :
 
 ```bash
-echo 'age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxx' > scripts/backup-recipients.txt
+age-keygen -y ~/.bluegenji-backup.key > scripts/backup-recipients.txt
 ```
 
-> **Sans la clé privée, les archives sont irrécupérables.** Garde une copie hors
-> du Raspberry (gestionnaire de mots de passe, clé USB) — sinon la sauvegarde ne
+> Ne mets **jamais** `AGE-SECRET-KEY-…` dans ce fichier. Chiffrer ne demande que
+> la clé publique : c'est tout l'intérêt du montage, le Raspberry produit des
+> sauvegardes sans détenir de quoi les relire. Une clé privée posée à côté
+> rendrait le chiffrement inutile pour quiconque accède à la machine.
+
+Le fichier accepte plusieurs destinataires, une clé publique par ligne : chaque
+archive devient alors déchiffrable par n'importe laquelle des clés privées
+correspondantes. Utile pour te donner une seconde clé de secours, rangée
+ailleurs que la première.
+
+> **Sans la clé privée, les archives sont irrécupérables.** Garde-la hors du
+> Raspberry (gestionnaire de mots de passe, clé USB) — sinon la sauvegarde ne
 > sert à rien le jour où la carte SD lâche.
 
 ### 4. Accès MySQL en lecture seule
