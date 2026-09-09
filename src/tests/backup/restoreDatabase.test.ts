@@ -13,7 +13,8 @@ process.env.BDD_PATH = path.join(WORK_DIR, "database.sqlite");
 const sqlite3 = (await import("sqlite3")).default;
 const { open } = await import("sqlite");
 const { getBddInstance, resetBddInstance } = await import("../../bdd/Bdd.js");
-const { restoreDatabase, validateSqliteFile } = await import("../../backup/restoreDatabase.js");
+const { KEPT_ROLLBACKS, purgeOldRollbacks, restoreDatabase, validateSqliteFile } =
+  await import("../../backup/restoreDatabase.js");
 
 /** Crée une base SQLite jetable portant une valeur repère. */
 async function makeSqliteFile(marker: string): Promise<string> {
@@ -81,7 +82,76 @@ test("restoreDatabase laisse le singleton utilisable après restauration", async
   assert.notEqual(await bdd.get("Repere", ["*"], {}), undefined);
 });
 
+test("restoreDatabase remet la base precedente en place si la copie echoue", async () => {
+  await getBddInstance();
+  const dbPath = process.env.BDD_PATH!;
+  const candidate = await makeSqliteFile("jamais-appliquee");
+
+  // La copie echoue apres la creation du filet de securite : c'est exactement
+  // la fenetre ou la base de production peut rester tronquee.
+  const vraieCopie = fs.promises.copyFile;
+  let premiere = true;
+  (fs.promises as { copyFile: typeof vraieCopie }).copyFile = async (...args) => {
+    if (premiere) {
+      premiere = false;
+      throw new Error("disque plein");
+    }
+    return vraieCopie(...(args as Parameters<typeof vraieCopie>));
+  };
+
+  let result;
+  try {
+    result = await restoreDatabase(candidate, dbPath);
+  } finally {
+    (fs.promises as { copyFile: typeof vraieCopie }).copyFile = vraieCopie;
+  }
+
+  assert.equal(result.success, false);
+  assert.match(result.message, /disque plein/);
+  assert.match(result.message, /remise en place/);
+  // La base reste celle d'avant, pas celle qu'on tentait de restaurer.
+  assert.notEqual(await readMarker(dbPath), "jamais-appliquee");
+  assert.ok((await getBddInstance()) !== undefined, "le bot doit rester utilisable");
+});
+
+test("purgeOldRollbacks ne garde que les copies les plus recentes", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bluegenji-purge-"));
+  const dbPath = path.join(dir, "database.sqlite");
+  // Suffixes horodates : le tri lexicographique doit designer les plus anciens.
+  const stamps = ["2026-01-01", "2026-02-01", "2026-03-01", "2026-04-01", "2026-05-01"];
+  for (const stamp of stamps) {
+    await fs.promises.writeFile(`${dbPath}.avant-${stamp}`, "copie");
+  }
+
+  const removed = await purgeOldRollbacks(dbPath);
+  const restants = (await fs.promises.readdir(dir)).sort();
+
+  assert.equal(removed, stamps.length - KEPT_ROLLBACKS);
+  assert.deepEqual(restants, [
+    "database.sqlite.avant-2026-03-01",
+    "database.sqlite.avant-2026-04-01",
+    "database.sqlite.avant-2026-05-01",
+  ]);
+  await fs.promises.rm(dir, { recursive: true, force: true });
+});
+
+test("purgeOldRollbacks laisse intactes les copies sous le seuil", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bluegenji-purge-"));
+  const dbPath = path.join(dir, "database.sqlite");
+  await fs.promises.writeFile(`${dbPath}.avant-2026-01-01`, "copie");
+  // Un fichier voisin qui ne porte pas le prefixe ne doit jamais etre touche.
+  await fs.promises.writeFile(path.join(dir, "database.sqlite"), "base");
+
+  assert.equal(await purgeOldRollbacks(dbPath), 0);
+  assert.equal((await fs.promises.readdir(dir)).length, 2);
+  await fs.promises.rm(dir, { recursive: true, force: true });
+});
+
+test("purgeOldRollbacks ne leve pas sur un dossier absent", async () => {
+  assert.equal(await purgeOldRollbacks("/dossier/absent/database.sqlite"), 0);
+});
+
 test.after(async () => {
-  resetBddInstance();
+  await resetBddInstance();
   await fs.promises.rm(WORK_DIR, { recursive: true, force: true }).catch(() => {});
 });

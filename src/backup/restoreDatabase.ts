@@ -9,6 +9,9 @@ import { getBddInstance, resetBddInstance } from "@/bdd/Bdd.js";
 /** En-tête que tout fichier SQLite valide porte sur ses seize premiers octets. */
 const SQLITE_MAGIC = "SQLite format 3\0";
 
+/** Nombre de copies de secours conservées après une restauration réussie. */
+export const KEPT_ROLLBACKS = 3;
+
 /** Résultat d'une tentative de restauration. */
 export interface RestoreResult {
   /** `true` si la base courante a bien été remplacée. */
@@ -48,7 +51,14 @@ export async function validateSqliteFile(candidatePath: string): Promise<string 
   }
 
   try {
-    const candidate = await open({ filename: candidatePath, driver: sqlite3.Database });
+    // Lecture seule : sur une base laissée en mode WAL, une ouverture en
+    // écriture déclencherait une récupération et modifierait le fichier que
+    // l'on est justement en train de valider.
+    const candidate = await open({
+      filename: candidatePath,
+      driver: sqlite3.Database,
+      mode: sqlite3.OPEN_READONLY,
+    });
     try {
       const row = await candidate.get<{ integrity_check: string }>("PRAGMA integrity_check");
       if (row?.integrity_check !== "ok") {
@@ -62,6 +72,41 @@ export async function validateSqliteFile(candidatePath: string): Promise<string 
   }
 
   return null;
+}
+
+/**
+ * Supprime les copies de secours les plus anciennes, au-delà de `KEPT_ROLLBACKS`.
+ *
+ * Chaque restauration recopie intégralement la base : sans purge, chercher la
+ * bonne sauvegarde parmi plusieurs remplit le disque du Raspberry — celui-là
+ * même que le rapport hebdomadaire surveille.
+ * @param dbPath Chemin de la base de production.
+ * @returns Le nombre de copies supprimées.
+ */
+export async function purgeOldRollbacks(dbPath: string): Promise<number> {
+  const dir = path.dirname(dbPath);
+  const prefix = `${path.basename(dbPath)}.avant-`;
+
+  try {
+    const entries = (await fs.promises.readdir(dir)).filter((name) => name.startsWith(prefix));
+    // L'horodatage ISO du suffixe est trié lexicographiquement comme chronologiquement.
+    const obsolete = entries.sort().slice(0, Math.max(0, entries.length - KEPT_ROLLBACKS));
+
+    let removed = 0;
+    for (const name of obsolete) {
+      // Une purge partielle vaut mieux qu'un échec : la restauration, elle, a réussi.
+      const deleted = await fs.promises
+        .unlink(path.join(dir, name))
+        .then(() => true)
+        .catch(() => false);
+      if (deleted) {
+        removed++;
+      }
+    }
+    return removed;
+  } catch {
+    return 0;
+  }
 }
 
 /**
@@ -85,6 +130,11 @@ export async function restoreDatabase(
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const rollbackPath = path.join(path.dirname(dbPath), `${path.basename(dbPath)}.avant-${stamp}`);
 
+  // `copyFile` n'est pas atomique : une interruption en cours d'écriture laisse
+  // une base tronquée. Le drapeau est donc posé avant la copie, pas après —
+  // sinon le seul cas qu'il sert à rattraper serait justement exclu.
+  let mayBeDamaged = false;
+
   try {
     // Le snapshot part avant toute fermeture : `VACUUM INTO` a besoin d'une
     // connexion vivante, et c'est le seul moyen d'obtenir une copie cohérente.
@@ -93,9 +143,11 @@ export async function restoreDatabase(
       await bdd.backupTo(rollbackPath);
     }
 
-    // SQLite garde le fichier ouvert : sans fermeture, la copie serait écrasée
-    // sous les pieds d'une connexion encore active.
-    resetBddInstance();
+    // SQLite finalise ses requêtes et checkpointe le WAL en arrière-plan :
+    // écraser le fichier sans attendre la fermeture laisserait l'ancienne
+    // connexion flusher ses pages par-dessus la base restaurée.
+    await resetBddInstance();
+    mayBeDamaged = true;
     await fs.promises.copyFile(candidatePath, dbPath);
 
     // Les journaux de l'ancienne base décriraient des pages qui n'existent plus.
@@ -109,20 +161,39 @@ export async function restoreDatabase(
     // base inutilisable est détectée ici plutôt qu'à la première commande.
     await getBddInstance();
 
+    const purged = await purgeOldRollbacks(dbPath);
+    const purgedLine = purged > 0 ? ` ${purged} copie(s) plus ancienne(s) supprimée(s).` : "";
+
     return {
       success: true,
-      message: "Base restaurée. L'ancienne version est conservée à côté du fichier.",
+      message: `Base restaurée. L'ancienne version est conservée à côté du fichier.${purgedLine}`,
       rollbackPath,
     };
   } catch (error) {
-    // La base courante peut être à moitié écrasée : on rouvre pour que le bot
-    // continue de répondre, et on laisse le fichier de secours au propriétaire.
-    resetBddInstance();
+    await resetBddInstance().catch(() => {});
+
+    // Une copie interrompue laisse une base tronquée : sans remise en état, le
+    // bot repartirait dessus. La copie de secours n'est reposée que si l'on a
+    // effectivement écrasé le fichier et qu'elle est elle-même exploitable —
+    // un `VACUUM INTO` interrompu produirait sinon une seconde base corrompue.
+    const recovered =
+      mayBeDamaged && (await validateSqliteFile(rollbackPath)) === null
+        ? await fs.promises
+            .copyFile(rollbackPath, dbPath)
+            .then(() => true)
+            .catch(() => false)
+        : false;
+
+    // On rouvre dans tous les cas : le bot doit continuer de répondre.
     await getBddInstance().catch(() => {});
+
+    const state = recovered
+      ? " La base précédente a été remise en place."
+      : " Vérifie l'état de la base avant de relancer le bot.";
 
     return {
       success: false,
-      message: `Restauration échouée : ${(error as Error).message}`,
+      message: `Restauration échouée : ${(error as Error).message}.${state}`,
       rollbackPath: fs.existsSync(rollbackPath) ? rollbackPath : undefined,
     };
   }

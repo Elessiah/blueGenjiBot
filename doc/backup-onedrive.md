@@ -135,9 +135,16 @@ age --decrypt -i ~/.bluegenji-backup.key bluegenji-2026-09-08.tar.age | tar -x
 
 La commande n'accepte que le propriétaire déclaré dans `OWNER_ID` — aucun rôle
 Discord ne l'ouvre à quelqu'un d'autre. Elle refuse un fichier encore chiffré ou
-une base corrompue (`PRAGMA integrity_check`), et recopie la base courante en
-`database.sqlite.avant-<date>` avant de l'écraser : une restauration ratée reste
-réversible. La connexion SQLite est fermée puis rouverte, sans redémarrage du bot.
+une base corrompue (`PRAGMA integrity_check`, en lecture seule), et recopie la
+base courante en `database.sqlite.avant-<date>` avant de l'écraser. La connexion
+SQLite est fermée — et la fermeture attendue, sinon le checkpoint du WAL écrirait
+par-dessus la base restaurée — puis rouverte, sans redémarrage du bot.
+
+Si la copie échoue en cours d'écriture, la base précédente est automatiquement
+remise en place, à condition qu'elle passe elle-même la vérification d'intégrité.
+Les trois copies de secours les plus récentes sont conservées, les plus anciennes
+sont purgées : ce sont des copies intégrales de la base, sur la machine dont on
+surveille justement l'espace disque.
 
 **Base du site** — restauration manuelle, le bot n'y touche pas :
 

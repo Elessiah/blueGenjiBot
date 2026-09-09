@@ -55,7 +55,9 @@ JSON
 }
 
 fail() {
-  STATUS_ERROR="$(printf '%s' "$1" | tr -d '"' | tr '\n' ' ')"
+  # Antislash et guillemet casseraient le JSON, et un JSON invalide ferait
+  # afficher au bot « aucune sauvegarde » au lieu de la vraie cause de l'échec.
+  STATUS_ERROR="$(printf '%s' "$1" | tr -d '\\"' | tr '\n' ' ')"
   write_status
   echo "[backup] ÉCHEC : $1" >&2
   exit 1
