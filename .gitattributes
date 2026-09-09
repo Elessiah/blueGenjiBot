@@ -1,0 +1,2 @@
+# Les scripts sont exécutés sur le Raspberry : un CRLF casse le shebang.
+*.sh text eol=lf

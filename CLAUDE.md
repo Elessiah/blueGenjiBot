@@ -77,6 +77,7 @@ GUILD_ID=                       # serveur principal pour register cmds
 INTERNAL_API_TOKEN=             # doit matcher BOT_INTERNAL_TOKEN côté appbluegenji
 INTERNAL_API_PORT=4400          # défaut
 LOG_CHANNEL_ID=                 # channel Discord pour sendLog
+BACKUP_STATUS_PATH=             # statut de la sauvegarde OneDrive (défaut /var/lib/bluegenji/backup-status.json)
 ```
 
 ## Conventions

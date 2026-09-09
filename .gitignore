@@ -21,3 +21,6 @@ database.sqlite
 # Logs
 *.log
 npm-debug.log*
+
+# Copies de secours ecrites par /restore-backup
+*.avant-*

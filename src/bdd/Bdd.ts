@@ -45,6 +45,25 @@ function closeBddInstance(): boolean {
   return true;
 }
 
+/**
+ * Ferme la connexion courante et oublie le singleton.
+ *
+ * `closeBddInstance()` laisse la référence en place et n'attend pas la
+ * fermeture : le prochain `getBddInstance()` rendrait une instance fermée, et
+ * le fichier resterait écrit après le retour. La restauration d'une sauvegarde
+ * a besoin des deux garanties, d'où ce variant.
+ * @returns `true` si une instance était ouverte, sinon `false`.
+ */
+async function resetBddInstance(): Promise<boolean> {
+  if (!bdd) {
+    return false;
+  }
+  const previous = bdd;
+  bdd = undefined as unknown as Bdd;
+  await previous.close();
+  return true;
+}
+
 class Bdd {
     private name: string;
     private Database: Database | null;
@@ -70,10 +89,24 @@ class Bdd {
   }
 
   /**
-   * Ferme la connexion SQLite associée à cette instance.
+   * Ferme la connexion SQLite associée à cette instance, sans attendre.
    */
   delete(): void {
-    void this.Database?.close();
+    void this.close();
+  }
+
+  /**
+   * Ferme la connexion SQLite et attend que le fichier soit relâché.
+   *
+   * `delete()` jette la promesse de fermeture : SQLite finalise ses requêtes et
+   * checkpointe le WAL en arrière-plan, si bien que le fichier reste écrit
+   * quelques instants après le retour. Toute opération qui remplace le fichier
+   * — la restauration d'une sauvegarde — doit attendre ici.
+   */
+  async close(): Promise<void> {
+    const database = this.Database;
+    this.Database = null;
+    await database?.close();
   }
 
   /**
@@ -847,6 +880,6 @@ class Bdd {
   }
 }
 
-export { Bdd, getBddInstance, closeBddInstance };
+export { Bdd, getBddInstance, closeBddInstance, resetBddInstance };
 
 
