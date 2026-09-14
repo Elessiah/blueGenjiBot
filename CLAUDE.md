@@ -110,7 +110,7 @@ Deux dossiers aux noms voisins, et ils ne servent pas le même public :
 - **`doc/` + `help.md` + `helpfr.md` — Markdown, lus à chaud par le site.** L'app sœur ne les copie pas : `lib/server/bot-docs.ts` les lit sur disque à chaque revalidation et les publie sur `/bot/docs`, d'après le registre `BOT_DOC_SECTIONS`. Une correction y est donc en ligne sans rebuild ni déploiement — une erreur aussi.
 - **`docs/` — HTML JSDoc, généré puis commité.** C'est la référence des modules, produite par `npm run docs` (build, puis `jsdoc -c jsdoc.json`). La source est **`dist/`** et non `src/` : JSDoc ne lit pas le TypeScript, d'où le build préalable. `dist/tests` en est exclu — un runner de tests n'est pas une API.
 
-**Règle : une PR qui touche `src/` régénère `docs/`.** Ajout, renommage ou suppression d'un module, réécriture d'un bloc JSDoc : la référence part avec le code, dans la même PR. Faute de cette règle elle avait dérivé de **trente modules** — `docs/` n'avait plus été regénéré depuis son commit d'origine, et publiait encore la page d'une commande retirée.
+**Règle : une PR qui touche `src/` régénère `docs/`.** Ajout, renommage ou suppression d'un module, réécriture d'un bloc JSDoc : la référence part avec le code, dans la même PR. Faute de cette règle elle avait dérivé de **vingt-deux modules** — `docs/` n'avait plus été regénéré depuis son commit d'origine, et publiait encore la page d'une commande retirée.
 
 Quatre choses à savoir avant de lancer la génération :
 
