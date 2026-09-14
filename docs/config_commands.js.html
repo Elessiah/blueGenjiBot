@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: config/commands.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: config/commands.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>import { ApplicationCommandOptionType } from "discord.js";
+import { ban_id } from "../commandsHandlers/ban/ban_id.js";
+import { ban_username } from "../commandsHandlers/ban/ban_username.js";
+import { banlist } from "../commandsHandlers/ban/banlist.js";
+import { unban } from "../commandsHandlers/ban/unban.js";
+import { printHelp } from "../commandsHandlers/printHelp.js";
+import { displayChannelFilter } from "../commandsHandlers/services/displayChannelFilter.js";
+import { displayChannelRankFilter } from "../commandsHandlers/services/displayChannelRankFilter.js";
+import { listPartner } from "../commandsHandlers/services/listPartner.js";
+import { newChannelPartner } from "../commandsHandlers/services/newChannelPartner.js";
+import { resetChannel } from "../commandsHandlers/services/resetChannel.js";
+import { resetServer } from "../commandsHandlers/services/resetServer.js";
+import { setChannelFilter } from "../commandsHandlers/services/setChannelFilter.js";
+import { setChannelRankFilter } from "../commandsHandlers/services/setChannelRankFilter.js";
+import { areaFilter } from "../utils/globals.js";
+import { rankChoices } from "./rankChoices.js";
+import { servicesChoices } from "./servicesChoices.js";
+import { setBotAdminRole } from "../commandsHandlers/admin/setBotAdminRole.js";
+import { showBotAdminRole } from "../commandsHandlers/admin/showBotAdminRole.js";
+import { setServerInvite } from "../commandsHandlers/admin/setServerInvite.js";
+import { showServerInvite } from "../commandsHandlers/admin/showServerInvite.js";
+import { resetServerInvite } from "../commandsHandlers/admin/resetServerInvite.js";
+import { setRefereeRole } from "../commandsHandlers/admin/setRefereeRole.js";
+import { showRefereeRole } from "../commandsHandlers/admin/showRefereeRole.js";
+import { resetRefereeRole } from "../commandsHandlers/admin/resetRefereeRole.js";
+import { ping } from "../commandsHandlers/ping.js";
+import { scrim } from "../commandsHandlers/scrim.js";
+import { recrute } from "../commandsHandlers/recrute.js";
+import { link } from "../commandsHandlers/link.js";
+import { statsPlayer } from "../commandsHandlers/statsPlayer.js";
+import { statsSite } from "../commandsHandlers/statsSite.js";
+import { relay } from "../commandsHandlers/admin/relay.js";
+import { configModule } from "../commandsHandlers/admin/configModule.js";
+import { restoreBackup } from "../commandsHandlers/admin/restoreBackup.js";
+/**
+ * Registre statique des commandes slash : handler, description et options de chacune.
+ *
+ * `updateCommands()` s'appuie dessus pour enregistrer les commandes aupres de
+ * Discord, et `interactionCreate` (`main.ts`) pour retrouver le handler d'une
+ * commande recue. Les commandes qui dependent d'un etat runtime (services
+ * partenaires ajoutes dynamiquement) sont completees a part par
+ * `fillBlueCommands()` plutot que declarees ici.
+ */
+const commands = {
+    "help": {
+        handler: printHelp,
+        parameters: {
+            description: "Send you in private the primary informations of the bot (EVERYONE)",
+            options: [
+                {
+                    name: "language",
+                    description: "The language you want to read",
+                    type: ApplicationCommandOptionType.String,
+                    required: true,
+                    choices: [
+                        {
+                            name: "English",
+                            value: "en"
+                        },
+                        {
+                            name: "Français",
+                            value: "fr"
+                        }
+                    ]
+                }
+            ]
+        }
+    },
+    "list-partner": {
+        handler: listPartner,
+        parameters: {
+            description: "List all the servers with the service activated (EVERYONE)",
+            options: [
+                {
+                    name: "service",
+                    description: "Service you want to list",
+                    type: ApplicationCommandOptionType.String,
+                    required: true,
+                    choices: servicesChoices
+                }
+            ]
+        }
+    },
+    "assign-channel": {
+        handler: newChannelPartner,
+        parameters: {
+            description: "Assign a channel for the service you want activate (SERVER ADMIN ONLY)",
+            options: [
+                {
+                    name: "channel",
+                    description: "Channel you want to assign",
+                    type: ApplicationCommandOptionType.Channel,
+                    required: true
+                },
+                {
+                    name: "service",
+                    description: "Service you want to assign",
+                    type: ApplicationCommandOptionType.String, // 3 for string
+                    required: true,
+                    choices: servicesChoices
+                },
+                {
+                    name: "region-filter",
+                    description: "Region you want to receive",
+                    type: ApplicationCommandOptionType.Integer,
+                    required: true,
+                    choices: [
+                        {
+                            name: "All (No filter)",
+                            value: areaFilter.ALL
+                        },
+                        {
+                            name: "EU (Europe)",
+                            value: areaFilter.EU
+                        },
+                        {
+                            name: "NA (North America)",
+                            value: areaFilter.NA
+                        },
+                        {
+                            name: "LATAM (Latin America)",
+                            value: areaFilter.LATAM
+                        },
+                        {
+                            name: "ASIA",
+                            value: areaFilter.ASIA
+                        }
+                    ]
+                },
+                {
+                    name: "rank-min",
+                    description: "The lowest rank you want to receive",
+                    type: ApplicationCommandOptionType.String,
+                    required: false,
+                    choices: rankChoices
+                },
+                {
+                    name: "rank-max",
+                    description: "The biggest rank you want to receive",
+                    type: ApplicationCommandOptionType.String,
+                    required: false,
+                    choices: rankChoices
+                }
+            ]
+        }
+    },
+    "edit-channel-filter-region": {
+        handler: setChannelFilter,
+        parameters: {
+            description: "Edit the area that the channel receive (ADMIN ONLY)",
+            options: [
+                {
+                    name: "channel",
+                    description: "Channel you want to edit",
+                    type: ApplicationCommandOptionType.Channel, // 7 for channel
+                    required: true,
+                },
+                {
+                    name: "region",
+                    description: "Regional alert that you will now receive.",
+                    type: ApplicationCommandOptionType.Integer,
+                    required: true,
+                    choices: [
+                        {
+                            name: "All (No filter)",
+                            value: areaFilter.ALL
+                        },
+                        {
+                            name: "EU (Europe)",
+                            value: areaFilter.EU
+                        },
+                        {
+                            name: "NA (North America)",
+                            value: areaFilter.NA
+                        },
+                        {
+                            name: "LATAM (Latin America)",
+                            value: areaFilter.LATAM
+                        },
+                        {
+                            name: "ASIA",
+                            value: areaFilter.ASIA
+                        }
+                    ]
+                }
+            ]
+        }
+    },
+    "display-channel-filter-region": {
+        handler: displayChannelFilter,
+        parameters: {
+            description: "Display the channel region filter (EVERYONE)",
+            options: [
+                {
+                    name: "channel",
+                    description: "Channel you want to display filter",
+                    type: ApplicationCommandOptionType.Channel,
+                    required: true,
+                }
+            ]
+        }
+    },
+    "edit-channel-filter-rank": {
+        handler: setChannelRankFilter,
+        parameters: {
+            description: "Edit the rank filter of the channel",
+            options: [
+                {
+                    name: "channel",
+                    description: "Channel you want to edit",
+                    type: ApplicationCommandOptionType.Channel,
+                    required: true,
+                },
+                {
+                    name: "rank-min",
+                    description: "The lowest rank you want to receive",
+                    type: ApplicationCommandOptionType.String,
+                    required: true,
+                    choices: rankChoices
+                },
+                {
+                    name: "rank-max",
+                    description: "The biggest rank you want to receive",
+                    type: ApplicationCommandOptionType.String,
+                    required: true,
+                    choices: rankChoices
+                }
+            ]
+        }
+    },
+    "display-channel-filter-rank": {
+        handler: displayChannelRankFilter,
+        parameters: {
+            description: "Display the region rank filter (EVERYONE)",
+            options: [
+                {
+                    name: "channel",
+                    description: "Channel you want to display the filter",
+                    type: ApplicationCommandOptionType.Channel,
+                    required: true,
+                }
+            ]
+        }
+    },
+    "reset-channel": {
+        handler: resetChannel,
+        parameters: {
+            description: "Remove all the service of the channel (SERVER ADMIN ONLY)",
+            options: [
+                {
+                    name: "channel",
+                    description: "Channel you want to assign",
+                    type: ApplicationCommandOptionType.Channel,
+                    required: true
+                }
+            ]
+        }
+    },
+    "reset-all": {
+        handler: resetServer,
+        parameters: {
+            description: "Remove all the service of the server (SERVER ADMIN ONLY)",
+        }
+    },
+    "ban-user-of-this-server": {
+        handler: ban_id,
+        parameters: {
+            description: "Ban user from the bot services (ONLY SERVER 50+ members) (SERVER ADMIN ONLY)",
+            options: [
+                {
+                    name: "user",
+                    description: "User you want to ban",
+                    type: ApplicationCommandOptionType.User,
+                    required: true
+                },
+                {
+                    name: "reason",
+                    description: "Reason for the ban",
+                    type: ApplicationCommandOptionType.String,
+                    required: true
+                }
+            ]
+        }
+    },
+    "ban-user-of-another-server": {
+        handler: ban_username,
+        parameters: {
+            description: "Ban user from the bot services (ONLY SERVER 50+ members) (SERVER ADMIN ONLY)",
+            options: [
+                {
+                    name: "username",
+                    description: "Username of the user you want to ban",
+                    type: ApplicationCommandOptionType.String,
+                    required: true
+                },
+                {
+                    name: "reason",
+                    description: "Reason for the ban",
+                    type: ApplicationCommandOptionType.String,
+                    required: true
+                }
+            ]
+        }
+    },
+    "ban-list": {
+        handler: banlist,
+        parameters: {
+            description: "Display the list of banned members from the bot service (EVERYONE)",
+        }
+    },
+    "unban": {
+        handler: unban,
+        parameters: {
+            description: "Unban user from the bot service (ONLY SERVER 50+ members) (SERVER ADMIN ONLY)",
+            options: [
+                {
+                    name: "id_ban",
+                    description: "ID Ban you can find with the ban-list command",
+                    type: ApplicationCommandOptionType.String,
+                    required: true,
+                }
+            ]
+        }
+    },
+    "set-bot-admin": {
+        handler: setBotAdminRole,
+        parameters: {
+            description: "Sets the bot admin role",
+            options: [
+                {
+                    name: "role",
+                    description: "Role admin for the bot service",
+                    type: ApplicationCommandOptionType.Role,
+                    required: true,
+                }
+            ]
+        }
+    },
+    "show-bot-admin": {
+        handler: showBotAdminRole,
+        parameters: {
+            description: "Display the bot admin role",
+        }
+    },
+    "set-server-invite": {
+        handler: setServerInvite,
+        parameters: {
+            description: "Set a custom invite link used for this server (SERVER ADMIN ONLY)",
+            options: [
+                {
+                    name: "invite",
+                    description: "Discord invite link (ex: https://discord.gg/xxxxxx)",
+                    type: ApplicationCommandOptionType.String,
+                    required: true,
+                }
+            ]
+        }
+    },
+    "show-server-invite": {
+        handler: showServerInvite,
+        parameters: {
+            description: "Display the custom invite link of this server (EVERYONE)",
+        }
+    },
+    "reset-server-invite": {
+        handler: resetServerInvite,
+        parameters: {
+            description: "Remove the custom invite link of this server (SERVER ADMIN ONLY)",
+        }
+    },
+    "set-referee-role": {
+        handler: setRefereeRole,
+        parameters: {
+            description: "Set the role notified of site issue reports (SERVER ADMIN ONLY)",
+            options: [
+                {
+                    name: "role",
+                    description: "Role whose members receive the reports by DM",
+                    type: ApplicationCommandOptionType.Role,
+                    required: true,
+                }
+            ]
+        }
+    },
+    "show-referee-role": {
+        handler: showRefereeRole,
+        parameters: {
+            description: "Display the referee role of this server (EVERYONE)",
+        }
+    },
+    "reset-referee-role": {
+        handler: resetRefereeRole,
+        parameters: {
+            description: "Remove the referee role of this server (SERVER ADMIN ONLY)",
+        }
+    },
+    "ping": {
+        handler: ping,
+        parameters: {
+            description: "Verifie la latence du bot (TOUS)"
+        }
+    },
+    "scrim": {
+        handler: scrim,
+        parameters: {
+            description: "Propose une equipe pour un scrim (TOUS)",
+            options: [
+                {
+                    name: "jeu",
+                    description: "Jeu pour le scrim",
+                    type: ApplicationCommandOptionType.String,
+                    required: true,
+                    choices: [
+                        { name: "Marvel Rivals", value: "marvel_rivals" },
+                        { name: "Overwatch 2", value: "overwatch2" }
+                    ]
+                },
+                {
+                    name: "niveau",
+                    description: "Niveau (debutant, intermediaire, avance...)",
+                    type: ApplicationCommandOptionType.String,
+                    required: true
+                }
+            ]
+        }
+    },
+    "recrute": {
+        handler: recrute,
+        parameters: {
+            description: "Publie une recherche d'equipe ou staff (TOUS)",
+            options: [
+                {
+                    name: "role",
+                    description: "Role recherche",
+                    type: ApplicationCommandOptionType.String,
+                    required: true
+                }
+            ]
+        }
+    },
+    "link": {
+        handler: link,
+        parameters: {
+            description: "Lie ton compte Discord au site BlueGenji (TOUS)"
+        }
+    },
+    "stats-site": {
+        handler: statsSite,
+        parameters: {
+            description: "Affiche la frequentation du site BlueGenji (TOUS)"
+        }
+    },
+    "stats": {
+        handler: statsPlayer,
+        parameters: {
+            description: "Affiche les stats 30j d'un joueur (TOUS)",
+            options: [
+                {
+                    name: "joueur",
+                    description: "Joueur (optionnel, sinon vous-meme)",
+                    type: ApplicationCommandOptionType.User,
+                    required: false
+                }
+            ]
+        }
+    },
+    "relay": {
+        handler: relay,
+        parameters: {
+            description: "Configure ou retire un salon de relais (ADMIN UNIQUEMENT)",
+            options: [
+                {
+                    name: "channel",
+                    description: "Salon a configurer",
+                    type: ApplicationCommandOptionType.Channel,
+                    required: true
+                }
+            ]
+        }
+    },
+    "config": {
+        handler: configModule,
+        parameters: {
+            description: "Active/desactive un module sur ce serveur (ADMIN UNIQUEMENT)",
+            options: [
+                {
+                    name: "module",
+                    description: "Module a basculer",
+                    type: ApplicationCommandOptionType.String,
+                    required: true,
+                    choices: [
+                        { name: "Annonces", value: "annonces" },
+                        { name: "Scrims", value: "scrims" },
+                        { name: "Recrutement", value: "recrutement" },
+                        { name: "Notifications", value: "notifications" },
+                        { name: "Stats", value: "stats" }
+                    ]
+                }
+            ]
+        }
+    },
+    "restore-backup": {
+        handler: restoreBackup,
+        parameters: {
+            description: "Restaure la base du bot depuis une sauvegarde (PROPRIETAIRE UNIQUEMENT)",
+            options: [
+                {
+                    name: "fichier",
+                    description: "Fichier database.sqlite dechiffre a restaurer",
+                    type: ApplicationCommandOptionType.Attachment,
+                    required: true
+                },
+                {
+                    name: "confirmer",
+                    description: "Confirme l'ecrasement de la base de production",
+                    type: ApplicationCommandOptionType.Boolean,
+                    required: true
+                }
+            ]
+        }
+    }
+};
+export { commands };
+//# sourceMappingURL=commands.js.map</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Classes</h3><ul><li><a href="Bdd.html">Bdd</a></li><li><a href="Tips.html">Tips</a></li></ul><h3>Global</h3><ul><li><a href="global.html#DEFAULT_DEDUPE_WINDOW_MS">DEFAULT_DEDUPE_WINDOW_MS</a></li><li><a href="global.html#DISCORD_ID_RE">DISCORD_ID_RE</a></li><li><a href="global.html#IGNORABLE_DISCORD_CODES">IGNORABLE_DISCORD_CODES</a></li><li><a href="global.html#KEPT_ROLLBACKS">KEPT_ROLLBACKS</a></li><li><a href="global.html#MAX_CAUSE_DEPTH">MAX_CAUSE_DEPTH</a></li><li><a href="global.html#MAX_MESSAGE_LENGTH">MAX_MESSAGE_LENGTH</a></li><li><a href="global.html#MAX_RECIPIENTS">MAX_RECIPIENTS</a></li><li><a href="global.html#MAX_REFEREE_DMS">MAX_REFEREE_DMS</a></li><li><a href="global.html#MAX_TRACKED_KEYS">MAX_TRACKED_KEYS</a></li><li><a href="global.html#SQLITE_MAGIC">SQLITE_MAGIC</a></li><li><a href="global.html#STALE_AFTER_MS">STALE_AFTER_MS</a></li><li><a href="global.html#TRANSIENT_NETWORK_CODES">TRANSIENT_NETWORK_CODES</a></li><li><a href="global.html#_deleteTempMsg">_deleteTempMsg</a></li><li><a href="global.html#_resetChannel">_resetChannel</a></li><li><a href="global.html#_resetProcessGuards">_resetProcessGuards</a></li><li><a href="global.html#_resetServer">_resetServer</a></li><li><a href="global.html#absDelta">absDelta</a></li><li><a href="global.html#adhesionPerimee">adhesionPerimee</a></li><li><a href="global.html#adhesionValide">adhesionValide</a></li><li><a href="global.html#alertReferees">alertReferees</a></li><li><a href="global.html#answerTmp">answerTmp</a></li><li><a href="global.html#areaFilter">areaFilter</a></li><li><a href="global.html#authorize">authorize</a></li><li><a href="global.html#ban">ban</a></li><li><a href="global.html#ban_id">ban_id</a></li><li><a href="global.html#ban_username">ban_username</a></li><li><a href="global.html#banlist">banlist</a></li><li><a href="global.html#broadcast">broadcast</a></li><li><a href="global.html#buildEmbedPage">buildEmbedPage</a></li><li><a href="global.html#buildServerChoices">buildServerChoices</a></li><li><a href="global.html#buildServiceMessage">buildServiceMessage</a></li><li><a href="global.html#capRefereeTargets">capRefereeTargets</a></li><li><a href="global.html#checkAdminRole">checkAdminRole</a></li><li><a href="global.html#checkBan">checkBan</a></li><li><a href="global.html#checkChannelMinPermissions">checkChannelMinPermissions</a></li><li><a href="global.html#checkCooldown">checkCooldown</a></li><li><a href="global.html#checkIntervalleAdhesion">checkIntervalleAdhesion</a></li><li><a href="global.html#checkMessageValidity">checkMessageValidity</a></li><li><a href="global.html#checkPermissions">checkPermissions</a></li><li><a href="global.html#checkTargets">checkTargets</a></li><li><a href="global.html#classifyError">classifyError</a></li><li><a href="global.html#client">client</a></li><li><a href="global.html#closeBddInstance">closeBddInstance</a></li><li><a href="global.html#commands">commands</a></li><li><a href="global.html#configModule">configModule</a></li><li><a href="global.html#contactAdminServer">contactAdminServer</a></li><li><a href="global.html#createErrorReporter">createErrorReporter</a></li><li><a href="global.html#dedupeRecipients">dedupeRecipients</a></li><li><a href="global.html#defineRankRange">defineRankRange</a></li><li><a href="global.html#delay">delay</a></li><li><a href="global.html#deleteDPMsgs">deleteDPMsgs</a></li><li><a href="global.html#deleteOldAttachment">deleteOldAttachment</a></li><li><a href="global.html#deleteSetupAdhesion">deleteSetupAdhesion</a></li><li><a href="global.html#deliverDirectMessages">deliverDirectMessages</a></li><li><a href="global.html#describeError">describeError</a></li><li><a href="global.html#deterministicColor">deterministicColor</a></li><li><a href="global.html#displayChannelFilter">displayChannelFilter</a></li><li><a href="global.html#displayChannelRankFilter">displayChannelRankFilter</a></li><li><a href="global.html#displaySetupAdhesion">displaySetupAdhesion</a></li><li><a href="global.html#downloadAttachment">downloadAttachment</a></li><li><a href="global.html#errorCode">errorCode</a></li><li><a href="global.html#extractRanks">extractRanks</a></li><li><a href="global.html#fetchHomeGuild">fetchHomeGuild</a></li><li><a href="global.html#fetchTargets">fetchTargets</a></li><li><a href="global.html#fillBlueCommands">fillBlueCommands</a></li><li><a href="global.html#findGuildMemberByHandle">findGuildMemberByHandle</a></li><li><a href="global.html#findHomeMember">findHomeMember</a></li><li><a href="global.html#formatBackupStatus">formatBackupStatus</a></li><li><a href="global.html#formatBytes">formatBytes</a></li><li><a href="global.html#formatChannel">formatChannel</a></li><li><a href="global.html#formatDiskUsage">formatDiskUsage</a></li><li><a href="global.html#formatRawRanks">formatRawRanks</a></li><li><a href="global.html#formatRole">formatRole</a></li><li><a href="global.html#formatSiteVisitStats">formatSiteVisitStats</a></li><li><a href="global.html#formatSnapshotAge">formatSnapshotAge</a></li><li><a href="global.html#formatUser">formatUser</a></li><li><a href="global.html#getAdhesion">getAdhesion</a></li><li><a href="global.html#getAdminRole">getAdminRole</a></li><li><a href="global.html#getBacklog">getBacklog</a></li><li><a href="global.html#getBddInstance">getBddInstance</a></li><li><a href="global.html#getCpuPercent">getCpuPercent</a></li><li><a href="global.html#getDiskUsage">getDiskUsage</a></li><li><a href="global.html#getInviteFromChannel">getInviteFromChannel</a></li><li><a href="global.html#getInviteFromMessage">getInviteFromMessage</a></li><li><a href="global.html#getReporter">getReporter</a></li><li><a href="global.html#getServicesAndID">getServicesAndID</a></li><li><a href="global.html#getSnapshotsBetween">getSnapshotsBetween</a></li><li><a href="global.html#getTargetRegions">getTargetRegions</a></li><li><a href="global.html#getTips">getTips</a></li><li><a href="global.html#installProcessGuards">installProcessGuards</a></li><li><a href="global.html#isBackupFresh">isBackupFresh</a></li><li><a href="global.html#isDiscordInvite">isDiscordInvite</a></li><li><a href="global.html#isIgnorableDiscordError">isIgnorableDiscordError</a></li><li><a href="global.html#isModuleEnabled">isModuleEnabled</a></li><li><a href="global.html#isTransientNetworkError">isTransientNetworkError</a></li><li><a href="global.html#isValidModule">isValidModule</a></li><li><a href="global.html#link">link</a></li><li><a href="global.html#listModules">listModules</a></li><li><a href="global.html#listPartner">listPartner</a></li><li><a href="global.html#loadAdhesionFiles">loadAdhesionFiles</a></li><li><a href="global.html#loadAdhesionPaths">loadAdhesionPaths</a></li><li><a href="global.html#manageDistribution">manageDistribution</a></li><li><a href="global.html#manageMsgExpiration">manageMsgExpiration</a></li><li><a href="global.html#manageOldFiles">manageOldFiles</a></li><li><a href="global.html#manageServiceSuccess">manageServiceSuccess</a></li><li><a href="global.html#newChannelPartner">newChannelPartner</a></li><li><a href="global.html#nextTips">nextTips</a></li><li><a href="global.html#normalizeInvite">normalizeInvite</a></li><li><a href="global.html#normalizeText">normalizeText</a></li><li><a href="global.html#parseDirectMessageRequest">parseDirectMessageRequest</a></li><li><a href="global.html#parseDiscordHandle">parseDiscordHandle</a></li><li><a href="global.html#parseRefereeAlert">parseRefereeAlert</a></li><li><a href="global.html#parseSiteVisitStats">parseSiteVisitStats</a></li><li><a href="global.html#pctDelta">pctDelta</a></li><li><a href="global.html#ping">ping</a></li><li><a href="global.html#printHelp">printHelp</a></li><li><a href="global.html#purgeOldRollbacks">purgeOldRollbacks</a></li><li><a href="global.html#rankChoices">rankChoices</a></li><li><a href="global.html#readBackupStatus">readBackupStatus</a></li><li><a href="global.html#readPackageInfo">readPackageInfo</a></li><li><a href="global.html#readSiteVisitStats">readSiteVisitStats</a></li><li><a href="global.html#recordDailySnapshot">recordDailySnapshot</a></li><li><a href="global.html#recordEvent">recordEvent</a></li><li><a href="global.html#recrute">recrute</a></li><li><a href="global.html#relay">relay</a></li><li><a href="global.html#remoteServerReset">remoteServerReset</a></li><li><a href="global.html#removeIntervalle">removeIntervalle</a></li><li><a href="global.html#reportError">reportError</a></li><li><a href="global.html#resetBddInstance">resetBddInstance</a></li><li><a href="global.html#resetChannel">resetChannel</a></li><li><a href="global.html#resetRefereeRole">resetRefereeRole</a></li><li><a href="global.html#resetServer">resetServer</a></li><li><a href="global.html#resetServerInvite">resetServerInvite</a></li><li><a href="global.html#resolveDiscordHandle">resolveDiscordHandle</a></li><li><a href="global.html#restoreBackup">restoreBackup</a></li><li><a href="global.html#restoreDatabase">restoreDatabase</a></li><li><a href="global.html#runSetupWizard">runSetupWizard</a></li><li><a href="global.html#safeChannel">safeChannel</a></li><li><a href="global.html#safeFollowUp">safeFollowUp</a></li><li><a href="global.html#safeMsgReply">safeMsgReply</a></li><li><a href="global.html#safeReact">safeReact</a></li><li><a href="global.html#safeReply">safeReply</a></li><li><a href="global.html#safeUser">safeUser</a></li><li><a href="global.html#saveAdhesionPaths">saveAdhesionPaths</a></li><li><a href="global.html#saveSiteVisitStats">saveSiteVisitStats</a></li><li><a href="global.html#scrim">scrim</a></li><li><a href="global.html#searchString">searchString</a></li><li><a href="global.html#sendAdhesion">sendAdhesion</a></li><li><a href="global.html#sendDatabaseBackup">sendDatabaseBackup</a></li><li><a href="global.html#sendInteractiveMsg">sendInteractiveMsg</a></li><li><a href="global.html#sendLog">sendLog</a></li><li><a href="global.html#sendServiceMessage">sendServiceMessage</a></li><li><a href="global.html#servicesChoices">servicesChoices</a></li><li><a href="global.html#servicesWithNoRanks">servicesWithNoRanks</a></li><li><a href="global.html#setBotAdminRole">setBotAdminRole</a></li><li><a href="global.html#setChannelFilter">setChannelFilter</a></li><li><a href="global.html#setChannelRankFilter">setChannelRankFilter</a></li><li><a href="global.html#setModuleEnabled">setModuleEnabled</a></li><li><a href="global.html#setRankFilter">setRankFilter</a></li><li><a href="global.html#setRefereeRole">setRefereeRole</a></li><li><a href="global.html#setServerInvite">setServerInvite</a></li><li><a href="global.html#setupIntervalAdhesion">setupIntervalAdhesion</a></li><li><a href="global.html#showBotAdminRole">showBotAdminRole</a></li><li><a href="global.html#showRefereeRole">showRefereeRole</a></li><li><a href="global.html#showServerInvite">showServerInvite</a></li><li><a href="global.html#splitForDiscord">splitForDiscord</a></li><li><a href="global.html#startInternalApi">startInternalApi</a></li><li><a href="global.html#statsPlayer">statsPlayer</a></li><li><a href="global.html#statsSite">statsSite</a></li><li><a href="global.html#subscribe">subscribe</a></li><li><a href="global.html#toSQLiteDate">toSQLiteDate</a></li><li><a href="global.html#truncateMessage">truncateMessage</a></li><li><a href="global.html#ts">ts</a></li><li><a href="global.html#unban">unban</a></li><li><a href="global.html#updateCommands">updateCommands</a></li><li><a href="global.html#validateSqliteFile">validateSqliteFile</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Mon Sep 14 2026 17:56:37 GMT+0200 (heure d’été d’Europe centrale)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>
