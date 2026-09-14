@@ -3,7 +3,6 @@ import {broadcast} from "../commandsHandlers/broadcast.js";
 import {buildServerChoices} from "../utils/buildServerChoices.js";
 import {contactAdminServer} from "../commandsHandlers/contactAdminServer.js";
 import {remoteServerReset} from "../commandsHandlers/services/remoteServerReset.js";
-import {restartBot} from "../commandsHandlers/restartBot.js";
 import {ApplicationCommandOptionType, Client} from "discord.js";
 import {displaySetupAdhesion} from "@/commandsHandlers/adhesions/displaySetupAdhesion.js";
 import {deleteSetupAdhesion} from "@/commandsHandlers/adhesions/deleteSetupAdhesion.js";
@@ -103,20 +102,6 @@ async function fillBlueCommands(client: Client) {
                         type: ApplicationCommandOptionType.String,
                         required: true,
                         choices: serverChoices,
-                    }
-                ]
-            }
-        },
-        "restart-bot": {
-            handler: restartBot,
-            parameters: {
-                description: "Restart bot",
-                options: [
-                    {
-                        name: "password",
-                        description: "Password, le grand amour d'Elessiah",
-                        type: ApplicationCommandOptionType.String,
-                        required: true,
                     }
                 ]
             }
