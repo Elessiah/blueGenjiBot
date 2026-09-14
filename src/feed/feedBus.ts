@@ -1,3 +1,14 @@
+/**
+ * Flux d'evenements du bot, persiste en base et diffuse en direct au dashboard web.
+ *
+ * Deux consommateurs bien differents : l'app web sœur affiche un fil
+ * d'activite en temps reel via `/internal/feed/stream` (SSE), qui a besoin de
+ * `subscribe()` pour recevoir les evenements au fil de l'eau, et ce meme
+ * endpoint a besoin de `getBacklog()` pour rattraper l'historique recent a la
+ * connexion. L'`EventEmitter` local ne fait que le direct — la persistance en
+ * base (`FeedEvent`) est ce qui rend le backlog possible.
+ */
+
 import { EventEmitter } from "events";
 import type { Client } from "discord.js";
 import { getBddInstance } from "@/bdd/Bdd.js";
@@ -16,6 +27,19 @@ export interface FeedEventRow {
 const emitter = new EventEmitter();
 emitter.setMaxListeners(50);
 
+/**
+ * Enregistre un evenement en base puis le diffuse aux abonnes en direct.
+ *
+ * L'echec est avale (journalise si `client` est fourni) plutot que remonte :
+ * un evenement de feed est un bonus d'observabilite, jamais une operation
+ * dont l'echec doit interrompre la commande ou la route qui l'a declenche.
+ *
+ * @param client Client Discord pour journaliser un echec d'ecriture ; `null` pour ne rien journaliser.
+ * @param type Categorie de l'evenement, utilisee par le dashboard pour le filtrage/l'icone.
+ * @param summary Texte court decrivant l'evenement.
+ * @param source Origine optionnelle (nom du serveur, etc.).
+ * @param target Cible optionnelle (ID utilisateur, etc.).
+ */
 export async function recordEvent(
   client: Client | null,
   type: FeedEventType,
@@ -47,6 +71,13 @@ export async function recordEvent(
   }
 }
 
+/**
+ * Recupere les derniers evenements, pour l'amorce ou la reconnexion d'un flux SSE.
+ *
+ * @param limit Nombre maximal d'evenements a renvoyer.
+ * @param sinceId Ne renvoie que les evenements posterieurs a cet ID (reconnexion via `Last-Event-ID`) ; sans lui, renvoie simplement les plus recents.
+ * @returns Les evenements dans l'ordre chronologique croissant.
+ */
 export async function getBacklog(
   limit: number = 13,
   sinceId?: number
@@ -65,6 +96,12 @@ export async function getBacklog(
   return rows.reverse();
 }
 
+/**
+ * S'abonne au flux d'evenements en direct.
+ *
+ * @param handler Rappele pour chaque evenement enregistre via `recordEvent`.
+ * @returns Fonction de desabonnement, a appeler quand le consommateur (ex. une connexion SSE) se ferme.
+ */
 export function subscribe(
   handler: (event: FeedEventRow) => void
 ): () => void {

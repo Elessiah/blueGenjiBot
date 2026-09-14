@@ -1,3 +1,11 @@
+/**
+ * Handler de `/set-bot-admin` : designe le role qui peut administrer le bot sur ce serveur.
+ *
+ * Insere ou met a jour selon qu'une ligne existe deja pour ce serveur, plutot
+ * qu'un simple upsert SQL : `Bdd` n'exposait pas cette primitive au moment de
+ * l'ecriture, d'ou le `get` prealable qui decide entre `set` et `update`.
+ */
+
 import {ChatInputCommandInteraction, Client, Role} from "discord.js";
 import {safeReply} from "@/safe/safeReply.js";
 import {checkPermissions} from "@/check/checkPermissions.js";
@@ -5,6 +13,10 @@ import {Bdd, getBddInstance} from "@/bdd/Bdd.js";
 import {status} from "@/types.js";
 import {sendLog} from "@/safe/sendLog.js";
 
+/**
+ * @param client Client Discord, utilise pour journaliser un echec d'ecriture en base.
+ * @param interaction Interaction `/set-bot-admin` (option `role` requise) ; doit venir d'un serveur ou l'auteur a les permissions requises par `checkPermissions`.
+ */
 async function setBotAdminRole(client: Client,
                                interaction: ChatInputCommandInteraction): Promise<void>  {
     if (!interaction.guild) {

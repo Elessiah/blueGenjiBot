@@ -1,9 +1,25 @@
+/**
+ * Handler de `/relay` : ajoute ou retire un salon texte de la liste des relais inter-serveurs.
+ *
+ * Bascule (toggle) plutot que deux commandes separees : le salon existe deja
+ * en base ou non, et c'est ce test qui decide de l'action — plus simple a
+ * utiliser qu'un choix explicite ajouter/retirer pour l'admin qui ne se
+ * souvient plus de l'etat courant. Retirer un salon supprime aussi ses
+ * services assignes (`ChannelPartnerService`) : un salon qui n'est plus un
+ * relais ne doit garder aucun service actif orphelin.
+ */
+
 import { PermissionFlagsBits, ChannelType } from "discord.js";
 import type { Client, ChatInputCommandInteraction, GuildMember } from "discord.js";
 import { safeReply } from "@/safe/safeReply.js";
 import { sendLog } from "@/safe/sendLog.js";
 import { getBddInstance } from "@/bdd/Bdd.js";
 
+/**
+ * @param client Client Discord, utilise pour journaliser le changement.
+ * @param interaction Interaction `/relay` (option `channel` requise, doit etre un salon texte).
+ * @param guildId Serveur cible ; `null` en DM, la commande refuse alors de s'executer.
+ */
 export async function relay(client: Client, interaction: ChatInputCommandInteraction, guildId: string | null): Promise<void> {
   try {
     if (!guildId) {

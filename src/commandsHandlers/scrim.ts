@@ -1,3 +1,11 @@
+/**
+ * Handler de `/scrim` : publie une recherche d'adversaire pour un match amical.
+ *
+ * Meme garde de module que `/recrute` : le module "scrims" doit etre actif
+ * sur le serveur, sinon la commande refuse d'ecrire plutot que de laisser
+ * s'accumuler des entrees qu'un admin a explicitement voulu desactiver.
+ */
+
 import type { Client, ChatInputCommandInteraction } from "discord.js";
 import { safeReply } from "@/safe/safeReply.js";
 import { sendLog } from "@/safe/sendLog.js";
@@ -5,6 +13,11 @@ import { getBddInstance } from "@/bdd/Bdd.js";
 import { recordEvent } from "@/feed/feedBus.js";
 import { isModuleEnabled } from "@/modules/moduleGuard.js";
 
+/**
+ * @param client Client Discord, utilise pour le feed d'evenements et les logs.
+ * @param interaction Interaction `/scrim` (options `jeu` et `niveau` requises).
+ * @param guildId Serveur d'origine ; `null` en DM, auquel cas le module n'est pas verifie.
+ */
 export async function scrim(client: Client, interaction: ChatInputCommandInteraction, guildId: string | null): Promise<void> {
   try {
     const jeu = interaction.options.getString("jeu", true);

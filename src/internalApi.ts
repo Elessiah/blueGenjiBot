@@ -1,4 +1,15 @@
-﻿import os from "node:os";
+﻿/**
+ * Serveur Express interne, consomme exclusivement par l'app web sœur `appbluegenji`.
+ *
+ * Monte sur `/internal` et proteg par un header `x-internal-token` (voir
+ * `authorize`) plutot que par un cookie ou une session : c'est un service a
+ * service, pas un endpoint navigateur. Chaque route repond en JSON et
+ * n'expose que ce que l'app a besoin d'afficher (dashboard, stats, flux
+ * d'evenements) ou de declencher (envoi de DM, alerte arbitre) — jamais
+ * d'acces direct a la base, toujours via `Bdd` et ses requetes parametrees.
+ */
+
+import os from "node:os";
 import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
@@ -16,6 +27,17 @@ import { parseDirectMessageRequest, parseRefereeAlert } from "@/notifications/no
 import { deliverDirectMessages, alertReferees } from "@/notifications/deliver.js";
 import { resolveDiscordHandle } from "@/notifications/resolveHandle.js";
 
+/**
+ * Verifie le header `x-internal-token` avant de laisser passer une requete `/internal/*`.
+ *
+ * Sans `INTERNAL_API_TOKEN` configure, la verification est desactivee plutot
+ * que de refuser tout le trafic : utile en dev local, mais a definir en
+ * production sous peine d'exposer l'API a quiconque atteint le port.
+ *
+ * @param req Requete Express entrante.
+ * @param res Reponse Express.
+ * @param next Passe la main a la route si le jeton correspond.
+ */
 function authorize(req: Request, res: Response, next: NextFunction): void {
   const expectedToken = process.env.INTERNAL_API_TOKEN;
   if (!expectedToken) {
@@ -34,6 +56,16 @@ function authorize(req: Request, res: Response, next: NextFunction): void {
 
 const STARTUP_TS = Date.now();
 
+/**
+ * Lit `package.json` pour donner a `/internal/status` une version et un hash de build.
+ *
+ * Le hash n'est pas un vrai hash de commit git (indisponible en prod, ou seul
+ * `dist/` est deploye) : c'est un hash du contenu + de la date de
+ * modification du fichier, suffisant pour distinguer deux deploiements sans
+ * dependre d'un outillage git absent en production.
+ *
+ * @returns Version, hash de build derive et date de derniere modification ; valeurs de repli si le fichier est illisible.
+ */
 function readPackageInfo(): { version: string; buildHash: string; buildDate: string } {
   try {
     const pkgPath = path.resolve(process.cwd(), "package.json");
@@ -50,6 +82,15 @@ function readPackageInfo(): { version: string; buildHash: string; buildDate: str
 
 const PKG_INFO = readPackageInfo();
 
+/**
+ * Estime la charge CPU du process sur une fenetre courte, pour `/internal/status`.
+ *
+ * `process.cpuUsage()` ne donne qu'un cumul depuis le demarrage ; il faut deux
+ * releves espaces pour en tirer un pourcentage instantane. 100 ms suffit a
+ * lisser le bruit sans ralentir la route de facon perceptible.
+ *
+ * @returns Pourcentage de CPU utilise (0-100), rapporte au nombre de coeurs disponibles.
+ */
 async function getCpuPercent(): Promise<number> {
   const start = process.cpuUsage();
   const startTime = Date.now();
@@ -61,6 +102,20 @@ async function getCpuPercent(): Promise<number> {
   return Math.min(100, Math.round((totalCpuMs / (elapsedMs * cpuCount)) * 100));
 }
 
+/**
+ * Construit, monte et demarre le serveur Express de l'API interne.
+ *
+ * Le port reste en ecoute sur `INTERNAL_API_HOST` (127.0.0.1 par defaut) et
+ * non sur toutes les interfaces : l'API interne n'a jamais vocation a etre
+ * jointe depuis l'exterieur, seulement par l'app web sœur sur la meme
+ * machine. Un `EADDRINUSE` est traite comme fatal (voir le listener
+ * `server.on("error", ...)` plus bas) car il signale un process precedent
+ * encore vivant sur le meme port — pm2 doit relancer proprement plutot que
+ * de laisser tourner un bot dont l'API interne est inaccessible.
+ *
+ * @param client Client Discord deja instancie, utilise par les routes pour lire l'etat du bot et envoyer des messages.
+ * @returns Le serveur HTTP Express demarre.
+ */
 export function startInternalApi(client: Client) {
   const app = express();
   app.use(express.json());

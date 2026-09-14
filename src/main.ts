@@ -27,6 +27,18 @@ import { startInternalApi } from "@/internalApi.js";
 import { recordDailySnapshot } from "@/snapshots/dailySnapshot.js";
 import { sendDatabaseBackup } from "@/backup/weeklyBackup.js";
 
+/**
+ * Point d'entree du bot : client Discord, listeners d'evenements et taches cron.
+ *
+ * Tout vit ici plutot que d'etre eclate car c'est le seul endroit qui a besoin
+ * de connaitre le client Discord ET l'API interne ET les crons a la fois — le
+ * separer forcerait a faire circuler le `Client` un peu partout pour un gain
+ * de lisibilite douteux. Chaque listener (`interactionCreate`, `messageCreate`,
+ * ...) et chaque callback `cron.schedule` a sa propre garde try/catch : ils
+ * s'executent hors de la pile applicative normale, et une exception non
+ * capturee y devient un `unhandledRejection` qui tue le process (voir
+ * `installProcessGuards`, `safe/processGuards.ts`).
+ */
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,

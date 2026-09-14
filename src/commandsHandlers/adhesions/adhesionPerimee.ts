@@ -1,6 +1,20 @@
+/**
+ * Handler de commande signalant a un membre que son adhesion a l'association est perimee.
+ *
+ * Envoie un message prive independant du parcours automatique
+ * `setupIntervalAdhesion` (voir `adhesion/checkIntervalleAdhesion.ts`) : c'est
+ * le rappel manuel qu'un admin declenche pour un cas particulier, avec un
+ * texte personnalisable, plutot que le message par defaut de l'echeance
+ * programmee.
+ */
+
 import { safeUser } from "@/safe/safeUser.js";
 import { Client } from "discord.js";
 
+/**
+ * @param client Client Discord, transmis a `safeUser` pour l'envoi du DM.
+ * @param interaction Interaction de la commande (typee `any` : options lues au vol, sans type Discord.js dedie).
+ */
 async function adhesionPerimee(client: Client,
                                 interaction: any): Promise<void> {
     // Récupère l'utilisateur et le message depuis les options de la commande

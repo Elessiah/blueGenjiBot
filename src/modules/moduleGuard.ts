@@ -1,3 +1,13 @@
+/**
+ * Activation/desactivation par serveur des modules fonctionnels du bot (annonces, scrims, ...).
+ *
+ * Chaque serveur decide independamment ce qu'il utilise : `/config` (cote
+ * commande) et `/internal/servers/:id/modules` (cote app web) passent tous
+ * deux par ce module pour lire et ecrire l'etat. Absence de ligne en base
+ * vaut "active" (voir `isModuleEnabled`) : un module nouvellement ajoute doit
+ * marcher partout sans migration retroactive de chaque serveur existant.
+ */
+
 import { getBddInstance } from "@/bdd/Bdd.js";
 
 export const MODULE_KEYS = [
@@ -10,10 +20,27 @@ export const MODULE_KEYS = [
 ] as const;
 export type ModuleKey = typeof MODULE_KEYS[number];
 
+/**
+ * Verifie qu'une chaine correspond a une cle de module connue.
+ * @param key Valeur a verifier (typiquement issue d'une option de commande ou d'un param d'URL).
+ * @returns `true` si `key` est une des clefs de `MODULE_KEYS` (garde de type associee).
+ */
 export function isValidModule(key: string): key is ModuleKey {
   return (MODULE_KEYS as readonly string[]).includes(key);
 }
 
+/**
+ * Indique si un module est actif pour un serveur donne.
+ *
+ * `oauth` est toujours actif (voir l'en-tete du module) ; une erreur de
+ * lecture repond aussi `true` par defaut — un module qui echoue a verifier son
+ * etat doit continuer a fonctionner plutot que de se couper silencieusement
+ * pour tous les serveurs a la moindre panne de base.
+ *
+ * @param guildId Serveur concerne.
+ * @param moduleKey Module a verifier.
+ * @returns `true` si le module est actif (ou si aucune preference n'a ete enregistree).
+ */
 export async function isModuleEnabled(
   guildId: string,
   moduleKey: ModuleKey
@@ -41,6 +68,16 @@ export async function isModuleEnabled(
   }
 }
 
+/**
+ * Active ou desactive un module pour un serveur.
+ *
+ * No-op pour `oauth`, qui ne peut pas etre desactive (voir l'en-tete du
+ * module).
+ *
+ * @param guildId Serveur concerne.
+ * @param moduleKey Module a basculer.
+ * @param enabled Nouvel etat souhaite.
+ */
 export async function setModuleEnabled(
   guildId: string,
   moduleKey: ModuleKey,
@@ -56,6 +93,11 @@ export async function setModuleEnabled(
   );
 }
 
+/**
+ * Liste l'etat de tous les modules connus pour un serveur, y compris ceux sans ligne en base.
+ * @param guildId Serveur concerne.
+ * @returns Un etat pour chaque `ModuleKey`, `oauth` toujours a `true` et les autres a `true` par defaut en l'absence de preference enregistree.
+ */
 export async function listModules(
   guildId: string
 ): Promise<Array<{ key: ModuleKey; enabled: boolean }>> {

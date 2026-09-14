@@ -1,9 +1,22 @@
+/**
+ * Handler de `/link` : genere un code de liaison entre le compte Discord et le compte du site BlueGenji.
+ *
+ * Le code passe par un DM plutot que par la reponse a la commande : c'est un
+ * secret court duree, et un DM garantit que seul l'utilisateur qui a tape la
+ * commande peut le lire, meme si la commande a ete lancee dans un salon
+ * public. Le site l'associe ensuite au compte via l'API interne.
+ */
+
 import type { Client, ChatInputCommandInteraction } from "discord.js";
 import { safeReply } from "@/safe/safeReply.js";
 import { sendLog } from "@/safe/sendLog.js";
 import { getBddInstance } from "@/bdd/Bdd.js";
 import { recordEvent } from "@/feed/feedBus.js";
 
+/**
+ * @param client Client Discord, utilise pour envoyer le DM et journaliser.
+ * @param interaction Interaction `/link` a laquelle repondre.
+ */
 export async function link(client: Client, interaction: ChatInputCommandInteraction): Promise<void> {
   try {
     const code = String(Math.floor(100000 + Math.random() * 900000));

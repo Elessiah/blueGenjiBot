@@ -1,3 +1,10 @@
+/**
+ * Choix de services partenaires proposes dans les options de commandes Discord (`/assign-channel`, `/list-partner`...).
+ *
+ * Les valeurs (`lfs`, `ta`, ...) sont les codes stockes en base dans
+ * `Service` : ne pas les modifier sans migrer les lignes existantes, sous
+ * peine de rompre les assignations de salons deja en place.
+ */
 const servicesChoices: {name: string, value: string}[] = [
     {
         name: "LookForScrim",

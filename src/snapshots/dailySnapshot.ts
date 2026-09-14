@@ -1,7 +1,26 @@
+/**
+ * Instantanes quotidiens des metriques cles (serveurs, salons, messages, relais), pour tracer une tendance.
+ *
+ * Les tables source (`ChannelPartner`, `OGMsg`, `DPMsg`) ne gardent que
+ * l'etat courant ou un historique de detail trop volumineux a interroger pour
+ * un dashboard : `DailySnapshot` fige une ligne par jour, que
+ * `/internal/kpis` compare a J-30 pour afficher des deltas sans recalculer de
+ * lourdes agregations a chaque requete.
+ */
+
 import type { Client } from "discord.js";
 import { getBddInstance } from "@/bdd/Bdd.js";
 import { sendLog } from "@/safe/sendLog.js";
 
+/**
+ * Calcule et enregistre l'instantane du jour, en ecrasant celui deja pris aujourd'hui.
+ *
+ * L'`ON CONFLICT` sur la date rend l'appel idempotent : le cron quotidien et
+ * un declenchement manuel (redemarrage du bot) peuvent tous deux l'appeler le
+ * meme jour sans dupliquer de ligne.
+ *
+ * @param client Client Discord, utilise pour compter les serveurs actifs et journaliser un echec.
+ */
 export async function recordDailySnapshot(client: Client): Promise<void> {
   try {
     const bdd = await getBddInstance();
@@ -62,6 +81,12 @@ export async function recordDailySnapshot(client: Client): Promise<void> {
   }
 }
 
+/**
+ * Recupere les instantanes dont la date tombe dans une fenetre relative a aujourd'hui.
+ * @param daysAgoStart Borne la plus ancienne, en jours avant aujourd'hui.
+ * @param daysAgoEnd Borne la plus recente, en jours avant aujourd'hui (0 pour aujourd'hui inclus).
+ * @returns Les instantanes de la fenetre, ordonnes du plus ancien au plus recent.
+ */
 export async function getSnapshotsBetween(
   daysAgoStart: number,
   daysAgoEnd: number
