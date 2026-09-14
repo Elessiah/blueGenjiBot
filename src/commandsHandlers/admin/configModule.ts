@@ -1,9 +1,26 @@
+/**
+ * Handler de `/config` : bascule un module (annonces, scrims, recrutement, notifications, stats) pour le serveur courant.
+ *
+ * Reserve aux administrateurs Discord du serveur, pas au role admin du bot :
+ * activer ou desactiver un module change ce que les membres peuvent faire
+ * (ecrire en base via `/scrim`, `/recrute`, ...), une decision qui reste au
+ * niveau de la permission Discord native plutot que d'une delegation du bot.
+ * Le module `oauth` (liaison compte) est expressement exclu : il reste
+ * toujours actif, la liaison de compte n'est pas une fonctionnalite qu'un
+ * serveur peut couper pour ses membres.
+ */
+
 import { PermissionFlagsBits } from "discord.js";
 import type { Client, ChatInputCommandInteraction, GuildMember } from "discord.js";
 import { safeReply } from "@/safe/safeReply.js";
 import { sendLog } from "@/safe/sendLog.js";
 import { isValidModule, isModuleEnabled, setModuleEnabled } from "@/modules/moduleGuard.js";
 
+/**
+ * @param client Client Discord, utilise pour journaliser le changement.
+ * @param interaction Interaction `/config` (option `module` requise).
+ * @param guildId Serveur cible ; `null` en DM, la commande refuse alors de s'executer.
+ */
 export async function configModule(client: Client, interaction: ChatInputCommandInteraction, guildId: string | null): Promise<void> {
   try {
     if (!guildId) {

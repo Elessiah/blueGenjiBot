@@ -1,9 +1,22 @@
+/**
+ * Handler de commande validant l'adhesion d'un membre a l'association.
+ *
+ * Fait deux choses dans le meme appel : previenir le membre par DM (avec
+ * eventuellement son attestation d'adhesion en piece jointe) et programmer le
+ * rappel de peremption via `setupIntervalAdhesion` — une adhesion validee sans
+ * date de peremption enregistree ne serait jamais relancee.
+ */
+
 import { Attachment, AttachmentBuilder, ChatInputCommandInteraction, Client, GuildMember, MessageFlags } from "discord.js";
 import { safeReply } from "@/safe/safeReply.js";
 import { safeUser } from "@/safe/safeUser.js";
 import { setupIntervalAdhesion } from "@/adhesion/setupIntervalAdhesion.js";
 import { checkPermissions } from "@/check/checkPermissions.js";
 
+/**
+ * @param client Client Discord.
+ * @param interaction Interaction de la commande : options `user`, `date-peremption` (format `jj/mm/aaaa`), `adhesion` (piece jointe optionnelle), `message-valide` et `message-perimee` (textes optionnels).
+ */
 async function adhesionValide(client: Client, interaction: ChatInputCommandInteraction): Promise<void> {
     const user: GuildMember | null = interaction.options.getMember("user") as GuildMember | null;
     if (!(await checkPermissions(interaction)))

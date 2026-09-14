@@ -1,4 +1,12 @@
-﻿const rankChoices = [
+﻿/**
+ * Choix de rangs proposes dans les options de commandes Discord (filtres de salon, adhesion...).
+ *
+ * Liste figee en dur plutot que derivee de `utils/globals.ts` (`ranks`,
+ * `ranksMatch`) : Discord exige des paires `name`/`value` litterales pour ses
+ * choix de commande, un format different de celui utilise pour matcher un
+ * rang tape librement dans un message.
+ */
+const rankChoices = [
     {
         name: "Bronze",
         value: "bronze"

@@ -1,8 +1,20 @@
+/**
+ * Handler de `/stats` : recapitule l'activite 30 jours d'un joueur (soi-meme par defaut).
+ *
+ * Compte messages partenaires, propositions de scrim et recherches publiees
+ * — les trois signaux d'activite que le bot suit deja pour ses propres
+ * besoins de moderation, redonnes ici au joueur pour transparence.
+ */
+
 import type { Client, ChatInputCommandInteraction } from "discord.js";
 import { safeReply } from "@/safe/safeReply.js";
 import { sendLog } from "@/safe/sendLog.js";
 import { getBddInstance } from "@/bdd/Bdd.js";
 
+/**
+ * @param client Client Discord.
+ * @param interaction Interaction `/stats` ; l'option `joueur` est optionnelle, l'auteur de la commande sert de cible par defaut.
+ */
 export async function statsPlayer(client: Client, interaction: ChatInputCommandInteraction): Promise<void> {
   try {
     const targetUser = interaction.options.getUser("joueur", false) ?? interaction.user;

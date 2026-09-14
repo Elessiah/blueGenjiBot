@@ -1,3 +1,12 @@
+/**
+ * Constantes partagees entre commandes et filtres : regions, rangs et leurs alias tolerants.
+ *
+ * `ranksMatch` existe a part de `ranks` car un rang tape librement (par un
+ * humain, dans un message ou une commande texte libre) arrive sous des
+ * graphies variees ("Diamant", "diam", "d") qu'il faut ramener au code canonique
+ * utilise en base ; `ranks` reste la liste de ces codes canoniques.
+ */
+
 const areaFilter = Object.freeze({
     ALL: 0,
     EU: 1,

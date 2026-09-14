@@ -1,6 +1,19 @@
+/**
+ * Message de bienvenue envoye au proprietaire d'un serveur qui vient d'ajouter le bot.
+ *
+ * Un DM au proprietaire plutot qu'un message dans un salon : le bot n'a pas
+ * encore de salon designe a l'arrivee sur un nouveau serveur, et le
+ * proprietaire est la seule personne garantie de recevoir l'information sans
+ * configuration prealable.
+ */
+
 import type { Client, Guild } from "discord.js";
 import { sendLog } from "@/safe/sendLog.js";
 
+/**
+ * @param guild Serveur qui vient d'accueillir le bot.
+ * @param client Client Discord, utilise pour journaliser un echec d'envoi.
+ */
 export async function runSetupWizard(guild: Guild, client: Client): Promise<void> {
   try {
     const owner = await guild.fetchOwner();
