@@ -52,7 +52,7 @@ src/
 │   ├── adhesions/          # parcours d'adhésion partenaire
 │   ├── admin/              # commandes admin
 │   ├── services/           # gestion des services (resetChannel, resetServer)
-│   ├── ban/, broadcast.ts, contactAdminServer.ts, printHelp.ts, restartBot.ts
+│   ├── ban/, broadcast.ts, contactAdminServer.ts, printHelp.ts
 ├── adhesion/               # logique d'adhésion (checkIntervalleAdhesion…)
 ├── check/                  # checks runtime (checkBan…)
 ├── messages/               # buildServiceMessage, manageDistribution
