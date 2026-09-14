@@ -1,14 +1,4 @@
-﻿/**
- * Registre statique des commandes slash : handler, description et options de chacune.
- *
- * `updateCommands()` s'appuie dessus pour enregistrer les commandes aupres de
- * Discord, et `interactionCreate` (`main.ts`) pour retrouver le handler d'une
- * commande recue. Les commandes qui dependent d'un etat runtime (services
- * partenaires ajoutes dynamiquement) sont completees a part par
- * `fillBlueCommands()` plutot que declarees ici.
- */
-
-import {ApplicationCommandOptionType} from "discord.js";
+﻿import {ApplicationCommandOptionType} from "discord.js";
 
 import {ban_id} from "../commandsHandlers/ban/ban_id.js";
 import {ban_username} from "../commandsHandlers/ban/ban_username.js";
@@ -45,6 +35,15 @@ import {relay} from "../commandsHandlers/admin/relay.js";
 import {configModule} from "../commandsHandlers/admin/configModule.js";
 import {restoreBackup} from "@/commandsHandlers/admin/restoreBackup.js";
 
+/**
+ * Registre statique des commandes slash : handler, description et options de chacune.
+ *
+ * `updateCommands()` s'appuie dessus pour enregistrer les commandes aupres de
+ * Discord, et `interactionCreate` (`main.ts`) pour retrouver le handler d'une
+ * commande recue. Les commandes qui dependent d'un etat runtime (services
+ * partenaires ajoutes dynamiquement) sont completees a part par
+ * `fillBlueCommands()` plutot que declarees ici.
+ */
 const commands = {
     "help": {
         handler: printHelp,
