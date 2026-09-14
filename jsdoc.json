@@ -1,6 +1,7 @@
 ﻿{
   "source": {
     "include": ["dist"],
+    "exclude": ["dist/tests"],
     "includePattern": "\\.js$",
     "excludePattern": "(^|\\\\)_",
     "recurse": true
