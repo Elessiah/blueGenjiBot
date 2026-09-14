@@ -26,10 +26,12 @@
     
     <section>
         <article>
-            <pre class="prettyprint source linenums"><code>import { open } from 'sqlite';
+            <pre class="prettyprint source linenums"><code>import fs from 'node:fs';
+import { open } from 'sqlite';
 // eslint-disable-next-line import/no-named-as-default
 import sqlite3 from 'sqlite3';
 import { ranks, services } from '../utils/globals.js';
+import { toSQLiteDate } from '../utils/toSQLiteDatetime.js';
 let bdd;
 /**
  * Retourne l'instance singleton de la base de données.
@@ -38,7 +40,7 @@ let bdd;
  */
 async function getBddInstance() {
     if (!bdd) {
-        bdd = await Bdd.create('./database.sqlite');
+        bdd = await Bdd.create(process.env.BDD_PATH || './database.sqlite');
     }
     return bdd;
 }
@@ -51,6 +53,24 @@ function closeBddInstance() {
         return false;
     }
     bdd.delete();
+    return true;
+}
+/**
+ * Ferme la connexion courante et oublie le singleton.
+ *
+ * `closeBddInstance()` laisse la référence en place et n'attend pas la
+ * fermeture : le prochain `getBddInstance()` rendrait une instance fermée, et
+ * le fichier resterait écrit après le retour. La restauration d'une sauvegarde
+ * a besoin des deux garanties, d'où ce variant.
+ * @returns `true` si une instance était ouverte, sinon `false`.
+ */
+async function resetBddInstance() {
+    if (!bdd) {
+        return false;
+    }
+    const previous = bdd;
+    bdd = undefined;
+    await previous.close();
     return true;
 }
 class Bdd {
@@ -75,10 +95,34 @@ class Bdd {
         return instance;
     }
     /**
-     * Ferme la connexion SQLite associée à cette instance.
+     * Ferme la connexion SQLite associée à cette instance, sans attendre.
      */
     delete() {
-        void this.Database?.close();
+        void this.close();
+    }
+    /**
+     * Ferme la connexion SQLite et attend que le fichier soit relâché.
+     *
+     * `delete()` jette la promesse de fermeture : SQLite finalise ses requêtes et
+     * checkpointe le WAL en arrière-plan, si bien que le fichier reste écrit
+     * quelques instants après le retour. Toute opération qui remplace le fichier
+     * — la restauration d'une sauvegarde — doit attendre ici.
+     */
+    async close() {
+        const database = this.Database;
+        this.Database = null;
+        await database?.close();
+    }
+    /**
+     * Écrit un snapshot cohérent de la base dans un fichier séparé via `VACUUM INTO`.
+     * Garantit une copie non corrompue même si des écritures sont en cours.
+     * @param destPath Chemin du fichier de sauvegarde (écrasé s'il existe déjà).
+     */
+    async backupTo(destPath) {
+        if (fs.existsSync(destPath)) {
+            fs.unlinkSync(destPath);
+        }
+        await this.Database?.exec(`VACUUM INTO '${destPath.replace(/'/g, "''")}'`);
     }
     /**
      * Ouvre la connexion SQLite puis initialise/met à jour le schéma.
@@ -296,18 +340,168 @@ class Bdd {
             await this.Database?.exec(`CREATE TABLE IF NOT EXISTS AdhesionInterval
             (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                message TEXT,
-                guild_id TEXT,
+                message TEXT NOT NULL ,
+                guild_id TEXT NOT NULL,
                 channel_id TEXT,
                 member_id TEXT,
                 role_id TEXT,
-                author_id TEXT,
+                author_id TEXT NOT NULL,
                 interval_days INTEGER NOT NULL,
+                iteration INTEGER NOT NULL DEFAULT -1,
                 nextTransmission DATETIME DEFAULT CURRENT_TIMESTAMP
            );`);
         }
         catch (e) {
             console.error("AdhesionInterval error: ", e.message);
+        }
+        try {
+            await this.Database?.exec(`CREATE TABLE IF NOT EXISTS RoleAdmin
+          (
+            guild_id TEXT NOT NULL PRIMARY KEY,
+            role_id TEXT NOT NULL
+          );
+        `);
+        }
+        catch (e) {
+            console.error("RoleAdmin error: ", e.message);
+        }
+        try {
+            await this.Database?.exec(`CREATE TABLE IF NOT EXISTS ServerModule
+          (
+            id_guild TEXT NOT NULL,
+            module_key TEXT NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            PRIMARY KEY (id_guild, module_key)
+          );
+        `);
+        }
+        catch (e) {
+            console.error("ServerModule error: ", e.message);
+        }
+        try {
+            await this.Database?.exec(`CREATE TABLE IF NOT EXISTS FeedEvent
+          (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts DATETIME DEFAULT CURRENT_TIMESTAMP,
+            type TEXT NOT NULL,
+            source TEXT,
+            target TEXT,
+            summary TEXT NOT NULL
+          );
+        `);
+        }
+        catch (e) {
+            console.error("FeedEvent error: ", e.message);
+        }
+        try {
+            await this.Database?.exec(`CREATE TABLE IF NOT EXISTS DailySnapshot
+          (
+            date TEXT PRIMARY KEY,
+            servers_count INTEGER NOT NULL DEFAULT 0,
+            channels_count INTEGER NOT NULL DEFAULT 0,
+            messages_count INTEGER NOT NULL DEFAULT 0,
+            relays_count INTEGER NOT NULL DEFAULT 0
+          );
+        `);
+        }
+        catch (e) {
+            console.error("DailySnapshot error: ", e.message);
+        }
+        try {
+            await this.Database?.exec(`CREATE TABLE IF NOT EXISTS Scrim
+          (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id_author TEXT NOT NULL,
+            game TEXT NOT NULL,
+            level TEXT NOT NULL,
+            id_guild TEXT,
+            date DATETIME DEFAULT CURRENT_TIMESTAMP
+          );
+        `);
+        }
+        catch (e) {
+            console.error("Scrim error: ", e.message);
+        }
+        try {
+            await this.Database?.exec(`CREATE TABLE IF NOT EXISTS Recrute
+          (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id_author TEXT NOT NULL,
+            role TEXT NOT NULL,
+            id_guild TEXT,
+            date DATETIME DEFAULT CURRENT_TIMESTAMP
+          );
+        `);
+        }
+        catch (e) {
+            console.error("Recrute error: ", e.message);
+        }
+        try {
+            await this.Database?.exec(`CREATE TABLE IF NOT EXISTS UserLink
+          (
+            id_user TEXT PRIMARY KEY,
+            code TEXT NOT NULL,
+            expires_at DATETIME NOT NULL,
+            linked_at DATETIME
+          );
+        `);
+        }
+        catch (e) {
+            console.error("UserLink error: ", e.message);
+        }
+        try {
+            await this.Database?.exec(`CREATE TABLE IF NOT EXISTS ServerInvite
+          (
+            id_guild TEXT PRIMARY KEY,
+            invite_url TEXT NOT NULL,
+            set_by TEXT,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          );
+        `);
+        }
+        catch (e) {
+            console.error("ServerInvite error: ", e.message);
+        }
+        try {
+            // Role arbitre d'un serveur : destinataires des signalements de probleme
+            // pousses par l'app web sur /internal/notify/referees. Une ligne par
+            // serveur, definie par la commande /set-referee-role.
+            await this.Database?.exec(`CREATE TABLE IF NOT EXISTS RefereeRole
+          (
+            id_guild TEXT PRIMARY KEY,
+            id_role TEXT NOT NULL,
+            set_by TEXT,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          );
+        `);
+        }
+        catch (e) {
+            console.error("RefereeRole error: ", e.message);
+        }
+        try {
+            // Instantane de frequentation du site, pousse par l'app web sur
+            // /internal/site-visits. Une seule ligne (id = 1) : le bot ne conserve
+            // que la derniere mesure, l'historique restant du cote du site.
+            await this.Database?.exec(`CREATE TABLE IF NOT EXISTS SiteVisit
+          (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            total_visits INTEGER NOT NULL DEFAULT 0,
+            unique_visitors INTEGER NOT NULL DEFAULT 0,
+            visits_24h INTEGER NOT NULL DEFAULT 0,
+            unique_24h INTEGER NOT NULL DEFAULT 0,
+            visits_7d INTEGER NOT NULL DEFAULT 0,
+            unique_7d INTEGER NOT NULL DEFAULT 0,
+            visits_30d INTEGER NOT NULL DEFAULT 0,
+            unique_30d INTEGER NOT NULL DEFAULT 0,
+            identified_visitors INTEGER NOT NULL DEFAULT 0,
+            first_visit_at DATETIME,
+            last_visit_at DATETIME,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          );
+        `);
+        }
+        catch (e) {
+            console.error("SiteVisit error: ", e.message);
         }
     }
     /**
@@ -323,10 +517,10 @@ class Bdd {
             return { success: false, message: "ElemName and value must be the same length." };
         }
         const names = "(" + elemName.join(", ") + ")";
-        const strValues = "(" + value.map(v => v === null ? "NULL" : "?").join(",") + ")";
+        const strValues = "(" + value.map(v => (v === null || v === undefined) ? "NULL" : "?").join(", ") + ")";
         const query = `INSERT INTO ${tableName} ${names} VALUES ${strValues}`;
         try {
-            await this.Database?.run(query, value.filter(v => v !== null));
+            await this.Database?.run(query, value.filter(v => v !== null &amp;&amp; v !== undefined));
         }
         catch (e) {
             return { success: false, message: `Error while adding "${tableName}": ${e.message}` };
@@ -517,18 +711,121 @@ class Bdd {
      * @returns `true` dès qu'au moins un rang demandé est lié au salon; sinon `false`.
      */
     async partnerHasRanks(channel_id, ranks) {
-        const ranksFilter = [];
-        ranks.forEach((rank) => { ranksFilter.push(` Ranks.name='${rank}' `); });
-        const queryFilter = ranksFilter.join(' OR ');
+        if (ranks.length === 0) {
+            return true;
+        }
         if (!this.Database) {
             return false;
         }
+        const placeholders = ranks.map(() => '?').join(', ');
         const request_result = await this.Database.all(`SELECT * FROM ChannelPartnerRank JOIN Ranks ON ChannelPartnerRank.id_rank = Ranks.id_rank
-      WHERE ChannelPartnerRank.id_channel=${channel_id} AND (${queryFilter});`);
-        return !(request_result.length === 0);
+       WHERE ChannelPartnerRank.id_channel = ? AND Ranks.name IN (${placeholders})`, [channel_id, ...ranks]);
+        return request_result.length > 0;
+    }
+    /**
+     * Récupère le lien d'invitation personnalisé associé à un serveur.
+     * @param guildId Identifiant du serveur.
+     * @returns URL d'invitation custom, ou `null` si aucune n'est configurée.
+     */
+    async getServerInvite(guildId) {
+        const rows = await this.get("ServerInvite", ["invite_url"], {}, { query: "id_guild = ?", values: [guildId] });
+        if (rows.length === 0) {
+            return null;
+        }
+        return rows[0].invite_url;
+    }
+    /**
+     * Enregistre ou met à jour le lien d'invitation personnalisé d'un serveur.
+     * @param guildId Identifiant du serveur.
+     * @param inviteUrl Lien d'invitation à stocker (déjà validé/normalisé par l'appelant).
+     * @param setBy Identifiant de l'utilisateur ayant défini le lien.
+     * @returns Objet `status` indiquant le succès de l'insertion/mise à jour.
+     */
+    async setServerInvite(guildId, inviteUrl, setBy) {
+        try {
+            const existing = await this.get("ServerInvite", ["id_guild"], {}, { query: "id_guild = ?", values: [guildId] });
+            if (existing.length === 0) {
+                return await this.set("ServerInvite", ["id_guild", "invite_url", "set_by", "updated_at"], [guildId, inviteUrl, setBy, toSQLiteDate(new Date())]);
+            }
+            await this.update("ServerInvite", { invite_url: inviteUrl, set_by: setBy, updated_at: toSQLiteDate(new Date()) }, { id_guild: guildId });
+            return { success: true, message: "Server invite updated." };
+        }
+        catch (e) {
+            return { success: false, message: `Error while setting server invite: ${e.message}` };
+        }
+    }
+    /**
+     * Supprime le lien d'invitation personnalisé d'un serveur (retour au lien auto-généré).
+     * @param guildId Identifiant du serveur.
+     * @returns `true` si un lien existait et a été supprimé; sinon `false`.
+     */
+    async removeServerInvite(guildId) {
+        const existing = await this.get("ServerInvite", ["id_guild"], {}, { query: "id_guild = ?", values: [guildId] });
+        if (existing.length === 0) {
+            return false;
+        }
+        await this.rm("ServerInvite", {}, { query: "id_guild = ?", values: [guildId] });
+        return true;
+    }
+    /**
+     * Récupère le rôle arbitre configuré pour un serveur.
+     * @param guildId Identifiant du serveur.
+     * @returns Identifiant du rôle, ou `null` si aucun n'est configuré.
+     */
+    async getRefereeRole(guildId) {
+        const rows = await this.get("RefereeRole", ["id_role"], {}, { query: "id_guild = ?", values: [guildId] });
+        if (rows.length === 0) {
+            return null;
+        }
+        return rows[0].id_role;
+    }
+    /**
+     * Enregistre ou met à jour le rôle arbitre d'un serveur.
+     * @param guildId Identifiant du serveur.
+     * @param roleId Identifiant du rôle Discord à alerter.
+     * @param setBy Identifiant de l'utilisateur ayant défini le rôle.
+     * @returns Objet `status` indiquant le succès de l'insertion/mise à jour.
+     */
+    async setRefereeRole(guildId, roleId, setBy) {
+        try {
+            const existing = await this.get("RefereeRole", ["id_guild"], {}, { query: "id_guild = ?", values: [guildId] });
+            if (existing.length === 0) {
+                return await this.set("RefereeRole", ["id_guild", "id_role", "set_by", "updated_at"], [guildId, roleId, setBy, toSQLiteDate(new Date())]);
+            }
+            await this.update("RefereeRole", { id_role: roleId, set_by: setBy, updated_at: toSQLiteDate(new Date()) }, { id_guild: guildId });
+            return { success: true, message: "Referee role updated." };
+        }
+        catch (e) {
+            return { success: false, message: `Error while setting referee role: ${e.message}` };
+        }
+    }
+    /**
+     * Supprime le rôle arbitre d'un serveur (plus aucun DM de signalement).
+     * @param guildId Identifiant du serveur.
+     * @returns `true` si un rôle était configuré et a été supprimé; sinon `false`.
+     */
+    async removeRefereeRole(guildId) {
+        const existing = await this.get("RefereeRole", ["id_guild"], {}, { query: "id_guild = ?", values: [guildId] });
+        if (existing.length === 0) {
+            return false;
+        }
+        await this.rm("RefereeRole", {}, { query: "id_guild = ?", values: [guildId] });
+        return true;
+    }
+    /**
+     * Exécute une requête SQL paramétrée brute (escape hatch pour analytics, GROUP BY, agrégats).
+     * @param query Requête SQL avec placeholders `?`.
+     * @param values Valeurs à binder (défaut: []).
+     * @returns Tableau typé des résultats.
+     */
+    async raw(query, values = []) {
+        if (!this.Database) {
+            return [];
+        }
+        return this.Database.all(query, values);
     }
 }
-export { Bdd, getBddInstance, closeBddInstance };
+export { Bdd, getBddInstance, closeBddInstance, resetBddInstance };
 //# sourceMappingURL=Bdd.js.map</code></pre>
         </article>
     </section>
@@ -539,13 +836,13 @@ export { Bdd, getBddInstance, closeBddInstance };
 </div>
 
 <nav>
-    <h2><a href="index.html">Home</a></h2><h3>Classes</h3><ul><li><a href="Bdd.html">Bdd</a></li><li><a href="Tips.html">Tips</a></li></ul><h3>Global</h3><ul><li><a href="global.html#_deleteTempMsg">_deleteTempMsg</a></li><li><a href="global.html#_resetChannel">_resetChannel</a></li><li><a href="global.html#_resetServer">_resetServer</a></li><li><a href="global.html#answerTmp">answerTmp</a></li><li><a href="global.html#ban">ban</a></li><li><a href="global.html#ban_id">ban_id</a></li><li><a href="global.html#ban_username">ban_username</a></li><li><a href="global.html#banlist">banlist</a></li><li><a href="global.html#broadcast">broadcast</a></li><li><a href="global.html#buildEmbedPage">buildEmbedPage</a></li><li><a href="global.html#buildServerChoices">buildServerChoices</a></li><li><a href="global.html#buildServiceMessage">buildServiceMessage</a></li><li><a href="global.html#checkBan">checkBan</a></li><li><a href="global.html#checkChannelMinPermissions">checkChannelMinPermissions</a></li><li><a href="global.html#checkCooldown">checkCooldown</a></li><li><a href="global.html#checkIntervalleAdhesion">checkIntervalleAdhesion</a></li><li><a href="global.html#checkMessageValidity">checkMessageValidity</a></li><li><a href="global.html#checkPermissions">checkPermissions</a></li><li><a href="global.html#checkTargets">checkTargets</a></li><li><a href="global.html#closeBddInstance">closeBddInstance</a></li><li><a href="global.html#contactAdminServer">contactAdminServer</a></li><li><a href="global.html#defineRankRange">defineRankRange</a></li><li><a href="global.html#delay">delay</a></li><li><a href="global.html#deleteDPMsgs">deleteDPMsgs</a></li><li><a href="global.html#deleteOldAttachment">deleteOldAttachment</a></li><li><a href="global.html#deleteSetupAdhesion">deleteSetupAdhesion</a></li><li><a href="global.html#displayChannelFilter">displayChannelFilter</a></li><li><a href="global.html#displayChannelRankFilter">displayChannelRankFilter</a></li><li><a href="global.html#displaySetupAdhesion">displaySetupAdhesion</a></li><li><a href="global.html#downloadAttachment">downloadAttachment</a></li><li><a href="global.html#extractRanks">extractRanks</a></li><li><a href="global.html#fetchTargets">fetchTargets</a></li><li><a href="global.html#fillBlueCommands">fillBlueCommands</a></li><li><a href="global.html#formatChannel">formatChannel</a></li><li><a href="global.html#formatRawRanks">formatRawRanks</a></li><li><a href="global.html#formatRole">formatRole</a></li><li><a href="global.html#formatUser">formatUser</a></li><li><a href="global.html#getAdhesion">getAdhesion</a></li><li><a href="global.html#getBddInstance">getBddInstance</a></li><li><a href="global.html#getInviteFromChannel">getInviteFromChannel</a></li><li><a href="global.html#getInviteFromMessage">getInviteFromMessage</a></li><li><a href="global.html#getServicesAndID">getServicesAndID</a></li><li><a href="global.html#getTargetRegions">getTargetRegions</a></li><li><a href="global.html#getTips">getTips</a></li><li><a href="global.html#listPartner">listPartner</a></li><li><a href="global.html#loadAdhesionFiles">loadAdhesionFiles</a></li><li><a href="global.html#loadAdhesionPaths">loadAdhesionPaths</a></li><li><a href="global.html#manageDistribution">manageDistribution</a></li><li><a href="global.html#manageMsgExpiration">manageMsgExpiration</a></li><li><a href="global.html#manageOldFiles">manageOldFiles</a></li><li><a href="global.html#manageServiceSuccess">manageServiceSuccess</a></li><li><a href="global.html#newChannelPartner">newChannelPartner</a></li><li><a href="global.html#nextTips">nextTips</a></li><li><a href="global.html#normalizeText">normalizeText</a></li><li><a href="global.html#printHelp">printHelp</a></li><li><a href="global.html#remoteServerReset">remoteServerReset</a></li><li><a href="global.html#removeIntervalle">removeIntervalle</a></li><li><a href="global.html#resetChannel">resetChannel</a></li><li><a href="global.html#resetServer">resetServer</a></li><li><a href="global.html#restartBot">restartBot</a></li><li><a href="global.html#safeChannel">safeChannel</a></li><li><a href="global.html#safeFollowUp">safeFollowUp</a></li><li><a href="global.html#safeMsgReply">safeMsgReply</a></li><li><a href="global.html#safeReply">safeReply</a></li><li><a href="global.html#safeUser">safeUser</a></li><li><a href="global.html#saveAdhesionPaths">saveAdhesionPaths</a></li><li><a href="global.html#searchString">searchString</a></li><li><a href="global.html#sendAdhesion">sendAdhesion</a></li><li><a href="global.html#sendInteractiveMsg">sendInteractiveMsg</a></li><li><a href="global.html#sendLog">sendLog</a></li><li><a href="global.html#sendServiceMessage">sendServiceMessage</a></li><li><a href="global.html#servicesWithNoRanks">servicesWithNoRanks</a></li><li><a href="global.html#setChannelFilter">setChannelFilter</a></li><li><a href="global.html#setChannelRankFilter">setChannelRankFilter</a></li><li><a href="global.html#setRankFilter">setRankFilter</a></li><li><a href="global.html#strictRestart">strictRestart</a></li><li><a href="global.html#ts">ts</a></li><li><a href="global.html#unban">unban</a></li><li><a href="global.html#updateCommands">updateCommands</a></li><li><a href="global.html#updateRestart">updateRestart</a></li></ul>
+    <h2><a href="index.html">Home</a></h2><h3>Classes</h3><ul><li><a href="Bdd.html">Bdd</a></li><li><a href="Tips.html">Tips</a></li></ul><h3>Global</h3><ul><li><a href="global.html#DEFAULT_DEDUPE_WINDOW_MS">DEFAULT_DEDUPE_WINDOW_MS</a></li><li><a href="global.html#DISCORD_ID_RE">DISCORD_ID_RE</a></li><li><a href="global.html#IGNORABLE_DISCORD_CODES">IGNORABLE_DISCORD_CODES</a></li><li><a href="global.html#KEPT_ROLLBACKS">KEPT_ROLLBACKS</a></li><li><a href="global.html#MAX_CAUSE_DEPTH">MAX_CAUSE_DEPTH</a></li><li><a href="global.html#MAX_MESSAGE_LENGTH">MAX_MESSAGE_LENGTH</a></li><li><a href="global.html#MAX_RECIPIENTS">MAX_RECIPIENTS</a></li><li><a href="global.html#MAX_REFEREE_DMS">MAX_REFEREE_DMS</a></li><li><a href="global.html#MAX_TRACKED_KEYS">MAX_TRACKED_KEYS</a></li><li><a href="global.html#SQLITE_MAGIC">SQLITE_MAGIC</a></li><li><a href="global.html#STALE_AFTER_MS">STALE_AFTER_MS</a></li><li><a href="global.html#TRANSIENT_NETWORK_CODES">TRANSIENT_NETWORK_CODES</a></li><li><a href="global.html#_deleteTempMsg">_deleteTempMsg</a></li><li><a href="global.html#_resetChannel">_resetChannel</a></li><li><a href="global.html#_resetProcessGuards">_resetProcessGuards</a></li><li><a href="global.html#_resetServer">_resetServer</a></li><li><a href="global.html#absDelta">absDelta</a></li><li><a href="global.html#alertReferees">alertReferees</a></li><li><a href="global.html#answerTmp">answerTmp</a></li><li><a href="global.html#ban">ban</a></li><li><a href="global.html#ban_id">ban_id</a></li><li><a href="global.html#ban_username">ban_username</a></li><li><a href="global.html#banlist">banlist</a></li><li><a href="global.html#broadcast">broadcast</a></li><li><a href="global.html#buildEmbedPage">buildEmbedPage</a></li><li><a href="global.html#buildServerChoices">buildServerChoices</a></li><li><a href="global.html#buildServiceMessage">buildServiceMessage</a></li><li><a href="global.html#capRefereeTargets">capRefereeTargets</a></li><li><a href="global.html#checkBan">checkBan</a></li><li><a href="global.html#checkChannelMinPermissions">checkChannelMinPermissions</a></li><li><a href="global.html#checkCooldown">checkCooldown</a></li><li><a href="global.html#checkIntervalleAdhesion">checkIntervalleAdhesion</a></li><li><a href="global.html#checkMessageValidity">checkMessageValidity</a></li><li><a href="global.html#checkPermissions">checkPermissions</a></li><li><a href="global.html#checkTargets">checkTargets</a></li><li><a href="global.html#classifyError">classifyError</a></li><li><a href="global.html#closeBddInstance">closeBddInstance</a></li><li><a href="global.html#contactAdminServer">contactAdminServer</a></li><li><a href="global.html#createErrorReporter">createErrorReporter</a></li><li><a href="global.html#dedupeRecipients">dedupeRecipients</a></li><li><a href="global.html#defineRankRange">defineRankRange</a></li><li><a href="global.html#delay">delay</a></li><li><a href="global.html#deleteDPMsgs">deleteDPMsgs</a></li><li><a href="global.html#deleteOldAttachment">deleteOldAttachment</a></li><li><a href="global.html#deleteSetupAdhesion">deleteSetupAdhesion</a></li><li><a href="global.html#deliverDirectMessages">deliverDirectMessages</a></li><li><a href="global.html#describeError">describeError</a></li><li><a href="global.html#deterministicColor">deterministicColor</a></li><li><a href="global.html#displayChannelFilter">displayChannelFilter</a></li><li><a href="global.html#displayChannelRankFilter">displayChannelRankFilter</a></li><li><a href="global.html#displaySetupAdhesion">displaySetupAdhesion</a></li><li><a href="global.html#downloadAttachment">downloadAttachment</a></li><li><a href="global.html#errorCode">errorCode</a></li><li><a href="global.html#extractRanks">extractRanks</a></li><li><a href="global.html#fetchHomeGuild">fetchHomeGuild</a></li><li><a href="global.html#fetchTargets">fetchTargets</a></li><li><a href="global.html#fillBlueCommands">fillBlueCommands</a></li><li><a href="global.html#findGuildMemberByHandle">findGuildMemberByHandle</a></li><li><a href="global.html#findHomeMember">findHomeMember</a></li><li><a href="global.html#formatBackupStatus">formatBackupStatus</a></li><li><a href="global.html#formatBytes">formatBytes</a></li><li><a href="global.html#formatChannel">formatChannel</a></li><li><a href="global.html#formatDiskUsage">formatDiskUsage</a></li><li><a href="global.html#formatRawRanks">formatRawRanks</a></li><li><a href="global.html#formatRole">formatRole</a></li><li><a href="global.html#formatSiteVisitStats">formatSiteVisitStats</a></li><li><a href="global.html#formatSnapshotAge">formatSnapshotAge</a></li><li><a href="global.html#formatUser">formatUser</a></li><li><a href="global.html#getAdhesion">getAdhesion</a></li><li><a href="global.html#getBddInstance">getBddInstance</a></li><li><a href="global.html#getDiskUsage">getDiskUsage</a></li><li><a href="global.html#getInviteFromChannel">getInviteFromChannel</a></li><li><a href="global.html#getInviteFromMessage">getInviteFromMessage</a></li><li><a href="global.html#getReporter">getReporter</a></li><li><a href="global.html#getServicesAndID">getServicesAndID</a></li><li><a href="global.html#getTargetRegions">getTargetRegions</a></li><li><a href="global.html#getTips">getTips</a></li><li><a href="global.html#installProcessGuards">installProcessGuards</a></li><li><a href="global.html#isBackupFresh">isBackupFresh</a></li><li><a href="global.html#isDiscordInvite">isDiscordInvite</a></li><li><a href="global.html#isIgnorableDiscordError">isIgnorableDiscordError</a></li><li><a href="global.html#isTransientNetworkError">isTransientNetworkError</a></li><li><a href="global.html#listPartner">listPartner</a></li><li><a href="global.html#loadAdhesionFiles">loadAdhesionFiles</a></li><li><a href="global.html#loadAdhesionPaths">loadAdhesionPaths</a></li><li><a href="global.html#manageDistribution">manageDistribution</a></li><li><a href="global.html#manageMsgExpiration">manageMsgExpiration</a></li><li><a href="global.html#manageOldFiles">manageOldFiles</a></li><li><a href="global.html#manageServiceSuccess">manageServiceSuccess</a></li><li><a href="global.html#newChannelPartner">newChannelPartner</a></li><li><a href="global.html#nextTips">nextTips</a></li><li><a href="global.html#normalizeInvite">normalizeInvite</a></li><li><a href="global.html#normalizeText">normalizeText</a></li><li><a href="global.html#parseDirectMessageRequest">parseDirectMessageRequest</a></li><li><a href="global.html#parseDiscordHandle">parseDiscordHandle</a></li><li><a href="global.html#parseRefereeAlert">parseRefereeAlert</a></li><li><a href="global.html#parseSiteVisitStats">parseSiteVisitStats</a></li><li><a href="global.html#pctDelta">pctDelta</a></li><li><a href="global.html#printHelp">printHelp</a></li><li><a href="global.html#purgeOldRollbacks">purgeOldRollbacks</a></li><li><a href="global.html#readBackupStatus">readBackupStatus</a></li><li><a href="global.html#readSiteVisitStats">readSiteVisitStats</a></li><li><a href="global.html#remoteServerReset">remoteServerReset</a></li><li><a href="global.html#removeIntervalle">removeIntervalle</a></li><li><a href="global.html#reportError">reportError</a></li><li><a href="global.html#resetBddInstance">resetBddInstance</a></li><li><a href="global.html#resetChannel">resetChannel</a></li><li><a href="global.html#resetRefereeRole">resetRefereeRole</a></li><li><a href="global.html#resetServer">resetServer</a></li><li><a href="global.html#resetServerInvite">resetServerInvite</a></li><li><a href="global.html#resolveDiscordHandle">resolveDiscordHandle</a></li><li><a href="global.html#restoreBackup">restoreBackup</a></li><li><a href="global.html#restoreDatabase">restoreDatabase</a></li><li><a href="global.html#safeChannel">safeChannel</a></li><li><a href="global.html#safeFollowUp">safeFollowUp</a></li><li><a href="global.html#safeMsgReply">safeMsgReply</a></li><li><a href="global.html#safeReact">safeReact</a></li><li><a href="global.html#safeReply">safeReply</a></li><li><a href="global.html#safeUser">safeUser</a></li><li><a href="global.html#saveAdhesionPaths">saveAdhesionPaths</a></li><li><a href="global.html#saveSiteVisitStats">saveSiteVisitStats</a></li><li><a href="global.html#searchString">searchString</a></li><li><a href="global.html#sendAdhesion">sendAdhesion</a></li><li><a href="global.html#sendDatabaseBackup">sendDatabaseBackup</a></li><li><a href="global.html#sendInteractiveMsg">sendInteractiveMsg</a></li><li><a href="global.html#sendLog">sendLog</a></li><li><a href="global.html#sendServiceMessage">sendServiceMessage</a></li><li><a href="global.html#servicesWithNoRanks">servicesWithNoRanks</a></li><li><a href="global.html#setChannelFilter">setChannelFilter</a></li><li><a href="global.html#setChannelRankFilter">setChannelRankFilter</a></li><li><a href="global.html#setRankFilter">setRankFilter</a></li><li><a href="global.html#setRefereeRole">setRefereeRole</a></li><li><a href="global.html#setServerInvite">setServerInvite</a></li><li><a href="global.html#setupIntervalAdhesion">setupIntervalAdhesion</a></li><li><a href="global.html#showRefereeRole">showRefereeRole</a></li><li><a href="global.html#showServerInvite">showServerInvite</a></li><li><a href="global.html#splitForDiscord">splitForDiscord</a></li><li><a href="global.html#statsSite">statsSite</a></li><li><a href="global.html#truncateMessage">truncateMessage</a></li><li><a href="global.html#ts">ts</a></li><li><a href="global.html#unban">unban</a></li><li><a href="global.html#updateCommands">updateCommands</a></li><li><a href="global.html#validateSqliteFile">validateSqliteFile</a></li></ul>
 </nav>
 
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Sat Mar 07 2026 21:08:38 GMT+0100 (Central European Standard Time)
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Mon Sep 14 2026 17:32:15 GMT+0200 (heure d’été d’Europe centrale)
 </footer>
 
 <script> prettyPrint(); </script>
