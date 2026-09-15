@@ -3,6 +3,7 @@ import type {ChatInputCommandInteraction, Client, TextChannel} from "discord.js"
 import type {Bdd} from "@/bdd/Bdd.js";
 import {getBddInstance} from '@/bdd/Bdd.js';
 import type {Ban} from "@/bdd/types.js";
+import {checkPermissions} from "@/check/checkPermissions.js";
 import {safeReply} from "@/safe/safeReply.js";
 import {sendLog} from "@/safe/sendLog.js";
 
@@ -13,6 +14,16 @@ import {sendLog} from "@/safe/sendLog.js";
  */
 async function banlist(client: Client,
                        interaction: ChatInputCommandInteraction): Promise<void> {
+    // Chaque ligne recopie la raison du bannissement, relue dans le canal
+    // d'administration de BlueGenji (`INFO_SERV`). Sans garde, la commande
+    // etait ouverte a tout membre de tout serveur partenaire : le contenu
+    // d'un salon prive sortait par une commande de lecture, et avec lui le
+    // nom des bannis et celui des moderateurs.
+    if (!(await checkPermissions(interaction))) {
+        await safeReply(interaction, "You don't have permission to list banned users.\n" +
+            "Please contact 'Elessiah' or your server administrators if you need this information.\n");
+        return;
+    }
     const bdd: Bdd = await getBddInstance();
     const ban_users: Ban[] = await bdd.get("Ban") as Ban[];
     if (ban_users.length === 0) {

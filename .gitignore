@@ -24,3 +24,7 @@ npm-debug.log*
 
 # Copies de secours ecrites par /restore-backup
 *.avant-*
+
+# Configuration locale des fichiers d adhesion (ecrite par le bot au demarrage)
+/paths.json
+/undefinedpaths.json

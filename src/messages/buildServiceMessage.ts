@@ -1,6 +1,7 @@
 import type {Attachment, Client, Message, TextChannel} from "discord.js";
 import {EmbedBuilder} from "discord.js";
 
+import {escapeLinkLabel} from "../utils/escapeLinkLabel.js";
 import {getInviteFromMessage} from "../utils/getInviteFromMessage.js";
 
 /**
@@ -16,7 +17,12 @@ async function buildServiceMessage(client: Client,
                                    channelId: string,
                                    attachement?: Attachment): Promise<EmbedBuilder> {
     const channelOG = await client.channels.fetch(channelId) as TextChannel;
-    const origin: string = "*Sent from : [" + channelOG.guild.name + "](" + await getInviteFromMessage(client, message) + ")*";
+    // Le nom du serveur source est choisi par son propriétaire et sert de
+    // libellé au lien relayé à tous les partenaires : un crochet ou une
+    // parenthèse y referme le lien et en ouvre un autre, vers l'adresse de
+    // son choix, sous le nom du bot et sur chaque serveur destinataire.
+    const originName: string = escapeLinkLabel(channelOG.guild.name);
+    const origin: string = "*Sent from : [" + originName + "](" + await getInviteFromMessage(client, message) + ")*";
     let embed: EmbedBuilder;
     if (attachement) {
         embed = new EmbedBuilder().setAuthor({
