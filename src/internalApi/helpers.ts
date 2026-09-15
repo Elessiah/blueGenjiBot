@@ -8,13 +8,17 @@ const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost", "::ffff:127.0.0
  *
  * La valeur par defaut reprend celle de `startInternalApi` (`127.0.0.1`) :
  * les deux doivent repondre la meme chose, sinon la garde d'`authorize`
- * raisonnerait sur une interface que le serveur n'ecoute pas.
+ * raisonnerait sur une interface que le serveur n'ecoute pas. `startInternalApi`
+ * replie avec `||`, qui traite aussi une chaine vide comme absente : `??` ne
+ * le ferait pas, et une variable presente mais vide romprait l'accord entre
+ * les deux — l'API resterait bien en ecoute locale, mais la garde la
+ * croirait ouverte et rejetterait tout en 503.
  *
- * @param host Valeur de `INTERNAL_API_HOST`, absente comprise.
+ * @param host Valeur de `INTERNAL_API_HOST`, absente ou vide comprise.
  * @returns `true` si l'ecoute est confinee a la boucle locale.
  */
 export function isLoopbackHost(host: string | undefined): boolean {
-  return LOOPBACK_HOSTS.has(host ?? "127.0.0.1");
+  return LOOPBACK_HOSTS.has(host || "127.0.0.1");
 }
 
 /**

@@ -45,10 +45,12 @@ test("isLoopbackHost reconnait les adresses confinees a la machine", () => {
 });
 
 test("isLoopbackHost retient la valeur par defaut de startInternalApi", () => {
-  // `INTERNAL_API_HOST` absente vaut 127.0.0.1 des deux cotes : si les deux
-  // divergeaient, la garde raisonnerait sur une interface non ecoutee.
+  // `INTERNAL_API_HOST` absente OU vide vaut 127.0.0.1 des deux cotes :
+  // `startInternalApi` replie avec `||`, qui traite aussi "" comme absente.
+  // Si les deux divergeaient, la garde raisonnerait sur une interface non
+  // ecoutee.
   assert.equal(isLoopbackHost(undefined), true);
-  assert.equal(isLoopbackHost(""), false);
+  assert.equal(isLoopbackHost(""), true);
 });
 
 test("isLoopbackHost refuse une ecoute ouverte sur le reseau", () => {
