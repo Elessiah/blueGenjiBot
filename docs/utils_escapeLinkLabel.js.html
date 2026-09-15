@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>JSDoc: Source: utils/delay.js</title>
+    <title>JSDoc: Source: utils/escapeLinkLabel.js</title>
 
     <script src="scripts/prettify/prettify.js"> </script>
     <script src="scripts/prettify/lang-css.js"> </script>
@@ -17,7 +17,7 @@
 
 <div id="main">
 
-    <h1 class="page-title">Source: utils/delay.js</h1>
+    <h1 class="page-title">Source: utils/escapeLinkLabel.js</h1>
 
     
 
@@ -27,14 +27,31 @@
     <section>
         <article>
             <pre class="prettyprint source linenums"><code>/**
- * Crée une temporisation asynchrone en millisecondes.
- * @param ms Durée en millisecondes.
+ * Neutralise les caractères qui referment un lien Markdown dans son libellé.
+ *
+ * Le nom d'un serveur partenaire est choisi par son propriétaire, et il finit
+ * dans le libellé du lien « Sent from : [nom](invitation) » relayé à tous les
+ * autres serveurs. Un crochet fermant y met fin au libellé, une parenthèse
+ * ouvrante à l'adresse : un serveur nommé `](https://exemple.invalid)[` fait
+ * pointer le lien de chaque message relayé où il veut, sous le nom du bot.
+ *
+ * Discord rend littéralement un caractère précédé d'une barre oblique
+ * inverse. La barre elle-même fait donc partie des caractères traités — sans
+ * quoi un nom se terminant par une barre échapperait le crochet que l'on
+ * vient d'écrire. Une passe unique les couvre tous, donc chacun est échappé
+ * exactement une fois.
  */
-function delay(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+/** Délimiteurs d'un lien Markdown, plus le caractère d'échappement lui-même. */
+const MARKDOWN_LINK_SPECIALS = /[\\[\]()]/g;
+/**
+ * @param label Libellé brut, tel qu'il vient de Discord.
+ * @returns Le même libellé, dont aucun caractère ne peut plus refermer le lien.
+ */
+function escapeLinkLabel(label) {
+    return label.replace(MARKDOWN_LINK_SPECIALS, (char) => "\\" + char);
 }
-export { delay };
-//# sourceMappingURL=delay.js.map</code></pre>
+export { escapeLinkLabel };
+//# sourceMappingURL=escapeLinkLabel.js.map</code></pre>
         </article>
     </section>
 
