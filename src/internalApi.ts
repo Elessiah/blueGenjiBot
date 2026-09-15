@@ -21,7 +21,7 @@ import { describeError } from "@/safe/errorGuards.js";
 import { recordEvent, getBacklog, subscribe } from "@/feed/feedBus.js";
 import { getSnapshotsBetween } from "@/snapshots/dailySnapshot.js";
 import { listModules, isValidModule, setModuleEnabled, MODULE_KEYS, type ModuleKey } from "@/modules/moduleGuard.js";
-import { pctDelta, absDelta, deterministicColor } from "@/internalApi/helpers.js";
+import { pctDelta, absDelta, deterministicColor, isLoopbackHost, matchesToken } from "@/internalApi/helpers.js";
 import { parseSiteVisitStats, saveSiteVisitStats } from "@/siteVisits/siteVisits.js";
 import { parseDirectMessageRequest, parseRefereeAlert } from "@/notifications/notifications.js";
 import { deliverDirectMessages, alertReferees } from "@/notifications/deliver.js";
@@ -30,9 +30,12 @@ import { resolveDiscordHandle } from "@/notifications/resolveHandle.js";
 /**
  * Verifie le header `x-internal-token` avant de laisser passer une requete `/internal/*`.
  *
- * Sans `INTERNAL_API_TOKEN` configure, la verification est desactivee plutot
- * que de refuser tout le trafic : utile en dev local, mais a definir en
- * production sous peine d'exposer l'API a quiconque atteint le port.
+ * Sans `INTERNAL_API_TOKEN`, la verification reste desactivee tant que le
+ * serveur n'ecoute que la boucle locale : c'est le confort du dev local, ou
+ * seule la machine elle-meme peut ouvrir la connexion. Des que
+ * `INTERNAL_API_HOST` designe une autre interface, la meme tolerance devient
+ * une API ouverte sur le reseau — l'oubli d'une variable d'environnement ne
+ * doit pas suffire a la publier, donc tout est refuse.
  *
  * @param req Requete Express entrante.
  * @param res Reponse Express.
@@ -41,12 +44,15 @@ import { resolveDiscordHandle } from "@/notifications/resolveHandle.js";
 function authorize(req: Request, res: Response, next: NextFunction): void {
   const expectedToken = process.env.INTERNAL_API_TOKEN;
   if (!expectedToken) {
+    if (!isLoopbackHost(process.env.INTERNAL_API_HOST)) {
+      res.status(503).json({ error: "INTERNAL_API_TOKEN_NOT_CONFIGURED" });
+      return;
+    }
     next();
     return;
   }
 
-  const providedToken = req.header("x-internal-token");
-  if (providedToken !== expectedToken) {
+  if (!matchesToken(req.header("x-internal-token"), expectedToken)) {
     res.status(401).json({ error: "UNAUTHORIZED" });
     return;
   }

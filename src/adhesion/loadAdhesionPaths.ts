@@ -1,6 +1,7 @@
 import {ChatInputCommandInteraction, Client} from "discord.js";
 import {PathsAdhesions} from "@/adhesion/types.js";
 import {readFile} from "fs/promises";
+import {adhesionFilePath} from "@/adhesion/adhesionPath.js";
 import {safeFollowUp} from "@/safe/safeFollowUp.js";
 import {sendLog} from "@/safe/sendLog.js";
 import {saveAdhesionPaths} from "@/adhesion/saveAdhesionPaths.js";
@@ -15,7 +16,7 @@ import {saveAdhesionPaths} from "@/adhesion/saveAdhesionPaths.js";
 async function loadAdhesionPaths(interaction?: ChatInputCommandInteraction,
                                  client?: Client): Promise<PathsAdhesions | null> {
     try {
-        const data: string = await readFile(process.env.ADHESIONS_PATH + "paths.json", "utf-8");
+        const data: string = await readFile(adhesionFilePath("paths.json"), "utf-8");
         return JSON.parse(data);
     } catch (e) {
         const errmsg: string = "Impossible de lire le fichier de configuration des adhésions, Erreur : " + (e as TypeError).message;

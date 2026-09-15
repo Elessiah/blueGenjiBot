@@ -1,5 +1,6 @@
 import {Attachment, ChatInputCommandInteraction, Client, MessageFlags} from "discord.js";
 import {unlink, writeFile} from "fs/promises";
+import {adhesionFilePath} from "@/adhesion/adhesionPath.js";
 import {safeFollowUp} from "@/safe/safeFollowUp.js";
 import {PathsAdhesions} from "@/adhesion/types.js";
 import {loadAdhesionPaths} from "@/adhesion/loadAdhesionPaths.js";
@@ -77,7 +78,9 @@ async function downloadAttachment(interaction: ChatInputCommandInteraction,
     const paths: PathsAdhesions | null = await manageOldFiles(interaction, adhesion_file);
     if (!paths)
         return false;
-    const newPath: string = process.env.ADHESIONS_PATH + attachment.name;
+    // Le nom vient de celui qui televerse : `path.basename` le ramene au dossier
+    // de stockage, un `../` ne peut plus en sortir.
+    const newPath: string = adhesionFilePath(attachment.name);
     if (adhesion_file == ADHESION_FILES.ADHESION) {
         paths.adhesion = newPath;
         paths.adhesionName = attachment.name;

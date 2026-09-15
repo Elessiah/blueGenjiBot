@@ -58,9 +58,18 @@ export async function restoreBackup(
   // Le téléchargement et la validation dépassent les 3 s d'une interaction.
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-  const tmpPath = path.join(os.tmpdir(), `bluegenji-restore-${Date.now()}.sqlite`);
+  // Le nom etait previsible (`bluegenji-restore-<horodatage>.sqlite`) dans un
+  // `/tmp` partage par tous les comptes de la machine : un autre utilisateur
+  // pouvait y poser d'avance un lien symbolique, et le telechargement allait
+  // alors ecrire le fichier de son choix sous l'identite du bot — ou lui
+  // livrer la sauvegarde. `mkdtemp` rend un dossier neuf dont le noyau tire
+  // le nom, cree en 0700 : ni devinable, ni preemptable.
+  let tmpDir = "";
 
   try {
+    tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "bluegenji-restore-"));
+    const tmpPath = path.join(tmpDir, "database.sqlite");
+
     const response = await fetch(attachment.url);
     if (!response.ok) {
       await safeReply(interaction, `❌ Téléchargement impossible (HTTP ${response.status}).`, true, true);
@@ -82,6 +91,10 @@ export async function restoreBackup(
     await safeReply(interaction, `❌ Restauration échouée : ${(error as Error).message}`, true, true);
     await sendLog(client, `Restauration de la base échouée : ${(error as Error).message}`);
   } finally {
-    await fs.promises.unlink(tmpPath).catch(() => {});
+    // Vide meme si `mkdtemp` a echoue : il n'y a alors rien a effacer, et
+    // `rm` sur une chaine vide viserait le dossier courant.
+    if (tmpDir) {
+      await fs.promises.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
+    }
   }
 }

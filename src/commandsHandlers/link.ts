@@ -7,6 +7,8 @@
  * public. Le site l'associe ensuite au compte via l'API interne.
  */
 
+import { randomInt } from "node:crypto";
+
 import type { Client, ChatInputCommandInteraction } from "discord.js";
 import { safeReply } from "@/safe/safeReply.js";
 import { sendLog } from "@/safe/sendLog.js";
@@ -19,7 +21,12 @@ import { recordEvent } from "@/feed/feedBus.js";
  */
 export async function link(client: Client, interaction: ChatInputCommandInteraction): Promise<void> {
   try {
-    const code = String(Math.floor(100000 + Math.random() * 900000));
+    // Un code de liaison est un secret d'authentification, et `Math.random`
+    // n'en produit pas : son etat interne se reconstitue a partir de quelques
+    // tirages consecutifs. Or la commande est ouverte a tous, donc n'importe
+    // qui peut echantillonner la suite en enchainant `/link` avant de
+    // demander celui d'un autre compte. `randomInt` tire du CSPRNG du noyau.
+    const code = String(randomInt(100000, 1000000));
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString().slice(0, 19).replace("T", " ");
     const bdd = await getBddInstance();
     await bdd.raw("INSERT INTO UserLink (id_user, code, expires_at, linked_at) VALUES (?, ?, ?, NULL) ON CONFLICT(id_user) DO UPDATE SET code = excluded.code, expires_at = excluded.expires_at, linked_at = NULL", [interaction.user.id, code, expiresAt]);
