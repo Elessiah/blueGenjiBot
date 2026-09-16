@@ -169,7 +169,10 @@ export function startInternalApi(client: Client) {
       // Express 4 ne rattrape pas. Un flux deja ouvert se ferme, il ne se
       // repond plus.
       if (res.headersSent) {
-        res.end();
+        // Meme precaution qu'a la fermeture du flux plus haut : on est deja
+        // dans un `catch`, et `res.end()` sur une socket detruite y leverait
+        // un rejet non capture — qu'Express 4 ne rattrape pas davantage.
+        try { res.end(); } catch { /* socket deja fermee */ }
         return;
       }
       res.status(500).json({ error: "INTERNAL_FEED_ERROR" });

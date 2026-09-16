@@ -127,13 +127,30 @@ test("reste BANNED quand le salon d'administration est injoignable", async () =>
 // --- Le second etat : « on n'a pas pu savoir » n'est pas « pas banni ». ---
 
 test("rend UNKNOWN quand la lecture du verdict echoue", async () => {
-  // La table disparait : proxy de la fenetre reelle ou la base est
+  // La table devient introuvable : proxy de la fenetre reelle ou la base est
   // indisponible (verrou de la sauvegarde nocturne, fichier deplace).
-  // Ce test passe en dernier -- il abime la base a dessein.
+  //
+  // Un renommage, et non un `DROP` : la table revient **a l'identique** sans
+  // qu'on ait a recopier son DDL ici — une copie aurait derive de celle de
+  // `Bdd.ts` au premier changement de schema. Et le `finally` retire la
+  // dependance a l'ordre des tests : celui-ci abimait la base pour tous les
+  // suivants, ce qu'un simple commentaire « a garder en dernier » ne tient pas.
   const bdd = await getBddInstance();
-  await bdd.raw("DROP TABLE Ban", []);
+  await bdd.raw("ALTER TABLE Ban RENAME TO Ban_indisponible", []);
+  try {
+    const verdict = await checkBan(fakeClient("none", newTrace()), "banni-1", false);
+    assert.equal(verdict, "UNKNOWN");
+  } finally {
+    await bdd.raw("ALTER TABLE Ban_indisponible RENAME TO Ban", []);
+  }
+});
+
+test("retrouve un verdict une fois la base revenue", async () => {
+  // Corollaire du test precedent : `UNKNOWN` est un etat passager, pas une
+  // panne definitive. Si cette assertion echoue, c'est que la restauration
+  // ci-dessus n'a pas eu lieu — donc que l'ordre des tests compte a nouveau.
   const verdict = await checkBan(fakeClient("none", newTrace()), "banni-1", false);
-  assert.equal(verdict, "UNKNOWN");
+  assert.equal(verdict, "BANNED");
 });
 
 test.after(async () => {

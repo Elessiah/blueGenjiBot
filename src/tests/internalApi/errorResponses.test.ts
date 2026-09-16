@@ -53,5 +53,15 @@ test("le flux SSE ne repond plus une fois les en-tetes envoyes", () => {
   // `flushHeaders()` a deja repondu : un `res.status().json()` dans le `catch`
   // leve ERR_HTTP_HEADERS_SENT, donc un rejet non gere qu'Express 4 ne
   // rattrape pas.
-  assert.match(SOURCE, /if \(res\.headersSent\) \{\s*\n\s*res\.end\(\);/);
+  //
+  // On verifie l'invariant — la garde precede la reponse — et non son
+  // orthographe : la premiere redaction epinglait `res.end();` a la ligne
+  // suivante, si bien qu'entourer cet appel d'un `try/catch` (contre une
+  // socket deja detruite) faisait echouer un code devenu meilleur.
+  const garde = SOURCE.indexOf("if (res.headersSent)");
+  assert.ok(garde !== -1, "aucune garde sur `res.headersSent`");
+  const finDeGarde = SOURCE.indexOf("}", SOURCE.indexOf("return;", garde));
+  assert.match(SOURCE.slice(garde, finDeGarde), /res\.end\(\)/);
+  // ...et la reponse d'erreur vient bien apres, donc hors du chemin garde.
+  assert.ok(SOURCE.indexOf('"INTERNAL_FEED_ERROR"', garde) > finDeGarde);
 });
