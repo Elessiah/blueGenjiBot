@@ -57,9 +57,13 @@ export async function setupIntervalAdhesion(
     // rappel n'est posé, et personne ne l'apprend.
     //
     // `/get-adhesion` y mène par l'autre bout : son option `interval` est du
-    // texte libre dont la description dit « 20 jours max » sans que rien ne
-    // l'impose, et une cadence assez grande sort de ce que `Date` sait
-    // représenter.
+    // texte libre que rien ne borne, et une cadence assez grande sort de ce
+    // que `Date` sait représenter. Elle a longtemps été bornée à 20 jours,
+    // non par choix de produit mais parce que le rappel était alors un
+    // `setInterval` en mémoire, dont le délai tient dans un entier 32 bits
+    // signé — 24,86 jours. Le passage à une date en base relevée par cron a
+    // retiré le plafond **et** sa raison d'être, dans le même commit. Le seul
+    // plafond qui subsiste est celui de `Date`, et c'est lui qu'on tient ici.
     //
     // Le refus est donc ici, où passe l'écriture de **tout** rappel, plutôt
     // que chez l'un des deux appelants.
@@ -67,7 +71,7 @@ export async function setupIntervalAdhesion(
         await sendLog(client, "Rappel refusé : date d'échéance invalide.");
         await safeFollowUp(
             interaction,
-            "Échéance invalide : aucun rappel n'a été programmé. Vérifiez la date (jj/mm/aaaa) ou l'intervalle (20 jours max).",
+            "Échéance invalide : aucun rappel n'a été programmé. Vérifiez la date (jj/mm/aaaa) ou l'intervalle.",
             true,
             []
         );
