@@ -4,7 +4,7 @@ import { safeFollowUp } from "@/safe/safeFollowUp.js";
 import { Bdd, getBddInstance } from "@/bdd/Bdd.js";
 import type { status } from "@/types.js";
 import { toSQLiteDate } from "@/utils/toSQLiteDatetime.js";
-import { initialIteration } from "@/adhesion/iteration.js";
+import { ITERATION_UNLIMITED, initialIteration } from "@/adhesion/iteration.js";
 
 /**
  * Programme un rappel d'adhésion à intervalle régulier dans la base de données.
@@ -85,9 +85,19 @@ export async function setupIntervalAdhesion(
         return;
     }
 
+    // Le message annonçait « dans N jours » quel que soit l'appelant, ce qui
+    // donnait « dans 0 jours » à `/adhesion-valide`, dont l'échéance est une
+    // date de péremption et non une cadence. Il dit désormais la seule chose
+    // que les deux appelants ont en commun : **quand** part le prochain envoi.
+    // `<t:...:F>` et `<t:...:R>` sont rendus par Discord dans le fuseau du
+    // lecteur, comme le fait déjà `/show-rappel-adhesion`.
+    const quand: number = Math.floor(nextTransmission.getTime() / 1000);
+    const suite: string = storedIteration === ITERATION_UNLIMITED
+        ? `, puis tous les **${intInterval} jours**`
+        : storedIteration > 1 ? `, ${storedIteration} envois au total` : "";
     await safeFollowUp(
         interaction,
-        `Programmation réussi du rappel. Envoi des adhésions dans ${intInterval} jours`,
+        `Rappel programmé. Prochain envoi <t:${quand}:F> (**<t:${quand}:R>**)${suite}.`,
         false,
         []
     );
