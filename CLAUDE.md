@@ -32,9 +32,8 @@ Test ciblé après build : `node --test "dist/tests/path/to/file.test.js"`.
 - **discord.js 14** — slash commands, intents : Guilds, GuildMembers, GuildMessages, MessageContent
 - **Express 4** — API interne montée sur `/internal`, auth via header `x-internal-token`
 - **SQLite** (`sqlite` + `sqlite3`) — base locale `database.sqlite`, accès via singleton `Bdd` (`src/bdd/Bdd.ts`)
-- **Mongoose** — présent dans les deps (legacy, vérifier avant de supposer une utilisation)
 - **node-cron** — tâches périodiques (vérif adhésion, etc.)
-- **pm2** — process manager pour la prod
+- **pm2** — process manager pour la prod, **installé globalement sur le serveur**. Il n'est *pas* une dépendance du projet : rien ne l'importe, il n'apparaissait que dans des commentaires, et la copie que `npm ci` posait dans `node_modules` ne servait qu'à traîner l'avis `js-yaml`. `mongoose` et `gridfs-stream` sont partis pour la raison voisine — reliquats de l'ère MongoDB, plus référencés nulle part depuis le passage à SQLite.
 
 ## Path Alias
 

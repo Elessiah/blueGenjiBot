@@ -163,7 +163,19 @@ export function startInternalApi(client: Client) {
         try { res.end(); } catch { /* noop */ }
       });
     } catch (error) {
-      res.status(500).json({ error: (error as Error).message || "INTERNAL_FEED_ERROR" });
+      await sendLog(client, `/internal/feed/stream error: ${(error as Error).message}`);
+      // `flushHeaders()` a deja repondu : `res.status().json()` leverait ici
+      // ERR_HTTP_HEADERS_SENT, dans un `catch` -- donc un rejet non gere qu'
+      // Express 4 ne rattrape pas. Un flux deja ouvert se ferme, il ne se
+      // repond plus.
+      if (res.headersSent) {
+        // Meme precaution qu'a la fermeture du flux plus haut : on est deja
+        // dans un `catch`, et `res.end()` sur une socket detruite y leverait
+        // un rejet non capture — qu'Express 4 ne rattrape pas davantage.
+        try { res.end(); } catch { /* socket deja fermee */ }
+        return;
+      }
+      res.status(500).json({ error: "INTERNAL_FEED_ERROR" });
     }
   });
 
@@ -224,7 +236,8 @@ export function startInternalApi(client: Client) {
         status,
       });
     } catch (error) {
-      res.status(500).json({ error: (error as Error).message || "INTERNAL_STATUS_ERROR" });
+      await sendLog(client, `/internal/status error: ${(error as Error).message}`);
+      res.status(500).json({ error: "INTERNAL_STATUS_ERROR" });
     }
   });
 
@@ -275,7 +288,8 @@ export function startInternalApi(client: Client) {
         uniqueUsersLast30Days: Number(uniqueUsersLast30Days[0]?.total ?? 0),
       });
     } catch (error) {
-      res.status(500).json({ error: (error as Error).message || "INTERNAL_STATS_ERROR" });
+      await sendLog(client, `/internal/stats error: ${(error as Error).message}`);
+      res.status(500).json({ error: "INTERNAL_STATS_ERROR" });
     }
   });
 
@@ -463,7 +477,8 @@ export function startInternalApi(client: Client) {
         relays: { value: relaysNow, delta: pctDelta(relaysNow, relaysPrev), series: relaysSeries },
       });
     } catch (error) {
-      res.status(500).json({ error: (error as Error).message || "INTERNAL_KPIS_ERROR" });
+      await sendLog(client, `/internal/kpis error: ${(error as Error).message}`);
+      res.status(500).json({ error: "INTERNAL_KPIS_ERROR" });
     }
   });
 
@@ -534,7 +549,8 @@ export function startInternalApi(client: Client) {
       const paged = enriched.slice(offset, offset + limit);
       res.json({ servers: paged, total: enriched.length, limit, offset });
     } catch (error) {
-      res.status(500).json({ error: (error as Error).message || "INTERNAL_SERVERS_ERROR" });
+      await sendLog(client, `/internal/servers error: ${(error as Error).message}`);
+      res.status(500).json({ error: "INTERNAL_SERVERS_ERROR" });
     }
   });
 
@@ -576,7 +592,8 @@ export function startInternalApi(client: Client) {
       const avgPerDay = Number((sumRelays / days).toFixed(2));
       res.json({ range, labels, relays, scrims, avgPerDay });
     } catch (error) {
-      res.status(500).json({ error: (error as Error).message || "INTERNAL_ACTIVITY_ERROR" });
+      await sendLog(client, `/internal/activity error: ${(error as Error).message}`);
+      res.status(500).json({ error: "INTERNAL_ACTIVITY_ERROR" });
     }
   });
 
@@ -623,7 +640,8 @@ export function startInternalApi(client: Client) {
       const enriched = modules.map((m) => ({ key: m.key, enabled: m.enabled, count30j: counters[m.key] }));
       res.json({ guildId, modules: enriched });
     } catch (error) {
-      res.status(500).json({ error: (error as Error).message || "INTERNAL_MODULES_ERROR" });
+      await sendLog(client, `/internal/servers/:id/modules error: ${(error as Error).message}`);
+      res.status(500).json({ error: "INTERNAL_MODULES_ERROR" });
     }
   });
 
@@ -647,7 +665,8 @@ export function startInternalApi(client: Client) {
       await setModuleEnabled(guildId, moduleKey as ModuleKey, enabled);
       res.json({ guildId, module: moduleKey, enabled });
     } catch (error) {
-      res.status(500).json({ error: (error as Error).message || "INTERNAL_MODULE_TOGGLE_ERROR" });
+      await sendLog(client, `/internal/servers/:id/modules/:moduleKey error: ${(error as Error).message}`);
+      res.status(500).json({ error: "INTERNAL_MODULE_TOGGLE_ERROR" });
     }
   });
 
