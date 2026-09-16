@@ -85,6 +85,32 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     `unresolved`, et le canal de logs le dit.
   - Même bilan de retour que `/internal/notify/dm`.
 
+## Réponses d'erreur
+
+Une erreur ne renvoie **jamais** le message de l'exception, seulement un code
+stable en majuscules : `{ "error": "INTERNAL_STATS_ERROR" }`. Le détail — pile
+d'appel, chemin de fichier, fragment de SQL — part au canal de logs Discord par
+`sendLog()`, qui est l'endroit où l'exploitant le lit de toute façon.
+
+Ce n'était pas le cas : huit routes écrivaient
+`{ error: (error as Error).message || "INTERNAL_STATS_ERROR" }`, où le code
+stable servait de **repli** à un message qu'on ne contrôle pas. L'API n'écoute
+que sur `127.0.0.1` et exige `x-internal-token`, donc le lecteur est l'app sœur
+— mais elle relaie ces réponses, et un code que l'appelant peut comparer vaut
+mieux qu'une phrase qui change avec la version de SQLite.
+
+Les codes en usage : `INTERNAL_FEED_ERROR`, `INTERNAL_STATUS_ERROR`,
+`INTERNAL_STATS_ERROR`, `INTERNAL_KPIS_ERROR`, `INTERNAL_SERVERS_ERROR`,
+`INTERNAL_ACTIVITY_ERROR`, `INTERNAL_MODULES_ERROR`,
+`INTERNAL_MODULE_TOGGLE_ERROR`, plus les codes propres aux routes d'écriture
+déjà décrits ci-dessus.
+
+Cas particulier de `GET /internal/feed/stream` : les en-têtes SSE sont envoyés
+d'emblée (`flushHeaders()`), si bien qu'une erreur survenant ensuite ne peut
+plus répondre. Le flux est **fermé**, pas répondu — y poser un `res.status(500)`
+levait `ERR_HTTP_HEADERS_SENT` depuis un `catch`, donc un rejet non capturé
+qu'Express 4 ne rattrape pas.
+
 ## Rôle arbitre
 
 Le rôle destinataire des signalements se configure par commande, serveur par
