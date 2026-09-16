@@ -4,6 +4,7 @@ import { safeFollowUp } from "@/safe/safeFollowUp.js";
 import { Bdd, getBddInstance } from "@/bdd/Bdd.js";
 import type { status } from "@/types.js";
 import { toSQLiteDate } from "@/utils/toSQLiteDatetime.js";
+import { initialIteration } from "@/adhesion/iteration.js";
 
 /**
  * Programme un rappel d'adhésion à intervalle régulier dans la base de données.
@@ -13,8 +14,9 @@ import { toSQLiteDate } from "@/utils/toSQLiteDatetime.js";
  * @param channel Canal cible, ou null.
  * @param member Membre cible, ou null.
  * @param role Rôle cible, ou null.
- * @param interval Intervalle en jours (chaîne).
- * @param intInterval Intervalle en jours (nombre).
+ * @param intInterval Intervalle en jours.
+ * @param nextTransmission Date du premier envoi.
+ * @param iteration Nombre d'envois à faire, ou `undefined` pour un rappel sans terme.
  */
 export async function setupIntervalAdhesion(
     client: Client,
@@ -28,6 +30,22 @@ export async function setupIntervalAdhesion(
     iteration?: number
 ): Promise<void> {
     if (!interaction.guild) return;
+
+    // Un rappel qui n'a aucun envoi à faire n'est pas un rappel : on refuse de
+    // l'écrire plutôt que de laisser la base décider de ce qu'il devient. Le
+    // `iteration ? iteration : -1` d'avant, lui, faisait tomber le zéro du côté
+    // falsy et posait un rappel **perpétuel** — l'inverse de la demande.
+    const storedIteration: number | null = initialIteration(iteration);
+    if (storedIteration === null) {
+        await sendLog(client, "Rappel refusé : " + iteration + " n'est pas un nombre d'envois.");
+        await safeFollowUp(
+            interaction,
+            "Impossible de programmer un rappel sans aucun envoi à faire !",
+            true,
+            []
+        );
+        return;
+    }
 
     const bdd: Bdd = await getBddInstance();
     const result: status = await bdd.set(
@@ -52,7 +70,7 @@ export async function setupIntervalAdhesion(
             interaction.user.id,
             intInterval,
             toSQLiteDate(nextTransmission),
-            iteration ? iteration : -1,
+            storedIteration,
         ]
     );
 
