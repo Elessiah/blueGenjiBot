@@ -19,7 +19,11 @@ if [[ -f "$CONFIG_FILE" ]]; then
   source "$CONFIG_FILE"
 fi
 
-: "${BDD_PATH:=/home/pi/blueGenjiBot/database.sqlite}"
+# Repli aligné sur celui du bot (`src/bdd/Bdd.ts`) : un chemin de secours qui
+# désigne une autre base que celle qui tourne sauvegarderait le mauvais
+# fichier sans rien signaler. L'ancien pointait vers `/home/pi/...`, reste
+# d'un hébergement sur Raspberry Pi qui n'existe plus.
+: "${BDD_PATH:=./data/database.sqlite}"
 : "${RCLONE_REMOTE:=onedrive}"
 : "${REMOTE_DIR:=BlueGenji/backups}"
 : "${AGE_RECIPIENTS_FILE:=$SCRIPT_DIR/backup-recipients.txt}"

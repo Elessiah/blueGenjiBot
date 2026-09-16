@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import path from 'node:path';
 import {open} from 'sqlite';
 import type {Database} from 'sqlite';
 // eslint-disable-next-line import/no-named-as-default
@@ -23,13 +24,40 @@ import type {
 let bdd: Bdd;
 
 /**
+ * Emplacement de la base, quand `BDD_PATH` n'est pas défini.
+ *
+ * `./database.sqlite` — l'ancien repli — était relatif au **répertoire courant**,
+ * et SQLite crée un fichier vide quand il ne le trouve pas. Un `.env` non lu, un
+ * service lancé d'ailleurs, et le bot repartait sur une base neuve en signalant
+ * simplement qu'il n'avait plus rien : c'est ainsi qu'un second fichier a vécu
+ * des mois à la racine du projet, pendant que la vraie base était dans `data/`.
+ * Le repli désigne donc **le même dossier que la configuration réelle**, celui
+ * que la sauvegarde emporte.
+ */
+const DEFAULT_BDD_PATH = './data/database.sqlite';
+
+/**
  * Retourne l'instance singleton de la base de données.
  * Crée et initialise la connexion SQLite si nécessaire.
+ *
+ * Le chemin **absolu** est journalisé à l'ouverture. Une ligne, et la question
+ * « quelle base le bot lit-il au juste ? » cesse de se poser : elle a demandé un
+ * `lsof` sur la production pour être tranchée.
+ *
  * @returns Instance Bdd prête à être utilisée.
  */
 async function getBddInstance(): Promise<Bdd> {
   if (!bdd) {
-    bdd = await Bdd.create(process.env.BDD_PATH || './database.sqlite');
+    const configured = process.env.BDD_PATH?.trim();
+    const target = configured && configured.length > 0 ? configured : DEFAULT_BDD_PATH;
+    const absolute = path.resolve(target);
+    if (!fs.existsSync(absolute)) {
+      // Pas un refus : une première installation doit pouvoir démarrer. Mais on
+      // le **dit**, parce que c'est indiscernable d'une base perdue.
+      console.warn(`[bdd] Aucun fichier à ${absolute} — création d'une base vide.`);
+    }
+    console.log(`[bdd] Base ouverte : ${absolute}${configured ? '' : ' (BDD_PATH non défini)'}`);
+    bdd = await Bdd.create(absolute);
   }
   return bdd;
 }
