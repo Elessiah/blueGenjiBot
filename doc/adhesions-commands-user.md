@@ -39,7 +39,21 @@ Affiche les rappels automatiques d'adhesion programmes.
 Comportement:
 - Affichage ephemere (visible uniquement par l'auteur).
 - Pagination par boutons (precedent/suivant/fermer).
-- Chaque rappel affiche: ID, cible(s), intervalle, date du prochain envoi.
+- Chaque rappel affiche: ID, cible(s), cadence, date du prochain envoi.
+- La commande est en **lecture seule**: elle n'envoie rien et ne supprime rien.
+
+Deux cadences apparaissent, et **les deux** sont listees:
+- `Tous les Nj, sans fin` : rappel recurrent pose par `/get-adhesion`.
+- `Peremption - N envoi(s) restant(s)` : avis pose par `/adhesion-valide`, qui
+  s'efface de lui-meme apres son dernier envoi.
+
+Les seconds etaient auparavant masques. Ils continuaient d'etre envoyes, et
+comme `/delete-rappel-adhesion` reclame un identifiant que seule cette commande
+donne, ils etaient impossibles a annuler: la liste pouvait afficher
+"Aucun rappel programme" pendant que des membres recevaient des rappels.
+
+Un rappel sans aucune cible est signale (`Aucune cible`): il part en message
+prive a son auteur.
 
 ## 3) /delete-rappel-adhesion
 Supprime un rappel programme.
