@@ -26,8 +26,16 @@ async function checkMessageValidity(client: Client,
     } else {
         hasValidService.value = true;
     }
-    if (await checkBan(client, message.author.id)) {
+    const banVerdict = await checkBan(client, message.author.id);
+    if (banVerdict === "BANNED") {
         await safeReact(client, message, "🚫");
+        return false;
+    }
+    // Verdict indisponible : on ne distribue pas. Un message relaye ne se
+    // rattrape pas, et le cooldown qui suit lit la meme base -- il echouerait.
+    // Reaction distincte du 🚫 : on ne vient d'accuser personne.
+    if (banVerdict === "UNKNOWN") {
+        await safeReact(client, message, "⚠️");
         return false;
     }
     const cooldown: string = await checkCooldown(message.author.id, service.id_service);

@@ -47,9 +47,18 @@ async function ban(client: Client,
         await sendLog(client, "Bdd failed in ban !");
         return false;
     }
-    if (await checkBan(client, user.id, false)) {
+    const banVerdict = await checkBan(client, user.id, false);
+    if (banVerdict === "BANNED") {
         await safeReply(interaction, "This user has been already banned.", true, true);
         return true;
+    }
+    // Verdict indisponible : on refuse plutot que de bannir a l'aveugle. La
+    // ligne `Ban` n'a pas de cle sur `id_user`, un second bannissement du meme
+    // compte en creerait donc un doublon -- et le motif publie au salon
+    // d'administration l'aurait ete pour rien.
+    if (banVerdict === "UNKNOWN") {
+        await safeReply(interaction, "Ban database unreachable, please try again in a moment.", true, true);
+        return false;
     }
     await sendLog(client, "**" + user.username + "** *has been banned by " + interaction.user.username + "*");
     const ids: idSendLogMsg = {admin: "", owner: ""};

@@ -60,10 +60,22 @@ client.on("interactionCreate", async (interaction) => {
   // pendant la sauvegarde, par exemple).
   const { commandName } = interaction;
   try {
-    if (await checkBan(client, interaction.user.id, false)) {
+    const banVerdict = await checkBan(client, interaction.user.id, false);
+    if (banVerdict === "BANNED") {
       await safeReply(
         interaction as ChatInputCommandInteraction,
         "Banned members cannot use commands ! Contact `elessiah` for any moderation problem !",
+      );
+      return;
+    }
+    // Verdict indisponible : on n'execute pas la commande, mais on ne l'annonce
+    // pas comme un bannissement -- ce serait accuser a tort tout le monde
+    // pendant la sauvegarde nocturne. La commande aurait de toute facon echoue :
+    // elle lit la meme base.
+    if (banVerdict === "UNKNOWN") {
+      await safeReply(
+        interaction as ChatInputCommandInteraction,
+        "Service temporarily unavailable, please try again in a moment.",
       );
       return;
     }
