@@ -25,6 +25,14 @@ Include these details to get better matches:
 Example:
 `LFS EU Diamond Tuesday 21:00 CET - BO3 scrim`
 
+## Deleting a forwarded message
+If you delete your original message, the bot deletes the copies it posted in the
+other partner channels.
+
+It can only do so while it still holds the relay record, which lasts **seven
+days**. After that the original can still be deleted, but the copies stay where
+they are: the bot no longer knows which message they belonged to.
+
 ## Slash commands
 Everyone:
 - `/help language:<English|Francais>`
