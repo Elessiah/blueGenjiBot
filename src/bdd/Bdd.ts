@@ -765,7 +765,28 @@ class Bdd {
 
   /**
    * Récupère l'horodatage courant retourné par SQLite.
-   * @returns Date courante de la base, ou epoch en fallback.
+   *
+   * **Attention : la `Date` rendue n'est pas l'instant courant.**
+   * `CURRENT_TIMESTAMP` est une chaîne `YYYY-MM-DD HH:MM:SS` en **UTC**, et
+   * `new Date()` relit cette forme-là dans le fuseau **de la machine** : la
+   * valeur rendue est donc en retard du décalage local (deux heures à Paris en
+   * été, une en hiver).
+   *
+   * Ce décalage est **volontairement conservé**, parce que le seul appelant
+   * restant s'en sert bien. `checkCooldown` relit la colonne `date` d'une ligne
+   * exactement de la même façon : les deux côtés sont décalés du même nombre
+   * d'heures, et leur **différence** est juste. Corriger cette fonction seule
+   * rendrait un instant vrai face à une date fausse, et le cooldown de deux
+   * heures ne s'appliquerait plus jamais.
+   *
+   * Autrement dit : cette valeur ne vaut que **comparée à une autre colonne lue
+   * pareil**. Elle ne doit jamais devenir un instant absolu — pas de
+   * `toISOString()`, pas de comparaison à une date construite ailleurs. C'est
+   * ce qu'avait fait la purge des messages, où le décalage ne s'annulait plus
+   * (voir `messages/manageMsgExpiration.ts`) : un seuil de date se calcule en
+   * SQL, là où les deux côtés parlent le même format.
+   *
+   * @returns L'horodatage de la base lu comme une heure locale, ou epoch en fallback.
    */
   async getCurrentTimestamp(): Promise<Date> {
     const ret: {CURRENT_TIMESTAMP: number}[] = await this.Database?.all('SELECT CURRENT_TIMESTAMP') as {CURRENT_TIMESTAMP: number}[];
