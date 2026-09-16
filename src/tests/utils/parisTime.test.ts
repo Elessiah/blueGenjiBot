@@ -78,6 +78,17 @@ test("mesure le decalage parisien des deux cotes du changement d'heure", () => {
   assert.equal(parisOffsetMs(new Date("2026-07-01T12:00:00Z")), 7200000);
 });
 
+test("lit minuit comme zero heure, pas comme vingt-quatre", () => {
+  // `hour12: false` rend « 24 » a minuit sur plusieurs moteurs, et `Date.UTC`
+  // le relirait alors comme le lendemain a zero heure : le decalage mesure
+  // serait faux d'un jour entier, une heure par nuit. `hourCycle: "h23"` est
+  // ce qui ferme ce cas, et rien d'autre dans ce module ne le dirait.
+  assert.deepEqual(parisWallClock(new Date("2026-01-01T23:00:00Z")), {
+    year: 2026, month: 1, day: 2, hour: 0, minute: 0, second: 0,
+  });
+  assert.equal(parisOffsetMs(new Date("2026-01-01T23:00:00Z")), 3600000);
+});
+
 test("ne laisse pas les millisecondes fausser le decalage", () => {
   // `formatToParts` tronque a la seconde : compare a l'instant non tronque, le
   // decalage aurait porte les millisecondes en trop, et la date resolue aurait

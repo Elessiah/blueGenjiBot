@@ -144,11 +144,20 @@ test("un rappel sans terme repart pour une periode complete", async () => {
   const avant = new Date();
 
   await checkIntervalleAdhesion(fakeClient(newTrace()));
+  const apresAppel = new Date();
 
   const apres = await readRappel(id);
   assert.notEqual(apres, null);
   // La cadence est relue sur la ligne, pas recopiee ici : c'est elle qui decide.
-  assert.equal(apres!.nextTransmission, toSQLiteDate(nextTransmissionAfter(avant, 14)));
+  //
+  // L'appel prend son propre `new Date()` : on encadre donc plutot que de
+  // fixer une valeur. Sans cet encadrement le test serait faux une fois par
+  // an, la nuit du changement d'heure, et une fois par jour a minuit pile a
+  // Paris — un echec aussi rare qu'incomprehensible.
+  assert.ok(
+    [avant, apresAppel].some((t) => apres!.nextTransmission === toSQLiteDate(nextTransmissionAfter(t, 14))),
+    "echeance inattendue : " + apres!.nextTransmission,
+  );
   assert.equal(apres!.iteration, ITERATION_UNLIMITED);
 });
 
@@ -220,7 +229,7 @@ test("un rappel pas encore du n'est pas touche", async () => {
   assert.equal(apres!.nextTransmission, toSQLiteDate(demain));
 });
 
-test("une cible qui n'existe plus emporte le rappel, et lui seul", async () => {
+test("une cible qui n'existe plus emporte son rappel sans arreter la passe", async () => {
   // `fetchTargets` retire la cible perdue puis, le rappel n'ayant plus aucune
   // cible, `checkTargets` supprime la ligne. Les autres lignes de la meme passe
   // doivent poursuivre : une boucle qui s'arreterait a la premiere cible

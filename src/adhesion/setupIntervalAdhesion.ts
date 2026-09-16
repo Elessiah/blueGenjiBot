@@ -47,6 +47,24 @@ export async function setupIntervalAdhesion(
         return;
     }
 
+    // `/adhesion-valide` construit cette date depuis une saisie libre annoncee
+    // en `jj/mm/aaaa`. Une saisie que `Date` ne comprend pas — la forme ISO,
+    // par exemple, que l'on tape par habitude — donne une date invalide, et
+    // `toSQLiteDate` leve alors un `RangeError` au beau milieu du handler : le
+    // membre vient de recevoir « votre adhesion est validee », aucun rappel
+    // n'est pose, et personne ne l'apprend. Le refus est ici, ou passe
+    // l'ecriture de **tout** rappel, plutot que chez l'un des deux appelants.
+    if (!Number.isFinite(nextTransmission.getTime())) {
+        await sendLog(client, "Rappel refusé : date d'échéance invalide.");
+        await safeFollowUp(
+            interaction,
+            "Date d'échéance incomprise : aucun rappel n'a été programmé. Format attendu : jj/mm/aaaa.",
+            true,
+            []
+        );
+        return;
+    }
+
     const bdd: Bdd = await getBddInstance();
     const result: status = await bdd.set(
         "AdhesionInterval",
