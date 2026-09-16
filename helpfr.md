@@ -25,6 +25,15 @@ Ajoutez ces informations pour obtenir de meilleures reponses :
 Exemple :
 `LFS EU Diamond Mardi 21:00 CET - Scrim BO3`
 
+## Effacer un message retransmis
+Si vous supprimez votre message d'origine, le bot supprime les copies qu'il a
+posees dans les autres salons partenaires.
+
+Il ne peut le faire que tant qu'il garde la trace du relais, soit **sept jours**.
+Passe ce delai le message d'origine peut toujours etre supprime, mais les copies
+restent la ou elles sont : le bot ne sait plus a quel message elles se
+rattachaient.
+
 ## Commandes slash
 Pour tout le monde :
 - `/help language:<English|Francais>`
