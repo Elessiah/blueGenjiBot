@@ -49,7 +49,7 @@ async function fillBlueCommands(client: Client) {
                     },
                     {
                         name: "interval",
-                        description: "Intervalle en jour pour renvoi automatique, 20 jours max",
+                        description: "Intervalle en jours pour un renvoi automatique, répété jusqu'à suppression du rappel",
                         type: ApplicationCommandOptionType.String,
                         required: false
                     }

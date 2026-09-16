@@ -26,8 +26,10 @@ Comportement:
 - Si l'auteur n'a pas les permissions admin du bot, les envois vers `channel`/`membre`/`role` sont ignores et le bot envoie en prive a l'auteur.
 - Si `interval` est defini a une valeur > 0 et que l'auteur n'a pas les permissions, la programmation est refusee.
 - En cas de programmation, le prochain envoi est prevu a 10:00 (heure Europe/Paris) apres le nombre de jours indique.
-- L'intervalle est un nombre de jours, 20 au maximum. Une valeur que le bot ne
-  peut pas dater lui fait repondre "Echeance invalide", sans rien programmer.
+- L'intervalle est un nombre de jours, **sans plafond**: le rappel se repete
+  jusqu'a ce que `/delete-rappel-adhesion` l'efface. Une valeur si grande que
+  le bot ne peut pas en dater l'echeance lui fait repondre "Echeance
+  invalide", sans rien programmer.
 
 Exemples:
 - `/get-adhesion`
