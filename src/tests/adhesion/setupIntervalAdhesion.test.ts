@@ -16,6 +16,7 @@ process.env.INFO_SERV = "admin-channel-1";
 import { getBddInstance, closeBddInstance } from "../../bdd/Bdd.js";
 import { setupIntervalAdhesion } from "../../adhesion/setupIntervalAdhesion.js";
 import { ITERATION_UNLIMITED } from "../../adhesion/iteration.js";
+import { nextTransmissionAfter } from "../../adhesion/nextTransmission.js";
 import type { ChatInputCommandInteraction, Client } from "discord.js";
 
 /**
@@ -119,6 +120,20 @@ test("une echeance incomprise n'ecrit rien, et le dit", async () => {
 
   assert.equal((await tousLesRappels()).length, avant);
   assert.ok(trace.followUps.some((m) => m.includes("jj/mm/aaaa")));
+});
+
+test("une cadence hors de portee n'ecrit rien non plus", async () => {
+  // L'autre bout : l'option `interval` de `/get-adhesion` est du texte libre
+  // dont la description annonce « 20 jours max » sans que rien ne l'impose.
+  // Une cadence assez grande sort de ce que `Date` sait representer, et le
+  // calcul de l'echeance levait alors dans `Intl` — donc **avant** la garde
+  // ci-dessus, qu'il court-circuitait.
+  const avant = (await tousLesRappels()).length;
+
+  const trace = await poser(nextTransmissionAfter(new Date(), 999999999), 1);
+
+  assert.equal((await tousLesRappels()).length, avant);
+  assert.ok(trace.followUps.some((m) => m.includes("invalide")));
 });
 
 test("la confirmation annonce la date, pas « dans 0 jours »", async () => {

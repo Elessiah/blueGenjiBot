@@ -47,18 +47,27 @@ export async function setupIntervalAdhesion(
         return;
     }
 
-    // `/adhesion-valide` construit cette date depuis une saisie libre annoncee
-    // en `jj/mm/aaaa`. Une saisie que `Date` ne comprend pas — la forme ISO,
-    // par exemple, que l'on tape par habitude — donne une date invalide, et
-    // `toSQLiteDate` leve alors un `RangeError` au beau milieu du handler : le
-    // membre vient de recevoir « votre adhesion est validee », aucun rappel
-    // n'est pose, et personne ne l'apprend. Le refus est ici, ou passe
-    // l'ecriture de **tout** rappel, plutot que chez l'un des deux appelants.
+    // Deux saisies libres mènent ici, et aucune n'est vérifiée en amont.
+    //
+    // `/adhesion-valide` construit cette date depuis une saisie annoncée en
+    // `jj/mm/aaaa`. Une saisie que `Date` ne comprend pas — la forme ISO, par
+    // exemple, que l'on tape par habitude — donne une date invalide, et
+    // `toSQLiteDate` levait alors un `RangeError` au beau milieu du handler :
+    // le membre vient de recevoir « votre adhésion est validée », aucun
+    // rappel n'est posé, et personne ne l'apprend.
+    //
+    // `/get-adhesion` y mène par l'autre bout : son option `interval` est du
+    // texte libre dont la description dit « 20 jours max » sans que rien ne
+    // l'impose, et une cadence assez grande sort de ce que `Date` sait
+    // représenter.
+    //
+    // Le refus est donc ici, où passe l'écriture de **tout** rappel, plutôt
+    // que chez l'un des deux appelants.
     if (!Number.isFinite(nextTransmission.getTime())) {
         await sendLog(client, "Rappel refusé : date d'échéance invalide.");
         await safeFollowUp(
             interaction,
-            "Date d'échéance incomprise : aucun rappel n'a été programmé. Format attendu : jj/mm/aaaa.",
+            "Échéance invalide : aucun rappel n'a été programmé. Vérifiez la date (jj/mm/aaaa) ou l'intervalle (20 jours max).",
             true,
             []
         );

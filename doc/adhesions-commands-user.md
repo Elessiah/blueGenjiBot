@@ -26,6 +26,8 @@ Comportement:
 - Si l'auteur n'a pas les permissions admin du bot, les envois vers `channel`/`membre`/`role` sont ignores et le bot envoie en prive a l'auteur.
 - Si `interval` est defini a une valeur > 0 et que l'auteur n'a pas les permissions, la programmation est refusee.
 - En cas de programmation, le prochain envoi est prevu a 10:00 (heure Europe/Paris) apres le nombre de jours indique.
+- L'intervalle est un nombre de jours, 20 au maximum. Une valeur que le bot ne
+  peut pas dater lui fait repondre "Echeance invalide", sans rien programmer.
 
 Exemples:
 - `/get-adhesion`
@@ -98,6 +100,11 @@ Droits:
 Comportement:
 - Le message "valide" est envoye immediatement en message prive au membre.
 - Le message "perimee" est programme pour la date de peremption (envoi unique).
+- **Le format de la date compte.** `DD/MM/YYYY`, et rien d'autre: une date
+  ecrite autrement (la forme ISO `2026-12-31`, par exemple) n'est pas comprise.
+  Le bot repond alors "Echeance invalide" et **ne programme aucun rappel** --
+  le message "valide", lui, est deja parti. Refaire la commande avec la bonne
+  forme suffit: seul le rappel manque.
 
 Exemple:
 - `/adhesion-valide user:@Pseudo date-peremption:31/12/2026`

@@ -70,6 +70,7 @@ function parisWallClock(instant: Date): WallClock {
  * @returns Le décalage en millisecondes (+1 h en hiver, +2 h en été).
  */
 function parisOffsetMs(instant: Date): number {
+    if (!Number.isFinite(instant.getTime())) return Number.NaN;
     const wall = parisWallClock(instant);
     const asIfUtc = Date.UTC(wall.year, wall.month - 1, wall.day, wall.hour, wall.minute, wall.second);
     // `formatToParts` tronque à la seconde : on compare donc à l'instant
@@ -98,9 +99,15 @@ function parisOffsetMs(instant: Date): number {
  * @returns L'instant correspondant.
  */
 function parisDaysLater(from: Date, days: number, hour: number): Date {
+    if (!Number.isFinite(from.getTime())) return new Date(Number.NaN);
     const wall = parisWallClock(from);
     // `Date.UTC` normalise le débordement : le 35 octobre devient le 4 novembre.
     const asIfUtc = Date.UTC(wall.year, wall.month - 1, wall.day + days, hour);
+    // Au-delà de ce que `Date` sait représenter (± 8,64e15 ms), `Date.UTC` rend
+    // `NaN`. On **rend une date invalide** plutôt que de laisser `Intl` lever :
+    // une cadence absurde est une saisie à refuser, pas une panne — et le refus
+    // est écrit une seule fois, la où le rappel s'écrit.
+    if (!Number.isFinite(asIfUtc)) return new Date(Number.NaN);
     const approx = asIfUtc - parisOffsetMs(new Date(asIfUtc));
     return new Date(asIfUtc - parisOffsetMs(new Date(approx)));
 }

@@ -95,3 +95,17 @@ test("ne laisse pas les millisecondes fausser le decalage", () => {
   // rate la seconde ronde.
   assert.equal(parisOffsetMs(new Date("2026-07-01T12:00:00.750Z")), 7200000);
 });
+
+test("rend une date invalide plutot que de lever, hors de portee", () => {
+  // `Intl.DateTimeFormat.formatToParts` **leve** un `RangeError` sur une date
+  // invalide. Une cadence absurde est une saisie a refuser, pas une panne :
+  // l'echeance sort invalide, et c'est `setupIntervalAdhesion` qui la refuse,
+  // en un seul endroit. Sans cela l'exception remontait au handler de la
+  // commande, en court-circuitant sa garde.
+  assert.ok(Number.isNaN(parisDaysLater(new Date("2026-07-01T09:13:00Z"), 1e9, 10).getTime()));
+  assert.ok(Number.isNaN(parisDaysLater(new Date("pas une date"), 7, 10).getTime()));
+});
+
+test("ne mesure pas un decalage sur un instant qui n'existe pas", () => {
+  assert.ok(Number.isNaN(parisOffsetMs(new Date("pas une date"))));
+});
