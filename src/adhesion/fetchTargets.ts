@@ -5,6 +5,7 @@ import {sendLog} from "@/safe/sendLog.js";
 import {safeUser} from "@/safe/safeUser.js";
 import {removeIntervalle} from "@/adhesion/removeIntervalle.js";
 import {checkTargets} from "@/adhesion/checkTargets.js";
+import {isGone} from "@/adhesion/isGone.js";
 
 /**
  * Récupère les objets Discord (serveur, canal, rôle, membre, auteur) à partir des ids en base.
@@ -19,6 +20,11 @@ async function fetchTargets(client: Client, bdd: Bdd, interval: adhesionInterval
     try {
         user = await client.users.fetch(interval.author_id);
     } catch(e) {
+        if (!isGone(e)) {
+            // Erreur passagère : on repasse au prochain tour, sans rien effacer.
+            await sendLog(client, "Interval n°" + interval.id + " : auteur injoignable pour l'instant, report.");
+            return null;
+        }
         await sendLog(client, "L'auteur de l'interval " + interval.guild_id + " est perdu. Suppression de l'interval...");
         await removeIntervalle(client, bdd, undefined, interval.id,"");
         return null;
@@ -27,6 +33,10 @@ async function fetchTargets(client: Client, bdd: Bdd, interval: adhesionInterval
     try {
         guild = await client.guilds.fetch(interval.guild_id);
     } catch (e) {
+        if (!isGone(e)) {
+            await sendLog(client, "Interval n°" + interval.id + " : serveur injoignable pour l'instant, report.");
+            return null;
+        }
         const msg: string = "Intervale n°" + interval.id + " annulée car le bot n'est plus sur le serveur concerné.";
         await removeIntervalle(client, bdd, user, interval.id, msg);
         return null;
@@ -38,6 +48,8 @@ async function fetchTargets(client: Client, bdd: Bdd, interval: adhesionInterval
         try {
             fetchResult = await guild.channels.fetch(interval.channel_id);
         } catch (e) {
+            // Même règle que plus haut : seul un « inconnu » retire la cible.
+            if (!isGone(e)) return null;
             fetchResult = null;
         }
         if (fetchResult) {
@@ -78,6 +90,7 @@ async function fetchTargets(client: Client, bdd: Bdd, interval: adhesionInterval
         try {
             member = await guild.members.fetch(interval.member_id);
         } catch (e) {
+            if (!isGone(e)) return null;
             if (user) {
                 await safeUser(
                     client,

@@ -1,8 +1,7 @@
 import {ChatInputCommandInteraction, Client, Message, MessageFlags} from "discord.js";
 import {Bdd, getBddInstance} from "@/bdd/Bdd.js";
 import {safeReply} from "@/safe/safeReply.js";
-import {adhesionIntervalIds, adhesionIntervalObj} from "@/adhesion/types.js"
-import {fetchTargets} from "@/adhesion/fetchTargets.js";
+import {adhesionIntervalIds} from "@/adhesion/types.js"
 
 import {
     ActionRowBuilder,
@@ -13,33 +12,19 @@ import {
 import {sendLog} from "@/safe/sendLog.js";
 
 /**
- * Formate l'affichage d'une cible utilisateur pour l'embed.
- * @param ai Objet de configuration d'un rappel d'adhésion.
- * @returns Mention utilisateur (`<@id>`) si définie, sinon `—`.
+ * Formate une cible pour l'embed, à partir de son **identifiant brut**.
+ *
+ * Aucune résolution n'est demandée à Discord : une mention `<@id>` est rendue
+ * par le client du lecteur, pas par le bot. C'est délibéré — l'affichage
+ * passait auparavant par `fetchTargets`, qui **supprime** l'intervalle quand une
+ * cible ne répond pas. Une commande de lecture ne doit rien effacer, et surtout
+ * pas la ligne qu'on vient d'ouvrir la commande pour lire.
+ *
+ * @param id Identifiant Discord stocké en base, ou `null` si la cible n'existe pas.
+ * @param prefix `@` pour un membre, `@&` pour un rôle, `#` pour un salon.
  */
-
-function formatUser(ai: adhesionIntervalObj): string {
-    if (ai.member) return `<@${ai.member.id}>`;
-    return "—";
-}
-
-/**
- * Formate l'affichage d'une cible rôle pour l'embed.
- * @param ai Objet de configuration d'un rappel d'adhésion.
- * @returns Mention rôle (`<@&id>`) si défini, sinon `—`.
- */
-function formatRole(ai: adhesionIntervalObj): string {
-    if (ai.role) return `<@&${ai.role.id}>`;
-    return "—";
-}
-
-/**
- * Formate l'affichage d'une cible salon pour l'embed.
- * @param ai Objet de configuration d'un rappel d'adhésion.
- * @returns Mention salon (`<#id>`) si défini, sinon `—`.
- */
-function formatChannel(ai: adhesionIntervalObj): string {
-    return ai.channel ? `<#${ai.channel.id}>` : "—";
+function formatTarget(id: string | null, prefix: "@" | "@&" | "#"): string {
+    return id ? `<${prefix}${id}>` : "—";
 }
 
 /**
@@ -52,33 +37,68 @@ function ts(d: Date): number {
 }
 
 /**
+ * Décrit la cadence d'un rappel.
+ *
+ * `iteration` vaut `-1` pour un rappel **sans fin** (`/get-adhesion`), et `n > 0`
+ * pour un rappel qui s'arrêtera après `n` envois — c'est la forme que prend
+ * l'avis de péremption posé par `/adhesion-valide`, avec `n = 1`.
+ *
+ * Les seconds étaient **masqués** de cette liste (`items.filter(i => i.iteration
+ * == -1)`). Ils continuaient pourtant d'être envoyés, et comme `/delete-rappel-
+ * adhesion` réclame un identifiant que seule cette commande donne, ils étaient
+ * aussi **impossibles à annuler**. On les montre donc, en disant ce qu'ils sont.
+ */
+function formatCadence(ai: adhesionIntervalIds): string {
+    if (ai.iteration === -1) {
+        return `Tous les **${ai.interval_days}j**, sans fin`;
+    }
+    const envois = ai.iteration === 1 ? "1 envoi restant" : `${ai.iteration} envois restants`;
+    return `Péremption — **${envois}**`;
+}
+
+/**
  * Construit une page d'embed pour la pagination des configurations d'adhésion.
+ *
+ * La pagination se calcule sur **la liste effectivement affichée**. Elle
+ * comptait auparavant les pages et le total sur `items` entier tout en découpant
+ * une liste filtrée : avec douze rappels dont trois visibles, la commande
+ * annonçait trois pages, n'en remplissait qu'une, et affichait
+ * « Aucun rappel programmé » sur les suivantes.
+ *
  * @param items Liste complète des rappels à paginer.
  * @param page Index de page demandé (base 0).
  * @param pageSize Nombre d'éléments à afficher par page.
  * @returns Objet de pagination contenant `embed`, `page` et `totalPages`, avec page bornée sur l'intervalle valide.
  */
-function buildEmbedPage(items: adhesionIntervalObj[], page: number, pageSize: number) {
+function buildEmbedPage(items: adhesionIntervalIds[], page: number, pageSize: number) {
     const totalPages: number = Math.max(1, Math.ceil(items.length / pageSize));
     const p: number = Math.min(Math.max(page, 0), totalPages - 1);
-    const slice: adhesionIntervalObj[] = items.filter(i => i.iteration == -1).slice(p * pageSize, p * pageSize + pageSize);
+    const slice: adhesionIntervalIds[] = items.slice(p * pageSize, p * pageSize + pageSize);
 
     const desc: string =
         slice.length === 0
             ? "Aucun rappel programmé."
             : slice
-                .map((ai: adhesionIntervalObj): string => {
-                    const when: number = ts(ai.nextTransmission);
+                .map((ai: adhesionIntervalIds): string => {
+                    const when: number = ts(new Date(ai.nextTransmission));
                     const rawMsg: string = ai.message ?? "";
-                    const msg = rawMsg.length > 60 ? rawMsg.slice(0, 57) + "..." : rawMsg;
+                    // Un rappel peut n'avoir aucun message : la ligne n°4 de la
+                    // base de production en était un. Le dire vaut mieux que
+                    // laisser un titre vide, qui se lit comme un bug d'affichage.
+                    const msg = rawMsg.length === 0
+                        ? "_(sans message)_"
+                        : rawMsg.length > 60 ? rawMsg.slice(0, 57) + "..." : rawMsg;
+                    const sansCible =
+                        ai.member_id === null && ai.role_id === null && ai.channel_id === null;
 
                     return [
                         `N°**#${ai.id}** — ${msg}`,
-                        `• Utilisateur à envoyer : ${formatUser(ai)}`,
-                        `• Role à envoyer : ${formatRole(ai)}`,
-                        `• Salon à envoyer : ${formatChannel(ai)}`,
-                        `• Intervalle: **${ai.interval_days}j**`,
+                        `• Utilisateur à envoyer : ${formatTarget(ai.member_id, "@")}`,
+                        `• Role à envoyer : ${formatTarget(ai.role_id, "@&")}`,
+                        `• Salon à envoyer : ${formatTarget(ai.channel_id, "#")}`,
+                        `• Cadence : ${formatCadence(ai)}`,
                         `• Prochain envoi: <t:${when}:F> (**<t:${when}:R>**)`,
+                        ...(sansCible ? ["⚠️ **Aucune cible** — le rappel part à son auteur."] : []),
                     ].join("\n");
                 })
                 .join("\n\n");
@@ -102,7 +122,7 @@ function buildEmbedPage(items: adhesionIntervalObj[], page: number, pageSize: nu
 async function sendInteractiveMsg(
     client: Client,
     interaction: ChatInputCommandInteraction,
-    items: adhesionIntervalObj[]
+    items: adhesionIntervalIds[]
 ): Promise<void> {
     const pageSize = 5;
     let page: number = 0;
@@ -183,24 +203,25 @@ async function sendInteractiveMsg(
  */
 async function displaySetupAdhesion(client: Client,
                                     interaction: ChatInputCommandInteraction): Promise<void> {
-    console.log("Ouille");
     const bdd: Bdd = await getBddInstance();
     const result: unknown[] = await bdd.get("AdhesionInterval", ["*"], undefined);
     if (result.length == 0) {
         await safeReply(interaction, "Pas de rappel paramétré !")
         return;
     }
-    const ids = result as adhesionIntervalIds[];
-    const intervals: adhesionIntervalObj[] = [];
-    for (const intervalID of ids)
-    {
-        const interval: adhesionIntervalObj | null = await fetchTargets(client, bdd, intervalID);
-        if (interval)
-        {
-            intervals.push(interval);
-        }
-    }
+    // Les lignes partent à l'affichage **telles qu'elles sont en base**, sans
+    // passer par `fetchTargets`. Celui-ci résout les identifiants auprès de
+    // Discord et, à la moindre résolution manquée, **supprime** l'intervalle —
+    // une panne réseau ou une limite de débit suffisait donc à effacer
+    // définitivement une programmation, depuis une commande de simple lecture.
+    // L'affichage n'a de toute façon besoin d'aucun objet Discord : une mention
+    // `<@id>` est rendue par le client du lecteur.
+    const intervals = result as adhesionIntervalIds[];
+    intervals.sort((left, right) => left.id - right.id);
     await sendInteractiveMsg(client, interaction, intervals);
 }
 
-export { displaySetupAdhesion };
+// `buildEmbedPage` et `formatCadence` sont pures : exportées pour être
+// éprouvées directement, la pagination et le filtrage étant précisément ce qui
+// a fait disparaître des rappels de la liste.
+export { displaySetupAdhesion, buildEmbedPage, formatCadence };
