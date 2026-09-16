@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>JSDoc: Source: commandsHandlers/admin/resetRefereeRole.js</title>
+    <title>JSDoc: Source: adhesion/nextTransmission.js</title>
 
     <script src="scripts/prettify/prettify.js"> </script>
     <script src="scripts/prettify/lang-css.js"> </script>
@@ -17,7 +17,7 @@
 
 <div id="main">
 
-    <h1 class="page-title">Source: commandsHandlers/admin/resetRefereeRole.js</h1>
+    <h1 class="page-title">Source: adhesion/nextTransmission.js</h1>
 
     
 
@@ -26,38 +26,32 @@
     
     <section>
         <article>
-            <pre class="prettyprint source linenums"><code>import { safeReply } from "../../safe/safeReply.js";
-import { checkPermissions } from "../../check/checkPermissions.js";
-import { getBddInstance } from "../../bdd/Bdd.js";
-import { sendLog } from "../../safe/sendLog.js";
-/**
- * Retire le rôle arbitre du serveur courant.
+            <pre class="prettyprint source linenums"><code>/**
+ * Date du prochain envoi d'un rappel d'adhésion.
  *
- * Les signalements envoyés depuis le site continuent d'arriver dans le canal de
- * logs : seuls les messages privés aux arbitres cessent.
- * @param client Client Discord utilisé pour les appels API.
- * @param interaction Interaction utilisateur en cours.
+ * Elle se calculait à deux endroits, en trois lignes chacun, et les deux
+ * écrivaient l'heure avec `setHours(10, 0, 0, 0)` — donc 10:00 **sur l'horloge
+ * de la machine**, pendant que le cron qui relève ces dates épingle
+ * `Europe/Paris` et que la doc utilisateur promet « 10:00 (heure
+ * Europe/Paris) ». Trois conventions pour une seule heure, d'accord entre elles
+ * seulement tant que le serveur reste à Paris.
+ *
+ * L'heure est donc nommée ici, une fois, et résolue dans son fuseau.
  */
-async function resetRefereeRole(client, interaction) {
-    if (!interaction.guild) {
-        await safeReply(interaction, "Cette commande est utilisable uniquement sur un serveur.");
-        return;
-    }
-    if (!(await checkPermissions(interaction))) {
-        await safeReply(interaction, "Vous devez être administrateur du serveur pour retirer le rôle arbitre.");
-        return;
-    }
-    const bdd = await getBddInstance();
-    const removed = await bdd.removeRefereeRole(interaction.guild.id);
-    if (!removed) {
-        await safeReply(interaction, "Aucun rôle arbitre n'était configuré sur ce serveur.");
-        return;
-    }
-    await safeReply(interaction, "Rôle arbitre retiré. Les signalements du site n'arriveront plus que dans le canal de logs.");
-    await sendLog(client, `/reset-referee-role: ${interaction.guild.id}`);
+import { parisDaysLater } from "../utils/parisTime.js";
+/** L'heure parisienne à laquelle partent les rappels, telle que la doc l'annonce. */
+const ADHESION_REMINDER_HOUR = 10;
+/**
+ * Date du prochain envoi, `intervalDays` jours après le jour parisien de `from`.
+ * @param from Instant de référence — l'envoi qui vient de partir, ou la pose du rappel.
+ * @param intervalDays Cadence du rappel, en jours.
+ * @returns L'instant auquel il sera 10:00 à Paris, ce nombre de jours plus tard.
+ */
+function nextTransmissionAfter(from, intervalDays) {
+    return parisDaysLater(from, intervalDays, ADHESION_REMINDER_HOUR);
 }
-export { resetRefereeRole };
-//# sourceMappingURL=resetRefereeRole.js.map</code></pre>
+export { ADHESION_REMINDER_HOUR, nextTransmissionAfter };
+//# sourceMappingURL=nextTransmission.js.map</code></pre>
         </article>
     </section>
 
