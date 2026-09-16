@@ -6,6 +6,8 @@ import {fetchTargets} from "@/adhesion/fetchTargets.js";
 import {sendLog} from "@/safe/sendLog.js";
 import { removeIntervalle } from "./removeIntervalle.js";
 import { toSQLiteDate } from "@/utils/toSQLiteDatetime.js";
+import { remainingIteration } from "@/adhesion/iteration.js";
+import { nextTransmissionAfter } from "@/adhesion/nextTransmission.js";
 
 /**
  * Vérifie les rappels d'adhésion arrives a échéance puis les envoie.
@@ -37,16 +39,17 @@ async function checkIntervalleAdhesion(client: Client) {
             false,
             fetchedIntervalle.author
         );
-        fetchedIntervalle.nextTransmission = new Date();
-        fetchedIntervalle.nextTransmission.setDate(fetchedIntervalle.nextTransmission.getDate() + fetchedIntervalle.interval_days);
-        fetchedIntervalle.nextTransmission.setHours(10, 0, 0,0);
-        if (fetchedIntervalle.iteration != -1) {
-            fetchedIntervalle.iteration--;
-            if (fetchedIntervalle.iteration == 0) {
-                await removeIntervalle(client, bdd, fetchedIntervalle.author, fetchedIntervalle.id, "Dernière itération du rappel n°" + fetchedIntervalle.id + " effectuée");
-                continue;
-            }
+        // Le décompte est décidé **avant** d'être écrit, et par une seule
+        // règle. L'enchaînement d'avant — `iteration--` puis `== 0` — laissait
+        // passer le zéro, qui devenait `-1` : un rappel à bout d'envois se
+        // réécrivait en rappel **sans fin**, et plus rien ne l'arrêtait.
+        const remaining: number | null = remainingIteration(fetchedIntervalle.iteration);
+        if (remaining === null) {
+            await removeIntervalle(client, bdd, fetchedIntervalle.author, fetchedIntervalle.id, "Dernière itération du rappel n°" + fetchedIntervalle.id + " effectuée");
+            continue;
         }
+        fetchedIntervalle.iteration = remaining;
+        fetchedIntervalle.nextTransmission = nextTransmissionAfter(new Date(), fetchedIntervalle.interval_days);
         await bdd.update(
             "AdhesionInterval",
             {

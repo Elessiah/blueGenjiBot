@@ -26,6 +26,8 @@ Comportement:
 - Si l'auteur n'a pas les permissions admin du bot, les envois vers `channel`/`membre`/`role` sont ignores et le bot envoie en prive a l'auteur.
 - Si `interval` est defini a une valeur > 0 et que l'auteur n'a pas les permissions, la programmation est refusee.
 - En cas de programmation, le prochain envoi est prevu a 10:00 (heure Europe/Paris) apres le nombre de jours indique.
+- L'intervalle est un nombre de jours, 20 au maximum. Une valeur que le bot ne
+  peut pas dater lui fait repondre "Echeance invalide", sans rien programmer.
 
 Exemples:
 - `/get-adhesion`
@@ -98,6 +100,11 @@ Droits:
 Comportement:
 - Le message "valide" est envoye immediatement en message prive au membre.
 - Le message "perimee" est programme pour la date de peremption (envoi unique).
+- **Le format de la date compte.** `DD/MM/YYYY`, et rien d'autre: une date
+  ecrite autrement (la forme ISO `2026-12-31`, par exemple) n'est pas comprise.
+  Le bot repond alors "Echeance invalide" et **ne programme aucun rappel** --
+  le message "valide", lui, est deja parti. Refaire la commande avec la bonne
+  forme suffit: seul le rappel manque.
 
 Exemple:
 - `/adhesion-valide user:@Pseudo date-peremption:31/12/2026`
@@ -122,6 +129,20 @@ Exemple:
 - Ensuite, verification quotidienne a 10:00 (Europe/Paris).
 - Quand une cible (salon/role/membre) n'existe plus, elle est retiree du rappel.
 - Si un rappel n'a plus aucune cible, il est supprime.
+- Un rappel a nombre d'envois fini (`/adhesion-valide`) est supprime apres son
+  dernier envoi; un rappel recurrent (`/get-adhesion`) n'a pas de terme et ne
+  s'arrete qu'avec `/delete-rappel-adhesion`.
+
+### A propos de l'heure
+`10:00 (Europe/Paris)` se lit au pied de la lettre: c'est l'heure parisienne,
+changements d'heure compris, et elle ne depend pas du fuseau de la machine qui
+heberge le bot. Le point merite d'etre ecrit parce qu'il ne l'a pas toujours
+ete: la date du prochain envoi se calculait sur l'horloge du serveur pendant
+que la verification quotidienne, elle, etait bien reglee sur Paris. Les deux
+coincidaient tant que le serveur etait a Paris; ailleurs -- une image Docker
+tourne en UTC par defaut -- le rappel n'etait plus du au moment de la
+verification, partait le lendemain, et **gagnait ainsi un jour a chaque
+periode**, sans message d'erreur.
 
 ## Bonnes pratiques
 - Mettre a jour les fichiers via `/load-adhesion-files` avant tout envoi massif.

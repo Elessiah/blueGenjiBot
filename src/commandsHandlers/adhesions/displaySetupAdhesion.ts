@@ -2,6 +2,7 @@ import {ChatInputCommandInteraction, Client, Message, MessageFlags} from "discor
 import {Bdd, getBddInstance} from "@/bdd/Bdd.js";
 import {safeReply} from "@/safe/safeReply.js";
 import {adhesionIntervalIds} from "@/adhesion/types.js"
+import {ITERATION_UNLIMITED} from "@/adhesion/iteration.js";
 
 import {
     ActionRowBuilder,
@@ -49,7 +50,7 @@ function ts(d: Date): number {
  * aussi **impossibles à annuler**. On les montre donc, en disant ce qu'ils sont.
  */
 function formatCadence(ai: adhesionIntervalIds): string {
-    if (ai.iteration === -1) {
+    if (ai.iteration === ITERATION_UNLIMITED) {
         return `Tous les **${ai.interval_days}j**, sans fin`;
     }
     const envois = ai.iteration === 1 ? "1 envoi restant" : `${ai.iteration} envois restants`;

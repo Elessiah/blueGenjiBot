@@ -4,6 +4,7 @@ import { safeFollowUp } from "@/safe/safeFollowUp.js";
 import { Bdd, getBddInstance } from "@/bdd/Bdd.js";
 import type { status } from "@/types.js";
 import { toSQLiteDate } from "@/utils/toSQLiteDatetime.js";
+import { ITERATION_UNLIMITED, initialIteration } from "@/adhesion/iteration.js";
 
 /**
  * Programme un rappel d'adhésion à intervalle régulier dans la base de données.
@@ -13,8 +14,9 @@ import { toSQLiteDate } from "@/utils/toSQLiteDatetime.js";
  * @param channel Canal cible, ou null.
  * @param member Membre cible, ou null.
  * @param role Rôle cible, ou null.
- * @param interval Intervalle en jours (chaîne).
- * @param intInterval Intervalle en jours (nombre).
+ * @param intInterval Intervalle en jours.
+ * @param nextTransmission Date du premier envoi.
+ * @param iteration Nombre d'envois à faire, ou `undefined` pour un rappel sans terme.
  */
 export async function setupIntervalAdhesion(
     client: Client,
@@ -28,6 +30,49 @@ export async function setupIntervalAdhesion(
     iteration?: number
 ): Promise<void> {
     if (!interaction.guild) return;
+
+    // Un rappel qui n'a aucun envoi à faire n'est pas un rappel : on refuse de
+    // l'écrire plutôt que de laisser la base décider de ce qu'il devient. Le
+    // `iteration ? iteration : -1` d'avant, lui, faisait tomber le zéro du côté
+    // falsy et posait un rappel **perpétuel** — l'inverse de la demande.
+    const storedIteration: number | null = initialIteration(iteration);
+    if (storedIteration === null) {
+        await sendLog(client, "Rappel refusé : " + iteration + " n'est pas un nombre d'envois.");
+        await safeFollowUp(
+            interaction,
+            "Impossible de programmer un rappel sans aucun envoi à faire !",
+            true,
+            []
+        );
+        return;
+    }
+
+    // Deux saisies libres mènent ici, et aucune n'est vérifiée en amont.
+    //
+    // `/adhesion-valide` construit cette date depuis une saisie annoncée en
+    // `jj/mm/aaaa`. Une saisie que `Date` ne comprend pas — la forme ISO, par
+    // exemple, que l'on tape par habitude — donne une date invalide, et
+    // `toSQLiteDate` levait alors un `RangeError` au beau milieu du handler :
+    // le membre vient de recevoir « votre adhésion est validée », aucun
+    // rappel n'est posé, et personne ne l'apprend.
+    //
+    // `/get-adhesion` y mène par l'autre bout : son option `interval` est du
+    // texte libre dont la description dit « 20 jours max » sans que rien ne
+    // l'impose, et une cadence assez grande sort de ce que `Date` sait
+    // représenter.
+    //
+    // Le refus est donc ici, où passe l'écriture de **tout** rappel, plutôt
+    // que chez l'un des deux appelants.
+    if (!Number.isFinite(nextTransmission.getTime())) {
+        await sendLog(client, "Rappel refusé : date d'échéance invalide.");
+        await safeFollowUp(
+            interaction,
+            "Échéance invalide : aucun rappel n'a été programmé. Vérifiez la date (jj/mm/aaaa) ou l'intervalle (20 jours max).",
+            true,
+            []
+        );
+        return;
+    }
 
     const bdd: Bdd = await getBddInstance();
     const result: status = await bdd.set(
@@ -52,7 +97,7 @@ export async function setupIntervalAdhesion(
             interaction.user.id,
             intInterval,
             toSQLiteDate(nextTransmission),
-            iteration ? iteration : -1,
+            storedIteration,
         ]
     );
 
@@ -67,9 +112,19 @@ export async function setupIntervalAdhesion(
         return;
     }
 
+    // Le message annonçait « dans N jours » quel que soit l'appelant, ce qui
+    // donnait « dans 0 jours » à `/adhesion-valide`, dont l'échéance est une
+    // date de péremption et non une cadence. Il dit désormais la seule chose
+    // que les deux appelants ont en commun : **quand** part le prochain envoi.
+    // `<t:...:F>` et `<t:...:R>` sont rendus par Discord dans le fuseau du
+    // lecteur, comme le fait déjà `/show-rappel-adhesion`.
+    const quand: number = Math.floor(nextTransmission.getTime() / 1000);
+    const suite: string = storedIteration === ITERATION_UNLIMITED
+        ? `, puis tous les **${intInterval} jours**`
+        : storedIteration > 1 ? `, ${storedIteration} envois au total` : "";
     await safeFollowUp(
         interaction,
-        `Programmation réussi du rappel. Envoi des adhésions dans ${intInterval} jours`,
+        `Rappel programmé. Prochain envoi <t:${quand}:F> (**<t:${quand}:R>**)${suite}.`,
         false,
         []
     );

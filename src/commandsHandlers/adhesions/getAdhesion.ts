@@ -5,6 +5,7 @@ import {safeFollowUp} from "@/safe/safeFollowUp.js";
 import {safeReply} from "@/safe/safeReply.js";
 import {sendAdhesion} from "@/adhesion/sendAdhesion.js";
 import {setupIntervalAdhesion} from "@/adhesion/setupIntervalAdhesion.js";
+import {nextTransmissionAfter} from "@/adhesion/nextTransmission.js";
 
 /**
  * Récupère et envoie les fichiers d'adhésion configurés.
@@ -44,9 +45,7 @@ async function getAdhesion(client: Client,
     else
         await safeFollowUp(interaction, "Echec de l'envoi !", true, []);
     if (intInterval > 0) {
-        const nextTransmission = new Date();
-        nextTransmission.setHours(10, 0, 0, 0);
-        nextTransmission.setDate(nextTransmission.getDate() + intInterval);
+        const nextTransmission: Date = nextTransmissionAfter(new Date(), intInterval);
         await setupIntervalAdhesion(
             client,
             interaction,
