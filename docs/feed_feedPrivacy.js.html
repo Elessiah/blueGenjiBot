@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>JSDoc: Source: commandsHandlers/adhesions/getAdhesion.js</title>
+    <title>JSDoc: Source: feed/feedPrivacy.js</title>
 
     <script src="scripts/prettify/prettify.js"> </script>
     <script src="scripts/prettify/lang-css.js"> </script>
@@ -17,7 +17,7 @@
 
 <div id="main">
 
-    <h1 class="page-title">Source: commandsHandlers/adhesions/getAdhesion.js</h1>
+    <h1 class="page-title">Source: feed/feedPrivacy.js</h1>
 
     
 
@@ -26,48 +26,79 @@
     
     <section>
         <article>
-            <pre class="prettyprint source linenums"><code>import { checkPermissions } from "../../check/checkPermissions.js";
-import { safeFollowUp } from "../../safe/safeFollowUp.js";
-import { safeReply } from "../../safe/safeReply.js";
-import { sendAdhesion } from "../../adhesion/sendAdhesion.js";
-import { setupIntervalAdhesion } from "../../adhesion/setupIntervalAdhesion.js";
-import { nextTransmissionAfter } from "../../adhesion/nextTransmission.js";
-/**
- * Récupère et envoie les fichiers d'adhésion configurés.
- * @param client Client Discord utilisé pour les appels API.
- * @param interaction Interaction utilisateur en cours.
+            <pre class="prettyprint source linenums"><code>/**
+ * Anonymisation du flux d'activite.
+ *
+ * Le flux n'est pas un journal interne : l'app web soeur le republie sur
+ * `/bot`, une page de **vitrine** que l'on lit sans compte. Or les evenements
+ * y nommaient le joueur par son identifiant Discord — « Code DM envoye a
+ * 390973051367587850 » — et `recordEvent` rangeait le meme identifiant dans la
+ * colonne `target`, donc **en base et sans duree**, d'ou il repartait a chaque
+ * rattrapage d'historique (`getBacklog`).
+ *
+ * Un identifiant Discord n'est pas un secret, mais c'est une **coordonnee** :
+ * il suffit a ecrire a la personne, avec l'horodatage de sa connexion a
+ * l'appui. Le flux dit *ce qui se passe*, jamais *a qui* : un compteur de
+ * salons, un role recherche, un jeu — et « un joueur » a la place de la
+ * personne.
+ *
+ * La regle est posee dans `recordEvent`, **unique ecrivain** de la table : un
+ * appelant ne peut pas l'oublier, et une commande ajoutee demain en herite sans
+ * une ligne. Les appelants ecrivent tout de meme un texte deja anonyme — ce
+ * module est le filet, pas l'intention.
  */
-async function getAdhesion(client, interaction) {
-    if (!interaction.guild) {
-        await safeReply(interaction, "Impossible d'envoyer des adhésions si vous n'êtes pas sur un serveur ! Réessayer sur un serveur");
-        return;
-    }
-    await safeReply(interaction, "Envoie des adhésions en cours...", true);
-    const message = interaction.options.getString("message");
-    const channel = interaction.options.getChannel("channel");
-    const member = interaction.options.getMember("membre");
-    const role = interaction.options.getRole("role");
-    const interval = interaction.options.getString("interval");
-    let intInterval = 0;
-    if (interval != null) {
-        intInterval = parseInt(interval, 10);
-    }
-    const memberPermMissing = !(await checkPermissions(interaction));
-    if (memberPermMissing &amp;&amp; intInterval > 0) {
-        await safeFollowUp(interaction, "Vous n'avez pas les permissions pour définir une intervalle", true, []);
-        return;
-    }
-    if (await sendAdhesion(client, message, channel, member, role, memberPermMissing, interaction.user))
-        await safeFollowUp(interaction, "Envoi réussi !", true, []);
-    else
-        await safeFollowUp(interaction, "Echec de l'envoi !", true, []);
-    if (intInterval > 0) {
-        const nextTransmission = nextTransmissionAfter(new Date(), intInterval);
-        await setupIntervalAdhesion(client, interaction, message, channel, member, role, intInterval, nextTransmission);
-    }
+/** Ce qui remplace la personne dans le texte d'un evenement. */
+export const FEED_ANONYMOUS_ACTOR = "un joueur";
+/**
+ * Un identifiant Discord est un entier de 17 a 20 chiffres. Les gardes
+ * `(?&lt;!\d)` / `(?!\d)` evitent de rogner un nombre plus long, et la borne basse
+ * met hors d'atteinte les nombres que le flux porte legitimement : un
+ * horodatage, un compteur de salons, un niveau.
+ */
+const SNOWFLAKE_PATTERN = /(?&lt;!\d)\d{17,20}(?!\d)/g;
+/** Une mention Discord (`&lt;@id>` ou `&lt;@!id>`) : l'identifiant y est deja emballe. */
+const MENTION_PATTERN = /&lt;@!?\d{17,20}>/g;
+/** Vrai si la chaine entiere est un identifiant Discord, aux espaces pres. */
+export function isSnowflake(value) {
+    return /^\d{17,20}$/.test(value.trim());
 }
-export { getAdhesion };
-//# sourceMappingURL=getAdhesion.js.map</code></pre>
+/**
+ * Retire d'un texte d'evenement toute designation d'une personne.
+ *
+ * Les mentions sont traitees **avant** les identifiants nus : sans cela,
+ * `&lt;@390973051367587850>` laisserait les chevrons orphelins autour du
+ * remplacement.
+ *
+ * @param text Texte de l'evenement, tel que l'appelant l'a redige.
+ * @returns Le meme texte, la personne remplacee par {@link FEED_ANONYMOUS_ACTOR}.
+ */
+export function scrubFeedText(text) {
+    return text
+        .replace(MENTION_PATTERN, FEED_ANONYMOUS_ACTOR)
+        .replace(SNOWFLAKE_PATTERN, FEED_ANONYMOUS_ACTOR);
+}
+/**
+ * Nettoie une colonne d'appoint (`source`, `target`).
+ *
+ * Une valeur qui n'**est** qu'un identifiant ne porte rien d'autre : elle
+ * devient `null` plutot qu'un « un joueur » qui ne dit rien. Un nom de serveur
+ * ou toute autre chaine est conserve, l'identifiant qu'il contiendrait en
+ * moins.
+ *
+ * @param value Valeur a ranger en base, ou `null`/`undefined`.
+ * @returns La valeur nettoyee, ou `null`.
+ */
+export function scrubFeedField(value) {
+    if (value === null || value === undefined) {
+        return null;
+    }
+    if (isSnowflake(value)) {
+        return null;
+    }
+    const scrubbed = scrubFeedText(value);
+    return scrubbed.length > 0 ? scrubbed : null;
+}
+//# sourceMappingURL=feedPrivacy.js.map</code></pre>
         </article>
     </section>
 
@@ -83,7 +114,7 @@ export { getAdhesion };
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Mon Sep 21 2026 18:13:10 GMT+0200 (heure d’été d’Europe centrale)
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Mon Sep 21 2026 18:13:09 GMT+0200 (heure d’été d’Europe centrale)
 </footer>
 
 <script> prettyPrint(); </script>
