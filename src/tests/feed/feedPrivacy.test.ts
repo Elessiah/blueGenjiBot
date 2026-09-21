@@ -8,7 +8,7 @@ import {
   scrubFeedText,
 } from "../../feed/feedPrivacy.js";
 
-const ID = "390973051367587850";
+const ID = "100000000000000001";
 
 test("isSnowflake reconnait un identifiant Discord et lui seul", () => {
   assert.equal(isSnowflake(ID), true);
@@ -40,7 +40,7 @@ test("scrubFeedText avale la mention entiere, chevrons compris", () => {
 });
 
 test("scrubFeedText traite plusieurs personnes dans la meme phrase", () => {
-  const out = scrubFeedText(`<@${ID}> a invite 812647086159036488`);
+  const out = scrubFeedText(`<@${ID}> a invite 100000000000000002`);
   assert.equal(out, `${FEED_ANONYMOUS_ACTOR} a invite ${FEED_ANONYMOUS_ACTOR}`);
   assert.equal(/\d{17}/.test(out), false);
 });

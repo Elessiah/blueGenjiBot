@@ -4,7 +4,7 @@
  * Le flux n'est pas un journal interne : l'app web soeur le republie sur
  * `/bot`, une page de **vitrine** que l'on lit sans compte. Or les evenements
  * y nommaient le joueur par son identifiant Discord — « Code DM envoye a
- * 390973051367587850 » — et `recordEvent` rangeait le meme identifiant dans la
+ * 100000000000000001 » — et `recordEvent` rangeait le meme identifiant dans la
  * colonne `target`, donc **en base et sans duree**, d'ou il repartait a chaque
  * rattrapage d'historique (`getBacklog`).
  *
@@ -43,7 +43,7 @@ export function isSnowflake(value: string): boolean {
  * Retire d'un texte d'evenement toute designation d'une personne.
  *
  * Les mentions sont traitees **avant** les identifiants nus : sans cela,
- * `<@390973051367587850>` laisserait les chevrons orphelins autour du
+ * `<@100000000000000001>` laisserait les chevrons orphelins autour du
  * remplacement.
  *
  * @param text Texte de l'evenement, tel que l'appelant l'a redige.

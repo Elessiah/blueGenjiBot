@@ -91,7 +91,7 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     arrêté.
   - **Aucun évènement ne nomme une personne.** L'app web republie ce flux sur
     `/bot`, une page de vitrine que l'on lit **sans compte** : un évènement y
-    disait « Code DM envoye a 390973051367587850 », et `recordEvent` rangeait le
+    disait « Code DM envoye a 100000000000000001 », et `recordEvent` rangeait le
     même identifiant dans la colonne `target` — donc en base et sans durée,
     d'où il repartait à chaque rattrapage d'historique. Un identifiant Discord
     n'est pas un secret, mais c'est une **coordonnée** : il suffit à écrire à

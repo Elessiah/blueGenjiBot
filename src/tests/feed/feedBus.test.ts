@@ -73,7 +73,7 @@ test("subscribe recoit les events emis et l'unsubscribe stoppe la reception", as
   assert.equal(received.length, beforeCount);
 });
 
-const DISCORD_ID = "390973051367587850";
+const DISCORD_ID = "100000000000000001";
 
 test("recordEvent n'enregistre jamais un identifiant Discord", async () => {
   // Le flux est republie sur une page publique : la regle est posee a
