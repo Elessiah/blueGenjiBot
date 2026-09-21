@@ -84,6 +84,7 @@ BACKUP_STATUS_PATH=             # statut de la sauvegarde OneDrive (défaut /var
 - **Tout en français** côté UI/messages utilisateur.
 - **Imports ESM** : toujours suffixer `.js` (même pour les fichiers `.ts`), TypeScript ESM l'exige.
 - **Requêtes SQL** : exclusivement paramétrées via `Bdd.get/set/...`. Jamais de concat de strings.
+- **Flux d'activité** : rien de ce qui entre dans `recordEvent()` ne doit nommer une personne. L'app web republie ce flux sur `/bot`, page de vitrine lue **sans compte**, et la table `FeedEvent` conserve ses lignes sans durée — un identifiant écrit ici repart à chaque rattrapage d'historique. `feed/feedPrivacy.ts` remplace mention et identifiant nu par « un joueur » ; la règle est posée dans `recordEvent`, **unique écrivain**, jamais chez l'appelant. Un évènement dit *ce qui se passe*, jamais *à qui*.
 - **Erreurs runtime** : try/catch + `sendLog()` ; ne jamais laisser une exception planter le bot.
   `installProcessGuards()` (`safe/processGuards.ts`) capte `unhandledRejection`,
   `uncaughtException` et les événements `error`/`shardError` du client — sans quoi une

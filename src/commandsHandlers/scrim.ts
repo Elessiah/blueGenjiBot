@@ -32,7 +32,7 @@ export async function scrim(client: Client, interaction: ChatInputCommandInterac
       await safeReply(interaction, "Erreur lors de l'enregistrement du scrim.", true, false);
       return;
     }
-    await recordEvent(client, "scrim", `Scrim ${jeu} niveau ${niveau} par <@${interaction.user.id}>`, interaction.guild?.name ?? null, null);
+    await recordEvent(client, "scrim", `Scrim ${jeu} niveau ${niveau}`, interaction.guild?.name ?? null, null);
     await safeReply(interaction, `Recherche de scrim publiee : **${jeu}** (${niveau}).`, false, false);
   } catch (err) {
     await sendLog(client, `scrim handler error: ${(err as Error).message}`);

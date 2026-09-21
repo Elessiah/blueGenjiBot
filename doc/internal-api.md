@@ -85,6 +85,26 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     `unresolved`, et le canal de logs le dit.
   - Même bilan de retour que `/internal/notify/dm`.
 
+- `GET /internal/feed/stream`
+  - Flux SSE des évènements d'activité (`FeedEvent`) : le backlog récent
+    d'abord, puis le direct. `Last-Event-ID` reprend là où le lecteur s'était
+    arrêté.
+  - **Aucun évènement ne nomme une personne.** L'app web republie ce flux sur
+    `/bot`, une page de vitrine que l'on lit **sans compte** : un évènement y
+    disait « Code DM envoye a 390973051367587850 », et `recordEvent` rangeait le
+    même identifiant dans la colonne `target` — donc en base et sans durée,
+    d'où il repartait à chaque rattrapage d'historique. Un identifiant Discord
+    n'est pas un secret, mais c'est une **coordonnée** : il suffit à écrire à
+    la personne, horodatage de sa connexion à l'appui.
+  - La règle est posée dans `recordEvent`, **unique écrivain** de la table, et
+    non chez les appelants : aucun ne peut l'oublier, et une commande ajoutée
+    demain en hérite sans une ligne. Mention (`<@id>`) comme identifiant nu sont
+    remplacés par « un joueur » ; une colonne d'appoint qui n'**est** qu'un
+    identifiant n'est pas enregistrée. Voir `src/feed/feedPrivacy.ts`.
+  - Corriger l'écriture ne corrige pas ce qui est écrit : `purgeFeedIdentifiers()`
+    répare au démarrage les lignes antérieures à la règle, **avant** l'ouverture
+    de l'API interne. Idempotente, elle ne réécrit rien sur une base propre.
+
 ## Réponses d'erreur
 
 Une erreur ne renvoie **jamais** le message de l'exception, seulement un code

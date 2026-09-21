@@ -32,7 +32,7 @@ export async function recrute(client: Client, interaction: ChatInputCommandInter
       await safeReply(interaction, "Erreur lors de l'enregistrement de la recherche.", true, false);
       return;
     }
-    await recordEvent(client, "recr", `Recherche ${role} par <@${interaction.user.id}>`, interaction.guild?.name ?? null, null);
+    await recordEvent(client, "recr", `Recherche ${role}`, interaction.guild?.name ?? null, null);
     await safeReply(interaction, `Recherche publiee : **${role}**.`, false, false);
   } catch (err) {
     await sendLog(client, `recrute handler error: ${(err as Error).message}`);

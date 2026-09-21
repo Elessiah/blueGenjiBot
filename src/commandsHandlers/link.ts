@@ -33,7 +33,7 @@ export async function link(client: Client, interaction: ChatInputCommandInteract
     try {
       await interaction.user.send(`BlueGenji Arena - Code de liaison : **${code}** (valide 10 minutes). Entrez-le sur le site pour lier votre compte Discord.`);
       await safeReply(interaction, "Code envoye en message prive. Verifiez vos DM.", true, false);
-      await recordEvent(client, "auth", `Code /link envoye a <@${interaction.user.id}>`, null, interaction.user.id);
+      await recordEvent(client, "auth", "Code /link envoye a un joueur");
     } catch {
       await safeReply(interaction, "Impossible d'envoyer le DM. Activez les messages prives du serveur dans vos parametres Discord.", true, false);
     }

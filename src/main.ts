@@ -24,6 +24,7 @@ import { safeReact } from "./safe/safeReact.js";
 import { safeReply } from "./safe/safeReply.js";
 import { updateCommands } from "./utils/updateCommands.js";
 import { startInternalApi } from "@/internalApi.js";
+import { purgeFeedIdentifiers } from "@/feed/feedBus.js";
 import { recordDailySnapshot } from "@/snapshots/dailySnapshot.js";
 import { sendDatabaseBackup } from "@/backup/weeklyBackup.js";
 
@@ -184,6 +185,14 @@ client.on("messageDelete", async (message) => {
 
 client.on("clientReady", async () => {
   try {
+    // Avant d'ouvrir l'API interne, et non apres : c'est elle qui sert le flux
+    // d'activite a l'app web, laquelle le republie sur une page publique. Une
+    // base en service porte encore les identifiants Discord collectes avant la
+    // regle d'anonymisation, et `getBacklog()` les rejouerait au premier
+    // lecteur. La purge n'echoue jamais bruyamment : le bot doit demarrer meme
+    // si elle ne passe pas.
+    await purgeFeedIdentifiers(client);
+
     if (!internalApiServer) {
       internalApiServer = startInternalApi(client);
     }

@@ -327,7 +327,7 @@ export function startInternalApi(client: Client) {
     try {
       const user = await client.users.fetch(discordId);
       await user.send(`BlueGenji Arena - Code de connexion: **${code}** (valide 10 minutes).`);
-      await recordEvent(client, 'auth', `Code DM envoye a ${discordId}`, null, discordId);
+      await recordEvent(client, 'auth', 'Code DM envoye a un joueur');
       res.json({ success: true });
     } catch (error) {
       await sendLog(client, `Failed to send auth code to user ${discordId}: ${(error as Error).message}`);

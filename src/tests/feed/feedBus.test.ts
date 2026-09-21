@@ -8,8 +8,8 @@ import fs from "node:fs";
 const TMP_DB = path.join(os.tmpdir(), `bgenji-feed-${randomUUID()}.sqlite`);
 process.env.BDD_PATH = TMP_DB;
 
-import { recordEvent, getBacklog, subscribe, type FeedEventRow } from "../../feed/feedBus.js";
-import { closeBddInstance } from "../../bdd/Bdd.js";
+import { recordEvent, getBacklog, purgeFeedIdentifiers, subscribe, type FeedEventRow } from "../../feed/feedBus.js";
+import { closeBddInstance, getBddInstance } from "../../bdd/Bdd.js";
 
 test("recordEvent insere une ligne et getBacklog la retrouve", async () => {
   await recordEvent(null, "relay", "test relay simple");
@@ -71,6 +71,60 @@ test("subscribe recoit les events emis et l'unsubscribe stoppe la reception", as
   await recordEvent(null, "recr", "recrute apres unsub");
   await new Promise((r) => setImmediate(r));
   assert.equal(received.length, beforeCount);
+});
+
+const DISCORD_ID = "390973051367587850";
+
+test("recordEvent n'enregistre jamais un identifiant Discord", async () => {
+  // Le flux est republie sur une page publique : la regle est posee a
+  // l'ecriture, pas chez l'appelant, pour qu'aucun ne puisse l'oublier.
+  await recordEvent(null, "auth", `Code DM envoye a ${DISCORD_ID}`, null, DISCORD_ID);
+  const backlog = await getBacklog(50);
+  const last = backlog[backlog.length - 1];
+  assert.equal(last.summary, "Code DM envoye a un joueur");
+  assert.equal(last.target, null);
+});
+
+test("recordEvent avale la mention d'un joueur", async () => {
+  await recordEvent(null, "recr", `Recherche TANK par <@${DISCORD_ID}>`, "GuildA", null);
+  const backlog = await getBacklog(50);
+  const last = backlog[backlog.length - 1];
+  assert.equal(last.summary, "Recherche TANK par un joueur");
+  // Le nom du serveur, lui, n'a rien a cacher.
+  assert.equal(last.source, "GuildA");
+});
+
+test("purgeFeedIdentifiers repare les lignes ecrites avant la regle", async () => {
+  // Ecriture directe : c'est exactement ce que la base en service contient,
+  // et `recordEvent` ne sait plus le produire.
+  const bdd = await getBddInstance();
+  await bdd.raw(
+    "INSERT INTO FeedEvent (type, source, target, summary) VALUES (?, ?, ?, ?)",
+    ["auth", null, DISCORD_ID, `Code DM envoye a ${DISCORD_ID}`],
+  );
+  await bdd.raw(
+    "INSERT INTO FeedEvent (type, source, target, summary) VALUES (?, ?, ?, ?)",
+    ["recr", "GuildB", null, `Recherche HEAL par <@${DISCORD_ID}>`],
+  );
+
+  const repaired = await purgeFeedIdentifiers(null);
+  assert.ok(repaired >= 2);
+
+  const backlog = await getBacklog(200);
+  for (const row of backlog) {
+    assert.equal(/\d{17,20}/.test(row.summary), false, row.summary);
+    assert.equal(row.target === DISCORD_ID, false);
+  }
+  const heal = backlog.find((r) => r.summary.startsWith("Recherche HEAL"));
+  assert.ok(heal);
+  assert.equal(heal.summary, "Recherche HEAL par un joueur");
+  assert.equal(heal.source, "GuildB");
+});
+
+test("purgeFeedIdentifiers est idempotente", async () => {
+  // Rejouee a chaque demarrage : une base deja propre ne doit rien reecrire.
+  await purgeFeedIdentifiers(null);
+  assert.equal(await purgeFeedIdentifiers(null), 0);
 });
 
 test.after(async () => {
