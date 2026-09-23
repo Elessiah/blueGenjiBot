@@ -26,22 +26,28 @@ images cassées partout.
 
 Ils sont traités à part, par `scripts/sync-uploads-onedrive.sh` :
 
-- **en clair** — ces images sont servies publiquement par le site, les chiffrer
-  n'apporterait rien ;
 - **au fil de l'eau** — `rclone sync` n'envoie que les fichiers nouveaux ou
   modifiés, le script tourne donc chaque heure pour presque rien, et une image
   n'attend pas le lundi suivant sa première copie ;
-- **sans perte brutale** — un fichier supprimé ou remplacé côté site est déplacé
-  dans `deleted/<horodatage>/` au lieu d'être effacé, puis purgé après
-  `UPLOADS_RETENTION_DAYS` (180 jours par défaut, comme les archives : un dump
-  ancien doit retrouver les images qu'il désigne).
+- **en miroir strict** — un fichier supprimé du site (avatar changé, compte
+  supprimé, logo retiré) est supprimé de OneDrive au passage suivant, soit en
+  moins d'une heure, et **définitivement** : `--onedrive-hard-delete` évite la
+  corbeille OneDrive, qui l'aurait gardé 30 jours de plus. Garder une copie
+  « au cas où » reviendrait à conserver précisément ce qu'on nous a demandé
+  d'effacer. Contrepartie : une image supprimée par erreur ne se récupère pas
+  ici, et un dump ancien restauré peut désigner des images qui n'existent plus
+  (le site affiche alors l'initiale à la place) ;
+- **garde-fou** — si `public/uploads` est vide (mauvais chemin après un
+  redéploiement, disque non monté), le script refuse de synchroniser : le miroir
+  viderait la sauvegarde ;
+- **en clair par défaut** — les images sont servies par le site à qui en connaît
+  l'adresse. Pour les chiffrer, créer un remote `crypt` enveloppant `onedrive:`
+  (`rclone config`) et le désigner par `UPLOADS_RCLONE_REMOTE` : rien d'autre ne
+  change, la synchronisation reste incrémentale.
 
 ```
-onedrive:BlueGenji/uploads/
-├── current/                     # copie conforme de public/uploads
-│   ├── avatars/  teams/  sponsors/  benevoles/  tournaments/
-└── deleted/
-    └── 2026-09-23T150002/       # ce qui a quitté le site à ce passage
+onedrive:BlueGenji/uploads/      # copie conforme de public/uploads
+├── avatars/  teams/  sponsors/  benevoles/  tournaments/
 ```
 
 La sauvegarde du lundi lance aussi cette synchronisation : le statut annonce
@@ -231,16 +237,11 @@ mysql -u root appbluegenji < appbluegenji.sql
 **Images du site** — à recopier dans `public/uploads` de l'app :
 
 ```bash
-rclone copy onedrive:BlueGenji/uploads/current /chemin/vers/appbluegenji/public/uploads
+rclone copy onedrive:BlueGenji/uploads /chemin/vers/appbluegenji/public/uploads
 ```
 
-Pour un dump ancien, les images supprimées depuis se trouvent dans
-`deleted/<horodatage>/`, sous la même arborescence : recopier en plus les
-dossiers postérieurs à la date du dump.
-
-```bash
-rclone copy onedrive:BlueGenji/uploads/deleted/2026-09-20T150002 /chemin/vers/appbluegenji/public/uploads
-```
+C'est l'état **actuel** des images, pas celui de la date du dump : avec un dump
+ancien, les images supprimées depuis manquent — c'est voulu.
 
 ## Variable côté bot
 

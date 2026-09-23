@@ -3,8 +3,8 @@
 # Sauvegarde chiffrée des bases BlueGenji vers OneDrive.
 #
 # Couvre les deux bases — le SQLite du bot et le MySQL du site — puis, si
-# UPLOADS_DIR est renseigné, les images téléversées du site (en clair et par
-# synchronisation incrémentale : voir sync-uploads-onedrive.sh). Le résultat est
+# UPLOADS_DIR est renseigné, les images téléversées du site (miroir incrémental,
+# hors archive : voir sync-uploads-onedrive.sh). Le résultat est
 # déposé dans un fichier de statut que le bot relit pour son rapport hebdomadaire
 # (voir src/backup/backupStatus.ts) : le script reste ainsi indépendant du bot,
 # et une sauvegarde continue même si le process Discord est arrêté.
