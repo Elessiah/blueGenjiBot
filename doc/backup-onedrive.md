@@ -7,7 +7,9 @@ sans rétention, et qui ignorait la base MySQL du site). Elle est assurée par
 1. snapshot SQLite du bot (`.backup`, sûr pendant les écritures) ;
 2. `mysqldump --single-transaction` de la base du site ;
 3. archive `tar`, chiffrée avec `age` ;
-4. envoi `rclone` vers OneDrive et purge des archives trop anciennes ;
+4. envoi `rclone` vers OneDrive et purge des archives de plus de **30 jours**,
+   durée annoncée par la politique de confidentialité du site — les deux
+   doivent bouger ensemble ;
 5. synchronisation des images téléversées du site (voir plus bas) ;
 6. écriture d'un fichier de statut que le bot relit chaque lundi.
 
@@ -40,14 +42,24 @@ Ils sont traités à part, par `scripts/sync-uploads-onedrive.sh` :
 - **garde-fou** — si `public/uploads` est vide (mauvais chemin après un
   redéploiement, disque non monté), le script refuse de synchroniser : le miroir
   viderait la sauvegarde ;
-- **en clair par défaut** — les images sont servies par le site à qui en connaît
-  l'adresse. Pour les chiffrer, créer un remote `crypt` enveloppant `onedrive:`
-  (`rclone config`) et le désigner par `UPLOADS_RCLONE_REMOTE` : rien d'autre ne
-  change, la synchronisation reste incrémentale.
+- **chiffré** — un avatar est une donnée personnelle, même masqué sur le site,
+  et un OneDrive personnel n'offre aucun contrat de sous-traitance : les images
+  passent par un remote `crypt` (étape 3 bis ci-dessous), qui chiffre contenu
+  **et** noms de fichiers avant envoi tout en gardant la synchronisation
+  incrémentale. Le script **refuse** un remote qui n'est pas de type `crypt`
+  (`UPLOADS_ALLOW_PLAINTEXT=true` pour passer outre, à ne pas faire).
+
+Le **journal des suppressions** du site (`<app>/data/account-deletions.jsonl`)
+part avec les images, sur le même remote chiffré. Une ligne par compte supprimé
+(identifiant, date de création, date de suppression) : c'est ce qui permet, après
+la restauration d'une archive, de supprimer à nouveau les comptes supprimés
+depuis (voir « Restauration »). Il est élagué par le site et recopié tel quel,
+sans conserver d'ancienne version (`--onedrive-no-versions`).
 
 ```
-onedrive:BlueGenji/uploads/      # copie conforme de public/uploads
-├── avatars/  teams/  sponsors/  benevoles/  tournaments/
+onedrive:BlueGenji/chiffre/      # vu en clair par onedrive-crypt: uniquement
+├── uploads/     avatars/ teams/ sponsors/ benevoles/ tournaments/
+└── deletions/   account-deletions.jsonl
 ```
 
 La sauvegarde du lundi lance aussi cette synchronisation : le statut annonce
@@ -129,6 +141,33 @@ echo 'age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxx' > scripts/backup-recipients.txt
 > du Raspberry (gestionnaire de mots de passe, clé USB) — sinon la sauvegarde ne
 > sert à rien le jour où la carte SD lâche.
 
+### 3 bis. Chiffrement des images (remote `crypt`)
+
+Les archives sont chiffrées par `age` ; les images et le journal des suppressions
+le sont par un remote `rclone crypt`, qui garde la synchronisation incrémentale
+(chaque fichier est chiffré à part, noms compris).
+
+```bash
+rclone config
+```
+
+`n` (new remote) → nom `onedrive-crypt` → type `crypt` → `remote` :
+`onedrive:BlueGenji/chiffre` → `filename_encryption` : `standard` →
+`directory_name_encryption` : `true` → mot de passe : **générer** (`g`, 256 bits)
+→ second mot de passe (sel) : **générer** aussi.
+
+> **Recopie les deux mots de passe affichés** là où tu gardes la clé `age`.
+> `rclone.conf` ne les contient qu'obscurcis, et sans eux les images sont
+> irrécupérables depuis une autre machine.
+
+Vérification — le premier listage montre des noms lisibles, le second des noms
+chiffrés :
+
+```bash
+rclone lsf onedrive-crypt:
+rclone lsf onedrive:BlueGenji/chiffre
+```
+
 ### 4. Accès MySQL en lecture seule
 
 MariaDB sait authentifier par socket Unix : l'utilisateur système est reconnu
@@ -187,9 +226,10 @@ PATH=/usr/local/bin:/usr/bin:/bin
 17 * * * * /home/elessiah/apps/blueGenjiBot/scripts/sync-uploads-onedrive.sh >> /home/elessiah/apps/logs/bluegenji-uploads.log 2>&1
 ```
 
-La seconde ligne synchronise les images chaque heure. Renseigner d'abord
-`UPLOADS_DIR` dans `backup-onedrive.env` (chemin absolu de `public/uploads` de
-l'app), puis faire un premier passage à la main — c'est lui qui envoie tout le
+La seconde ligne synchronise les images et le journal des suppressions chaque
+heure : une image ou un compte supprimé du site quitte OneDrive dans l'heure.
+Renseigner d'abord `UPLOADS_DIR` dans `backup-onedrive.env` (chemin absolu de
+`public/uploads` de l'app) et créer le remote chiffré (3 bis), puis faire un premier passage à la main — c'est lui qui envoie tout le
 dossier, les suivants n'envoient que les nouveautés :
 
 ```bash
@@ -237,11 +277,26 @@ mysql -u root appbluegenji < appbluegenji.sql
 **Images du site** — à recopier dans `public/uploads` de l'app :
 
 ```bash
-rclone copy onedrive:BlueGenji/uploads /chemin/vers/appbluegenji/public/uploads
+rclone copy onedrive-crypt:uploads /chemin/vers/appbluegenji/public/uploads
 ```
 
 C'est l'état **actuel** des images, pas celui de la date du dump : avec un dump
 ancien, les images supprimées depuis manquent — c'est voulu.
+
+**Suppressions de compte — obligatoire avant de rouvrir le site.** Le dump date
+d'avant certaines suppressions de compte, qui y sont donc revenues. Le site les
+rejoue depuis son journal (`docs/features/BACKUP_DATA_PROTECTION.md` côté site) :
+
+```bash
+cd /chemin/vers/appbluegenji
+# Si la machine a été perdue, le journal local aussi : on reprend sa copie.
+rclone copy onedrive-crypt:deletions/account-deletions.jsonl data/
+npm run replay:deletions -- --dry-run   # ce qui va être supprimé
+npm run replay:deletions
+```
+
+Sans cette étape, restaurer ferait revenir les pseudos, identités de connexion et
+tags Discord de joueurs qui avaient demandé leur suppression.
 
 ## Variable côté bot
 

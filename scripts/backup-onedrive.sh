@@ -29,7 +29,10 @@ fi
 : "${RCLONE_REMOTE:=onedrive}"
 : "${REMOTE_DIR:=BlueGenji/backups}"
 : "${AGE_RECIPIENTS_FILE:=$SCRIPT_DIR/backup-recipients.txt}"
-: "${RETENTION_DAYS:=180}"
+# 30 jours : c'est la durée que la politique de confidentialité du site annonce
+# (`BACKUP_RETENTION_DAYS`, appbluegenji `lib/shared/account-deletion-journal.ts`).
+# La changer ici sans la changer là-bas rendrait la page fausse.
+: "${RETENTION_DAYS:=30}"
 : "${STATUS_FILE:=/var/lib/bluegenji/backup-status.json}"
 : "${MYSQL_DEFAULTS_FILE:=}"
 : "${DB_DATABASE:=}"
