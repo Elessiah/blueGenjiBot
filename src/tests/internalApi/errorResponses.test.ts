@@ -65,3 +65,14 @@ test("le flux SSE ne repond plus une fois les en-tetes envoyes", () => {
   // ...et la reponse d'erreur vient bien apres, donc hors du chemin garde.
   assert.ok(SOURCE.indexOf('"INTERNAL_FEED_ERROR"', garde) > finDeGarde);
 });
+
+test("notify/dm répond 503 quand aucun serveur BlueGenji n'est joignable", () => {
+  // Un `200` portant « tous introuvables » était lu par le site comme un
+  // résultat définitif (joueurs absents du serveur) : la réservation n'était
+  // jamais rendue, et le message ne repartait plus une fois la configuration
+  // réparée. Seul un statut d'échec fait réessayer le site.
+  assert.match(
+    SOURCE,
+    /error instanceof HomeGuildUnavailableError\)\s*\{\s*res\.status\(503\)\.json\(\{ error: "HOME_GUILD_UNAVAILABLE" \}\)/,
+  );
+});

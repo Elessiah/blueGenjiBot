@@ -24,7 +24,7 @@ import { listModules, isValidModule, setModuleEnabled, MODULE_KEYS, type ModuleK
 import { pctDelta, absDelta, deterministicColor, isLoopbackHost, matchesToken } from "@/internalApi/helpers.js";
 import { parseSiteVisitStats, saveSiteVisitStats } from "@/siteVisits/siteVisits.js";
 import { parseDirectMessageRequest, parseRefereeAlert } from "@/notifications/notifications.js";
-import { deliverDirectMessages, alertReferees } from "@/notifications/deliver.js";
+import { deliverDirectMessages, alertReferees, HomeGuildUnavailableError } from "@/notifications/deliver.js";
 import { resolveDiscordHandle } from "@/notifications/resolveHandle.js";
 
 /**
@@ -391,6 +391,12 @@ export function startInternalApi(client: Client) {
       }
       res.json(report);
     } catch (error) {
+      // Configuration absente : rien n'est parti, et le dire autrement qu'en
+      // bilan est ce qui permet au site de réessayer (voir l'erreur).
+      if (error instanceof HomeGuildUnavailableError) {
+        res.status(503).json({ error: "HOME_GUILD_UNAVAILABLE" });
+        return;
+      }
       await sendLog(client, `notify/dm error (${request.context}): ${(error as Error).message}`);
       res.status(500).json({ error: "NOTIFICATION_DELIVERY_FAILED" });
     }

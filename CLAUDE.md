@@ -69,13 +69,25 @@ src/
 
 ## Environment Variables
 
+Les noms ci-dessous sont ceux que le code lit réellement (`.env.example` en fait
+foi). Cette liste en portait trois qui n'existent pas — `DISCORD_TOKEN`,
+`GUILD_ID` « pour register cmds », `LOG_CHANNEL_ID` — et la distribution des
+messages privés a été écrite d'après elle : elle lisait `GUILD_ID`, jamais posé,
+et n'a donc rien envoyé depuis sa création.
+
 ```env
-DISCORD_TOKEN=
+TOKEN=                          # jeton du bot
 CLIENT_ID=
-GUILD_ID=                       # serveur principal pour register cmds
-INTERNAL_API_TOKEN=             # doit matcher BOT_INTERNAL_TOKEN côté appbluegenji
+OWNER_ID=                       # reçoit les logs en message privé
+INFO_SERV=                      # salon Discord des logs (sendLog)
+PRESIDENT=
+SERV_GENJI=                     # serveur BlueGenji (commandes réservées, MP du site)
+SERV_RIVALS=                    # serveur BlueGenji Marvel Rivals (idem)
+PASSWORD=
+INTERNAL_API_HOST=
 INTERNAL_API_PORT=4400          # défaut
-LOG_CHANNEL_ID=                 # channel Discord pour sendLog
+INTERNAL_API_TOKEN=             # doit matcher BOT_INTERNAL_TOKEN côté appbluegenji
+GUILD_ID=                       # facultatif — surcharge les serveurs démarchés par /internal/notify/dm
 BACKUP_STATUS_PATH=             # statut de la sauvegarde OneDrive (défaut /var/lib/bluegenji/backup-status.json)
 ```
 

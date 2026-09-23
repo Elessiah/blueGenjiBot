@@ -9,6 +9,7 @@ import {
   MAX_RECIPIENTS,
   MAX_REFEREE_DMS,
   capRefereeTargets,
+  homeGuildIds,
   type DirectMessageRecipient,
 } from "../../notifications/notifications.js";
 
@@ -169,4 +170,28 @@ test("capRefereeTargets ne rend jamais le tableau d'origine", () => {
 
 test("capRefereeTargets supporte une liste vide", () => {
   assert.deepEqual(capRefereeTargets([]), { kept: [], skipped: 0 });
+});
+
+test("homeGuildIds lit SERV_GENJI et SERV_RIVALS quand GUILD_ID est absent", () => {
+  assert.deepEqual(
+    homeGuildIds({ SERV_GENJI: "111111111111111111", SERV_RIVALS: "222222222222222222" }),
+    ["111111111111111111", "222222222222222222"],
+  );
+});
+
+test("homeGuildIds privilégie GUILD_ID, liste séparée par des virgules comprise", () => {
+  assert.deepEqual(
+    homeGuildIds({ GUILD_ID: " 333333333333333333 , 444444444444444444", SERV_GENJI: "111111111111111111" }),
+    ["333333333333333333", "444444444444444444"],
+  );
+});
+
+test("homeGuildIds écarte les valeurs vides, non numériques et les doublons", () => {
+  assert.deepEqual(homeGuildIds({}), []);
+  assert.deepEqual(homeGuildIds({ GUILD_ID: "  " }), []);
+  assert.deepEqual(homeGuildIds({ SERV_GENJI: "pas-un-id", SERV_RIVALS: "" }), []);
+  assert.deepEqual(
+    homeGuildIds({ SERV_GENJI: "111111111111111111", SERV_RIVALS: "111111111111111111" }),
+    ["111111111111111111"],
+  );
 });
