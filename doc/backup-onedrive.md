@@ -293,8 +293,8 @@ rejoue depuis son journal (`docs/features/BACKUP_DATA_PROTECTION.md` côté site
 cd /chemin/vers/appbluegenji
 # Si la machine a été perdue, le journal local aussi : on reprend sa copie.
 rclone copy onedrive-crypt:deletions/account-deletions.jsonl data/
-npm run replay:deletions -- --dry-run   # ce qui va être supprimé
-npm run replay:deletions
+NODE_ENV=production npm run replay:deletions -- --dry-run   # ce qui va être supprimé
+NODE_ENV=production npm run replay:deletions
 ```
 
 Sans cette étape, restaurer ferait revenir les pseudos, identités de connexion et
