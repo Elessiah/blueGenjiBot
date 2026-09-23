@@ -5,12 +5,11 @@ BlueGenjiBot connecte des serveurs partenaires via des services partages.
 Si vous postez dans un salon assigne avec le bon prefixe, votre message est retransmis aux autres serveurs partenaires utilisant le meme service.
 
 ## Services (prefixes)
-Les recherches de scrim, de joueurs et de staff (`LFS`, `LFSub`, `LFT`, `LFP`,
-`LFG`, `LFStaff`, `LFCast`) sont reservees a **Marvel Rivals**. Seul `TA`
-accepte les annonces de tournoi de tout jeu.
+Tous les services ci-dessous, annonces de tournoi comprises, sont reserves
+a **Marvel Rivals**.
 
 - `LFS` : Recherche de scrim (Marvel Rivals).
-- `TA` : Annonce de tournoi.
+- `TA` : Annonce de tournoi (Marvel Rivals).
 - `LFSub` : Recherche de remplacant (Marvel Rivals).
 - `LFT` : Recherche d'equipe competitive (Marvel Rivals).
 - `LFP` : Recherche de joueurs pour une equipe competitive (Marvel Rivals).
