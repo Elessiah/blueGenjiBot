@@ -49,8 +49,10 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     être sur le serveur BlueGenji.
   - Ordre de recherche : les serveurs BlueGenji (`GUILD_ID`, sinon
     `SERV_GENJI` / `SERV_RIVALS`), puis les autres — cinq serveurs interrogés
-    de front, jamais un par un. Le cache des membres n'est pas consulté : un
-    pseudo qui a changé de titulaire y désignerait l'ancien.
+    de front, jamais un par un. Les serveurs BlueGenji ne retiennent pas les
+    autres plus de 1,2 s : un serveur qui ne répond pas ne bloque pas les
+    partenaires. Le cache des membres n'est pas consulté : un pseudo qui a
+    changé de titulaire y désignerait l'ancien.
   - Délai total de 2,5 s, sous les 3 s après lesquelles le site abandonne :
     à l'échéance, **504** (`BOT_RESOLVE_TIMEOUT`) et non 404 — des serveurs
     n'ont pas répondu, le joueur y est peut-être. Le site dit alors que la

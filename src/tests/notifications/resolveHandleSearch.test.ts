@@ -176,6 +176,52 @@ test("searchInWaves n'entame pas une vague dont le delai est deja epuise", async
   assert.deepEqual(searched, ["a"]);
 });
 
+test("searchInWaves laisse partir la vague suivante quand une vague depasse sa part", async () => {
+  const searched: string[] = [];
+  const outcome = await searchInWaves(
+    [["home-muet"], ["partner"]],
+    (item) => {
+      searched.push(item);
+      if (item === "home-muet") return new Promise<null>(() => { /* ne se resout jamais */ });
+      return Promise.resolve("membre");
+    },
+    { budgetMs: 1_000, concurrency: 5, waveBudgetMs: 30 },
+  );
+  assert.deepEqual(outcome, { status: "found", value: "membre" });
+  assert.deepEqual(searched, ["home-muet", "partner"]);
+});
+
+test("searchInWaves rend l'echeance, pas l'absence, quand une vague a cede la place sans reponse", async () => {
+  const outcome = await searchInWaves(
+    [["home-muet"], ["partner"]],
+    (item) => item === "home-muet"
+      ? new Promise<null>(() => { /* ne se resout jamais */ })
+      : Promise.resolve(null),
+    { budgetMs: 1_000, concurrency: 5, waveBudgetMs: 30 },
+  );
+  assert.deepEqual(outcome, { status: "timeout" });
+});
+
+test("searchInWaves donne tout le delai restant a la derniere vague non vide", async () => {
+  const outcome = await searchInWaves(
+    [["lent"], []],
+    async () => { await sleep(60); return "membre"; },
+    { budgetMs: 1_000, concurrency: 5, waveBudgetMs: 20 },
+  );
+  assert.deepEqual(outcome, { status: "found", value: "membre" });
+});
+
+test("searchInWaves transmet a chaque recherche le temps restant jusqu'a l'echeance totale", async () => {
+  let clock = 0;
+  const seen: number[] = [];
+  await searchInWaves(
+    [["a"], ["b"]],
+    async (_item, remainingMs) => { seen.push(remainingMs); clock += 100; return null; },
+    { budgetMs: 1_000, concurrency: 1, waveBudgetMs: 200, now: () => clock },
+  );
+  assert.deepEqual(seen, [1_000, 900]);
+});
+
 // ---------------------------------------------------------------------------
 // resolveDiscordHandle
 // ---------------------------------------------------------------------------
@@ -307,6 +353,18 @@ test("resolveDiscordHandle compare le seul username, casse ignoree, et le discri
       matchedBy: "tag",
     });
     assert.equal(await resolveDiscordHandle(client, "joueur#9999", FAST), null);
+  }));
+
+test("resolveDiscordHandle interroge les partenaires meme quand un serveur BlueGenji ne repond pas", () =>
+  withHomes(async () => {
+    const client = fakeClient({
+      [GENJI]: { hangs: true },
+      [PARTNER_A]: { members: [member("900000000000000006", "partenaire")] },
+    });
+    assert.deepEqual(
+      await resolveDiscordHandle(client, "partenaire", { budgetMs: 1_000, concurrency: 5, waveBudgetMs: 30 }),
+      { discordId: "900000000000000006", matchedBy: "tag" },
+    );
   }));
 
 test("resolveDiscordHandle rend null quand aucun serveur ne connait le tag", () =>

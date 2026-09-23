@@ -50,6 +50,17 @@ export const RESOLVE_BUDGET_MS = 2_500;
 export const RESOLVE_CONCURRENCY = 5;
 
 /**
+ * Temps maximal pendant lequel une vague retient la suivante.
+ *
+ * Les serveurs BlueGenji répondent d'ordinaire en quelques centaines de
+ * millisecondes. Sans cette borne, un seul d'entre eux qui ne répond pas
+ * consommerait tout {@link RESOLVE_BUDGET_MS}, et aucun serveur partenaire ne
+ * serait jamais interrogé. Passé ce délai, la vague suivante démarre. La vague
+ * interrompue compte comme une recherche **incomplète**, jamais comme une absence.
+ */
+export const RESOLVE_WAVE_BUDGET_MS = 1_200;
+
+/**
  * Marge laissée à une recherche de serveur au-delà du délai total.
  *
  * Le délai de `guild.members.fetch` (`time`, deux minutes par défaut) est
@@ -175,6 +186,12 @@ export interface SearchOptions {
   budgetMs: number;
   /** Recherches menées de front dans une vague. */
   concurrency: number;
+  /**
+   * Temps maximal pendant lequel une vague retient la suivante (ms). Sans
+   * valeur, une vague dispose de tout le délai restant. La dernière vague non
+   * vide en dispose toujours.
+   */
+  waveBudgetMs?: number;
   /** Horloge, remplaçable en test. */
   now?: () => number;
 }
@@ -189,7 +206,9 @@ export interface SearchOptions {
  * injoignable ne doit pas faire échouer la résolution.
  *
  * `timeout` n'est rendu que si des recherches étaient encore en cours ou à
- * lancer : une absence constatée partout reste une absence.
+ * lancer, que ce soit à l'échéance ou quand une vague a cédé la place à la
+ * suivante (`waveBudgetMs`). Une absence constatée partout reste une absence ;
+ * un serveur qui n'a pas répondu ne l'est pas.
  *
  * @param waves Éléments à interroger, par ordre de priorité.
  * @param search Recherche d'un élément ; reçoit le temps qui reste (ms).
@@ -204,25 +223,40 @@ export async function searchInWaves<T, R>(
   const now = options.now ?? Date.now;
   const deadline = now() + options.budgetMs;
   const concurrency = Math.max(1, Math.floor(options.concurrency));
+  const pending = waves.filter((wave) => wave.length > 0);
+  let incomplete = false;
 
-  for (const wave of waves) {
-    if (wave.length === 0) { continue; }
-    const outcome = await searchWave(wave, search, concurrency, deadline, now);
-    if (outcome.status !== "not-found") { return outcome; }
+  for (const [index, wave] of pending.entries()) {
+    const isLast = index === pending.length - 1;
+    const waveDeadline = isLast || options.waveBudgetMs === undefined
+      ? deadline
+      : Math.min(deadline, now() + options.waveBudgetMs);
+    const outcome = await searchWave(wave, search, concurrency, waveDeadline, deadline, now);
+    if (outcome.status === "found") { return outcome; }
+    if (outcome.status === "timeout") {
+      incomplete = true;
+      if (now() >= deadline) { break; }
+    }
   }
-  return { status: "not-found" };
+  return incomplete ? { status: "timeout" } : { status: "not-found" };
 }
 
-/** Une vague de {@link searchInWaves} : un bassin de recherches borné par l'échéance. */
+/**
+ * Une vague de {@link searchInWaves} : un bassin de recherches borné par
+ * l'échéance de la vague. Chaque recherche reçoit le temps restant jusqu'à
+ * l'échéance **totale**, qui est son vrai délai : une vague qui cède la place ne
+ * doit pas abréger des requêtes déjà parties.
+ */
 function searchWave<T, R>(
   items: T[],
   search: (item: T, remainingMs: number) => Promise<R | null>,
   concurrency: number,
+  waveDeadline: number,
   deadline: number,
   now: () => number,
 ): Promise<SearchOutcome<R>> {
   return new Promise((resolve) => {
-    const remaining = deadline - now();
+    const remaining = waveDeadline - now();
     if (remaining <= 0) {
       resolve({ status: "timeout" });
       return;
@@ -280,6 +314,7 @@ function searchWave<T, R>(
  *
  * Les serveurs BlueGenji d'abord, puis les autres, {@link RESOLVE_CONCURRENCY}
  * à la fois, sous un délai total de {@link RESOLVE_BUDGET_MS}. Les serveurs
+ * BlueGenji ne retiennent pas les autres plus de {@link RESOLVE_WAVE_BUDGET_MS}. Les serveurs
  * étaient autrefois parcourus **un par un**, sans délai : un tag absent de tous
  * additionnait leurs latences et dépassait le délai du site, qui annonçait
  * alors une panne.
@@ -300,7 +335,11 @@ function searchWave<T, R>(
 export async function resolveDiscordHandle(
   client: Client,
   handle: string,
-  options: SearchOptions = { budgetMs: RESOLVE_BUDGET_MS, concurrency: RESOLVE_CONCURRENCY },
+  options: SearchOptions = {
+    budgetMs: RESOLVE_BUDGET_MS,
+    concurrency: RESOLVE_CONCURRENCY,
+    waveBudgetMs: RESOLVE_WAVE_BUDGET_MS,
+  },
 ): Promise<HandleResolution | null> {
   const parsed = parseDiscordHandle(handle);
   if (!parsed) { return null; }
