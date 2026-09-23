@@ -55,8 +55,8 @@ export const RESOLVE_CONCURRENCY = 5;
  * Les serveurs BlueGenji répondent d'ordinaire en quelques centaines de
  * millisecondes. Sans cette borne, un seul d'entre eux qui ne répond pas
  * consommerait tout {@link RESOLVE_BUDGET_MS}, et aucun serveur partenaire ne
- * serait jamais interrogé. Passé ce délai, la vague suivante démarre. La vague
- * interrompue compte comme une recherche **incomplète**, jamais comme une absence.
+ * serait jamais interrogé. Passé ce délai, la vague suivante démarre, et la
+ * précédente reste écoutée : sa réponse tardive compte toujours.
  */
 export const RESOLVE_WAVE_BUDGET_MS = 1_200;
 
@@ -188,8 +188,7 @@ export interface SearchOptions {
   concurrency: number;
   /**
    * Temps maximal pendant lequel une vague retient la suivante (ms). Sans
-   * valeur, une vague dispose de tout le délai restant. La dernière vague non
-   * vide en dispose toujours.
+   * valeur, la suivante attend que la précédente ait entièrement répondu.
    */
   waveBudgetMs?: number;
   /** Horloge, remplaçable en test. */
@@ -200,22 +199,27 @@ export interface SearchOptions {
  * Interroge des éléments vague par vague, quelques-uns de front, jusqu'au
  * premier résultat ou jusqu'à l'échéance.
  *
- * Une vague n'est entamée que si la précédente n'a rien trouvé. Un résultat
- * arrête tout : un tag désigne un seul compte, peu importe quel serveur le
- * rend. Une recherche qui **lève** compte pour « rien ici » — un serveur
- * injoignable ne doit pas faire échouer la résolution.
+ * Une vague n'est **libérée** que lorsque la précédente a entièrement répondu
+ * sans rien trouver, ou au bout de `waveBudgetMs` si elle tarde. Libérer la
+ * suivante n'abandonne pas la précédente : ses recherches encore en cours
+ * restent écoutées jusqu'à l'échéance, et un serveur BlueGenji qui répond
+ * tard compte autant qu'un partenaire qui répond vite. Un seul bassin porte
+ * toutes les vagues, sous le même parallélisme.
+ *
+ * Un résultat arrête tout : un tag désigne un seul compte, peu importe quel
+ * serveur le rend. Une recherche qui **lève** compte pour « rien ici » — un
+ * serveur injoignable ne doit pas faire échouer la résolution.
  *
  * `timeout` n'est rendu que si des recherches étaient encore en cours ou à
- * lancer, que ce soit à l'échéance ou quand une vague a cédé la place à la
- * suivante (`waveBudgetMs`). Une absence constatée partout reste une absence ;
- * un serveur qui n'a pas répondu ne l'est pas.
+ * lancer à l'échéance. Une absence constatée partout reste une absence ; un
+ * serveur qui n'a pas répondu ne l'est pas.
  *
  * @param waves Éléments à interroger, par ordre de priorité.
  * @param search Recherche d'un élément ; reçoit le temps qui reste (ms).
- * @param options Délai total et parallélisme.
+ * @param options Délai total, parallélisme, part d'une vague.
  * @returns Le premier résultat, l'absence, ou l'échéance.
  */
-export async function searchInWaves<T, R>(
+export function searchInWaves<T, R>(
   waves: T[][],
   search: (item: T, remainingMs: number) => Promise<R | null>,
   options: SearchOptions,
@@ -224,83 +228,74 @@ export async function searchInWaves<T, R>(
   const deadline = now() + options.budgetMs;
   const concurrency = Math.max(1, Math.floor(options.concurrency));
   const pending = waves.filter((wave) => wave.length > 0);
-  let incomplete = false;
+  if (pending.length === 0) { return Promise.resolve({ status: "not-found" }); }
+  if (options.budgetMs <= 0) { return Promise.resolve({ status: "timeout" }); }
 
-  for (const [index, wave] of pending.entries()) {
-    const isLast = index === pending.length - 1;
-    const waveDeadline = isLast || options.waveBudgetMs === undefined
-      ? deadline
-      : Math.min(deadline, now() + options.waveBudgetMs);
-    const outcome = await searchWave(wave, search, concurrency, waveDeadline, deadline, now);
-    if (outcome.status === "found") { return outcome; }
-    if (outcome.status === "timeout") {
-      incomplete = true;
-      if (now() >= deadline) { break; }
-    }
-  }
-  return incomplete ? { status: "timeout" } : { status: "not-found" };
-}
-
-/**
- * Une vague de {@link searchInWaves} : un bassin de recherches borné par
- * l'échéance de la vague. Chaque recherche reçoit le temps restant jusqu'à
- * l'échéance **totale**, qui est son vrai délai : une vague qui cède la place ne
- * doit pas abréger des requêtes déjà parties.
- */
-function searchWave<T, R>(
-  items: T[],
-  search: (item: T, remainingMs: number) => Promise<R | null>,
-  concurrency: number,
-  waveDeadline: number,
-  deadline: number,
-  now: () => number,
-): Promise<SearchOutcome<R>> {
   return new Promise((resolve) => {
-    const remaining = waveDeadline - now();
-    if (remaining <= 0) {
-      resolve({ status: "timeout" });
-      return;
-    }
-
-    let next = 0;
+    const queue: { item: T; wave: number }[] = [];
+    const unsettled = pending.map((wave) => wave.length);
+    let released = -1;
     let active = 0;
     let settled = false;
+    let waveTimer: ReturnType<typeof setTimeout> | undefined;
 
     const finish = (outcome: SearchOutcome<R>) => {
       if (settled) { return; }
       settled = true;
-      clearTimeout(timer);
+      clearTimeout(deadlineTimer);
+      clearTimeout(waveTimer);
       resolve(outcome);
     };
 
-    const launch = () => {
-      while (!settled && active < concurrency && next < items.length) {
-        const item = items[next++];
+    const releaseNextWave = () => {
+      clearTimeout(waveTimer);
+      released++;
+      for (const item of pending[released]) { queue.push({ item, wave: released }); }
+      if (released < pending.length - 1 && options.waveBudgetMs !== undefined) {
+        waveTimer = setTimeout(() => {
+          releaseNextWave();
+          pump();
+        }, options.waveBudgetMs);
+      }
+    };
+
+    const onSettled = (wave: number, value: R | null | undefined) => {
+      active--;
+      if (settled) { return; }
+      if (value !== null && value !== undefined) {
+        finish({ status: "found", value });
+        return;
+      }
+      unsettled[wave]--;
+      if (wave === released && unsettled[wave] === 0 && released < pending.length - 1) {
+        releaseNextWave();
+      }
+      pump();
+    };
+
+    const pump = () => {
+      while (!settled && active < concurrency && queue.length > 0) {
+        if (now() >= deadline) {
+          finish({ status: "timeout" });
+          return;
+        }
+        const { item, wave } = queue.shift()!;
         active++;
         Promise.resolve()
           .then(() => search(item, Math.max(0, deadline - now())))
           .then(
-            (value) => {
-              active--;
-              if (value !== null && value !== undefined) {
-                finish({ status: "found", value });
-              } else {
-                launch();
-              }
-            },
-            () => {
-              active--;
-              launch();
-            },
+            (value) => onSettled(wave, value),
+            () => onSettled(wave, null),
           );
       }
-      if (!settled && active === 0 && next >= items.length) {
+      if (!settled && active === 0 && queue.length === 0 && released === pending.length - 1) {
         finish({ status: "not-found" });
       }
     };
 
-    const timer = setTimeout(() => finish({ status: "timeout" }), remaining);
-    launch();
+    const deadlineTimer = setTimeout(() => finish({ status: "timeout" }), options.budgetMs);
+    releaseNextWave();
+    pump();
   });
 }
 
@@ -313,11 +308,11 @@ function searchWave<T, R>(
  * (`deliver.ts`).
  *
  * Les serveurs BlueGenji d'abord, puis les autres, {@link RESOLVE_CONCURRENCY}
- * à la fois, sous un délai total de {@link RESOLVE_BUDGET_MS}. Les serveurs
- * BlueGenji ne retiennent pas les autres plus de {@link RESOLVE_WAVE_BUDGET_MS}. Les serveurs
- * étaient autrefois parcourus **un par un**, sans délai : un tag absent de tous
- * additionnait leurs latences et dépassait le délai du site, qui annonçait
- * alors une panne.
+ * à la fois, sous un délai total de {@link RESOLVE_BUDGET_MS} ; les serveurs
+ * BlueGenji ne retiennent pas les autres plus de {@link RESOLVE_WAVE_BUDGET_MS}.
+ * Les serveurs étaient autrefois parcourus **un par un**, sans délai : un tag
+ * absent de tous additionnait leurs latences et dépassait le délai du site, qui
+ * annonçait alors une panne.
  *
  * Le cache des membres n'est **pas** consulté, bien qu'il soit gratuit : un
  * pseudo peut changer de titulaire pendant une reconnexion où le bot manque la

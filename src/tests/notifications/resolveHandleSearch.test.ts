@@ -211,6 +211,49 @@ test("searchInWaves donne tout le delai restant a la derniere vague non vide", a
   assert.deepEqual(outcome, { status: "found", value: "membre" });
 });
 
+test("searchInWaves garde l'ecoute d'une vague qui a cede la place : sa reponse tardive compte", async () => {
+  const searched: string[] = [];
+  const outcome = await searchInWaves(
+    [["home-lent"], ["partner"]],
+    async (item) => {
+      searched.push(item);
+      if (item === "home-lent") { await sleep(80); return "membre-home"; }
+      return null;
+    },
+    { budgetMs: 1_000, concurrency: 5, waveBudgetMs: 20 },
+  );
+  assert.deepEqual(outcome, { status: "found", value: "membre-home" });
+  assert.deepEqual(searched, ["home-lent", "partner"]);
+});
+
+test("searchInWaves libere la vague suivante des que la precedente a tout repondu", async () => {
+  const searched: string[] = [];
+  const outcome = await searchInWaves(
+    [["home"], ["partner"]],
+    async (item) => { searched.push(item); return item === "partner" ? "membre" : null; },
+    // Une part de vague qui depasse le delai du test : seule la liberation
+    // anticipee peut faire aboutir la recherche.
+    { budgetMs: 1_000, concurrency: 5, waveBudgetMs: 60_000 },
+  );
+  assert.deepEqual(outcome, { status: "found", value: "membre" });
+  assert.deepEqual(searched, ["home", "partner"]);
+});
+
+test("searchInWaves libere une vague lointaine quand l'intermediaire a repondu avant la premiere", async () => {
+  const searched: string[] = [];
+  const outcome = await searchInWaves(
+    [["muet"], ["vite"], ["dernier"]],
+    (item) => {
+      searched.push(item);
+      if (item === "muet") return new Promise<null>(() => { /* ne se resout jamais */ });
+      return Promise.resolve(item === "dernier" ? "membre" : null);
+    },
+    { budgetMs: 1_000, concurrency: 5, waveBudgetMs: 20 },
+  );
+  assert.deepEqual(outcome, { status: "found", value: "membre" });
+  assert.deepEqual(searched, ["muet", "vite", "dernier"]);
+});
+
 test("searchInWaves transmet a chaque recherche le temps restant jusqu'a l'echeance totale", async () => {
   let clock = 0;
   const seen: number[] = [];
