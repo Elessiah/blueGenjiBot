@@ -47,6 +47,13 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
   - Balaye **tous** les serveurs du bot, contrairement à `/internal/notify/dm` :
     un membre d'un serveur partenaire doit pouvoir se connecter au site sans
     être sur le serveur BlueGenji.
+  - Ordre de recherche : membres déjà en cache (aucune requête), puis les
+    serveurs BlueGenji (`GUILD_ID`, sinon `SERV_GENJI` / `SERV_RIVALS`), puis
+    les autres — cinq serveurs interrogés de front, jamais un par un.
+  - Délai total de 2,5 s, sous les 3 s après lesquelles le site abandonne :
+    à l'échéance, **504** (`BOT_RESOLVE_TIMEOUT`) et non 404 — des serveurs
+    n'ont pas répondu, le joueur y est peut-être. Le site dit alors que la
+    recherche n'a pas abouti à temps, et non que le tag est introuvable.
 
 - `POST /internal/notify/dm`
   - Body: `{ "message": "...", "recipients": [{ "discordId": "123...", "handle":
