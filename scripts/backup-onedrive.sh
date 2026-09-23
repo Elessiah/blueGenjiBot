@@ -119,8 +119,11 @@ rclone copy "$ARCHIVE.age" "$RCLONE_REMOTE:$REMOTE_DIR" \
 
 # --- 5. Rétention -------------------------------------------------------------
 # Un échec de purge ne doit pas invalider une sauvegarde déjà envoyée.
+# --onedrive-hard-delete : sans lui, l'archive purgée passe par la corbeille
+# OneDrive et y reste encore 30 jours — la durée annoncée serait fausse d'autant.
 rclone delete "$RCLONE_REMOTE:$REMOTE_DIR" \
   --min-age "${RETENTION_DAYS}d" --include "bluegenji-*.tar.age" \
+  --onedrive-hard-delete \
   || echo "[backup] purge des anciennes sauvegardes incomplète." >&2
 
 # --- 6. Images du site --------------------------------------------------------
