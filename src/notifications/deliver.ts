@@ -2,7 +2,7 @@ import type { Client, Guild, GuildMember, Role } from "discord.js";
 import { getBddInstance } from "@/bdd/Bdd.js";
 import { sendLog } from "@/safe/sendLog.js";
 import { findGuildMemberByHandle, parseDiscordHandle } from "@/notifications/resolveHandle.js";
-import { capRefereeTargets, MAX_REFEREE_DMS } from "@/notifications/notifications.js";
+import { capRefereeTargets, homeGuildIds, MAX_REFEREE_DMS } from "@/notifications/notifications.js";
 import type { DirectMessageRecipient } from "@/notifications/notifications.js";
 
 /**
@@ -25,24 +25,43 @@ export interface DeliveryReport {
 }
 
 /**
- * Serveur BlueGenji, seule population que le bot démarche.
+ * Aucun serveur BlueGenji n'est joignable : l'envoi n'a pas eu lieu.
  *
- * Un rappel de match ne s'envoie qu'à un joueur du serveur : c'est la règle
+ * Levée plutôt que rendue en bilan. Le bot répondait `200` en déclarant tous
+ * les destinataires « introuvables » — donc absents du serveur, ce qui est un
+ * **résultat** que le site garde pour définitif (il ne réécrit pas à qui n'est
+ * pas membre). Une configuration absente n'est pas un résultat : la route en
+ * fait un `503`, et le site rend sa réservation pour réessayer.
+ */
+export class HomeGuildUnavailableError extends Error {
+  constructor() {
+    super("HOME_GUILD_UNAVAILABLE");
+    this.name = "HomeGuildUnavailableError";
+  }
+}
+
+/**
+ * Serveurs BlueGenji, seule population que le bot démarche.
+ *
+ * Un rappel de match ne s'envoie qu'à un joueur de BlueGenji : c'est la règle
  * posée côté site (« ils devront être sur le serveur Discord »), et elle borne
  * aussi le risque — sans elle, un tag mal saisi pourrait faire écrire le bot à
- * un inconnu croisé sur un serveur partenaire.
+ * un inconnu croisé sur un serveur partenaire. Les identifiants viennent de
+ * {@link homeGuildIds}.
  *
  * @param client Client Discord.
- * @returns La guilde, ou `null` si `GUILD_ID` n'est pas configuré ou injoignable.
+ * @returns Les serveurs joignables, vide si aucun n'est configuré ou atteint.
  */
-async function fetchHomeGuild(client: Client): Promise<Guild | null> {
-  const guildId = process.env.GUILD_ID?.trim();
-  if (!guildId) { return null; }
-  try {
-    return await client.guilds.fetch(guildId);
-  } catch {
-    return null;
+async function fetchHomeGuilds(client: Client): Promise<Guild[]> {
+  const guilds: Guild[] = [];
+  for (const guildId of homeGuildIds(process.env)) {
+    try {
+      guilds.push(await client.guilds.fetch(guildId));
+    } catch {
+      // Serveur quitté ou identifiant faux : les autres suffisent peut-être.
+    }
   }
+  return guilds;
 }
 
 /**
@@ -52,7 +71,7 @@ async function fetchHomeGuild(client: Client): Promise<Guild | null> {
  * recherche par tag. Dans les deux cas, la réponse vaut appartenance — un
  * `null` signifie « pas sur le serveur », donc pas d'envoi.
  */
-async function findHomeMember(
+async function findMemberIn(
   guild: Guild,
   recipient: DirectMessageRecipient,
 ): Promise<GuildMember | null> {
@@ -80,12 +99,29 @@ async function findHomeMember(
 }
 
 /**
- * Envoie un message privé à chaque destinataire présent sur le serveur BlueGenji.
+ * Retrouve un destinataire sur **l'un** des serveurs BlueGenji — le premier qui
+ * le connaît. Être membre de l'un suffit à être joignable.
+ */
+async function findHomeMember(
+  guilds: Guild[],
+  recipient: DirectMessageRecipient,
+): Promise<GuildMember | null> {
+  for (const guild of guilds) {
+    const member = await findMemberIn(guild, recipient);
+    if (member) { return member; }
+  }
+  return null;
+}
+
+/**
+ * Envoie un message privé à chaque destinataire présent sur l'un des serveurs
+ * BlueGenji.
  *
  * @param client Client Discord.
  * @param message Texte déjà rédigé et borné par l'app.
  * @param recipients Destinataires normalisés et dédoublonnés.
  * @returns Le bilan de la distribution.
+ * @throws {HomeGuildUnavailableError} Aucun serveur BlueGenji joignable : rien n'est parti.
  */
 export async function deliverDirectMessages(
   client: Client,
@@ -94,17 +130,20 @@ export async function deliverDirectMessages(
 ): Promise<DeliveryReport> {
   const report: DeliveryReport = { sent: 0, unresolved: [], failed: [] };
 
-  const guild = await fetchHomeGuild(client);
-  if (!guild) {
+  const guilds = await fetchHomeGuilds(client);
+  if (guilds.length === 0) {
     // Sans serveur de référence, l'appartenance est invérifiable : on n'écrit à
-    // personne plutôt que d'écrire à n'importe qui.
-    report.unresolved.push(...recipients.map((r) => r.label));
-    await sendLog(client, "notify/dm: GUILD_ID absent ou injoignable, aucun message envoyé.");
-    return report;
+    // personne plutôt que d'écrire à n'importe qui — et on le **dit**, au lieu
+    // de déclarer tout le monde absent du serveur.
+    await sendLog(
+      client,
+      "notify/dm: aucun serveur BlueGenji joignable (GUILD_ID, sinon SERV_GENJI / SERV_RIVALS), aucun message envoyé.",
+    );
+    throw new HomeGuildUnavailableError();
   }
 
   for (const recipient of recipients) {
-    const member = await findHomeMember(guild, recipient);
+    const member = await findHomeMember(guilds, recipient);
     if (!member) {
       report.unresolved.push(recipient.label);
       continue;

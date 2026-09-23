@@ -193,3 +193,31 @@ export function parseRefereeAlert(payload: unknown): RefereeAlertRequest | null 
     context: toTrimmedString(raw.context) ?? "site",
   };
 }
+
+/**
+ * Les serveurs BlueGenji, seule population que le bot démarche par message
+ * privé.
+ *
+ * L'envoi lisait `GUILD_ID`, une variable que la configuration réelle du bot
+ * n'a jamais portée : les serveurs BlueGenji y sont nommés `SERV_GENJI` et
+ * `SERV_RIVALS` (ce sont eux qui reçoivent déjà les commandes réservées,
+ * `updateCommands`). Faute de valeur, **aucun** message poussé par le site ne
+ * partait — rappels de match comme annonces RGPD —, et la panne passait pour
+ * « tous les joueurs sont absents du serveur ».
+ *
+ * `GUILD_ID` reste la surcharge explicite (une ou plusieurs valeurs séparées par
+ * des virgules) ; sans elle, les deux serveurs BlueGenji. Un joueur de Marvel
+ * Rivals peut n'être que sur le second : il est membre de BlueGenji autant que
+ * celui du premier.
+ *
+ * Pur : l'environnement est passé en argument.
+ *
+ * @param env Variables d'environnement (`process.env` en production).
+ * @returns Les identifiants de serveur, dédoublonnés, sans valeur vide.
+ */
+export function homeGuildIds(env: Record<string, string | undefined>): string[] {
+  const explicit = env.GUILD_ID?.trim();
+  const raw = explicit ? explicit.split(",") : [env.SERV_GENJI, env.SERV_RIVALS];
+  const ids = raw.map((value) => value?.trim() ?? "").filter((value) => /^\d{5,25}$/.test(value));
+  return [...new Set(ids)];
+}
