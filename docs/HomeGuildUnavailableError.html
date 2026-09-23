@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>JSDoc: Source: commandsHandlers/ban/ban.js</title>
+    <title>JSDoc: Class: HomeGuildUnavailableError</title>
 
     <script src="scripts/prettify/prettify.js"> </script>
     <script src="scripts/prettify/lang-css.js"> </script>
@@ -17,87 +17,150 @@
 
 <div id="main">
 
-    <h1 class="page-title">Source: commandsHandlers/ban/ban.js</h1>
+    <h1 class="page-title">Class: HomeGuildUnavailableError</h1>
 
     
 
 
 
+
+<section>
+
+<header>
     
-    <section>
-        <article>
-            <pre class="prettyprint source linenums"><code>import { MessageFlags } from "discord.js";
-import { getBddInstance } from "../../bdd/Bdd.js";
-import { deleteDPMsgs } from "../../bdd/deleteDPMsgs.js";
-import { checkBan } from "../../check/checkBan.js";
-import { checkPermissions } from "../../check/checkPermissions.js";
-import { safeReply } from "../../safe/safeReply.js";
-import { sendLog } from "../../safe/sendLog.js";
-/**
- * Ban un utilisateur des utilisations du bot discord.
- * @param client Client Discord utilisé pour les appels API.
- * @param interaction Interaction utilisateur en cours.
- * @param user Utilisateur concerne.
- * @param reason Motif fourni pour le bannissement.
- * @returns `true` si l'utilisateur est déjà banni ou banni avec succès; `false` si préconditions/permissions échouent ou erreur base/log.
- */
-async function ban(client, interaction, user, reason) {
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    const guild = interaction.guild;
-    if (!guild) {
-        await safeReply(interaction, "Error occured while checking your right to ban... Guild was not into the interaction. Please try again !", true, true);
-        return false;
-    }
-    if (guild.id !== process.env.SERV_RIVALS &amp;&amp; guild.id !== process.env.SERV_GENJI &amp;&amp; guild.memberCount &lt; 50) {
-        await safeReply(interaction, "Your server doesn't have enough members to ban users.\n" +
-            "A minimum of 50 members is required.\n" +
-            "If necessary, please contact 'Elessiah' or the administrators of a server that meets the requirements to take appropriate measures.\n", true, true);
-        return false;
-    }
-    if (!(await checkPermissions(interaction))) {
-        await safeReply(interaction, "You don't have permission to ban users.\n" +
-            "Please contact 'Elessiah' or your server administrators to take appropriate action if needed.\n", true, true);
-        return false;
-    }
-    const bdd = await getBddInstance();
-    if (!bdd) {
-        await sendLog(client, "Bdd failed in ban !");
-        return false;
-    }
-    const banVerdict = await checkBan(client, user.id, false);
-    if (banVerdict === "BANNED") {
-        await safeReply(interaction, "This user has been already banned.", true, true);
-        return true;
-    }
-    // Verdict indisponible : on refuse plutot que de bannir a l'aveugle. La
-    // ligne `Ban` n'a pas de cle sur `id_user`, un second bannissement du meme
-    // compte en creerait donc un doublon -- et le motif publie au salon
-    // d'administration l'aurait ete pour rien.
-    if (banVerdict === "UNKNOWN") {
-        await safeReply(interaction, "Ban database unreachable, please try again in a moment.", true, true);
-        return false;
-    }
-    await sendLog(client, "**" + user.username + "** *has been banned by " + interaction.user.username + "*");
-    const ids = { admin: "", owner: "" };
-    await sendLog(client, "**Reason:** " + reason, ids);
-    try {
-        await bdd.set('Ban', ['id_user', 'id_moderator', 'id_reason'], [user.id, interaction.user.id, ids.admin]);
-    }
-    catch (e) {
-        await sendLog(client, 'Error while register ban : ' + e.message);
-        return false;
-    }
-    const OGMsgs = await bdd.get('OGMsg', ['id_msg'], {}, { query: "id_author = ?", values: [user.id] });
-    for (const OGMsg of OGMsgs) {
-        await deleteDPMsgs(client, OGMsg.id_msg);
-    }
-    await safeReply(interaction, "Member has been successfully banned !", true, true);
-    return true;
-}
-export { ban };
-//# sourceMappingURL=ban.js.map</code></pre>
-        </article>
-    </section>
+        <h2><span class="attribs"><span class="type-signature"></span></span>HomeGuildUnavailableError<span class="signature">()</span><span class="type-signature"></span></h2>
+        
+            <div class="class-description">Aucun serveur BlueGenji n'est joignable : l'envoi n'a pas eu lieu.
+
+Levée plutôt que rendue en bilan. Le bot répondait `200` en déclarant tous
+les destinataires « introuvables » — donc absents du serveur, ce qui est un
+**résultat** que le site garde pour définitif (il ne réécrit pas à qui n'est
+pas membre). Une configuration absente n'est pas un résultat : la route en
+fait un `503`, et le site rend sa réservation pour réessayer.</div>
+        
+    
+</header>
+
+<article>
+    <div class="container-overview">
+    
+        
+
+    
+    <h2>Constructor</h2>
+    
+
+    
+    <h4 class="name" id="HomeGuildUnavailableError"><span class="type-signature"></span>new HomeGuildUnavailableError<span class="signature">()</span><span class="type-signature"></span></h4>
+    
+
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="notifications_deliver.js.html">notifications/deliver.js</a>, <a href="notifications_deliver.js.html#line14">line 14</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+    </div>
+
+    
+
+    
+
+    
+        <h3 class="subsection-title">Classes</h3>
+
+        <dl>
+            <dt><a href="HomeGuildUnavailableError.html">HomeGuildUnavailableError</a></dt>
+            <dd></dd>
+        </dl>
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+</article>
+
+</section>
 
 
 
