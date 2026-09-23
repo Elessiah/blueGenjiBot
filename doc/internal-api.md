@@ -56,11 +56,20 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     joindre les comptes. Un destinataire sans `discordId` est résolu par son
     `handle` (même résolution que `/internal/auth/resolve`) — les joueurs sont
     sur le serveur BlueGenji, l'ID n'est donc pas requis.
-  - **Seuls les membres du serveur BlueGenji sont démarchés** (`GUILD_ID`) : le
-    destinataire est d'abord retrouvé dans cette guilde, par ID quand l'app le
-    connaît, par tag sinon. Absent de la guilde, aucun envoi n'est tenté — un
-    tag mal saisi ne doit pas faire écrire le bot à un inconnu croisé sur un
-    serveur partenaire. Sans `GUILD_ID` configuré, rien n'est envoyé du tout.
+  - **Seuls les membres des serveurs BlueGenji sont démarchés** : le
+    destinataire est d'abord retrouvé dans l'un d'eux, par ID quand l'app le
+    connaît, par tag sinon. Absent de tous, aucun envoi n'est tenté — un tag
+    mal saisi ne doit pas faire écrire le bot à un inconnu croisé sur un
+    serveur partenaire. Les serveurs sont ceux de `SERV_GENJI` et
+    `SERV_RIVALS` (un joueur de Marvel Rivals peut n'être que sur le second),
+    ou ceux de `GUILD_ID` s'il est posé — surcharge facultative, une ou
+    plusieurs valeurs séparées par des virgules.
+  - **Aucun serveur joignable → `503` (`HOME_GUILD_UNAVAILABLE`)**, rien n'est
+    envoyé. Ce n'est pas un bilan : le bot répondait `200` en déclarant tous
+    les destinataires « introuvables », que l'app lit comme « absents du
+    serveur » — un résultat définitif, qu'elle ne retente pas. La route
+    n'envoyait donc plus rien depuis sa création (la variable `GUILD_ID` n'a
+    jamais figuré dans la configuration réelle) sans qu'aucun statut ne le dise.
   - Le message est tronqué à 1800 caractères, les destinataires dédoublonnés
     (par ID, à défaut par tag en minuscules) et bornés à 100 par appel. Un corps
     sans message ou sans destinataire joignable est refusé en 400
