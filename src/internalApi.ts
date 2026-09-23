@@ -25,7 +25,7 @@ import { pctDelta, absDelta, deterministicColor, isLoopbackHost, matchesToken } 
 import { parseSiteVisitStats, saveSiteVisitStats } from "@/siteVisits/siteVisits.js";
 import { parseDirectMessageRequest, parseRefereeAlert } from "@/notifications/notifications.js";
 import { deliverDirectMessages, alertReferees, HomeGuildUnavailableError } from "@/notifications/deliver.js";
-import { resolveDiscordHandle } from "@/notifications/resolveHandle.js";
+import { HandleResolutionTimeoutError, resolveDiscordHandle } from "@/notifications/resolveHandle.js";
 
 /**
  * Verifie le header `x-internal-token` avant de laisser passer une requete `/internal/*`.
@@ -310,6 +310,12 @@ export function startInternalApi(client: Client) {
       }
       res.json(resolved);
     } catch (error) {
+      if (error instanceof HandleResolutionTimeoutError) {
+        // Pas une panne : des serveurs n'ont pas répondu à temps. Le site
+        // connaît ce code et le distingue d'un tag introuvable.
+        res.status(504).json({ error: "BOT_RESOLVE_TIMEOUT" });
+        return;
+      }
       await sendLog(client, `Failed to resolve discord handle "${handle}": ${(error as Error).message}`);
       res.status(500).json({ error: "INTERNAL_RESOLVE_ERROR" });
     }
