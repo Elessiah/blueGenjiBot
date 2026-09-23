@@ -67,7 +67,7 @@ Moderation (serveurs de 50+ membres) :
 
 Publiques :
 - `/ping` : verifie la latence du bot.
-- `/scrim <jeu> <niveau>` : publie une recherche de scrim, **Marvel Rivals uniquement**.
+- `/scrim <niveau>` : publie une recherche de scrim, **Marvel Rivals uniquement**.
 - `/recrute <role>` : publie une recherche de joueurs ou staff, **Marvel Rivals uniquement**.
 - `/link` : recoit en DM un code pour lier ton compte Discord au site BlueGenji.
 - `/stats [joueur]` : affiche les stats 30j d'un joueur (toi par defaut).
