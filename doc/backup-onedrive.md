@@ -227,7 +227,9 @@ PATH=/usr/local/bin:/usr/bin:/bin
 ```
 
 La seconde ligne synchronise les images et le journal des suppressions chaque
-heure : une image ou un compte supprimé du site quitte OneDrive dans l'heure.
+heure : une image ou un compte supprimé du site quitte OneDrive dans l'heure. Elle
+purge aussi les archives de plus de `RETENTION_DAYS` jours — la purge du lundi
+seule laisserait une archive vivre jusqu'à 35 jours.
 Renseigner d'abord `UPLOADS_DIR` dans `backup-onedrive.env` (chemin absolu de
 `public/uploads` de l'app) et créer le remote chiffré (3 bis), puis faire un premier passage à la main — c'est lui qui envoie tout le
 dossier, les suivants n'envoient que les nouveautés :

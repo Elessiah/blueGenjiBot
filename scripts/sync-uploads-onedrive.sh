@@ -56,6 +56,9 @@ fi
 : "${UPLOADS_ALLOW_PLAINTEXT:=false}"
 : "${DELETION_JOURNAL_REMOTE_DIR:=deletions}"
 : "${UPLOADS_LOCK_FILE:=/tmp/bluegenji-uploads-sync.lock}"
+# Mêmes défauts que backup-onedrive.sh : la purge horaire des archives en dépend.
+: "${REMOTE_DIR:=BlueGenji/backups}"
+: "${RETENTION_DAYS:=30}"
 
 log() { echo "[uploads] $*"; }
 die() { echo "[uploads] ÉCHEC : $*" >&2; exit 1; }
@@ -117,5 +120,16 @@ else
   # Aucune suppression consignée (ou journal retiré) : rien ne doit rester en face.
   rclone deletefile "$JOURNAL_DEST" "${ONEDRIVE_FLAGS[@]}" >/dev/null 2>&1 || true
 fi
+
+# --- Rétention des archives ----------------------------------------------------
+# La purge de backup-onedrive.sh ne tourne que le lundi : une archive créée un
+# lundi y a 28 jours au quatrième passage (gardée), 35 au cinquième — au-delà des
+# RETENTION_DAYS que le site annonce. Refaite ici chaque heure, la borne tient à
+# une heure près, même quand la sauvegarde du lundi échoue avant sa purge. Un
+# échec de purge ne fait pas échouer la synchronisation.
+rclone delete "$RCLONE_REMOTE:$REMOTE_DIR" \
+  --min-age "${RETENTION_DAYS}d" --include "bluegenji-*.tar.age" \
+  --onedrive-hard-delete \
+  || echo "[uploads] purge des anciennes archives incomplète." >&2
 
 log "Images et journal des suppressions synchronisés vers $UPLOADS_RCLONE_REMOTE."
