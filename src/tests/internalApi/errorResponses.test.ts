@@ -76,3 +76,13 @@ test("notify/dm répond 503 quand aucun serveur BlueGenji n'est joignable", () =
     /error instanceof HomeGuildUnavailableError\)\s*\{\s*res\.status\(503\)\.json\(\{ error: "HOME_GUILD_UNAVAILABLE" \}\)/,
   );
 });
+
+test("auth/resolve répond 504 BOT_RESOLVE_TIMEOUT, jamais 404, quand la recherche expire", () => {
+  // À l'échéance, des serveurs n'ont pas répondu : le joueur y est peut-être.
+  // Un `404` serait lu par le site comme « tag introuvable » ; le code
+  // `BOT_RESOLVE_TIMEOUT` est celui qu'il connaît déjà pour un délai dépassé.
+  assert.match(
+    SOURCE,
+    /error instanceof HandleResolutionTimeoutError\)\s*\{[^}]*res\.status\(504\)\.json\(\{ error: "BOT_RESOLVE_TIMEOUT" \}\)/,
+  );
+});
