@@ -8,13 +8,45 @@ sans rétention, et qui ignorait la base MySQL du site). Elle est assurée par
 2. `mysqldump --single-transaction` de la base du site ;
 3. archive `tar`, chiffrée avec `age` ;
 4. envoi `rclone` vers OneDrive et purge des archives trop anciennes ;
-5. écriture d'un fichier de statut que le bot relit chaque lundi.
+5. synchronisation des images téléversées du site (voir plus bas) ;
+6. écriture d'un fichier de statut que le bot relit chaque lundi.
 
 Le script est indépendant du bot : la sauvegarde continue même si le process
 Discord est arrêté. Le bot n'envoie plus aucun fichier — les sauvegardes vivent
 uniquement sur OneDrive. Son message hebdomadaire du lundi 4 h se limite au
 statut de la dernière sauvegarde et à l'espace disque restant, et passe en alerte
 dès qu'aucune sauvegarde réussie n'a moins de huit jours.
+
+## Images du site
+
+Avatars, logos d'équipe et de partenaires, photos de bénévoles et illustrations
+de tournoi vivent dans `public/uploads` de l'app, **hors de la base** : le dump
+MySQL n'en garde que le chemin. Sans eux, une base restaurée afficherait des
+images cassées partout.
+
+Ils sont traités à part, par `scripts/sync-uploads-onedrive.sh` :
+
+- **en clair** — ces images sont servies publiquement par le site, les chiffrer
+  n'apporterait rien ;
+- **au fil de l'eau** — `rclone sync` n'envoie que les fichiers nouveaux ou
+  modifiés, le script tourne donc chaque heure pour presque rien, et une image
+  n'attend pas le lundi suivant sa première copie ;
+- **sans perte brutale** — un fichier supprimé ou remplacé côté site est déplacé
+  dans `deleted/<horodatage>/` au lieu d'être effacé, puis purgé après
+  `UPLOADS_RETENTION_DAYS` (180 jours par défaut, comme les archives : un dump
+  ancien doit retrouver les images qu'il désigne).
+
+```
+onedrive:BlueGenji/uploads/
+├── current/                     # copie conforme de public/uploads
+│   ├── avatars/  teams/  sponsors/  benevoles/  tournaments/
+└── deleted/
+    └── 2026-09-23T150002/       # ce qui a quitté le site à ce passage
+```
+
+La sauvegarde du lundi lance aussi cette synchronisation : le statut annonce
+alors `sqlite+mysql+images`, et passe en échec si les images n'ont pas pu partir
+— c'est le seul endroit où une panne du cron horaire se remarque.
 
 ## Installation (à faire sur le Raspberry)
 
@@ -146,7 +178,20 @@ appelée, et l'échec ne se manifesterait qu'en production.
 ```cron
 PATH=/usr/local/bin:/usr/bin:/bin
 0 3 * * 1 /home/elessiah/apps/blueGenjiBot/scripts/backup-onedrive.sh >> /home/elessiah/apps/logs/bluegenji-backup.log 2>&1
+17 * * * * /home/elessiah/apps/blueGenjiBot/scripts/sync-uploads-onedrive.sh >> /home/elessiah/apps/logs/bluegenji-uploads.log 2>&1
 ```
+
+La seconde ligne synchronise les images chaque heure. Renseigner d'abord
+`UPLOADS_DIR` dans `backup-onedrive.env` (chemin absolu de `public/uploads` de
+l'app), puis faire un premier passage à la main — c'est lui qui envoie tout le
+dossier, les suivants n'envoient que les nouveautés :
+
+```bash
+./scripts/sync-uploads-onedrive.sh
+```
+
+Les deux tâches partagent un verrou (`flock`) : si elles se croisent le lundi à
+3 h, la seconde attend la première au lieu de synchroniser en même temps.
 
 ## Restauration
 
@@ -181,6 +226,20 @@ surveille justement l'espace disque.
 
 ```bash
 mysql -u root appbluegenji < appbluegenji.sql
+```
+
+**Images du site** — à recopier dans `public/uploads` de l'app :
+
+```bash
+rclone copy onedrive:BlueGenji/uploads/current /chemin/vers/appbluegenji/public/uploads
+```
+
+Pour un dump ancien, les images supprimées depuis se trouvent dans
+`deleted/<horodatage>/`, sous la même arborescence : recopier en plus les
+dossiers postérieurs à la date du dump.
+
+```bash
+rclone copy onedrive:BlueGenji/uploads/deleted/2026-09-20T150002 /chemin/vers/appbluegenji/public/uploads
 ```
 
 ## Variable côté bot

@@ -2,7 +2,9 @@
 #
 # Sauvegarde chiffrée des bases BlueGenji vers OneDrive.
 #
-# Couvre les deux bases : le SQLite du bot et le MySQL du site. Le résultat est
+# Couvre les deux bases — le SQLite du bot et le MySQL du site — puis, si
+# UPLOADS_DIR est renseigné, les images téléversées du site (en clair et par
+# synchronisation incrémentale : voir sync-uploads-onedrive.sh). Le résultat est
 # déposé dans un fichier de statut que le bot relit pour son rapport hebdomadaire
 # (voir src/backup/backupStatus.ts) : le script reste ainsi indépendant du bot,
 # et une sauvegarde continue même si le process Discord est arrêté.
@@ -31,6 +33,7 @@ fi
 : "${STATUS_FILE:=/var/lib/bluegenji/backup-status.json}"
 : "${MYSQL_DEFAULTS_FILE:=}"
 : "${DB_DATABASE:=}"
+: "${UPLOADS_DIR:=}"
 
 STAMP="$(date +%Y-%m-%d)"
 WORK_DIR="$(mktemp -d)"
@@ -119,6 +122,24 @@ rclone copy "$ARCHIVE.age" "$RCLONE_REMOTE:$REMOTE_DIR" \
 rclone delete "$RCLONE_REMOTE:$REMOTE_DIR" \
   --min-age "${RETENTION_DAYS}d" --include "bluegenji-*.tar.age" \
   || echo "[backup] purge des anciennes sauvegardes incomplète." >&2
+
+# --- 6. Images du site --------------------------------------------------------
+# Après l'archive, et non avant : une panne OneDrive côté images ne doit pas
+# priver la semaine de sa sauvegarde des bases. L'échec est tout de même porté
+# au statut — le cron horaire qui fait le gros du travail n'a, lui, aucun autre
+# moyen d'être remarqué que ce rapport du lundi.
+if [[ -n "$UPLOADS_DIR" ]]; then
+  UPLOADS_LOG="$WORK_DIR/uploads.log"
+  if BACKUP_CONFIG="$CONFIG_FILE" "$SCRIPT_DIR/sync-uploads-onedrive.sh" >"$UPLOADS_LOG" 2>&1; then
+    STATUS_PARTS="$STATUS_PARTS+images"
+    cat "$UPLOADS_LOG"
+  else
+    cat "$UPLOADS_LOG" >&2
+    fail "bases envoyées, mais images non synchronisées : $(grep -m1 'ÉCHEC' "$UPLOADS_LOG" | sed 's/^\[uploads\] ÉCHEC : //' || echo 'cause inconnue')"
+  fi
+else
+  echo "[backup] UPLOADS_DIR non configuré — images du site non sauvegardées."
+fi
 
 STATUS_OK=true
 write_status
