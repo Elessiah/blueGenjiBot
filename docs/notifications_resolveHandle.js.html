@@ -51,8 +51,8 @@ export const RESOLVE_CONCURRENCY = 5;
  * Les serveurs BlueGenji répondent d'ordinaire en quelques centaines de
  * millisecondes. Sans cette borne, un seul d'entre eux qui ne répond pas
  * consommerait tout {@link RESOLVE_BUDGET_MS}, et aucun serveur partenaire ne
- * serait jamais interrogé. Passé ce délai, la vague suivante démarre. La vague
- * interrompue compte comme une recherche **incomplète**, jamais comme une absence.
+ * serait jamais interrogé. Passé ce délai, la vague suivante démarre, et la
+ * précédente reste écoutée : sa réponse tardive compte toujours.
  */
 export const RESOLVE_WAVE_BUDGET_MS = 1_200;
 /**
@@ -169,94 +169,100 @@ export function resolutionWaves(guilds, homeIds) {
  * Interroge des éléments vague par vague, quelques-uns de front, jusqu'au
  * premier résultat ou jusqu'à l'échéance.
  *
- * Une vague n'est entamée que si la précédente n'a rien trouvé. Un résultat
- * arrête tout : un tag désigne un seul compte, peu importe quel serveur le
- * rend. Une recherche qui **lève** compte pour « rien ici » — un serveur
- * injoignable ne doit pas faire échouer la résolution.
+ * Une vague n'est **libérée** que lorsque la précédente a entièrement répondu
+ * sans rien trouver, ou au bout de `waveBudgetMs` si elle tarde. Libérer la
+ * suivante n'abandonne pas la précédente : ses recherches encore en cours
+ * restent écoutées jusqu'à l'échéance, et un serveur BlueGenji qui répond
+ * tard compte autant qu'un partenaire qui répond vite. Un seul bassin porte
+ * toutes les vagues, sous le même parallélisme.
+ *
+ * Un résultat arrête tout : un tag désigne un seul compte, peu importe quel
+ * serveur le rend. Une recherche qui **lève** compte pour « rien ici » — un
+ * serveur injoignable ne doit pas faire échouer la résolution.
  *
  * `timeout` n'est rendu que si des recherches étaient encore en cours ou à
- * lancer, que ce soit à l'échéance ou quand une vague a cédé la place à la
- * suivante (`waveBudgetMs`). Une absence constatée partout reste une absence ;
- * un serveur qui n'a pas répondu ne l'est pas.
+ * lancer à l'échéance. Une absence constatée partout reste une absence ; un
+ * serveur qui n'a pas répondu ne l'est pas.
  *
  * @param waves Éléments à interroger, par ordre de priorité.
  * @param search Recherche d'un élément ; reçoit le temps qui reste (ms).
- * @param options Délai total et parallélisme.
+ * @param options Délai total, parallélisme, part d'une vague.
  * @returns Le premier résultat, l'absence, ou l'échéance.
  */
-export async function searchInWaves(waves, search, options) {
+export function searchInWaves(waves, search, options) {
     const now = options.now ?? Date.now;
     const deadline = now() + options.budgetMs;
     const concurrency = Math.max(1, Math.floor(options.concurrency));
     const pending = waves.filter((wave) => wave.length > 0);
-    let incomplete = false;
-    for (const [index, wave] of pending.entries()) {
-        const isLast = index === pending.length - 1;
-        const waveDeadline = isLast || options.waveBudgetMs === undefined
-            ? deadline
-            : Math.min(deadline, now() + options.waveBudgetMs);
-        const outcome = await searchWave(wave, search, concurrency, waveDeadline, deadline, now);
-        if (outcome.status === "found") {
-            return outcome;
-        }
-        if (outcome.status === "timeout") {
-            incomplete = true;
-            if (now() >= deadline) {
-                break;
-            }
-        }
+    if (pending.length === 0) {
+        return Promise.resolve({ status: "not-found" });
     }
-    return incomplete ? { status: "timeout" } : { status: "not-found" };
-}
-/**
- * Une vague de {@link searchInWaves} : un bassin de recherches borné par
- * l'échéance de la vague. Chaque recherche reçoit le temps restant jusqu'à
- * l'échéance **totale**, qui est son vrai délai : une vague qui cède la place ne
- * doit pas abréger des requêtes déjà parties.
- */
-function searchWave(items, search, concurrency, waveDeadline, deadline, now) {
+    if (options.budgetMs &lt;= 0) {
+        return Promise.resolve({ status: "timeout" });
+    }
     return new Promise((resolve) => {
-        const remaining = waveDeadline - now();
-        if (remaining &lt;= 0) {
-            resolve({ status: "timeout" });
-            return;
-        }
-        let next = 0;
+        const queue = [];
+        const unsettled = pending.map((wave) => wave.length);
+        let released = -1;
         let active = 0;
         let settled = false;
+        let waveTimer;
         const finish = (outcome) => {
             if (settled) {
                 return;
             }
             settled = true;
-            clearTimeout(timer);
+            clearTimeout(deadlineTimer);
+            clearTimeout(waveTimer);
             resolve(outcome);
         };
-        const launch = () => {
-            while (!settled &amp;&amp; active &lt; concurrency &amp;&amp; next &lt; items.length) {
-                const item = items[next++];
+        const releaseNextWave = () => {
+            clearTimeout(waveTimer);
+            released++;
+            for (const item of pending[released]) {
+                queue.push({ item, wave: released });
+            }
+            if (released &lt; pending.length - 1 &amp;&amp; options.waveBudgetMs !== undefined) {
+                waveTimer = setTimeout(() => {
+                    releaseNextWave();
+                    pump();
+                }, options.waveBudgetMs);
+            }
+        };
+        const onSettled = (wave, value) => {
+            active--;
+            if (settled) {
+                return;
+            }
+            if (value !== null &amp;&amp; value !== undefined) {
+                finish({ status: "found", value });
+                return;
+            }
+            unsettled[wave]--;
+            if (wave === released &amp;&amp; unsettled[wave] === 0 &amp;&amp; released &lt; pending.length - 1) {
+                releaseNextWave();
+            }
+            pump();
+        };
+        const pump = () => {
+            while (!settled &amp;&amp; active &lt; concurrency &amp;&amp; queue.length > 0) {
+                if (now() >= deadline) {
+                    finish({ status: "timeout" });
+                    return;
+                }
+                const { item, wave } = queue.shift();
                 active++;
                 Promise.resolve()
                     .then(() => search(item, Math.max(0, deadline - now())))
-                    .then((value) => {
-                    active--;
-                    if (value !== null &amp;&amp; value !== undefined) {
-                        finish({ status: "found", value });
-                    }
-                    else {
-                        launch();
-                    }
-                }, () => {
-                    active--;
-                    launch();
-                });
+                    .then((value) => onSettled(wave, value), () => onSettled(wave, null));
             }
-            if (!settled &amp;&amp; active === 0 &amp;&amp; next >= items.length) {
+            if (!settled &amp;&amp; active === 0 &amp;&amp; queue.length === 0 &amp;&amp; released === pending.length - 1) {
                 finish({ status: "not-found" });
             }
         };
-        const timer = setTimeout(() => finish({ status: "timeout" }), remaining);
-        launch();
+        const deadlineTimer = setTimeout(() => finish({ status: "timeout" }), options.budgetMs);
+        releaseNextWave();
+        pump();
     });
 }
 /**
@@ -268,11 +274,11 @@ function searchWave(items, search, concurrency, waveDeadline, deadline, now) {
  * (`deliver.ts`).
  *
  * Les serveurs BlueGenji d'abord, puis les autres, {@link RESOLVE_CONCURRENCY}
- * à la fois, sous un délai total de {@link RESOLVE_BUDGET_MS}. Les serveurs
- * BlueGenji ne retiennent pas les autres plus de {@link RESOLVE_WAVE_BUDGET_MS}. Les serveurs
- * étaient autrefois parcourus **un par un**, sans délai : un tag absent de tous
- * additionnait leurs latences et dépassait le délai du site, qui annonçait
- * alors une panne.
+ * à la fois, sous un délai total de {@link RESOLVE_BUDGET_MS} ; les serveurs
+ * BlueGenji ne retiennent pas les autres plus de {@link RESOLVE_WAVE_BUDGET_MS}.
+ * Les serveurs étaient autrefois parcourus **un par un**, sans délai : un tag
+ * absent de tous additionnait leurs latences et dépassait le délai du site, qui
+ * annonçait alors une panne.
  *
  * Le cache des membres n'est **pas** consulté, bien qu'il soit gratuit : un
  * pseudo peut changer de titulaire pendant une reconnexion où le bot manque la
@@ -319,13 +325,13 @@ export async function resolveDiscordHandle(client, handle, options = {
 </div>
 
 <nav>
-    <h2><a href="index.html">Home</a></h2><h3>Classes</h3><ul><li><a href="Bdd.html">Bdd</a></li><li><a href="HandleResolutionTimeoutError.html">HandleResolutionTimeoutError</a></li><li><a href="HomeGuildUnavailableError.html">HomeGuildUnavailableError</a></li><li><a href="Tips.html">Tips</a></li></ul><h3>Global</h3><ul><li><a href="global.html#ADHESION_REMINDER_HOUR">ADHESION_REMINDER_HOUR</a></li><li><a href="global.html#DEFAULT_BDD_PATH">DEFAULT_BDD_PATH</a></li><li><a href="global.html#DEFAULT_DEDUPE_WINDOW_MS">DEFAULT_DEDUPE_WINDOW_MS</a></li><li><a href="global.html#DISCORD_ID_RE">DISCORD_ID_RE</a></li><li><a href="global.html#FEED_ANONYMOUS_ACTOR">FEED_ANONYMOUS_ACTOR</a></li><li><a href="global.html#FETCH_GRACE_MS">FETCH_GRACE_MS</a></li><li><a href="global.html#GONE_CODES">GONE_CODES</a></li><li><a href="global.html#IGNORABLE_DISCORD_CODES">IGNORABLE_DISCORD_CODES</a></li><li><a href="global.html#ITERATION_UNLIMITED">ITERATION_UNLIMITED</a></li><li><a href="global.html#KEPT_ROLLBACKS">KEPT_ROLLBACKS</a></li><li><a href="global.html#LOOPBACK_HOSTS">LOOPBACK_HOSTS</a></li><li><a href="global.html#MARKDOWN_LINK_SPECIALS">MARKDOWN_LINK_SPECIALS</a></li><li><a href="global.html#MAX_CAUSE_DEPTH">MAX_CAUSE_DEPTH</a></li><li><a href="global.html#MAX_MESSAGE_LENGTH">MAX_MESSAGE_LENGTH</a></li><li><a href="global.html#MAX_RECIPIENTS">MAX_RECIPIENTS</a></li><li><a href="global.html#MAX_REFEREE_DMS">MAX_REFEREE_DMS</a></li><li><a href="global.html#MAX_TRACKED_KEYS">MAX_TRACKED_KEYS</a></li><li><a href="global.html#MENTION_PATTERN">MENTION_PATTERN</a></li><li><a href="global.html#MESSAGE_RETENTION_DAYS">MESSAGE_RETENTION_DAYS</a></li><li><a href="global.html#PARIS_TIME_ZONE">PARIS_TIME_ZONE</a></li><li><a href="global.html#RESOLVE_BUDGET_MS">RESOLVE_BUDGET_MS</a></li><li><a href="global.html#RESOLVE_CONCURRENCY">RESOLVE_CONCURRENCY</a></li><li><a href="global.html#RESOLVE_WAVE_BUDGET_MS">RESOLVE_WAVE_BUDGET_MS</a></li><li><a href="global.html#RETENTION_MODIFIER">RETENTION_MODIFIER</a></li><li><a href="global.html#SCRIM_GAME">SCRIM_GAME</a></li><li><a href="global.html#SCRIM_GAME_LABEL">SCRIM_GAME_LABEL</a></li><li><a href="global.html#SNOWFLAKE_PATTERN">SNOWFLAKE_PATTERN</a></li><li><a href="global.html#SQLITE_MAGIC">SQLITE_MAGIC</a></li><li><a href="global.html#STALE_AFTER_MS">STALE_AFTER_MS</a></li><li><a href="global.html#TRANSIENT_NETWORK_CODES">TRANSIENT_NETWORK_CODES</a></li><li><a href="global.html#_deleteTempMsg">_deleteTempMsg</a></li><li><a href="global.html#_resetChannel">_resetChannel</a></li><li><a href="global.html#_resetProcessGuards">_resetProcessGuards</a></li><li><a href="global.html#_resetServer">_resetServer</a></li><li><a href="global.html#absDelta">absDelta</a></li><li><a href="global.html#adhesionDir">adhesionDir</a></li><li><a href="global.html#adhesionFilePath">adhesionFilePath</a></li><li><a href="global.html#adhesionPerimee">adhesionPerimee</a></li><li><a href="global.html#adhesionValide">adhesionValide</a></li><li><a href="global.html#alertReferees">alertReferees</a></li><li><a href="global.html#answerTmp">answerTmp</a></li><li><a href="global.html#areaFilter">areaFilter</a></li><li><a href="global.html#authorize">authorize</a></li><li><a href="global.html#ban">ban</a></li><li><a href="global.html#ban_id">ban_id</a></li><li><a href="global.html#ban_username">ban_username</a></li><li><a href="global.html#banlist">banlist</a></li><li><a href="global.html#broadcast">broadcast</a></li><li><a href="global.html#buildEmbedPage">buildEmbedPage</a></li><li><a href="global.html#buildServerChoices">buildServerChoices</a></li><li><a href="global.html#buildServiceMessage">buildServiceMessage</a></li><li><a href="global.html#capRefereeTargets">capRefereeTargets</a></li><li><a href="global.html#checkAdminRole">checkAdminRole</a></li><li><a href="global.html#checkBan">checkBan</a></li><li><a href="global.html#checkChannelMinPermissions">checkChannelMinPermissions</a></li><li><a href="global.html#checkCooldown">checkCooldown</a></li><li><a href="global.html#checkIntervalleAdhesion">checkIntervalleAdhesion</a></li><li><a href="global.html#checkMessageValidity">checkMessageValidity</a></li><li><a href="global.html#checkPermissions">checkPermissions</a></li><li><a href="global.html#checkTargets">checkTargets</a></li><li><a href="global.html#classifyError">classifyError</a></li><li><a href="global.html#client">client</a></li><li><a href="global.html#closeBddInstance">closeBddInstance</a></li><li><a href="global.html#commands">commands</a></li><li><a href="global.html#configModule">configModule</a></li><li><a href="global.html#contactAdminServer">contactAdminServer</a></li><li><a href="global.html#createErrorReporter">createErrorReporter</a></li><li><a href="global.html#dedupeRecipients">dedupeRecipients</a></li><li><a href="global.html#defineRankRange">defineRankRange</a></li><li><a href="global.html#delay">delay</a></li><li><a href="global.html#deleteDPMsgs">deleteDPMsgs</a></li><li><a href="global.html#deleteOldAttachment">deleteOldAttachment</a></li><li><a href="global.html#deleteSetupAdhesion">deleteSetupAdhesion</a></li><li><a href="global.html#deliverDirectMessages">deliverDirectMessages</a></li><li><a href="global.html#describeError">describeError</a></li><li><a href="global.html#deterministicColor">deterministicColor</a></li><li><a href="global.html#displayChannelFilter">displayChannelFilter</a></li><li><a href="global.html#displayChannelRankFilter">displayChannelRankFilter</a></li><li><a href="global.html#displaySetupAdhesion">displaySetupAdhesion</a></li><li><a href="global.html#downloadAttachment">downloadAttachment</a></li><li><a href="global.html#errorCode">errorCode</a></li><li><a href="global.html#escapeLinkLabel">escapeLinkLabel</a></li><li><a href="global.html#extractRanks">extractRanks</a></li><li><a href="global.html#fetchHomeGuilds">fetchHomeGuilds</a></li><li><a href="global.html#fetchTargets">fetchTargets</a></li><li><a href="global.html#fillBlueCommands">fillBlueCommands</a></li><li><a href="global.html#findGuildMemberByHandle">findGuildMemberByHandle</a></li><li><a href="global.html#findHomeMember">findHomeMember</a></li><li><a href="global.html#findMemberIn">findMemberIn</a></li><li><a href="global.html#formatBackupStatus">formatBackupStatus</a></li><li><a href="global.html#formatBytes">formatBytes</a></li><li><a href="global.html#formatCadence">formatCadence</a></li><li><a href="global.html#formatDiskUsage">formatDiskUsage</a></li><li><a href="global.html#formatRawRanks">formatRawRanks</a></li><li><a href="global.html#formatSiteVisitStats">formatSiteVisitStats</a></li><li><a href="global.html#formatSnapshotAge">formatSnapshotAge</a></li><li><a href="global.html#formatTarget">formatTarget</a></li><li><a href="global.html#getAdhesion">getAdhesion</a></li><li><a href="global.html#getAdminRole">getAdminRole</a></li><li><a href="global.html#getBacklog">getBacklog</a></li><li><a href="global.html#getBddInstance">getBddInstance</a></li><li><a href="global.html#getCpuPercent">getCpuPercent</a></li><li><a href="global.html#getDiskUsage">getDiskUsage</a></li><li><a href="global.html#getInviteFromChannel">getInviteFromChannel</a></li><li><a href="global.html#getInviteFromMessage">getInviteFromMessage</a></li><li><a href="global.html#getReporter">getReporter</a></li><li><a href="global.html#getServicesAndID">getServicesAndID</a></li><li><a href="global.html#getSnapshotsBetween">getSnapshotsBetween</a></li><li><a href="global.html#getTargetRegions">getTargetRegions</a></li><li><a href="global.html#getTips">getTips</a></li><li><a href="global.html#homeGuildIds">homeGuildIds</a></li><li><a href="global.html#initialIteration">initialIteration</a></li><li><a href="global.html#installProcessGuards">installProcessGuards</a></li><li><a href="global.html#isBackupFresh">isBackupFresh</a></li><li><a href="global.html#isDiscordInvite">isDiscordInvite</a></li><li><a href="global.html#isGone">isGone</a></li><li><a href="global.html#isIgnorableDiscordError">isIgnorableDiscordError</a></li><li><a href="global.html#isLoopbackHost">isLoopbackHost</a></li><li><a href="global.html#isModuleEnabled">isModuleEnabled</a></li><li><a href="global.html#isSnowflake">isSnowflake</a></li><li><a href="global.html#isTransientNetworkError">isTransientNetworkError</a></li><li><a href="global.html#isValidModule">isValidModule</a></li><li><a href="global.html#link">link</a></li><li><a href="global.html#listModules">listModules</a></li><li><a href="global.html#listPartner">listPartner</a></li><li><a href="global.html#loadAdhesionFiles">loadAdhesionFiles</a></li><li><a href="global.html#loadAdhesionPaths">loadAdhesionPaths</a></li><li><a href="global.html#manageDistribution">manageDistribution</a></li><li><a href="global.html#manageMsgExpiration">manageMsgExpiration</a></li><li><a href="global.html#manageOldFiles">manageOldFiles</a></li><li><a href="global.html#manageServiceSuccess">manageServiceSuccess</a></li><li><a href="global.html#matchesToken">matchesToken</a></li><li><a href="global.html#memberMatchesHandle">memberMatchesHandle</a></li><li><a href="global.html#newChannelPartner">newChannelPartner</a></li><li><a href="global.html#nextTips">nextTips</a></li><li><a href="global.html#nextTransmissionAfter">nextTransmissionAfter</a></li><li><a href="global.html#normalizeInvite">normalizeInvite</a></li><li><a href="global.html#normalizeText">normalizeText</a></li><li><a href="global.html#notifyBannedUser">notifyBannedUser</a></li><li><a href="global.html#olderThanRetention">olderThanRetention</a></li><li><a href="global.html#parisDaysLater">parisDaysLater</a></li><li><a href="global.html#parisOffsetMs">parisOffsetMs</a></li><li><a href="global.html#parisWallClock">parisWallClock</a></li><li><a href="global.html#parseDirectMessageRequest">parseDirectMessageRequest</a></li><li><a href="global.html#parseDiscordHandle">parseDiscordHandle</a></li><li><a href="global.html#parseRefereeAlert">parseRefereeAlert</a></li><li><a href="global.html#parseSiteVisitStats">parseSiteVisitStats</a></li><li><a href="global.html#pctDelta">pctDelta</a></li><li><a href="global.html#ping">ping</a></li><li><a href="global.html#printHelp">printHelp</a></li><li><a href="global.html#purgeFeedIdentifiers">purgeFeedIdentifiers</a></li><li><a href="global.html#purgeOldRollbacks">purgeOldRollbacks</a></li><li><a href="global.html#rankChoices">rankChoices</a></li><li><a href="global.html#readBackupStatus">readBackupStatus</a></li><li><a href="global.html#readPackageInfo">readPackageInfo</a></li><li><a href="global.html#readSiteVisitStats">readSiteVisitStats</a></li><li><a href="global.html#recordDailySnapshot">recordDailySnapshot</a></li><li><a href="global.html#recordEvent">recordEvent</a></li><li><a href="global.html#recrute">recrute</a></li><li><a href="global.html#relay">relay</a></li><li><a href="global.html#remainingIteration">remainingIteration</a></li><li><a href="global.html#remoteServerReset">remoteServerReset</a></li><li><a href="global.html#removeIntervalle">removeIntervalle</a></li><li><a href="global.html#reportError">reportError</a></li><li><a href="global.html#resetBddInstance">resetBddInstance</a></li><li><a href="global.html#resetChannel">resetChannel</a></li><li><a href="global.html#resetRefereeRole">resetRefereeRole</a></li><li><a href="global.html#resetServer">resetServer</a></li><li><a href="global.html#resetServerInvite">resetServerInvite</a></li><li><a href="global.html#resolutionWaves">resolutionWaves</a></li><li><a href="global.html#resolveDiscordHandle">resolveDiscordHandle</a></li><li><a href="global.html#restoreBackup">restoreBackup</a></li><li><a href="global.html#restoreDatabase">restoreDatabase</a></li><li><a href="global.html#runSetupWizard">runSetupWizard</a></li><li><a href="global.html#safeChannel">safeChannel</a></li><li><a href="global.html#safeFollowUp">safeFollowUp</a></li><li><a href="global.html#safeMsgReply">safeMsgReply</a></li><li><a href="global.html#safeReact">safeReact</a></li><li><a href="global.html#safeReply">safeReply</a></li><li><a href="global.html#safeUser">safeUser</a></li><li><a href="global.html#saveAdhesionPaths">saveAdhesionPaths</a></li><li><a href="global.html#saveSiteVisitStats">saveSiteVisitStats</a></li><li><a href="global.html#scrim">scrim</a></li><li><a href="global.html#scrubFeedField">scrubFeedField</a></li><li><a href="global.html#scrubFeedText">scrubFeedText</a></li><li><a href="global.html#searchInWaves">searchInWaves</a></li><li><a href="global.html#searchString">searchString</a></li><li><a href="global.html#searchWave">searchWave</a></li><li><a href="global.html#sendAdhesion">sendAdhesion</a></li><li><a href="global.html#sendDatabaseBackup">sendDatabaseBackup</a></li><li><a href="global.html#sendInteractiveMsg">sendInteractiveMsg</a></li><li><a href="global.html#sendLog">sendLog</a></li><li><a href="global.html#sendServiceMessage">sendServiceMessage</a></li><li><a href="global.html#servicesChoices">servicesChoices</a></li><li><a href="global.html#servicesWithNoRanks">servicesWithNoRanks</a></li><li><a href="global.html#setBotAdminRole">setBotAdminRole</a></li><li><a href="global.html#setChannelFilter">setChannelFilter</a></li><li><a href="global.html#setChannelRankFilter">setChannelRankFilter</a></li><li><a href="global.html#setModuleEnabled">setModuleEnabled</a></li><li><a href="global.html#setRankFilter">setRankFilter</a></li><li><a href="global.html#setRefereeRole">setRefereeRole</a></li><li><a href="global.html#setServerInvite">setServerInvite</a></li><li><a href="global.html#setupIntervalAdhesion">setupIntervalAdhesion</a></li><li><a href="global.html#showBotAdminRole">showBotAdminRole</a></li><li><a href="global.html#showRefereeRole">showRefereeRole</a></li><li><a href="global.html#showServerInvite">showServerInvite</a></li><li><a href="global.html#splitForDiscord">splitForDiscord</a></li><li><a href="global.html#startInternalApi">startInternalApi</a></li><li><a href="global.html#statsPlayer">statsPlayer</a></li><li><a href="global.html#statsSite">statsSite</a></li><li><a href="global.html#subscribe">subscribe</a></li><li><a href="global.html#toSQLiteDate">toSQLiteDate</a></li><li><a href="global.html#truncateMessage">truncateMessage</a></li><li><a href="global.html#ts">ts</a></li><li><a href="global.html#unban">unban</a></li><li><a href="global.html#updateCommands">updateCommands</a></li><li><a href="global.html#validateSqliteFile">validateSqliteFile</a></li></ul>
+    <h2><a href="index.html">Home</a></h2><h3>Classes</h3><ul><li><a href="Bdd.html">Bdd</a></li><li><a href="HandleResolutionTimeoutError.html">HandleResolutionTimeoutError</a></li><li><a href="HomeGuildUnavailableError.html">HomeGuildUnavailableError</a></li><li><a href="Tips.html">Tips</a></li></ul><h3>Global</h3><ul><li><a href="global.html#ADHESION_REMINDER_HOUR">ADHESION_REMINDER_HOUR</a></li><li><a href="global.html#DEFAULT_BDD_PATH">DEFAULT_BDD_PATH</a></li><li><a href="global.html#DEFAULT_DEDUPE_WINDOW_MS">DEFAULT_DEDUPE_WINDOW_MS</a></li><li><a href="global.html#DISCORD_ID_RE">DISCORD_ID_RE</a></li><li><a href="global.html#FEED_ANONYMOUS_ACTOR">FEED_ANONYMOUS_ACTOR</a></li><li><a href="global.html#FETCH_GRACE_MS">FETCH_GRACE_MS</a></li><li><a href="global.html#GONE_CODES">GONE_CODES</a></li><li><a href="global.html#IGNORABLE_DISCORD_CODES">IGNORABLE_DISCORD_CODES</a></li><li><a href="global.html#ITERATION_UNLIMITED">ITERATION_UNLIMITED</a></li><li><a href="global.html#KEPT_ROLLBACKS">KEPT_ROLLBACKS</a></li><li><a href="global.html#LOOPBACK_HOSTS">LOOPBACK_HOSTS</a></li><li><a href="global.html#MARKDOWN_LINK_SPECIALS">MARKDOWN_LINK_SPECIALS</a></li><li><a href="global.html#MAX_CAUSE_DEPTH">MAX_CAUSE_DEPTH</a></li><li><a href="global.html#MAX_MESSAGE_LENGTH">MAX_MESSAGE_LENGTH</a></li><li><a href="global.html#MAX_RECIPIENTS">MAX_RECIPIENTS</a></li><li><a href="global.html#MAX_REFEREE_DMS">MAX_REFEREE_DMS</a></li><li><a href="global.html#MAX_TRACKED_KEYS">MAX_TRACKED_KEYS</a></li><li><a href="global.html#MENTION_PATTERN">MENTION_PATTERN</a></li><li><a href="global.html#MESSAGE_RETENTION_DAYS">MESSAGE_RETENTION_DAYS</a></li><li><a href="global.html#PARIS_TIME_ZONE">PARIS_TIME_ZONE</a></li><li><a href="global.html#RESOLVE_BUDGET_MS">RESOLVE_BUDGET_MS</a></li><li><a href="global.html#RESOLVE_CONCURRENCY">RESOLVE_CONCURRENCY</a></li><li><a href="global.html#RESOLVE_WAVE_BUDGET_MS">RESOLVE_WAVE_BUDGET_MS</a></li><li><a href="global.html#RETENTION_MODIFIER">RETENTION_MODIFIER</a></li><li><a href="global.html#SCRIM_GAME">SCRIM_GAME</a></li><li><a href="global.html#SCRIM_GAME_LABEL">SCRIM_GAME_LABEL</a></li><li><a href="global.html#SNOWFLAKE_PATTERN">SNOWFLAKE_PATTERN</a></li><li><a href="global.html#SQLITE_MAGIC">SQLITE_MAGIC</a></li><li><a href="global.html#STALE_AFTER_MS">STALE_AFTER_MS</a></li><li><a href="global.html#TRANSIENT_NETWORK_CODES">TRANSIENT_NETWORK_CODES</a></li><li><a href="global.html#_deleteTempMsg">_deleteTempMsg</a></li><li><a href="global.html#_resetChannel">_resetChannel</a></li><li><a href="global.html#_resetProcessGuards">_resetProcessGuards</a></li><li><a href="global.html#_resetServer">_resetServer</a></li><li><a href="global.html#absDelta">absDelta</a></li><li><a href="global.html#adhesionDir">adhesionDir</a></li><li><a href="global.html#adhesionFilePath">adhesionFilePath</a></li><li><a href="global.html#adhesionPerimee">adhesionPerimee</a></li><li><a href="global.html#adhesionValide">adhesionValide</a></li><li><a href="global.html#alertReferees">alertReferees</a></li><li><a href="global.html#answerTmp">answerTmp</a></li><li><a href="global.html#areaFilter">areaFilter</a></li><li><a href="global.html#authorize">authorize</a></li><li><a href="global.html#ban">ban</a></li><li><a href="global.html#ban_id">ban_id</a></li><li><a href="global.html#ban_username">ban_username</a></li><li><a href="global.html#banlist">banlist</a></li><li><a href="global.html#broadcast">broadcast</a></li><li><a href="global.html#buildEmbedPage">buildEmbedPage</a></li><li><a href="global.html#buildServerChoices">buildServerChoices</a></li><li><a href="global.html#buildServiceMessage">buildServiceMessage</a></li><li><a href="global.html#capRefereeTargets">capRefereeTargets</a></li><li><a href="global.html#checkAdminRole">checkAdminRole</a></li><li><a href="global.html#checkBan">checkBan</a></li><li><a href="global.html#checkChannelMinPermissions">checkChannelMinPermissions</a></li><li><a href="global.html#checkCooldown">checkCooldown</a></li><li><a href="global.html#checkIntervalleAdhesion">checkIntervalleAdhesion</a></li><li><a href="global.html#checkMessageValidity">checkMessageValidity</a></li><li><a href="global.html#checkPermissions">checkPermissions</a></li><li><a href="global.html#checkTargets">checkTargets</a></li><li><a href="global.html#classifyError">classifyError</a></li><li><a href="global.html#client">client</a></li><li><a href="global.html#closeBddInstance">closeBddInstance</a></li><li><a href="global.html#commands">commands</a></li><li><a href="global.html#configModule">configModule</a></li><li><a href="global.html#contactAdminServer">contactAdminServer</a></li><li><a href="global.html#createErrorReporter">createErrorReporter</a></li><li><a href="global.html#dedupeRecipients">dedupeRecipients</a></li><li><a href="global.html#defineRankRange">defineRankRange</a></li><li><a href="global.html#delay">delay</a></li><li><a href="global.html#deleteDPMsgs">deleteDPMsgs</a></li><li><a href="global.html#deleteOldAttachment">deleteOldAttachment</a></li><li><a href="global.html#deleteSetupAdhesion">deleteSetupAdhesion</a></li><li><a href="global.html#deliverDirectMessages">deliverDirectMessages</a></li><li><a href="global.html#describeError">describeError</a></li><li><a href="global.html#deterministicColor">deterministicColor</a></li><li><a href="global.html#displayChannelFilter">displayChannelFilter</a></li><li><a href="global.html#displayChannelRankFilter">displayChannelRankFilter</a></li><li><a href="global.html#displaySetupAdhesion">displaySetupAdhesion</a></li><li><a href="global.html#downloadAttachment">downloadAttachment</a></li><li><a href="global.html#errorCode">errorCode</a></li><li><a href="global.html#escapeLinkLabel">escapeLinkLabel</a></li><li><a href="global.html#extractRanks">extractRanks</a></li><li><a href="global.html#fetchHomeGuilds">fetchHomeGuilds</a></li><li><a href="global.html#fetchTargets">fetchTargets</a></li><li><a href="global.html#fillBlueCommands">fillBlueCommands</a></li><li><a href="global.html#findGuildMemberByHandle">findGuildMemberByHandle</a></li><li><a href="global.html#findHomeMember">findHomeMember</a></li><li><a href="global.html#findMemberIn">findMemberIn</a></li><li><a href="global.html#formatBackupStatus">formatBackupStatus</a></li><li><a href="global.html#formatBytes">formatBytes</a></li><li><a href="global.html#formatCadence">formatCadence</a></li><li><a href="global.html#formatDiskUsage">formatDiskUsage</a></li><li><a href="global.html#formatRawRanks">formatRawRanks</a></li><li><a href="global.html#formatSiteVisitStats">formatSiteVisitStats</a></li><li><a href="global.html#formatSnapshotAge">formatSnapshotAge</a></li><li><a href="global.html#formatTarget">formatTarget</a></li><li><a href="global.html#getAdhesion">getAdhesion</a></li><li><a href="global.html#getAdminRole">getAdminRole</a></li><li><a href="global.html#getBacklog">getBacklog</a></li><li><a href="global.html#getBddInstance">getBddInstance</a></li><li><a href="global.html#getCpuPercent">getCpuPercent</a></li><li><a href="global.html#getDiskUsage">getDiskUsage</a></li><li><a href="global.html#getInviteFromChannel">getInviteFromChannel</a></li><li><a href="global.html#getInviteFromMessage">getInviteFromMessage</a></li><li><a href="global.html#getReporter">getReporter</a></li><li><a href="global.html#getServicesAndID">getServicesAndID</a></li><li><a href="global.html#getSnapshotsBetween">getSnapshotsBetween</a></li><li><a href="global.html#getTargetRegions">getTargetRegions</a></li><li><a href="global.html#getTips">getTips</a></li><li><a href="global.html#homeGuildIds">homeGuildIds</a></li><li><a href="global.html#initialIteration">initialIteration</a></li><li><a href="global.html#installProcessGuards">installProcessGuards</a></li><li><a href="global.html#isBackupFresh">isBackupFresh</a></li><li><a href="global.html#isDiscordInvite">isDiscordInvite</a></li><li><a href="global.html#isGone">isGone</a></li><li><a href="global.html#isIgnorableDiscordError">isIgnorableDiscordError</a></li><li><a href="global.html#isLoopbackHost">isLoopbackHost</a></li><li><a href="global.html#isModuleEnabled">isModuleEnabled</a></li><li><a href="global.html#isSnowflake">isSnowflake</a></li><li><a href="global.html#isTransientNetworkError">isTransientNetworkError</a></li><li><a href="global.html#isValidModule">isValidModule</a></li><li><a href="global.html#link">link</a></li><li><a href="global.html#listModules">listModules</a></li><li><a href="global.html#listPartner">listPartner</a></li><li><a href="global.html#loadAdhesionFiles">loadAdhesionFiles</a></li><li><a href="global.html#loadAdhesionPaths">loadAdhesionPaths</a></li><li><a href="global.html#manageDistribution">manageDistribution</a></li><li><a href="global.html#manageMsgExpiration">manageMsgExpiration</a></li><li><a href="global.html#manageOldFiles">manageOldFiles</a></li><li><a href="global.html#manageServiceSuccess">manageServiceSuccess</a></li><li><a href="global.html#matchesToken">matchesToken</a></li><li><a href="global.html#memberMatchesHandle">memberMatchesHandle</a></li><li><a href="global.html#newChannelPartner">newChannelPartner</a></li><li><a href="global.html#nextTips">nextTips</a></li><li><a href="global.html#nextTransmissionAfter">nextTransmissionAfter</a></li><li><a href="global.html#normalizeInvite">normalizeInvite</a></li><li><a href="global.html#normalizeText">normalizeText</a></li><li><a href="global.html#notifyBannedUser">notifyBannedUser</a></li><li><a href="global.html#olderThanRetention">olderThanRetention</a></li><li><a href="global.html#parisDaysLater">parisDaysLater</a></li><li><a href="global.html#parisOffsetMs">parisOffsetMs</a></li><li><a href="global.html#parisWallClock">parisWallClock</a></li><li><a href="global.html#parseDirectMessageRequest">parseDirectMessageRequest</a></li><li><a href="global.html#parseDiscordHandle">parseDiscordHandle</a></li><li><a href="global.html#parseRefereeAlert">parseRefereeAlert</a></li><li><a href="global.html#parseSiteVisitStats">parseSiteVisitStats</a></li><li><a href="global.html#pctDelta">pctDelta</a></li><li><a href="global.html#ping">ping</a></li><li><a href="global.html#printHelp">printHelp</a></li><li><a href="global.html#purgeFeedIdentifiers">purgeFeedIdentifiers</a></li><li><a href="global.html#purgeOldRollbacks">purgeOldRollbacks</a></li><li><a href="global.html#rankChoices">rankChoices</a></li><li><a href="global.html#readBackupStatus">readBackupStatus</a></li><li><a href="global.html#readPackageInfo">readPackageInfo</a></li><li><a href="global.html#readSiteVisitStats">readSiteVisitStats</a></li><li><a href="global.html#recordDailySnapshot">recordDailySnapshot</a></li><li><a href="global.html#recordEvent">recordEvent</a></li><li><a href="global.html#recrute">recrute</a></li><li><a href="global.html#relay">relay</a></li><li><a href="global.html#remainingIteration">remainingIteration</a></li><li><a href="global.html#remoteServerReset">remoteServerReset</a></li><li><a href="global.html#removeIntervalle">removeIntervalle</a></li><li><a href="global.html#reportError">reportError</a></li><li><a href="global.html#resetBddInstance">resetBddInstance</a></li><li><a href="global.html#resetChannel">resetChannel</a></li><li><a href="global.html#resetRefereeRole">resetRefereeRole</a></li><li><a href="global.html#resetServer">resetServer</a></li><li><a href="global.html#resetServerInvite">resetServerInvite</a></li><li><a href="global.html#resolutionWaves">resolutionWaves</a></li><li><a href="global.html#resolveDiscordHandle">resolveDiscordHandle</a></li><li><a href="global.html#restoreBackup">restoreBackup</a></li><li><a href="global.html#restoreDatabase">restoreDatabase</a></li><li><a href="global.html#runSetupWizard">runSetupWizard</a></li><li><a href="global.html#safeChannel">safeChannel</a></li><li><a href="global.html#safeFollowUp">safeFollowUp</a></li><li><a href="global.html#safeMsgReply">safeMsgReply</a></li><li><a href="global.html#safeReact">safeReact</a></li><li><a href="global.html#safeReply">safeReply</a></li><li><a href="global.html#safeUser">safeUser</a></li><li><a href="global.html#saveAdhesionPaths">saveAdhesionPaths</a></li><li><a href="global.html#saveSiteVisitStats">saveSiteVisitStats</a></li><li><a href="global.html#scrim">scrim</a></li><li><a href="global.html#scrubFeedField">scrubFeedField</a></li><li><a href="global.html#scrubFeedText">scrubFeedText</a></li><li><a href="global.html#searchInWaves">searchInWaves</a></li><li><a href="global.html#searchString">searchString</a></li><li><a href="global.html#sendAdhesion">sendAdhesion</a></li><li><a href="global.html#sendDatabaseBackup">sendDatabaseBackup</a></li><li><a href="global.html#sendInteractiveMsg">sendInteractiveMsg</a></li><li><a href="global.html#sendLog">sendLog</a></li><li><a href="global.html#sendServiceMessage">sendServiceMessage</a></li><li><a href="global.html#servicesChoices">servicesChoices</a></li><li><a href="global.html#servicesWithNoRanks">servicesWithNoRanks</a></li><li><a href="global.html#setBotAdminRole">setBotAdminRole</a></li><li><a href="global.html#setChannelFilter">setChannelFilter</a></li><li><a href="global.html#setChannelRankFilter">setChannelRankFilter</a></li><li><a href="global.html#setModuleEnabled">setModuleEnabled</a></li><li><a href="global.html#setRankFilter">setRankFilter</a></li><li><a href="global.html#setRefereeRole">setRefereeRole</a></li><li><a href="global.html#setServerInvite">setServerInvite</a></li><li><a href="global.html#setupIntervalAdhesion">setupIntervalAdhesion</a></li><li><a href="global.html#showBotAdminRole">showBotAdminRole</a></li><li><a href="global.html#showRefereeRole">showRefereeRole</a></li><li><a href="global.html#showServerInvite">showServerInvite</a></li><li><a href="global.html#splitForDiscord">splitForDiscord</a></li><li><a href="global.html#startInternalApi">startInternalApi</a></li><li><a href="global.html#statsPlayer">statsPlayer</a></li><li><a href="global.html#statsSite">statsSite</a></li><li><a href="global.html#subscribe">subscribe</a></li><li><a href="global.html#toSQLiteDate">toSQLiteDate</a></li><li><a href="global.html#truncateMessage">truncateMessage</a></li><li><a href="global.html#ts">ts</a></li><li><a href="global.html#unban">unban</a></li><li><a href="global.html#updateCommands">updateCommands</a></li><li><a href="global.html#validateSqliteFile">validateSqliteFile</a></li></ul>
 </nav>
 
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Wed Sep 23 2026 21:44:50 GMT+0200 (heure d’été d’Europe centrale)
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Wed Sep 23 2026 21:47:08 GMT+0200 (heure d’été d’Europe centrale)
 </footer>
 
 <script> prettyPrint(); </script>
