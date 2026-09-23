@@ -5,14 +5,18 @@ BlueGenjiBot links partner servers through shared services.
 If you post in an assigned channel with the right prefix, your message is forwarded to other partner servers using the same service.
 
 ## Services (prefixes)
-- `LFS`: Looking for scrim.
+Scrim, player and staff searches (`LFS`, `LFSub`, `LFT`, `LFP`, `LFG`,
+`LFStaff`, `LFCast`) are for **Marvel Rivals only**. Only `TA` covers
+tournament announcements for any game.
+
+- `LFS`: Looking for scrim (Marvel Rivals).
 - `TA`: Tournament announcement.
-- `LFSub`: Looking for a substitute player.
-- `LFT`: Looking for a competitive team.
-- `LFP`: Looking for players for a competitive team.
-- `LFG`: Looking for a casual/ranked group.
-- `LFStaff`: Looking for staff (coach, manager, admin, etc.).
-- `LFCast`: Looking for casters.
+- `LFSub`: Looking for a substitute player (Marvel Rivals).
+- `LFT`: Looking for a competitive team (Marvel Rivals).
+- `LFP`: Looking for players for a competitive team (Marvel Rivals).
+- `LFG`: Looking for a casual/ranked group (Marvel Rivals).
+- `LFStaff`: Looking for staff (coach, manager, admin, etc.) for Marvel Rivals.
+- `LFCast`: Looking for casters (Marvel Rivals).
 
 ## Good message format
 Include these details to get better matches:
