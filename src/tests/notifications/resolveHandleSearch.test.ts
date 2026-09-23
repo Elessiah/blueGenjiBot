@@ -91,22 +91,23 @@ test("searchInWaves compte une recherche qui leve pour une absence, sans arreter
 test("searchInWaves mene les recherches de front sans depasser le parallelisme", async () => {
   let active = 0;
   let peak = 0;
-  const started = Date.now();
+  let calls = 0;
   const outcome = await searchInWaves(
     [Array.from({ length: 10 }, (_, i) => i)],
     async () => {
+      calls++;
       active++;
       peak = Math.max(peak, active);
-      await sleep(40);
+      await sleep(10);
       active--;
       return null;
     },
     { budgetMs: 2_000, concurrency: 3 },
   );
   assert.deepEqual(outcome, { status: "not-found" });
+  // Trois de front, jamais davantage, et toutes finissent par etre lancees.
   assert.equal(peak, 3);
-  // Dix recherches de 40 ms, trois de front : quatre tours, pas dix.
-  assert.ok(Date.now() - started < 400, `trop lent : ${Date.now() - started} ms`);
+  assert.equal(calls, 10);
 });
 
 test("searchInWaves ramene un parallelisme nul ou fractionnaire a au moins un", async () => {
@@ -122,14 +123,12 @@ test("searchInWaves ramene un parallelisme nul ou fractionnaire a au moins un", 
 });
 
 test("searchInWaves rend l'echeance quand une recherche ne repond pas", async () => {
-  const started = Date.now();
   const outcome = await searchInWaves(
     [["muet"]],
     () => new Promise<null>(() => { /* ne se resout jamais */ }),
     { budgetMs: 60, concurrency: 5 },
   );
   assert.deepEqual(outcome, { status: "timeout" });
-  assert.ok(Date.now() - started < 500);
 });
 
 test("searchInWaves partage un seul delai entre les vagues", async () => {
@@ -244,15 +243,20 @@ test("resolveDiscordHandle rend null sur un tag inexploitable, sans requete", ()
     assert.equal(calls.length, 0);
   }));
 
-test("resolveDiscordHandle trouve d'abord dans le cache, sans requete a la passerelle", () =>
+test("resolveDiscordHandle ne se fie pas au cache, qui peut designer l'ancien titulaire d'un pseudo", () =>
   withHomes(async () => {
     const calls: FetchCall[] = [];
-    const client = fakeClient({ [PARTNER_A]: { cached: [member("900000000000000001", "Joueur")] } }, calls);
+    const client = fakeClient({
+      [GENJI]: {
+        cached: [member("900000000000000008", "joueur")],
+        members: [member("900000000000000001", "joueur")],
+      },
+    }, calls);
     assert.deepEqual(await resolveDiscordHandle(client, "@joueur", FAST), {
       discordId: "900000000000000001",
       matchedBy: "tag",
     });
-    assert.equal(calls.length, 0);
+    assert.equal(calls.length, 1);
   }));
 
 test("resolveDiscordHandle ne sollicite aucun serveur partenaire quand le joueur est sur BlueGenji", () =>

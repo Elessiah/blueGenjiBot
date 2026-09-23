@@ -312,7 +312,10 @@ export function startInternalApi(client: Client) {
     } catch (error) {
       if (error instanceof HandleResolutionTimeoutError) {
         // Pas une panne : des serveurs n'ont pas répondu à temps. Le site
-        // connaît ce code et le distingue d'un tag introuvable.
+        // connaît ce code et le distingue d'un tag introuvable. Trace en
+        // console seulement (le canal de supervision serait inondé par un
+        // serveur lent), et sans le tag : c'est l'identifiant d'une personne.
+        console.warn("/internal/auth/resolve: recherche de tag expirée, 504 BOT_RESOLVE_TIMEOUT");
         res.status(504).json({ error: "BOT_RESOLVE_TIMEOUT" });
         return;
       }

@@ -144,17 +144,6 @@ export async function findGuildMemberByHandle(
 }
 
 /**
- * Cherche un tag parmi les membres **déjà en cache** d'une guilde.
- *
- * Gratuit — aucune requête à la passerelle —, et le cache se remplit justement
- * des recherches précédentes : un joueur qui redemande un code dans la minute
- * est retrouvé sans rien interroger.
- */
-function findCachedMemberByHandle(guild: Guild, parsed: TagHandle): GuildMember | null {
-  return guild.members.cache.find((m) => memberMatchesHandle(m, parsed)) ?? null;
-}
-
-/**
  * Range les serveurs dans l'ordre où les interroger : les serveurs BlueGenji
  * d'abord, puis tous les autres.
  *
@@ -289,12 +278,16 @@ function searchWave<T, R>(
  * BlueGenji. L'envoi de messages privés, lui, se restreint à ce dernier
  * (`deliver.ts`).
  *
- * Trois paliers, du moins coûteux au plus coûteux : le cache des membres
- * (aucune requête), les serveurs BlueGenji, puis les autres — ces deux derniers
- * interrogés {@link RESOLVE_CONCURRENCY} à la fois, sous un délai total de
- * {@link RESOLVE_BUDGET_MS}. Les serveurs étaient autrefois parcourus **un par
- * un**, sans délai : un tag absent de tous additionnait leurs latences et
- * dépassait le délai du site, qui annonçait alors une panne.
+ * Les serveurs BlueGenji d'abord, puis les autres, {@link RESOLVE_CONCURRENCY}
+ * à la fois, sous un délai total de {@link RESOLVE_BUDGET_MS}. Les serveurs
+ * étaient autrefois parcourus **un par un**, sans délai : un tag absent de tous
+ * additionnait leurs latences et dépassait le délai du site, qui annonçait
+ * alors une panne.
+ *
+ * Le cache des membres n'est **pas** consulté, bien qu'il soit gratuit : un
+ * pseudo peut changer de titulaire pendant une reconnexion où le bot manque la
+ * mise à jour, et le cache désignerait alors l'ancien — le code de connexion
+ * partirait chez quelqu'un d'autre. Chaque résolution est une recherche fraîche.
  *
  * Un identifiant numérique est rendu tel quel, sans aucune requête.
  *
@@ -314,11 +307,6 @@ export async function resolveDiscordHandle(
   if (parsed.kind === "id") { return { discordId: parsed.discordId, matchedBy: "id" }; }
 
   const guilds = [...client.guilds.cache.values()];
-  for (const guild of guilds) {
-    const cached = findCachedMemberByHandle(guild, parsed);
-    if (cached) { return { discordId: cached.id, matchedBy: "tag" }; }
-  }
-
   const outcome = await searchInWaves(
     resolutionWaves(guilds, homeGuildIds(process.env)),
     (guild, remainingMs) => findGuildMemberByHandle(guild, parsed, remainingMs + FETCH_GRACE_MS),
