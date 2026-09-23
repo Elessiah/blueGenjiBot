@@ -1,5 +1,6 @@
 /**
- * Handler de `/recrute` : publie une recherche d'equipe ou de staff.
+ * Handler de `/recrute` : publie une recherche d'equipe ou de staff, pour
+ * Marvel Rivals uniquement (comme toutes les recherches du bot).
  *
  * Verifie le module "recrutement" avant d'ecrire, sinon un serveur qui l'a
  * desactive verrait quand meme des entrees s'accumuler en base et remonter

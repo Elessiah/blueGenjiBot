@@ -406,18 +406,8 @@ const commands = {
     "scrim": {
         handler: scrim,
         parameters: {
-            description: "Propose une equipe pour un scrim (TOUS)",
+            description: "Propose une equipe pour un scrim Marvel Rivals (TOUS)",
             options: [
-                {
-                    name: "jeu",
-                    description: "Jeu pour le scrim",
-                    type: ApplicationCommandOptionType.String,
-                    required: true,
-                    choices: [
-                        { name: "Marvel Rivals", value: "marvel_rivals" },
-                        { name: "Overwatch 2", value: "overwatch2" }
-                    ]
-                },
                 {
                     name: "niveau",
                     description: "Niveau (debutant, intermediaire, avance...)",
@@ -430,7 +420,7 @@ const commands = {
     "recrute": {
         handler: recrute,
         parameters: {
-            description: "Publie une recherche d'equipe ou staff (TOUS)",
+            description: "Publie une recherche d'equipe ou staff Marvel Rivals (TOUS)",
             options: [
                 {
                     name: "role",

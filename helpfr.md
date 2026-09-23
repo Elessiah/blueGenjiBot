@@ -5,14 +5,17 @@ BlueGenjiBot connecte des serveurs partenaires via des services partages.
 Si vous postez dans un salon assigne avec le bon prefixe, votre message est retransmis aux autres serveurs partenaires utilisant le meme service.
 
 ## Services (prefixes)
-- `LFS` : Recherche de scrim.
-- `TA` : Annonce de tournoi.
-- `LFSub` : Recherche de remplacant.
-- `LFT` : Recherche d'equipe competitive.
-- `LFP` : Recherche de joueurs pour une equipe competitive.
-- `LFG` : Recherche de groupe (casu/classe).
-- `LFStaff` : Recherche de staff (coach, manager, admin, etc.).
-- `LFCast` : Recherche de commentateurs/casters.
+Tous les services ci-dessous, annonces de tournoi comprises, sont reserves
+a **Marvel Rivals**.
+
+- `LFS` : Recherche de scrim (Marvel Rivals).
+- `TA` : Annonce de tournoi (Marvel Rivals).
+- `LFSub` : Recherche de remplacant (Marvel Rivals).
+- `LFT` : Recherche d'equipe competitive (Marvel Rivals).
+- `LFP` : Recherche de joueurs pour une equipe competitive (Marvel Rivals).
+- `LFG` : Recherche de groupe casu/classe (Marvel Rivals).
+- `LFStaff` : Recherche de staff (coach, manager, admin, etc.) pour Marvel Rivals.
+- `LFCast` : Recherche de commentateurs/casters (Marvel Rivals).
 
 ## Format de message recommande
 Ajoutez ces informations pour obtenir de meilleures reponses :
@@ -63,8 +66,8 @@ Moderation (serveurs de 50+ membres) :
 
 Publiques :
 - `/ping` : verifie la latence du bot.
-- `/scrim <jeu> <niveau>` : publie une recherche de scrim (Marvel Rivals ou Overwatch 2).
-- `/recrute <role>` : publie une recherche de joueurs ou staff.
+- `/scrim <niveau>` : publie une recherche de scrim, **Marvel Rivals uniquement**.
+- `/recrute <role>` : publie une recherche de joueurs ou staff, **Marvel Rivals uniquement**.
 - `/link` : recoit en DM un code pour lier ton compte Discord au site BlueGenji.
 - `/stats [joueur]` : affiche les stats 30j d'un joueur (toi par defaut).
 - `/stats-site` : affiche la frequentation du site BlueGenji (visites totales et visiteurs uniques).
