@@ -221,3 +221,25 @@ export function homeGuildIds(env: Record<string, string | undefined>): string[] 
   const ids = raw.map((value) => value?.trim() ?? "").filter((value) => /^\d{5,25}$/.test(value));
   return [...new Set(ids)];
 }
+
+/**
+ * La direction de l'association, destinataire des alertes de signalement du
+ * site : le propriétaire du bot (`OWNER_ID`) et le président (`PRESIDENT`).
+ *
+ * Le site ne connaît pas ces comptes — ils ne sont écrits que dans la
+ * configuration du bot, qui les sert déjà aux commandes réservées
+ * (`checkPermissions`). Une valeur vide ou qui n'a pas la forme d'un
+ * identifiant Discord est écartée ; une même personne aux deux postes n'est
+ * écrite qu'une fois.
+ *
+ * Pur : l'environnement est passé en argument.
+ *
+ * @param env Variables d'environnement (`process.env` en production).
+ * @returns Les identifiants à prévenir, dédoublonnés.
+ */
+export function leadershipIds(env: Record<string, string | undefined>): string[] {
+  const ids = [env.OWNER_ID, env.PRESIDENT]
+    .map((value) => value?.trim() ?? "")
+    .filter((value) => /^\d{5,25}$/.test(value));
+  return [...new Set(ids)];
+}

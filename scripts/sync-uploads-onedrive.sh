@@ -28,6 +28,10 @@
 # images doit donc être un remote `crypt` ; le script refuse d'envoyer en clair
 # sauf si UPLOADS_ALLOW_PLAINTEXT=true.
 #
+# Les **logos masqués** après un signalement (data/quarantine du site) partent
+# aussi, en miroir : hors ligne sur le site, ils doivent pouvoir être rétablis si
+# la contestation aboutit, même après la perte de la machine.
+#
 # Le **journal des suppressions** du site (data/account-deletions.jsonl, une
 # ligne par compte supprimé) part avec, sur le même remote : c'est lui qui
 # permet de rejouer les suppressions après la restauration d'une archive, y
@@ -55,6 +59,7 @@ fi
 : "${UPLOADS_REMOTE_DIR:=uploads}"
 : "${UPLOADS_ALLOW_PLAINTEXT:=false}"
 : "${DELETION_JOURNAL_REMOTE_DIR:=deletions}"
+: "${QUARANTINE_REMOTE_DIR:=quarantine}"
 : "${UPLOADS_LOCK_FILE:=/tmp/bluegenji-uploads-sync.lock}"
 # Mêmes défauts que backup-onedrive.sh : la purge horaire des archives en dépend.
 : "${REMOTE_DIR:=BlueGenji/backups}"
@@ -72,6 +77,8 @@ done
 # Le journal vit à côté de l'app : <app>/public/uploads → <app>/data/…, sauf
 # réglage explicite (qui doit alors suivre ACCOUNT_DELETION_JOURNAL_PATH du site).
 : "${DELETION_JOURNAL_PATH:=$(dirname "$(dirname "${UPLOADS_DIR%/}")")/data/account-deletions.jsonl}"
+# Même règle pour la quarantaine des logos : <app>/data/quarantine.
+: "${QUARANTINE_DIR:=$(dirname "$(dirname "${UPLOADS_DIR%/}")")/data/quarantine}"
 
 # --- Chiffrement ---------------------------------------------------------------
 # `rclone listremotes --long` rend « nom: type » ; seul un remote `crypt` chiffre.
@@ -107,6 +114,26 @@ rclone sync "$UPLOADS_DIR" "$DEST" \
   "${ONEDRIVE_FLAGS[@]}" \
   --transfers 4 --retries 3 --low-level-retries 10 \
   || die "synchronisation vers $DEST impossible"
+
+# --- Logos en quarantaine -------------------------------------------------------
+# Miroir lui aussi, et sans garde-fou de dossier **vide** : le site ne crée le
+# dossier qu'au premier masquage, puis y retire les fichiers rétablis ou
+# supprimés — un dossier vide est donc une quarantaine vide, et la copie
+# distante doit l'être aussi.
+#
+# Un dossier **absent**, en revanche, ne dit rien : c'est l'état d'une machine
+# reconstruite avant qu'on y ait recopié la quarantaine (voir « Restauration »
+# dans doc/backup-onedrive.md). Le purger effacerait la seule copie des logos en
+# attente de contestation au premier passage horaire — le cas même que cette
+# sauvegarde existe pour couvrir. On n'y touche pas.
+QUARANTINE_DEST="$UPLOADS_RCLONE_REMOTE:$QUARANTINE_REMOTE_DIR"
+if [[ -d "$QUARANTINE_DIR" ]]; then
+  rclone sync "$QUARANTINE_DIR" "$QUARANTINE_DEST" \
+    --min-age 1m \
+    "${ONEDRIVE_FLAGS[@]}" \
+    --retries 3 --low-level-retries 10 \
+    || die "synchronisation des logos en quarantaine impossible ($QUARANTINE_DEST)"
+fi
 
 # --- Journal des suppressions --------------------------------------------------
 # Miroir lui aussi : le site l'élague, la copie distante doit l'être avec lui.

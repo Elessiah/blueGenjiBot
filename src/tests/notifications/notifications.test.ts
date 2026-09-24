@@ -10,6 +10,7 @@ import {
   MAX_REFEREE_DMS,
   capRefereeTargets,
   homeGuildIds,
+  leadershipIds,
   type DirectMessageRecipient,
 } from "../../notifications/notifications.js";
 
@@ -194,4 +195,22 @@ test("homeGuildIds écarte les valeurs vides, non numériques et les doublons", 
     homeGuildIds({ SERV_GENJI: "111111111111111111", SERV_RIVALS: "111111111111111111" }),
     ["111111111111111111"],
   );
+});
+
+test("leadershipIds lit OWNER_ID et PRESIDENT", () => {
+  assert.deepEqual(
+    leadershipIds({ OWNER_ID: "555555555555555555", PRESIDENT: "666666666666666666" }),
+    ["555555555555555555", "666666666666666666"],
+  );
+});
+
+test("leadershipIds n'écrit qu'une fois à la personne qui tient les deux postes", () => {
+  assert.deepEqual(leadershipIds({ OWNER_ID: " 555555555555555555 ", PRESIDENT: "555555555555555555" }), [
+    "555555555555555555",
+  ]);
+});
+
+test("leadershipIds écarte une valeur absente, vide ou qui n'est pas un identifiant", () => {
+  assert.deepEqual(leadershipIds({ OWNER_ID: "", PRESIDENT: "owner-test" }), []);
+  assert.deepEqual(leadershipIds({}), []);
 });

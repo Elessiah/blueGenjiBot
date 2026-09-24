@@ -10,7 +10,7 @@ process.env.BDD_PATH = path.join(os.tmpdir(), `bgenji-deliver-${randomUUID()}.sq
 process.env.OWNER_ID = "owner-1";
 process.env.INFO_SERV = "admin-channel-1";
 
-import { deliverDirectMessages, HomeGuildUnavailableError } from "../../notifications/deliver.js";
+import { alertLeadership, deliverDirectMessages, HomeGuildUnavailableError } from "../../notifications/deliver.js";
 import type { Client } from "discord.js";
 
 const GENJI = "111111111111111111";
@@ -118,4 +118,41 @@ test("messages privés fermés : compté en échec, pas en introuvable", () =>
     const client = fakeClient({ [GENJI]: ["900000000000000001"] }, trace, ["900000000000000001"]);
     const report = await deliverDirectMessages(client, "Bonjour", [recipient("900000000000000001", "Ferme")]);
     assert.deepEqual(report, { sent: 0, unresolved: [], failed: ["Ferme"] });
+  }));
+
+/** Faux client pour la direction : `users.fetch` rend un compte, ou lève pour un identifiant inconnu. */
+function leadershipClient(trace: Trace, reachable: string[]): Client {
+  return {
+    users: {
+      fetch: async (id: string) => {
+        if (!reachable.includes(id)) throw new Error("Unknown User");
+        return { send: async (message: string) => { trace.dms.push(`${id}:${message}`); } };
+      },
+    },
+    channels: { fetch: async () => ({ send: async (text: unknown) => { trace.logs.push(String(text)); } }) },
+  } as unknown as Client;
+}
+
+function withLeadership(env: { OWNER_ID?: string; PRESIDENT?: string }, run: () => Promise<void>) {
+  const saved = { OWNER_ID: process.env.OWNER_ID, PRESIDENT: process.env.PRESIDENT };
+  Object.assign(process.env, { OWNER_ID: "", PRESIDENT: "" }, env);
+  return run().finally(() => Object.assign(process.env, saved));
+}
+
+test("alertLeadership écrit au propriétaire et au président, et au salon de logs", () =>
+  withLeadership({ OWNER_ID: "700000000000000001", PRESIDENT: "700000000000000002" }, async () => {
+    const trace: Trace = { dms: [], logs: [] };
+    const client = leadershipClient(trace, ["700000000000000001", "700000000000000002"]);
+    const report = await alertLeadership(client, "Signalement #1");
+    assert.deepEqual(report, { sent: 2, unresolved: [], failed: [] });
+    assert.deepEqual(trace.dms, ["700000000000000001:Signalement #1", "700000000000000002:Signalement #1"]);
+    assert.ok(trace.logs.includes("Signalement #1"));
+  }));
+
+test("alertLeadership compte en échec un compte injoignable, sans empêcher l'autre", () =>
+  withLeadership({ OWNER_ID: "700000000000000001", PRESIDENT: "700000000000000002" }, async () => {
+    const trace: Trace = { dms: [], logs: [] };
+    const client = leadershipClient(trace, ["700000000000000002"]);
+    const report = await alertLeadership(client, "Signalement #2");
+    assert.deepEqual(report, { sent: 1, unresolved: [], failed: ["700000000000000001"] });
   }));

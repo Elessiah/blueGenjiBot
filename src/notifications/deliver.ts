@@ -2,7 +2,7 @@ import type { Client, Guild, GuildMember, Role } from "discord.js";
 import { getBddInstance } from "@/bdd/Bdd.js";
 import { sendLog } from "@/safe/sendLog.js";
 import { findGuildMemberByHandle, parseDiscordHandle } from "@/notifications/resolveHandle.js";
-import { capRefereeTargets, homeGuildIds, MAX_REFEREE_DMS } from "@/notifications/notifications.js";
+import { capRefereeTargets, homeGuildIds, leadershipIds, MAX_REFEREE_DMS } from "@/notifications/notifications.js";
 import type { DirectMessageRecipient } from "@/notifications/notifications.js";
 
 /**
@@ -226,5 +226,36 @@ export async function alertReferees(client: Client, message: string): Promise<De
     }
   }
 
+  return report;
+}
+
+/**
+ * Alerte la direction de l'association : log de supervision **et** message
+ * privé au propriétaire (`OWNER_ID`) et au président (`PRESIDENT`).
+ *
+ * Sert aux signalements du site (contenu illicite, contestation) : le salon de
+ * logs garde la trace, le message privé sort l'alerte du salon. Les deux
+ * destinataires sont joints **directement** par leur identifiant, sans passer
+ * par les serveurs BlueGenji : ce sont eux qui administrent le bot, le bot les
+ * connaît déjà.
+ *
+ * @param client Client Discord.
+ * @param message Texte déjà rédigé et borné par l'app.
+ * @returns Le bilan de la distribution.
+ */
+export async function alertLeadership(client: Client, message: string): Promise<DeliveryReport> {
+  const report: DeliveryReport = { sent: 0, unresolved: [], failed: [] };
+
+  await sendLog(client, message);
+
+  for (const id of leadershipIds(process.env)) {
+    try {
+      const user = await client.users.fetch(id);
+      await user.send(message);
+      report.sent += 1;
+    } catch {
+      report.failed.push(id);
+    }
+  }
   return report;
 }
