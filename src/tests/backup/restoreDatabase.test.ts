@@ -9,7 +9,6 @@ import path from "node:path";
 const WORK_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "bluegenji-restore-"));
 process.env.BDD_PATH = path.join(WORK_DIR, "database.sqlite");
 
-// eslint-disable-next-line import/no-named-as-default
 const sqlite3 = (await import("sqlite3")).default;
 const { open } = await import("sqlite");
 const { getBddInstance, resetBddInstance } = await import("../../bdd/Bdd.js");
