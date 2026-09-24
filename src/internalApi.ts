@@ -24,7 +24,7 @@ import { listModules, isValidModule, setModuleEnabled, MODULE_KEYS, type ModuleK
 import { pctDelta, absDelta, deterministicColor, isLoopbackHost, matchesToken } from "@/internalApi/helpers.js";
 import { parseSiteVisitStats, saveSiteVisitStats } from "@/siteVisits/siteVisits.js";
 import { parseDirectMessageRequest, parseRefereeAlert } from "@/notifications/notifications.js";
-import { deliverDirectMessages, alertReferees, HomeGuildUnavailableError } from "@/notifications/deliver.js";
+import { deliverDirectMessages, alertLeadership, alertReferees, HomeGuildUnavailableError } from "@/notifications/deliver.js";
 import { HandleResolutionTimeoutError, resolveDiscordHandle } from "@/notifications/resolveHandle.js";
 
 /**
@@ -427,6 +427,27 @@ export function startInternalApi(client: Client) {
       res.json(report);
     } catch (error) {
       await sendLog(client, `notify/referees error (${request.context}): ${(error as Error).message}`);
+      res.status(500).json({ error: "NOTIFICATION_DELIVERY_FAILED" });
+    }
+  });
+
+  /**
+   * Signalement ou contestation reçu par le site : canal de logs **et** message
+   * prive au proprietaire (OWNER_ID) et au president (PRESIDENT). Meme corps
+   * que l'alerte des arbitres ; l'app n'y met aucune donnee nominative.
+   */
+  app.post("/internal/notify/leadership", async (req: Request, res: Response) => {
+    const request = parseRefereeAlert(req.body);
+    if (!request) {
+      res.status(400).json({ error: "INVALID_NOTIFICATION_PAYLOAD" });
+      return;
+    }
+
+    try {
+      const report = await alertLeadership(client, `[AppBlueGenji] ${request.message}`);
+      res.json(report);
+    } catch (error) {
+      await sendLog(client, `notify/leadership error (${request.context}): ${(error as Error).message}`);
       res.status(500).json({ error: "NOTIFICATION_DELIVERY_FAILED" });
     }
   });
