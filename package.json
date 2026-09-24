@@ -42,5 +42,9 @@
     "docs": "npm run build && npm run docs:gen",
     "test": "npm run build && cd dist && node --test",
     "test:coverage": "npm run build && cd dist && node --test --experimental-test-coverage"
+  },
+  "allowScripts": {
+    "sqlite3": true,
+    "unrs-resolver": false
   }
 }
