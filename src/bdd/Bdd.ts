@@ -2,7 +2,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {open} from 'sqlite';
 import type {Database} from 'sqlite';
-// eslint-disable-next-line import/no-named-as-default
 import sqlite3 from 'sqlite3';
 
 import type {status, Query} from "../types.js";
@@ -155,7 +154,6 @@ class Bdd {
   async init(): Promise<void> {
     this.Database = await open({
       filename: this.name,
-        // eslint-disable-next-line import/no-named-as-default-member
       driver: sqlite3.Database,
     });
     await this.initDatabase();

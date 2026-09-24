@@ -109,7 +109,7 @@ BACKUP_STATUS_PATH=             # statut de la sauvegarde OneDrive (défaut /var
   supprimé entre-temps lève un `10008` qui interromprait la diffusion en cours.
 - **Commandes Discord** : enregistrer via `updateCommands()`, déclarer dans `config/commands.ts` (statiques) ou `fillBlueCommands()` (dynamiques).
 - **Tests** : runner natif `node:test` sur le build (`dist/`), pas de transpil à la volée.
-- **Lint** : configuration `.eslintrc.cjs` (format eslintrc — ESLint 8 ne lit la « flat config » que derrière un drapeau). Le périmètre est **`src/` seul** (`.eslintignore`) : sans lui, `eslint .` partait analyser `dist/`. `src/main.js` est ignoré — ancien point d'entrée, ni compilé (`allowJs: false`) ni référencé.
+- **Lint** : ESLint 10, configuration « flat » dans `eslint.config.js` (`@eslint/js` + `typescript-eslint`, recommandés). Le périmètre est **`src/` seul** (`ignores` de la configuration) : sans lui, `eslint .` partait analyser `dist/`. `src/main.js` est ignoré — ancien point d’entrée, ni compilé (`allowJs: false`) ni référencé. Aucun plugin `import` : il n’était chargé que pour que quatre `eslint-disable` résolvent des règles jamais activées, et ESLint 10 signale un tel commentaire comme inutile. Le seul avis `deprecated` restant à l’installation, `prebuild-install`, vient de `sqlite3` et ne se corrige pas de notre côté.
 
 ## CI
 

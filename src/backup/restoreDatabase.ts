@@ -1,6 +1,5 @@
 import fs from "node:fs";
 import path from "node:path";
-// eslint-disable-next-line import/no-named-as-default
 import sqlite3 from "sqlite3";
 import { open } from "sqlite";
 

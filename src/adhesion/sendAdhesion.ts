@@ -28,7 +28,7 @@ async function sendAdhesion(client: Client,
     let status: AttachmentBuilder;
     let adhesion: AttachmentBuilder;
 
-    let paths: PathsAdhesions | null = null;
+    let paths: PathsAdhesions | null;
     try {
         paths = await loadAdhesionPaths(undefined, client);
     } catch (err) {
