@@ -62,7 +62,9 @@ par le site, mais il doit pouvoir être **rétabli** si la contestation de
 l'équipe aboutit — y compris après la perte de la machine. Rétabli ou supprimé
 définitivement, il quitte le dossier, donc la sauvegarde au passage suivant. Un
 dossier vide est normal ici (aucun logo en attente) : pas de garde-fou, un
-miroir vide est la bonne copie d'une quarantaine vide.
+miroir vide est la bonne copie d'une quarantaine vide. Un dossier **absent**,
+lui, laisse la copie distante intacte : c'est l'état d'une machine reconstruite
+avant la restauration.
 
 ```
 onedrive:BlueGenji/chiffre/      # vu en clair par onedrive-crypt: uniquement
@@ -293,6 +295,15 @@ rclone copy onedrive-crypt:uploads /chemin/vers/appbluegenji/public/uploads
 
 C'est l'état **actuel** des images, pas celui de la date du dump : avec un dump
 ancien, les images supprimées depuis manquent — c'est voulu.
+
+**Logos en quarantaine** — à recopier dans `data/quarantine` de l'app, **avant**
+de rouvrir le site : sans eux, « Rétablir » échoue sur chaque logo masqué en
+attente de contestation. Tant que le dossier local n'existe pas, la
+synchronisation horaire ne touche pas à la copie distante.
+
+```bash
+rclone copy onedrive-crypt:quarantine /chemin/vers/appbluegenji/data/quarantine
+```
 
 **Suppressions de compte — obligatoire avant de rouvrir le site.** Le dump date
 d'avant certaines suppressions de compte, qui y sont donc revenues. Le site les

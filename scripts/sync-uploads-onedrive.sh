@@ -116,9 +116,16 @@ rclone sync "$UPLOADS_DIR" "$DEST" \
   || die "synchronisation vers $DEST impossible"
 
 # --- Logos en quarantaine -------------------------------------------------------
-# Miroir lui aussi, et sans garde-fou de dossier vide : aucune attente en cours
-# est l'état normal, et la copie distante doit alors être vide. Dossier absent
-# (site sans aucun masquage à ce jour) : rien en face non plus.
+# Miroir lui aussi, et sans garde-fou de dossier **vide** : le site ne crée le
+# dossier qu'au premier masquage, puis y retire les fichiers rétablis ou
+# supprimés — un dossier vide est donc une quarantaine vide, et la copie
+# distante doit l'être aussi.
+#
+# Un dossier **absent**, en revanche, ne dit rien : c'est l'état d'une machine
+# reconstruite avant qu'on y ait recopié la quarantaine (voir « Restauration »
+# dans doc/backup-onedrive.md). Le purger effacerait la seule copie des logos en
+# attente de contestation au premier passage horaire — le cas même que cette
+# sauvegarde existe pour couvrir. On n'y touche pas.
 QUARANTINE_DEST="$UPLOADS_RCLONE_REMOTE:$QUARANTINE_REMOTE_DIR"
 if [[ -d "$QUARANTINE_DIR" ]]; then
   rclone sync "$QUARANTINE_DIR" "$QUARANTINE_DEST" \
@@ -126,8 +133,6 @@ if [[ -d "$QUARANTINE_DIR" ]]; then
     "${ONEDRIVE_FLAGS[@]}" \
     --retries 3 --low-level-retries 10 \
     || die "synchronisation des logos en quarantaine impossible ($QUARANTINE_DEST)"
-else
-  rclone purge "$QUARANTINE_DEST" "${ONEDRIVE_FLAGS[@]}" >/dev/null 2>&1 || true
 fi
 
 # --- Journal des suppressions --------------------------------------------------
