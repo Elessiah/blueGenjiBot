@@ -104,6 +104,22 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     `unresolved`, et le canal de logs le dit.
   - Même bilan de retour que `/internal/notify/dm`.
 
+- `POST /internal/notify/leadership`
+  - Body: `{ "message": "...", "context": "content-report" }`
+  - Alerte la **direction de l'association** d'un signalement reçu par le site
+    (contenu illicite, modération, bug) ou d'une contestation : le message part
+    dans le canal de logs (`sendLog()`) **et** en privé au propriétaire du bot
+    (`OWNER_ID`) et au président (`PRESIDENT`). Le site ne connaît pas ces deux
+    comptes : ils ne sont écrits que dans la configuration du bot.
+  - Les deux destinataires sont joints **par leur identifiant**, sans passer par
+    les serveurs BlueGenji. Une valeur vide ou mal formée est ignorée, et une
+    même personne aux deux postes ne reçoit qu'un message.
+  - L'app n'y met **aucune donnée nominative** : ni pseudo de joueur, ni nom ou
+    adresse du signalant, ni description — seulement la catégorie, les équipes
+    et tournois visés, le nombre de joueurs et le lien du panneau.
+  - Même bilan de retour que `/internal/notify/dm` (`failed` liste les
+    identifiants injoignables).
+
 - `GET /internal/feed/stream`
   - Flux SSE des évènements d'activité (`FeedEvent`) : le backlog récent
     d'abord, puis le direct. `Last-Event-ID` reprend là où le lecteur s'était

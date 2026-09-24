@@ -56,9 +56,18 @@ la restauration d'une archive, de supprimer à nouveau les comptes supprimés
 depuis (voir « Restauration »). Il est élagué par le site et recopié tel quel,
 sans conserver d'ancienne version (`--onedrive-no-versions`).
 
+Les **logos masqués** après un signalement (`<app>/data/quarantine`) partent
+aussi, sur le même remote chiffré et en miroir : un logo masqué n'est plus servi
+par le site, mais il doit pouvoir être **rétabli** si la contestation de
+l'équipe aboutit — y compris après la perte de la machine. Rétabli ou supprimé
+définitivement, il quitte le dossier, donc la sauvegarde au passage suivant. Un
+dossier vide est normal ici (aucun logo en attente) : pas de garde-fou, un
+miroir vide est la bonne copie d'une quarantaine vide.
+
 ```
 onedrive:BlueGenji/chiffre/      # vu en clair par onedrive-crypt: uniquement
 ├── uploads/     avatars/ teams/ sponsors/ benevoles/ tournaments/
+├── quarantine/  teams/        (logos masqués, en attente de contestation)
 └── deletions/   account-deletions.jsonl
 ```
 
