@@ -4,6 +4,11 @@
 BlueGenjiBot links partner servers through shared services.
 If you post in an assigned channel with the right prefix, your message is forwarded to other partner servers using the same service.
 
+## Games covered
+The bot does not offer the same services for each game:
+- **Marvel Rivals**: announcements dispatched across partner servers (every service below) **and** BlueGenji tournament management.
+- **Overwatch**: BlueGenji tournament management **only** (match reminders, referee alerts, tournament log). No Overwatch announcement is dispatched across servers.
+
 ## Services (prefixes)
 Every service below, tournament announcements included, is for
 **Marvel Rivals only**.
@@ -38,7 +43,7 @@ they are: the bot no longer knows which message they belonged to.
 
 ## Slash commands
 Everyone:
-- `/help language:<English|Francais>`
+- `/help language:<English|Français>`
 - `/list-partner service:<service>`
 - `/display-channel-filter-region channel:<channel>`
 - `/display-channel-filter-rank channel:<channel>`
