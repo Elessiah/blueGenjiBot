@@ -15,7 +15,8 @@ Projet sœur : `C:\work\BlueGenji\appbluegenji` (Next.js 15, MySQL). Le bot reç
 
 ```bash
 npm run dev          # nodemon + ts-node ESM loader
-npm run build        # tsc && tsc-alias (résout les @/* en chemins relatifs)
+npm run build        # TypeScript 7 puis tsc-alias (résout les @/* en chemins relatifs)
+npm run typecheck:ts5 # même contrôle des types avec TypeScript 5, celui que lisent ESLint et ts-node
 npm start            # node dist/main.js
 npm run lint         # ESLint
 npm test             # build puis node --test sur dist/tests/**/*.test.js
@@ -29,6 +30,7 @@ Test ciblé après build : `node --test "dist/tests/path/to/file.test.js"`.
 ## Stack
 
 - **Node.js + TypeScript ESM** (strict). Imports avec extension `.js` obligatoire.
+- **Deux TypeScript cohabitent.** `typescript-native` (alias npm de `typescript@^7`, le compilateur réécrit en Go) produit `dist/` — environ 3 s au lieu de 9. `typescript` (5.x) reste installé pour **typescript-eslint** (qui exige `<6.1`) et **ts-node** (`npm run dev`) : TypeScript 7 n'expose plus l'API JavaScript qu'ils appellent. Les deux paquets fournissent un binaire `tsc`, et celui que retient `node_modules/.bin` dépend de l'ordre d'installation : les scripts désignent donc leur compilateur **par chemin** (`node node_modules/<paquet>/bin/tsc`), jamais par `tsc` ni `npx tsc`. `baseUrl` a quitté `tsconfig.json` (retiré en TypeScript 7) : `paths` s'écrit `"@/*": ["./src/*"]`, lu pareil par les deux versions. Le lockfile porte les binaires natifs de toutes les plateformes, dont `@typescript/typescript-linux-arm64` pour le serveur. Même schéma que l'app sœur ; le passage complet attendra que typescript-eslint accepte la version 7. Câblage gardé par `tests/utils/typescriptWiring.test.ts`.
 - **discord.js 14** — slash commands, intents : Guilds, GuildMembers, GuildMessages, MessageContent
 - **Express 4** — API interne montée sur `/internal`, auth via header `x-internal-token`
 - **SQLite** (`sqlite` + `sqlite3`) — base locale `database.sqlite`, accès via singleton `Bdd` (`src/bdd/Bdd.ts`)

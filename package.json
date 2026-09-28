@@ -25,10 +25,12 @@
     "ts-node": "^10.9.2",
     "tsc-alias": "^1.8.16",
     "typescript": "^5.9.3",
-    "typescript-eslint": "^8.70.1"
+    "typescript-eslint": "^8.70.1",
+    "typescript-native": "npm:typescript@^7.0.2"
   },
   "scripts": {
-    "build": "tsc && tsc-alias",
+    "build": "node node_modules/typescript-native/bin/tsc && tsc-alias",
+    "typecheck:ts5": "node node_modules/typescript/bin/tsc --noEmit",
     "start": "node dist/main.js",
     "dev": "nodemon --watch src --ext ts --exec \"node --loader ts-node/esm src/main.ts\"",
     "genToken": "node dist/genToken.js",
