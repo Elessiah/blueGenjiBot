@@ -46,8 +46,8 @@ Ils sont traités à part, par `scripts/sync-uploads-onedrive.sh` :
   et un OneDrive personnel n'offre aucun contrat de sous-traitance : les images
   passent par un remote `crypt` (étape 3 bis ci-dessous), qui chiffre contenu
   **et** noms de fichiers avant envoi tout en gardant la synchronisation
-  incrémentale. Le script **refuse** un remote qui n'est pas de type `crypt`
-  (`UPLOADS_ALLOW_PLAINTEXT=true` pour passer outre, à ne pas faire).
+  incrémentale. Le script **refuse** un remote qui n'est pas de type `crypt`,
+  sans exception : aucun réglage ne permet d'envoyer les images en clair.
 
 Le **journal des suppressions** du site (`<app>/data/account-deletions.jsonl`)
 part avec les images, sur le même remote chiffré. Une ligne par compte supprimé
