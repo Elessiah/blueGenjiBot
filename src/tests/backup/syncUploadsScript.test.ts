@@ -36,3 +36,11 @@ test("le contrôle du chiffrement précède tout envoi", () => {
   const firstUpload = SCRIPT.search(/^\s*rclone (sync|copy|copyto) /m);
   assert.ok(check > 0 && firstUpload > check);
 });
+
+test("la purge horaire des archives tourne même si le remote des images est refusé", () => {
+  // Sans elle, une archive vivrait jusqu'à 35 jours (purge du lundi seule)
+  // au lieu des RETENTION_DAYS annoncés par le site.
+  const purge = SCRIPT.search(/^rclone delete "\$RCLONE_REMOTE:\$REMOTE_DIR"/m);
+  const check = SCRIPT.indexOf('if [[ "$REMOTE_TYPE" != "crypt" ]]');
+  assert.ok(purge > 0 && purge < check);
+});

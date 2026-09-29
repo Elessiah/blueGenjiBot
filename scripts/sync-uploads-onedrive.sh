@@ -79,6 +79,20 @@ done
 # Même règle pour la quarantaine des logos : <app>/data/quarantine.
 : "${QUARANTINE_DIR:=$(dirname "$(dirname "${UPLOADS_DIR%/}")")/data/quarantine}"
 
+# --- Rétention des archives ----------------------------------------------------
+# La purge de backup-onedrive.sh ne tourne que le lundi : une archive créée un
+# lundi y a 28 jours au quatrième passage (gardée), 35 au cinquième — au-delà des
+# RETENTION_DAYS que le site annonce. Refaite ici chaque heure, la borne tient à
+# une heure près, même quand la sauvegarde du lundi échoue avant sa purge. Elle
+# passe **avant** les contrôles du miroir des images (chiffrement, dossier vide) :
+# elle ne touche que les archives, et un remote d'images refusé ne doit pas
+# prolonger la conservation annoncée. Un échec de purge ne fait pas échouer la
+# synchronisation.
+rclone delete "$RCLONE_REMOTE:$REMOTE_DIR" \
+  --min-age "${RETENTION_DAYS}d" --include "bluegenji-*.tar.age" \
+  --onedrive-hard-delete \
+  || echo "[uploads] purge des anciennes archives incomplète." >&2
+
 # --- Chiffrement ---------------------------------------------------------------
 # `rclone listremotes --long` rend « nom: type » ; seul un remote `crypt` chiffre.
 REMOTE_TYPE="$(rclone listremotes --long 2>/dev/null \
@@ -146,16 +160,5 @@ else
   # Aucune suppression consignée (ou journal retiré) : rien ne doit rester en face.
   rclone deletefile "$JOURNAL_DEST" "${ONEDRIVE_FLAGS[@]}" >/dev/null 2>&1 || true
 fi
-
-# --- Rétention des archives ----------------------------------------------------
-# La purge de backup-onedrive.sh ne tourne que le lundi : une archive créée un
-# lundi y a 28 jours au quatrième passage (gardée), 35 au cinquième — au-delà des
-# RETENTION_DAYS que le site annonce. Refaite ici chaque heure, la borne tient à
-# une heure près, même quand la sauvegarde du lundi échoue avant sa purge. Un
-# échec de purge ne fait pas échouer la synchronisation.
-rclone delete "$RCLONE_REMOTE:$REMOTE_DIR" \
-  --min-age "${RETENTION_DAYS}d" --include "bluegenji-*.tar.age" \
-  --onedrive-hard-delete \
-  || echo "[uploads] purge des anciennes archives incomplète." >&2
 
 log "Images et journal des suppressions synchronisés vers $UPLOADS_RCLONE_REMOTE."
