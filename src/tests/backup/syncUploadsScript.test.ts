@@ -42,9 +42,20 @@ test("la purge horaire des archives tourne même si le remote des images est ref
   // au lieu des RETENTION_DAYS annoncés par le site.
   const purge = SCRIPT.search(/^rclone delete "\$RCLONE_REMOTE:\$REMOTE_DIR"/m);
   assert.ok(purge > 0);
-  // Tout arrêt (`die`) placé avant la purge ne doit porter que sur rclone.
-  const guardsBefore = SCRIPT.slice(0, purge).split("\n").filter((line) => /\bdie "/.test(line) && !/^\s*die\(\)/.test(line));
+  // Seuls les prérequis de la purge l'arrêtent : binaires, configuration lue,
+  // verrou. Aucun contrôle propre au miroir des images ne la précède.
+  const guardsBefore = SCRIPT.slice(0, purge).split("\n").filter((line) => /\bdie "/.test(line));
   assert.deepEqual(guardsBefore.map((line) => line.trim()), [
-    'command -v rclone >/dev/null 2>&1 || die "binaire manquant : rclone"',
+    'command -v "$binary" >/dev/null 2>&1 || die "binaire manquant : $binary"',
+    '[[ -n "$UPLOADS_DIR" ]] || die "UPLOADS_DIR non renseigné dans $CONFIG_FILE"',
+    'flock -w 600 9 || die "une autre synchronisation tient le verrou depuis plus de 10 min"',
   ]);
+});
+
+test("la purge des archives n'est jamais lancée sur une configuration non lue", () => {
+  const purge = SCRIPT.search(/^rclone delete "\$RCLONE_REMOTE:\$REMOTE_DIR"/m);
+  const configCheck = SCRIPT.indexOf('[[ -n "$UPLOADS_DIR" ]] || die');
+  const lock = SCRIPT.indexOf("flock -w 600 9");
+  assert.ok(configCheck > 0 && configCheck < purge);
+  assert.ok(lock > 0 && lock < purge);
 });

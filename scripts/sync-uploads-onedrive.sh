@@ -67,25 +67,36 @@ fi
 log() { echo "[uploads] $*"; }
 die() { echo "[uploads] ÉCHEC : $*" >&2; exit 1; }
 
-command -v rclone >/dev/null 2>&1 || die "binaire manquant : rclone"
+for binary in rclone flock; do
+  command -v "$binary" >/dev/null 2>&1 || die "binaire manquant : $binary"
+done
+# Preuve que la configuration a été lue : sans elle, la purge ci-dessous
+# tournerait sur des valeurs par défaut (remote, dossier, durée) qui ne sont
+# peut-être pas celles de la machine.
+[[ -n "$UPLOADS_DIR" ]] || die "UPLOADS_DIR non renseigné dans $CONFIG_FILE"
+
+# Le cron horaire et la sauvegarde du lundi peuvent se croiser : deux `sync`
+# simultanés vers le même dossier se marcheraient dessus. On attend le premier
+# (il ne dure que quelques secondes en régime normal) plutôt que d'abandonner,
+# sinon la sauvegarde hebdomadaire annoncerait un échec qui n'en est pas un.
+exec 9>"$UPLOADS_LOCK_FILE"
+flock -w 600 9 || die "une autre synchronisation tient le verrou depuis plus de 10 min"
 
 # --- Rétention des archives ----------------------------------------------------
 # La purge de backup-onedrive.sh ne tourne que le lundi : une archive créée un
 # lundi y a 28 jours au quatrième passage (gardée), 35 au cinquième — au-delà des
 # RETENTION_DAYS que le site annonce. Refaite ici chaque heure, la borne tient à
 # une heure près, même quand la sauvegarde du lundi échoue avant sa purge. Elle
-# passe **avant** tous les contrôles du miroir des images (dossier, verrou,
-# chiffrement, dossier vide) : elle ne touche que les archives et ne dépend que de
-# rclone, et un miroir refusé ne doit pas prolonger la conservation annoncée. Un
-# échec de purge ne fait pas échouer la synchronisation.
+# passe **avant** les contrôles du miroir des images (dossier, chiffrement,
+# dossier vide) : elle ne touche que les archives, et un miroir refusé ne doit pas
+# prolonger la conservation annoncée. Un échec de purge ne fait pas échouer la
+# synchronisation.
 rclone delete "$RCLONE_REMOTE:$REMOTE_DIR" \
   --min-age "${RETENTION_DAYS}d" --include "bluegenji-*.tar.age" \
   --onedrive-hard-delete \
   || echo "[uploads] purge des anciennes archives incomplète." >&2
 
-[[ -n "$UPLOADS_DIR" ]] || die "UPLOADS_DIR non renseigné dans $CONFIG_FILE"
 [[ -d "$UPLOADS_DIR" ]] || die "dossier des images introuvable ($UPLOADS_DIR)"
-command -v flock >/dev/null 2>&1 || die "binaire manquant : flock"
 
 # Le journal vit à côté de l'app : <app>/public/uploads → <app>/data/…, sauf
 # réglage explicite (qui doit alors suivre ACCOUNT_DELETION_JOURNAL_PATH du site).
@@ -108,13 +119,6 @@ fi
 if [[ -z "$(find "$UPLOADS_DIR" -type f -print -quit)" ]]; then
   die "aucun fichier dans $UPLOADS_DIR — synchronisation refusée, elle viderait la sauvegarde"
 fi
-
-# Le cron horaire et la sauvegarde du lundi peuvent se croiser : deux `sync`
-# simultanés vers le même dossier se marcheraient dessus. On attend le premier
-# (il ne dure que quelques secondes en régime normal) plutôt que d'abandonner,
-# sinon la sauvegarde hebdomadaire annoncerait un échec qui n'en est pas un.
-exec 9>"$UPLOADS_LOCK_FILE"
-flock -w 600 9 || die "une autre synchronisation tient le verrou depuis plus de 10 min"
 
 ONEDRIVE_FLAGS=(--onedrive-hard-delete --onedrive-no-versions)
 DEST="$UPLOADS_RCLONE_REMOTE:$UPLOADS_REMOTE_DIR"
