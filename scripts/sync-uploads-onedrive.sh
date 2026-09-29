@@ -25,8 +25,8 @@
 #
 # **Chiffré** : un avatar est une donnée personnelle — masqué ou non sur le site —
 # et un OneDrive personnel n'offre aucun contrat de sous-traitance. Le remote des
-# images doit donc être un remote `crypt` ; le script refuse d'envoyer en clair
-# sauf si UPLOADS_ALLOW_PLAINTEXT=true.
+# images doit donc être un remote `crypt` ; le script refuse d'envoyer en clair,
+# sans exception ni réglage pour passer outre.
 #
 # Les **logos masqués** après un signalement (data/quarantine du site) partent
 # aussi, en miroir : hors ligne sur le site, ils doivent pouvoir être rétablis si
@@ -57,7 +57,6 @@ fi
 : "${UPLOADS_RCLONE_REMOTE:=$RCLONE_REMOTE}"
 : "${UPLOADS_DIR:=}"
 : "${UPLOADS_REMOTE_DIR:=uploads}"
-: "${UPLOADS_ALLOW_PLAINTEXT:=false}"
 : "${DELETION_JOURNAL_REMOTE_DIR:=deletions}"
 : "${QUARANTINE_REMOTE_DIR:=quarantine}"
 : "${UPLOADS_LOCK_FILE:=/tmp/bluegenji-uploads-sync.lock}"
@@ -85,8 +84,8 @@ done
 REMOTE_TYPE="$(rclone listremotes --long 2>/dev/null \
   | awk -v name="$UPLOADS_RCLONE_REMOTE:" '$1 == name { print $2 }')"
 [[ -n "$REMOTE_TYPE" ]] || die "remote rclone inconnu : $UPLOADS_RCLONE_REMOTE"
-if [[ "$REMOTE_TYPE" != "crypt" && "$UPLOADS_ALLOW_PLAINTEXT" != "true" ]]; then
-  die "le remote $UPLOADS_RCLONE_REMOTE n'est pas chiffré (type $REMOTE_TYPE) — voir doc/backup-onedrive.md, ou UPLOADS_ALLOW_PLAINTEXT=true"
+if [[ "$REMOTE_TYPE" != "crypt" ]]; then
+  die "le remote $UPLOADS_RCLONE_REMOTE n'est pas chiffré (type $REMOTE_TYPE) — voir doc/backup-onedrive.md"
 fi
 
 # Garde-fou du miroir : un dossier vide (chemin changé au redéploiement, disque
