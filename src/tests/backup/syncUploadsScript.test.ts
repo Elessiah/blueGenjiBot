@@ -41,6 +41,10 @@ test("la purge horaire des archives tourne même si le remote des images est ref
   // Sans elle, une archive vivrait jusqu'à 35 jours (purge du lundi seule)
   // au lieu des RETENTION_DAYS annoncés par le site.
   const purge = SCRIPT.search(/^rclone delete "\$RCLONE_REMOTE:\$REMOTE_DIR"/m);
-  const check = SCRIPT.indexOf('if [[ "$REMOTE_TYPE" != "crypt" ]]');
-  assert.ok(purge > 0 && purge < check);
+  assert.ok(purge > 0);
+  // Tout arrêt (`die`) placé avant la purge ne doit porter que sur rclone.
+  const guardsBefore = SCRIPT.slice(0, purge).split("\n").filter((line) => /\bdie "/.test(line) && !/^\s*die\(\)/.test(line));
+  assert.deepEqual(guardsBefore.map((line) => line.trim()), [
+    'command -v rclone >/dev/null 2>&1 || die "binaire manquant : rclone"',
+  ]);
 });

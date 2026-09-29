@@ -67,31 +67,31 @@ fi
 log() { echo "[uploads] $*"; }
 die() { echo "[uploads] ÉCHEC : $*" >&2; exit 1; }
 
-[[ -n "$UPLOADS_DIR" ]] || die "UPLOADS_DIR non renseigné dans $CONFIG_FILE"
-[[ -d "$UPLOADS_DIR" ]] || die "dossier des images introuvable ($UPLOADS_DIR)"
-for binary in rclone flock; do
-  command -v "$binary" >/dev/null 2>&1 || die "binaire manquant : $binary"
-done
-
-# Le journal vit à côté de l'app : <app>/public/uploads → <app>/data/…, sauf
-# réglage explicite (qui doit alors suivre ACCOUNT_DELETION_JOURNAL_PATH du site).
-: "${DELETION_JOURNAL_PATH:=$(dirname "$(dirname "${UPLOADS_DIR%/}")")/data/account-deletions.jsonl}"
-# Même règle pour la quarantaine des logos : <app>/data/quarantine.
-: "${QUARANTINE_DIR:=$(dirname "$(dirname "${UPLOADS_DIR%/}")")/data/quarantine}"
+command -v rclone >/dev/null 2>&1 || die "binaire manquant : rclone"
 
 # --- Rétention des archives ----------------------------------------------------
 # La purge de backup-onedrive.sh ne tourne que le lundi : une archive créée un
 # lundi y a 28 jours au quatrième passage (gardée), 35 au cinquième — au-delà des
 # RETENTION_DAYS que le site annonce. Refaite ici chaque heure, la borne tient à
 # une heure près, même quand la sauvegarde du lundi échoue avant sa purge. Elle
-# passe **avant** les contrôles du miroir des images (chiffrement, dossier vide) :
-# elle ne touche que les archives, et un remote d'images refusé ne doit pas
-# prolonger la conservation annoncée. Un échec de purge ne fait pas échouer la
-# synchronisation.
+# passe **avant** tous les contrôles du miroir des images (dossier, verrou,
+# chiffrement, dossier vide) : elle ne touche que les archives et ne dépend que de
+# rclone, et un miroir refusé ne doit pas prolonger la conservation annoncée. Un
+# échec de purge ne fait pas échouer la synchronisation.
 rclone delete "$RCLONE_REMOTE:$REMOTE_DIR" \
   --min-age "${RETENTION_DAYS}d" --include "bluegenji-*.tar.age" \
   --onedrive-hard-delete \
   || echo "[uploads] purge des anciennes archives incomplète." >&2
+
+[[ -n "$UPLOADS_DIR" ]] || die "UPLOADS_DIR non renseigné dans $CONFIG_FILE"
+[[ -d "$UPLOADS_DIR" ]] || die "dossier des images introuvable ($UPLOADS_DIR)"
+command -v flock >/dev/null 2>&1 || die "binaire manquant : flock"
+
+# Le journal vit à côté de l'app : <app>/public/uploads → <app>/data/…, sauf
+# réglage explicite (qui doit alors suivre ACCOUNT_DELETION_JOURNAL_PATH du site).
+: "${DELETION_JOURNAL_PATH:=$(dirname "$(dirname "${UPLOADS_DIR%/}")")/data/account-deletions.jsonl}"
+# Même règle pour la quarantaine des logos : <app>/data/quarantine.
+: "${QUARANTINE_DIR:=$(dirname "$(dirname "${UPLOADS_DIR%/}")")/data/quarantine}"
 
 # --- Chiffrement ---------------------------------------------------------------
 # `rclone listremotes --long` rend « nom: type » ; seul un remote `crypt` chiffre.
