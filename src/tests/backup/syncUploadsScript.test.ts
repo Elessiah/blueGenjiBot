@@ -23,3 +23,16 @@ test("un dossier de quarantaine absent ne purge jamais la copie distante", () =>
   // copie des logos en attente de contestation au premier passage horaire.
   assert.doesNotMatch(SCRIPT, /rclone (purge|delete)[^\n]*QUARANTINE_DEST/);
 });
+
+test("un remote non chiffré est refusé, sans réglage pour passer outre", () => {
+  // Un avatar est une donnée personnelle : aucune variable ne doit rouvrir
+  // l'envoi en clair vers un OneDrive personnel.
+  assert.match(SCRIPT, /if \[\[ "\$REMOTE_TYPE" != "crypt" \]\]; then\s+die /);
+  assert.doesNotMatch(SCRIPT, /PLAINTEXT/);
+});
+
+test("le contrôle du chiffrement précède tout envoi", () => {
+  const check = SCRIPT.indexOf('if [[ "$REMOTE_TYPE" != "crypt" ]]');
+  const firstUpload = SCRIPT.search(/^\s*rclone (sync|copy|copyto) /m);
+  assert.ok(check > 0 && firstUpload > check);
+});
