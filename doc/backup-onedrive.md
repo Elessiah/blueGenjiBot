@@ -179,6 +179,22 @@ rclone lsf onedrive-crypt:
 rclone lsf onedrive:BlueGenji/chiffre
 ```
 
+**Machine qui envoyait encore en clair.** Le chiffrement est obligatoire, sans
+réglage pour passer outre (l'ancienne variable `UPLOADS_ALLOW_PLAINTEXT` n'est
+plus lue : la retirer de `backup-onedrive.env`). Tant que `UPLOADS_RCLONE_REMOTE`
+ne désigne pas un remote `crypt`, le miroir horaire échoue — et la copie en clair
+déjà envoyée reste figée, avatars supprimés compris, puisque plus rien ne la
+synchronise. Une fois le remote chiffré créé et renseigné
+(`UPLOADS_RCLONE_REMOTE="onedrive-crypt"`) et un premier passage réussi, effacer
+définitivement l'ancienne copie en clair (dossiers par défaut ci-dessous, à
+adapter si `UPLOADS_REMOTE_DIR` et consorts avaient été changés) :
+
+```bash
+rclone purge onedrive:uploads --onedrive-hard-delete
+rclone purge onedrive:quarantine --onedrive-hard-delete
+rclone purge onedrive:deletions --onedrive-hard-delete
+```
+
 ### 4. Accès MySQL en lecture seule
 
 MariaDB sait authentifier par socket Unix : l'utilisateur système est reconnu
