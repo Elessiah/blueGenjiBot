@@ -46,8 +46,8 @@ Ils sont traités à part, par `scripts/sync-uploads-onedrive.sh` :
   et un OneDrive personnel n'offre aucun contrat de sous-traitance : les images
   passent par un remote `crypt` (étape 3 bis ci-dessous), qui chiffre contenu
   **et** noms de fichiers avant envoi tout en gardant la synchronisation
-  incrémentale. Le script **refuse** un remote qui n'est pas de type `crypt`
-  (`UPLOADS_ALLOW_PLAINTEXT=true` pour passer outre, à ne pas faire).
+  incrémentale. Le script **refuse** un remote qui n'est pas de type `crypt`,
+  sans exception : aucun réglage ne permet d'envoyer les images en clair.
 
 Le **journal des suppressions** du site (`<app>/data/account-deletions.jsonl`)
 part avec les images, sur le même remote chiffré. Une ligne par compte supprimé
@@ -177,6 +177,22 @@ chiffrés :
 ```bash
 rclone lsf onedrive-crypt:
 rclone lsf onedrive:BlueGenji/chiffre
+```
+
+**Machine qui envoyait encore en clair.** Le chiffrement est obligatoire, sans
+réglage pour passer outre (l'ancienne variable `UPLOADS_ALLOW_PLAINTEXT` n'est
+plus lue : la retirer de `backup-onedrive.env`). Tant que `UPLOADS_RCLONE_REMOTE`
+ne désigne pas un remote `crypt`, le miroir horaire échoue — et la copie en clair
+déjà envoyée reste figée, avatars supprimés compris, puisque plus rien ne la
+synchronise. Une fois le remote chiffré créé et renseigné
+(`UPLOADS_RCLONE_REMOTE="onedrive-crypt"`) et un premier passage réussi, effacer
+définitivement l'ancienne copie en clair (dossiers par défaut ci-dessous, à
+adapter si `UPLOADS_REMOTE_DIR` et consorts avaient été changés) :
+
+```bash
+rclone purge onedrive:uploads --onedrive-hard-delete
+rclone purge onedrive:quarantine --onedrive-hard-delete
+rclone purge onedrive:deletions --onedrive-hard-delete
 ```
 
 ### 4. Accès MySQL en lecture seule

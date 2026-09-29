@@ -25,8 +25,8 @@
 #
 # **Chiffré** : un avatar est une donnée personnelle — masqué ou non sur le site —
 # et un OneDrive personnel n'offre aucun contrat de sous-traitance. Le remote des
-# images doit donc être un remote `crypt` ; le script refuse d'envoyer en clair
-# sauf si UPLOADS_ALLOW_PLAINTEXT=true.
+# images doit donc être un remote `crypt` ; le script refuse d'envoyer en clair,
+# sans exception ni réglage pour passer outre.
 #
 # Les **logos masqués** après un signalement (data/quarantine du site) partent
 # aussi, en miroir : hors ligne sur le site, ils doivent pouvoir être rétablis si
@@ -57,7 +57,6 @@ fi
 : "${UPLOADS_RCLONE_REMOTE:=$RCLONE_REMOTE}"
 : "${UPLOADS_DIR:=}"
 : "${UPLOADS_REMOTE_DIR:=uploads}"
-: "${UPLOADS_ALLOW_PLAINTEXT:=false}"
 : "${DELETION_JOURNAL_REMOTE_DIR:=deletions}"
 : "${QUARANTINE_REMOTE_DIR:=quarantine}"
 : "${UPLOADS_LOCK_FILE:=/tmp/bluegenji-uploads-sync.lock}"
@@ -68,11 +67,36 @@ fi
 log() { echo "[uploads] $*"; }
 die() { echo "[uploads] ÉCHEC : $*" >&2; exit 1; }
 
-[[ -n "$UPLOADS_DIR" ]] || die "UPLOADS_DIR non renseigné dans $CONFIG_FILE"
-[[ -d "$UPLOADS_DIR" ]] || die "dossier des images introuvable ($UPLOADS_DIR)"
 for binary in rclone flock; do
   command -v "$binary" >/dev/null 2>&1 || die "binaire manquant : $binary"
 done
+# Preuve que la configuration a été lue : sans elle, la purge ci-dessous
+# tournerait sur des valeurs par défaut (remote, dossier, durée) qui ne sont
+# peut-être pas celles de la machine.
+[[ -n "$UPLOADS_DIR" ]] || die "UPLOADS_DIR non renseigné dans $CONFIG_FILE"
+
+# Le cron horaire et la sauvegarde du lundi peuvent se croiser : deux `sync`
+# simultanés vers le même dossier se marcheraient dessus. On attend le premier
+# (il ne dure que quelques secondes en régime normal) plutôt que d'abandonner,
+# sinon la sauvegarde hebdomadaire annoncerait un échec qui n'en est pas un.
+exec 9>"$UPLOADS_LOCK_FILE"
+flock -w 600 9 || die "une autre synchronisation tient le verrou depuis plus de 10 min"
+
+# --- Rétention des archives ----------------------------------------------------
+# La purge de backup-onedrive.sh ne tourne que le lundi : une archive créée un
+# lundi y a 28 jours au quatrième passage (gardée), 35 au cinquième — au-delà des
+# RETENTION_DAYS que le site annonce. Refaite ici chaque heure, la borne tient à
+# une heure près, même quand la sauvegarde du lundi échoue avant sa purge. Elle
+# passe **avant** les contrôles du miroir des images (dossier, chiffrement,
+# dossier vide) : elle ne touche que les archives, et un miroir refusé ne doit pas
+# prolonger la conservation annoncée. Un échec de purge ne fait pas échouer la
+# synchronisation.
+rclone delete "$RCLONE_REMOTE:$REMOTE_DIR" \
+  --min-age "${RETENTION_DAYS}d" --include "bluegenji-*.tar.age" \
+  --onedrive-hard-delete \
+  || echo "[uploads] purge des anciennes archives incomplète." >&2
+
+[[ -d "$UPLOADS_DIR" ]] || die "dossier des images introuvable ($UPLOADS_DIR)"
 
 # Le journal vit à côté de l'app : <app>/public/uploads → <app>/data/…, sauf
 # réglage explicite (qui doit alors suivre ACCOUNT_DELETION_JOURNAL_PATH du site).
@@ -85,8 +109,8 @@ done
 REMOTE_TYPE="$(rclone listremotes --long 2>/dev/null \
   | awk -v name="$UPLOADS_RCLONE_REMOTE:" '$1 == name { print $2 }')"
 [[ -n "$REMOTE_TYPE" ]] || die "remote rclone inconnu : $UPLOADS_RCLONE_REMOTE"
-if [[ "$REMOTE_TYPE" != "crypt" && "$UPLOADS_ALLOW_PLAINTEXT" != "true" ]]; then
-  die "le remote $UPLOADS_RCLONE_REMOTE n'est pas chiffré (type $REMOTE_TYPE) — voir doc/backup-onedrive.md, ou UPLOADS_ALLOW_PLAINTEXT=true"
+if [[ "$REMOTE_TYPE" != "crypt" ]]; then
+  die "le remote $UPLOADS_RCLONE_REMOTE n'est pas chiffré (type $REMOTE_TYPE) — voir doc/backup-onedrive.md"
 fi
 
 # Garde-fou du miroir : un dossier vide (chemin changé au redéploiement, disque
@@ -95,13 +119,6 @@ fi
 if [[ -z "$(find "$UPLOADS_DIR" -type f -print -quit)" ]]; then
   die "aucun fichier dans $UPLOADS_DIR — synchronisation refusée, elle viderait la sauvegarde"
 fi
-
-# Le cron horaire et la sauvegarde du lundi peuvent se croiser : deux `sync`
-# simultanés vers le même dossier se marcheraient dessus. On attend le premier
-# (il ne dure que quelques secondes en régime normal) plutôt que d'abandonner,
-# sinon la sauvegarde hebdomadaire annoncerait un échec qui n'en est pas un.
-exec 9>"$UPLOADS_LOCK_FILE"
-flock -w 600 9 || die "une autre synchronisation tient le verrou depuis plus de 10 min"
 
 ONEDRIVE_FLAGS=(--onedrive-hard-delete --onedrive-no-versions)
 DEST="$UPLOADS_RCLONE_REMOTE:$UPLOADS_REMOTE_DIR"
@@ -147,16 +164,5 @@ else
   # Aucune suppression consignée (ou journal retiré) : rien ne doit rester en face.
   rclone deletefile "$JOURNAL_DEST" "${ONEDRIVE_FLAGS[@]}" >/dev/null 2>&1 || true
 fi
-
-# --- Rétention des archives ----------------------------------------------------
-# La purge de backup-onedrive.sh ne tourne que le lundi : une archive créée un
-# lundi y a 28 jours au quatrième passage (gardée), 35 au cinquième — au-delà des
-# RETENTION_DAYS que le site annonce. Refaite ici chaque heure, la borne tient à
-# une heure près, même quand la sauvegarde du lundi échoue avant sa purge. Un
-# échec de purge ne fait pas échouer la synchronisation.
-rclone delete "$RCLONE_REMOTE:$REMOTE_DIR" \
-  --min-age "${RETENTION_DAYS}d" --include "bluegenji-*.tar.age" \
-  --onedrive-hard-delete \
-  || echo "[uploads] purge des anciennes archives incomplète." >&2
 
 log "Images et journal des suppressions synchronisés vers $UPLOADS_RCLONE_REMOTE."
