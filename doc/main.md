@@ -48,11 +48,11 @@ Is called when the bot join a server.
 We begin by applying the commands to the new server, then we log the event in owner DM and the admin channel of blueGenji define 
 in the `env` under `INFO_SERV`.
 
-### Data retention (ready + nightly cron)
+### Data retention (ready, nightly cron, after a backup restore)
 
-`privacy/dataRetention.ts` runs at startup and in the existing 00:05 cron job. It erases the author of `/scrim` and `/recrute` rows older than 30 days (rows stay for counters), and forgets every server configured in the database that the bot is no longer in (`forgetGuild`, then its relayed channels) — Discord sends no `guildDelete` for a server left while the bot was offline, and this also finishes a `forgetGuild` that failed halfway. It does nothing if the guild cache is empty.
+`privacy/dataRetention.ts` runs at startup, in the existing 00:05 cron job and after a successful `/restore-backup`. It catches up the 7-day purge of relayed messages (otherwise only triggered by a new relay), erases the author of `/scrim` and `/recrute` rows older than 30 days (rows stay for counters), and forgets every server configured in the database that the bot is no longer in (`eraseGuild`: `forgetGuild`, then its relayed channels) — Discord sends no `guildDelete` for a server left while the bot was offline, and this also finishes a `forgetGuild` that failed halfway. It does nothing if the guild cache is empty.
 
 ### GuildDelete
 
-Is called when the bot leave a server. We first remove the server's configuration (`Bdd.forgetGuild`: invite link, referee role, bot admin role, modules, membership reminders and the rank filters of its channels), then its relayed channels and their services (`_resetServer`), and we log it in the owner DM and the admin channel of the BlueGenji
+Is called when the bot leave a server. We first remove the server's configuration (`Bdd.forgetGuild`: invite link, referee role, bot admin role, modules, membership reminders and the rank filters of its channels), then its relayed channels and their services — both through `eraseGuild`, the same path as the startup catch-up, and we log it in the owner DM and the admin channel of the BlueGenji
 
