@@ -24,13 +24,9 @@ import { manageMsgExpiration } from "@/messages/manageMsgExpiration.js";
 import { reportError } from "@/safe/processGuards.js";
 import { sendLog } from "@/safe/sendLog.js";
 
-/**
- * Âge au-delà duquel l'auteur d'un scrim ou d'une recherche est effacé.
- * C'est la fenêtre de `/stats`, seul lecteur de l'auteur. Le ménage passant
- * chaque nuit, l'effacement a lieu dans la nuit qui suit cette échéance
- * (au plus un jour de plus) — les textes le disent ainsi.
- */
-export const ACTIVITY_AUTHOR_RETENTION_DAYS = 30;
+import { ACTIVITY_AUTHOR_RETENTION_DAYS } from "@/privacy/retentionPeriods.js";
+
+export { ACTIVITY_AUTHOR_RETENTION_DAYS };
 
 /**
  * Efface l'auteur des scrims et recherches plus vieux que la durée de
@@ -86,22 +82,23 @@ export async function eraseGuild(guildId: string): Promise<void> {
 /**
  * Oublie les serveurs configurés en base que le bot n'a plus rejoints.
  *
- * Deux gardes avant tout effacement, irréversible : le cache ne doit pas être
- * vide (un démarrage où Discord n'a encore livré aucun serveur effacerait la
- * configuration de tous), et la base doit appartenir à l'application connectée
+ * Deux gardes avant tout effacement, irréversible : le client doit être prêt
+ * (avant `clientReady`, Discord n'a encore livré aucun serveur et le cache
+ * vide effacerait la configuration de tous ; prêt, un cache vide veut bien
+ * dire que le bot n'est plus sur aucun serveur), et la base doit appartenir à l'application connectée
  * (`claimOwnerApplication`) — un bot lancé avec un autre jeton sur cette base,
  * un bot de développement par exemple, a un cache qui ne la décrit pas. Un serveur
  * momentanément indisponible (panne Discord) reste dans le cache, marqué
  * `available: false` : il n'est donc pas oublié.
  * @param client Client Discord connecté (`client.guilds.cache` rempli).
  * @returns Identifiants des serveurs oubliés, ou `null` si le rattrapage n'a
- *          pas été joué (cache vide, application inconnue, base fermée ou
+ *          pas été joué (client pas prêt, application inconnue, base fermée ou
  *          appartenant à une autre application) — à distinguer d'une passe
  *          qui n'a rien trouvé.
  */
 export async function forgetDepartedGuilds(client: Client): Promise<string[] | null> {
   const joined = client.guilds.cache;
-  if (joined.size === 0) { return null; }
+  if (!client.isReady()) { return null; }
   // L'application (celle de `CLIENT_ID`), pas l'utilisateur du bot : sur une
   // application ancienne les deux identifiants diffèrent, et c'est celui de
   // l'application que l'exploitant reconnaît dans `BotOwner`.

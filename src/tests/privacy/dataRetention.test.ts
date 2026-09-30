@@ -24,8 +24,9 @@ import { _resetChannel } from "../../commandsHandlers/services/resetChannel.js";
 const logs: string[] = [];
 
 /** Client minimal : `sendLog` écrit au propriétaire et au salon d'administration. */
-function fakeClient(joinedGuildIds: string[], applicationId = "app-prod"): Client {
+function fakeClient(joinedGuildIds: string[], applicationId = "app-prod", ready = true): Client {
   return {
+    isReady: () => ready,
     application: { id: applicationId },
     user: { id: `user-of-${applicationId}` },
     guilds: { cache: new Map(joinedGuildIds.map((id) => [id, { id }])) },
@@ -216,8 +217,8 @@ test("les filtres de rang d'un salon pas encore relayé survivent au ménage", a
   assert.equal(await count("SELECT COUNT(*) AS n FROM ChannelPartnerRank WHERE id_channel = 'c-future'"), 1);
 });
 
-test("un cache de serveurs vide n'efface rien", async () => {
-  assert.equal(await forgetDepartedGuilds(fakeClient([])), null);
+test("un client pas encore prêt n'efface rien", async () => {
+  assert.equal(await forgetDepartedGuilds(fakeClient([], "app-prod", false)), null);
   assert.equal(await count("SELECT COUNT(*) AS n FROM ChannelPartner WHERE id_guild = 'g-stay'"), 1);
 });
 
