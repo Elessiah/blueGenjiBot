@@ -97,7 +97,9 @@ async function resetBddInstance(): Promise<boolean> {
  * relit. Une seule liste pour les deux — tenues à la main, elles divergeraient,
  * et un serveur figurant dans l'une seulement serait « oublié » chaque nuit sans
  * rien perdre, ou gardé sans limite. Les noms sont interpolés dans le SQL :
- * ce sont des constantes, et `assertSqlIdentifier` le vérifie à chaque usage.
+ * ce sont des constantes, vérifiées une fois au chargement du module (une
+ * faute de frappe fait échouer le démarrage et les tests, pas un départ de
+ * serveur).
  */
 const GUILD_CONFIG_TABLES: readonly (readonly [string, string])[] = [
   ["ServerInvite", "id_guild"],
@@ -120,6 +122,11 @@ function assertSqlIdentifier(name: string): string {
     throw new Error(`Identifiant SQL refusé : ${name}`);
   }
   return name;
+}
+
+for (const [table, column] of GUILD_CONFIG_TABLES) {
+  assertSqlIdentifier(table);
+  assertSqlIdentifier(column);
 }
 
 class Bdd {
@@ -516,11 +523,15 @@ class Bdd {
       // Discord et des codes expirés. La supprimer efface les lignes des
       // bases qui tournent ; aucune ne sera plus jamais écrite.
       await this.Database?.exec("DROP TABLE IF EXISTS UserLink");
+    } catch (e) {
+      console.error("UserLink error: ", (e as TypeError).message);
+    }
+    try {
       // Le module `oauth` n'existait que pour `/link` : ses préférences,
       // qu'aucun code ne relit plus, partent avec lui.
       await this.Database?.exec("DELETE FROM ServerModule WHERE module_key = 'oauth'");
     } catch (e) {
-      console.error("UserLink error: ", (e as TypeError).message);
+      console.error("ServerModule oauth cleanup error: ", (e as TypeError).message);
     }
     try {
       await this.Database?.exec(
@@ -981,7 +992,7 @@ class Bdd {
     const removed: Record<string, number> = {};
     for (const [table, column] of GUILD_CONFIG_TABLES) {
       const result = await database.run(
-        `DELETE FROM ${assertSqlIdentifier(table)} WHERE ${assertSqlIdentifier(column)} = ?`,
+        `DELETE FROM ${table} WHERE ${column} = ?`,
         [guildId],
       );
       removed[table] = result.changes ?? 0;
@@ -1023,7 +1034,10 @@ class Bdd {
     const database = this.Database;
     if (!database) { return 0; }
     const result = await database.run(
-      "DELETE FROM ChannelPartnerRank WHERE id_channel NOT IN (SELECT id_channel FROM ChannelPartner)",
+      // `NOT EXISTS` et non `NOT IN` : une seule ligne `ChannelPartner` à
+      // `id_channel` NULL rendrait `NOT IN` NULL pour toutes, et la purge
+      // n'effacerait plus rien, sans erreur.
+      "DELETE FROM ChannelPartnerRank WHERE NOT EXISTS (SELECT 1 FROM ChannelPartner WHERE ChannelPartner.id_channel = ChannelPartnerRank.id_channel)",
     );
     return result.changes ?? 0;
   }
@@ -1069,7 +1083,7 @@ class Bdd {
    */
   async listConfiguredGuildIds(): Promise<string[]> {
     const sources = [["ChannelPartner", "id_guild"], ...GUILD_CONFIG_TABLES]
-      .map(([table, column]) => `SELECT ${assertSqlIdentifier(column)} AS id FROM ${assertSqlIdentifier(table)}`)
+      .map(([table, column]) => `SELECT ${column} AS id FROM ${table}`)
       .join(" UNION ");
     // Filtré après l'union : une clé primaire `TEXT` admet `NULL` en SQLite,
     // et `String(null)` ferait oublier chaque nuit un serveur nommé "null".

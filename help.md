@@ -62,7 +62,7 @@ Retention: relayed messages 7 days; the author of a `/scrim` or `/recrute` 30 da
 Server admins:
 - `/ban-list` (network-wide list, see above)
 - `/relay <channel>`: adds or removes an inter-server relay channel
-- `/config <module>`: turns a module on or off (annonces, scrims, recrutement, notifications, stats)
+- `/config <module>`: turns a module on or off (annonces, scrims, recrutement)
 - `/assign-channel channel:<channel> service:<service> region-filter:<region> [rank-min] [rank-max]`
 - `/edit-channel-filter-region channel:<channel> region:<region>`
 - `/edit-channel-filter-rank channel:<channel> rank-min:<rank> rank-max:<rank>`

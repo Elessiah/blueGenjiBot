@@ -142,16 +142,24 @@ export async function runDataRetention(client: Client): Promise<void> {
   } catch (error) {
     await reportError(client, "manageMsgExpiration", error);
   }
-  await anonymizeOldActivity(client);
+  const anonymized = await anonymizeOldActivity(client);
+  let forgotten: number | null = null;
   try {
-    await forgetDepartedGuilds(client);
+    forgotten = (await forgetDepartedGuilds(client)).length;
   } catch (error) {
     await reportError(client, "forgetDepartedGuilds", error);
   }
   // Après le rattrapage, qui peut en laisser : filtres de rang orphelins.
+  let orphans: number | null = null;
   try {
-    await (await getBddInstance()).purgeOrphanRankFilters();
+    orphans = await (await getBddInstance()).purgeOrphanRankFilters();
   } catch (error) {
     await reportError(client, "purgeOrphanRankFilters", error);
   }
+  // Une ligne par passage dans les journaux du serveur (pm2) : une nuit à
+  // zéro se distingue ainsi d'un ménage qui n'a pas tourné. Aucun identifiant.
+  console.log(
+    `[data-retention] auteurs anonymisés : ${anonymized ?? "échec"}, ` +
+      `serveurs oubliés : ${forgotten ?? "échec"}, filtres orphelins : ${orphans ?? "échec"}`,
+  );
 }

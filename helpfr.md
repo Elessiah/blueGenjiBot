@@ -80,7 +80,7 @@ Pour lier votre compte Discord au site, connectez-vous au site avec Discord, ou 
 
 Admin :
 - `/relay <channel>` : ajoute ou retire un salon de relais inter-serveurs.
-- `/config <module>` : active/désactive un module (annonces, scrims, recrutement, notifications, stats).
+- `/config <module>` : active/désactive un module (annonces, scrims, recrutement).
 
 ## Durées de conservation
 - Messages relayés : 7 jours.
