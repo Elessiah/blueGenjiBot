@@ -25,7 +25,9 @@ async function _resetChannel(client: Client, channel_id: string, guildName?: str
             // services), seul le journal est réservé aux salons relayés.
             const relayed = await bdd.get("ChannelPartner", ["id_channel"], {}, {query: "id_channel = ?", values: [channel_id]}) as {id_channel: string}[];
             const ret: status = await bdd.deleteChannel(channel_id);
-            if (ret.success && relayed.length === 0) {
+            if (relayed.length === 0) {
+                // Rien de relayé : un échec (filtres de rang restants) n'a pas
+                // à être retenté ni journalisé, le salon n'était pas en service.
                 return {success: true, message: "Ce salon n'est pas relayé."};
             }
             if (ret.success) {
