@@ -622,9 +622,15 @@ export function startInternalApi(client: Client) {
         "SELECT date(date) AS day, COUNT(*) AS count FROM DPMsg WHERE date >= datetime('now', ?) GROUP BY day ORDER BY day ASC",
         [`-${days} day`]
       );
+      // Au-delà de 30 jours, les scrims ne sont plus des lignes mais des
+      // compteurs journaliers (`ActivityDaily`) : les deux sources s'ajoutent.
       const scrimRows = await bdd.raw<{ day: string; count: number }>(
-        "SELECT date(date) AS day, COUNT(*) AS count FROM Scrim WHERE date >= datetime('now', ?) GROUP BY day ORDER BY day ASC",
-        [`-${days} day`]
+        `SELECT day, SUM(count) AS count FROM (
+           SELECT date(date) AS day, COUNT(*) AS count FROM Scrim WHERE date >= datetime('now', ?) GROUP BY day
+           UNION ALL
+           SELECT day, SUM(count) AS count FROM ActivityDaily WHERE kind = 'scrim' AND day >= date('now', ?) GROUP BY day
+         ) GROUP BY day ORDER BY day ASC`,
+        [`-${days} day`, `-${days} day`]
       );
 
       const labels: string[] = [];

@@ -9,8 +9,8 @@
  * - **messages relayés** : la purge à 7 jours (`manageMsgExpiration`) n'était
  *   entraînée que par un nouveau relais ; une semaine sans relais la laissait
  *   dormir. La nuit la rattrape ;
- * - **auteurs des scrims et des recherches** : effacés au-delà de
- *   `ACTIVITY_AUTHOR_RETENTION_DAYS`, les lignes restant pour les compteurs ;
+ * - **scrims et recherches** : au-delà de `ACTIVITY_AUTHOR_RETENTION_DAYS`,
+ *   repliés en nombres par jour, serveur et niveau (ou rôle), sans auteur ;
  * - **serveurs quittés pendant un arrêt** : Discord n'envoie `guildDelete` qu'à
  *   un bot connecté. Un serveur quitté pendant que le bot était arrêté — ou
  *   dont l'oubli a échoué à mi-chemin — garderait sinon sa configuration sans

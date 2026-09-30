@@ -628,6 +628,24 @@ class Bdd {
       console.error("SiteVisit error: ", (e as TypeError).message);
     }
     try {
+      // Scrims et recherches de plus de 30 jours, repliés en nombres : ni
+      // auteur, ni ordre, ni heure (voir `anonymizeActivityAuthors`).
+      await this.Database?.exec(
+        `CREATE TABLE IF NOT EXISTS ActivityDaily
+          (
+            kind TEXT NOT NULL,
+            day TEXT NOT NULL,
+            id_guild TEXT NOT NULL DEFAULT '',
+            detail TEXT NOT NULL DEFAULT '',
+            count INTEGER NOT NULL,
+            PRIMARY KEY (kind, day, id_guild, detail)
+          );
+        `
+      );
+    } catch (e) {
+      console.error("ActivityDaily error: ", (e as TypeError).message);
+    }
+    try {
       // Application Discord propriétaire de cette base (une ligne). Le
       // rattrapage des serveurs quittés s'y fie avant tout effacement : un bot
       // lancé avec un autre jeton sur cette base verrait un cache qui ne la
@@ -1143,38 +1161,57 @@ class Bdd {
   }
 
   /**
-   * Efface l'auteur des scrims et des recherches plus vieux que `days` jours.
+   * Replie les scrims et les recherches plus vieux que `days` jours en
+   * compteurs journaliers anonymes (`ActivityDaily`), puis supprime les lignes.
    *
    * `Scrim.id_author` et `Recrute.id_author` sont des identifiants Discord :
    * datés et rattachés à un serveur, ils font un historique d'activité par
-   * personne. Seul `/stats` (30 jours, soi-même) a besoin de l'auteur ; les
-   * compteurs par serveur et le graphe d'activité ne lisent que la date et le
-   * serveur. La ligne reste donc, sans auteur — une anonymisation réelle, là
-   * où un hachage de l'identifiant n'en serait qu'une pseudonymisation. La
-   * colonne est `NOT NULL` sur les bases existantes : l'auteur effacé s'écrit
-   * chaîne vide, qu'aucun identifiant Discord ne peut valoir. La date est
-   * ramenée au jour dans la même instruction : à la seconde, croisée avec la
-   * réponse publique de la commande ou le fil d'activité, elle redonnerait
-   * l'auteur. Compteurs et graphe ne lisent que le jour. Une ligne sans
-   * date (la colonne l'admet) ne peut prouver son âge : elle est anonymisée.
-   * @param days Âge au-delà duquel l'auteur est effacé.
-   * @returns Nombre de lignes anonymisées, par table.
+   * personne. Seul `/stats` (30 jours, soi-même) a besoin de l'auteur. Effacer
+   * l'auteur en gardant la ligne ne suffisait pas : l'identifiant
+   * auto-incrémenté garde l'ordre des commandes, et la n-ième ligne d'un
+   * serveur un jour donné redonne la n-ième réponse publique « <joueur> a
+   * utilisé /scrim ». Il ne reste donc qu'un **nombre** par jour, serveur et
+   * niveau (ou rôle) — ce que lisent le graphe d'activité et les compteurs.
+   * Une ligne sans date (la colonne l'admet) ne peut prouver son âge : elle
+   * est repliée sous un jour vide.
+   *
+   * Repli et suppression dans une seule transaction, sur un seuil calculé une
+   * fois : sans elle, un arrêt entre les deux compterait deux fois les lignes.
+   * @param days Âge au-delà duquel les lignes sont repliées.
+   * @returns Nombre de lignes repliées, par table.
    */
   async anonymizeActivityAuthors(days: number): Promise<{ Scrim: number; Recrute: number }> {
     const database = this.Database;
     // Base fermée (restauration en cours) : lever plutôt que rendre 0, que le
     // journal lirait comme une nuit sans rien à effacer.
     if (!database) { throw new Error("Base fermée : anonymisation non jouée."); }
-    const modifier = `-${days} days`;
-    const scrim = await database.run(
-      "UPDATE Scrim SET id_author = '', date = DATE(date) WHERE id_author <> '' AND (date IS NULL OR date < DATETIME('now', ?))",
-      [modifier],
-    );
-    const recrute = await database.run(
-      "UPDATE Recrute SET id_author = '', date = DATE(date) WHERE id_author <> '' AND (date IS NULL OR date < DATETIME('now', ?))",
-      [modifier],
-    );
-    return { Scrim: scrim.changes ?? 0, Recrute: recrute.changes ?? 0 };
+    const [{ cutoff }] = await database.all("SELECT DATETIME('now', ?) AS cutoff", [`-${days} days`]) as { cutoff: string }[];
+    // Le seuil est inliné (une transaction multi-instructions ne se lie pas) :
+    // il vient de SQLite, mais sa forme est vérifiée avant d'entrer dans le SQL.
+    if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(cutoff)) {
+      throw new Error(`Seuil de date inattendu : ${cutoff}`);
+    }
+    const old = `(date IS NULL OR date < '${cutoff}')`;
+    const [counts] = await database.all(
+      `SELECT (SELECT COUNT(*) FROM Scrim WHERE ${old}) AS scrim, (SELECT COUNT(*) FROM Recrute WHERE ${old}) AS recrute`,
+    ) as { scrim: number; recrute: number }[];
+    if (counts.scrim + counts.recrute === 0) { return { Scrim: 0, Recrute: 0 }; }
+    await database.exec(`BEGIN IMMEDIATE;
+      INSERT INTO ActivityDaily (kind, day, id_guild, detail, count)
+        SELECT 'scrim', COALESCE(DATE(date), ''), COALESCE(id_guild, ''), COALESCE(level, ''), COUNT(*)
+        FROM Scrim WHERE ${old} GROUP BY 2, 3, 4
+        ON CONFLICT(kind, day, id_guild, detail) DO UPDATE SET count = count + excluded.count;
+      INSERT INTO ActivityDaily (kind, day, id_guild, detail, count)
+        SELECT 'recrute', COALESCE(DATE(date), ''), COALESCE(id_guild, ''), COALESCE(role, ''), COUNT(*)
+        FROM Recrute WHERE ${old} GROUP BY 2, 3, 4
+        ON CONFLICT(kind, day, id_guild, detail) DO UPDATE SET count = count + excluded.count;
+      DELETE FROM Scrim WHERE ${old};
+      DELETE FROM Recrute WHERE ${old};
+      COMMIT;`).catch(async (error: unknown) => {
+      await database.exec("ROLLBACK").catch(() => {});
+      throw error;
+    });
+    return { Scrim: Number(counts.scrim), Recrute: Number(counts.recrute) };
   }
 
   /**

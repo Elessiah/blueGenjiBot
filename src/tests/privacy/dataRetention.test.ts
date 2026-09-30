@@ -103,7 +103,7 @@ test("_resetServer réussit même quand Discord ne connaît plus le serveur", as
   await (await getBddInstance()).forgetGuild("g-left");
 });
 
-test("l'auteur d'un scrim ou d'une recherche est effacé au-delà de 30 jours, la ligne reste", async () => {
+test("scrims et recherches de plus de 30 jours sont repliés en nombres, sans auteur", async () => {
   const bdd = await getBddInstance();
   await bdd.raw("INSERT INTO Scrim (id_author, game, level, id_guild, date) VALUES ('u-old', 'MR', '3', 'g1', DATETIME('now', '-31 days'))");
   await bdd.raw("INSERT INTO Scrim (id_author, game, level, id_guild, date) VALUES ('u-new', 'MR', '3', 'g1', DATETIME('now', '-29 days'))");
@@ -114,13 +114,16 @@ test("l'auteur d'un scrim ou d'une recherche est effacé au-delà de 30 jours, l
   assert.equal(await count("SELECT COUNT(*) AS n FROM Scrim WHERE id_author = 'u-old'"), 0);
   assert.equal(await count("SELECT COUNT(*) AS n FROM Recrute WHERE id_author = 'u-old'"), 0);
   assert.equal(await count("SELECT COUNT(*) AS n FROM Scrim WHERE id_author = 'u-new'"), 1);
-  // La date d'une ligne anonymisée est ramenée au jour, jamais celle d'une ligne récente.
-  assert.equal(await count("SELECT COUNT(*) AS n FROM Scrim WHERE id_author = '' AND date <> DATE(date)"), 0);
-  assert.equal(await count("SELECT COUNT(*) AS n FROM Recrute WHERE id_author = '' AND date = DATE(date)"), 1);
-  // Les compteurs par serveur ne perdent rien.
-  assert.equal(await count("SELECT COUNT(*) AS n FROM Scrim WHERE id_guild = 'g1'"), 2);
-  assert.equal(await count("SELECT COUNT(*) AS n FROM Recrute WHERE id_guild = 'g1'"), 1);
-  // Idempotent : une ligne déjà anonymisée n'est pas recomptée.
+  // Repliées : plus aucune ligne ancienne, seulement des nombres par jour.
+  assert.equal(await count("SELECT COUNT(*) AS n FROM Scrim WHERE date < DATETIME('now', '-30 days')"), 0);
+  assert.equal(await count("SELECT COALESCE(SUM(count), 0) AS n FROM ActivityDaily WHERE kind = 'scrim' AND id_guild = 'g1' AND detail = '3'"), 1);
+  assert.equal(await count("SELECT COALESCE(SUM(count), 0) AS n FROM ActivityDaily WHERE kind = 'recrute' AND detail = 'TANK'"), 1);
+  // Les compteurs par serveur ne perdent rien : lignes récentes + nombres repliés.
+  assert.equal(
+    await count("SELECT (SELECT COUNT(*) FROM Scrim WHERE id_guild = 'g1') + (SELECT SUM(count) FROM ActivityDaily WHERE kind = 'scrim' AND id_guild = 'g1') AS n"),
+    2,
+  );
+  // Idempotent : rien n'est replié deux fois.
   assert.equal(await anonymizeOldActivity(fakeClient(["g1"])), 0);
 });
 
