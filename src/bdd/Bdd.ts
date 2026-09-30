@@ -132,6 +132,19 @@ for (const [table, column] of [...GUILD_CONFIG_TABLES, GUILD_CHANNEL_TABLE]) {
   assertSqlIdentifier(column);
 }
 
+/**
+ * Tous les serveurs dont la base garde une configuration, bâti une fois à côté
+ * de la vérification des noms qu'il interpole. Filtré après l'union : une clé
+ * primaire `TEXT` admet `NULL` en SQLite, et `String(null)` ferait oublier
+ * chaque nuit un serveur nommé "null".
+ */
+const CONFIGURED_GUILDS_SQL =
+  "SELECT id FROM (" +
+  [GUILD_CHANNEL_TABLE, ...GUILD_CONFIG_TABLES]
+    .map(([table, column]) => `SELECT ${column} AS id FROM ${table}`)
+    .join(" UNION ") +
+  ") WHERE id IS NOT NULL AND id <> ''";
+
 class Bdd {
     private name: string;
     private Database: Database | null;
@@ -213,6 +226,10 @@ class Bdd {
       // liste libre, justement celles d'une table supprimée. Le coût (quelques
       // écritures de plus par purge de relais) est négligeable sur cette base.
       await this.Database?.exec("PRAGMA secure_delete = ON");
+      // Une écriture qui trouve la base verrouillée (sauvegarde en cours)
+      // attend jusqu'à 5 s au lieu d'échouer aussitôt : les reprises des
+      // appelants ne font alors plus dix échecs en rafale.
+      await this.Database?.exec("PRAGMA busy_timeout = 5000");
     } catch (e) {
       console.error("secure_delete error: ", (e as TypeError).message);
     }
@@ -1059,7 +1076,8 @@ class Bdd {
    *          zéro dit « rien à retirer ».
    */
   async deleteGuildChannels(guildId: string): Promise<status & { found: number }> {
-    const channels = await this.get("ChannelPartner", ["id_channel"], {}, {query: "id_guild = ?", values: [guildId]}) as {id_channel: string}[];
+    const [channelTable, guildColumn] = GUILD_CHANNEL_TABLE;
+    const channels = await this.get(channelTable, ["id_channel"], {}, {query: `${guildColumn} = ?`, values: [guildId]}) as {id_channel: string}[];
     let message = "";
     for (const {id_channel} of channels) {
       // `deleteChannel` ne lève pas : son échec se lit sur `success`.
@@ -1084,17 +1102,12 @@ class Bdd {
    * @returns Identifiants distincts, dans un ordre quelconque.
    */
   async listConfiguredGuildIds(): Promise<string[]> {
-    const sources = [GUILD_CHANNEL_TABLE, ...GUILD_CONFIG_TABLES]
-      .map(([table, column]) => `SELECT ${column} AS id FROM ${table}`)
-      .join(" UNION ");
     // Base fermée (restauration en cours) : lever plutôt que rendre une liste
     // vide, qui passerait pour une passe sans rien à oublier.
     const database = this.Database;
     if (!database) { throw new Error("Base fermée : serveurs configurés illisibles."); }
-    // Filtré après l'union : une clé primaire `TEXT` admet `NULL` en SQLite,
-    // et `String(null)` ferait oublier chaque nuit un serveur nommé "null".
     const rows = await database.all(
-      `SELECT id FROM (${sources}) WHERE id IS NOT NULL AND id <> ''`,
+      CONFIGURED_GUILDS_SQL,
     ) as { id: string }[];
     return rows.map((row) => String(row.id));
   }

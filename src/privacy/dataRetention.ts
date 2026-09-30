@@ -172,6 +172,9 @@ let rerunRequested = false;
 async function runDataRetentionOnce(client: Client): Promise<void> {
   let relays = "échec";
   try {
+    // Base fermée (restauration en cours) : `Bdd.rm` n'y ferait rien sans le
+    // dire. Vérifié ici et non dans la purge, qui suit aussi chaque relais.
+    if (!(await getBddInstance()).isOpen()) { throw new Error("Base fermée : purge des relais non jouée."); }
     await manageMsgExpiration(client);
     relays = "jouée";
   } catch (error) {

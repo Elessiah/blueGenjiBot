@@ -15,11 +15,13 @@ const read = (...parts: string[]) => fs.readFileSync(path.join(SRC, ...parts), "
 test("la route d'écriture d'un module refuse un serveur que le bot n'a pas rejoint, avant d'écrire", () => {
   const source = read("internalApi.ts");
   const route = source.slice(source.indexOf('app.put("/internal/servers/:id/modules/:moduleKey"'));
-  const guard = route.indexOf("client.guilds.cache.has(guildId)");
+  const guard = route.indexOf("refuseUnjoinedGuild(client, res, guildId)");
   const write = route.indexOf("setModuleEnabled(");
   assert.ok(guard > 0, "garde GUILD_NOT_JOINED absente");
-  assert.ok(route.includes('"GUILD_NOT_JOINED"'));
+  assert.ok(source.includes('res.status(404).json({ error: "GUILD_NOT_JOINED" })'));
   assert.ok(guard < write, "la garde doit précéder l'écriture");
+  const getRoute = source.slice(source.indexOf('app.get("/internal/servers/:id/modules"'));
+  assert.ok(getRoute.indexOf("refuseUnjoinedGuild(client, res, guildId)") < getRoute.indexOf("listModules("));
 });
 
 test("une restauration réussie rejoue la purge du flux et les durées de conservation", () => {

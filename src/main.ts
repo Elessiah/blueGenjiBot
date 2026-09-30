@@ -295,7 +295,11 @@ client.on("guildDelete", async (guild) => {
 
 client.on("channelDelete", async (channel) => {
   try {
-    await _resetChannel(client, channel.id, "guild" in channel ? channel.guild.name : undefined);
+    const ret = await _resetChannel(client, channel.id, "guild" in channel ? channel.guild.name : undefined);
+    if (!ret.success) {
+      // Le salon supprimé resterait sinon relayé en base, sans trace.
+      await sendLog(client, `channelDelete: retrait du salon ${channel.id} échoué : ${ret.message}`);
+    }
   } catch (error) {
     await reportError(client, "channelDelete", error);
   }

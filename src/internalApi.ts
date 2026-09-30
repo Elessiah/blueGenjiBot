@@ -109,6 +109,22 @@ async function getCpuPercent(): Promise<number> {
 }
 
 /**
+ * Refuse en `404 GUILD_NOT_JOINED` un serveur que le bot n'a pas rejoint, pour
+ * les routes de modules (lecture et écriture) : un réglage y serait effacé au
+ * prochain rattrapage des serveurs quittés, et un « tout actif » serait
+ * trompeur. Une seule règle pour les deux routes.
+ * @param client Client Discord.
+ * @param res Réponse, envoyée en cas de refus.
+ * @param guildId Serveur visé.
+ * @returns `true` si la réponse est partie (la route s'arrête).
+ */
+function refuseUnjoinedGuild(client: Client, res: Response, guildId: string): boolean {
+  if (client.guilds.cache.has(guildId)) { return false; }
+  res.status(404).json({ error: "GUILD_NOT_JOINED" });
+  return true;
+}
+
+/**
  * Construit, monte et demarre le serveur Express de l'API interne.
  *
  * Le port reste en ecoute sur `INTERNAL_API_HOST` (127.0.0.1 par defaut) et
@@ -640,12 +656,7 @@ export function startInternalApi(client: Client) {
         res.status(400).json({ error: "INVALID_GUILD_ID" });
         return;
       }
-      // Même refus que l'écriture : un serveur que le bot n'a pas rejoint n'a
-      // pas de modules à montrer, et un « tout actif » y serait trompeur.
-      if (!client.guilds.cache.has(guildId)) {
-        res.status(404).json({ error: "GUILD_NOT_JOINED" });
-        return;
-      }
+      if (refuseUnjoinedGuild(client, res, guildId)) { return; }
       const bdd = await getBddInstance();
       const modules = await listModules(guildId);
 
@@ -687,13 +698,7 @@ export function startInternalApi(client: Client) {
         res.status(400).json({ error: "INVALID_MODULE_KEY", allowed: MODULE_KEYS });
         return;
       }
-      // Un réglage pour un serveur que le bot n'a pas rejoint serait effacé
-      // au prochain rattrapage des serveurs quittés : on le refuse plutôt que
-      // de répondre 200 pour une écriture vouée à disparaître.
-      if (!client.guilds.cache.has(guildId)) {
-        res.status(404).json({ error: "GUILD_NOT_JOINED" });
-        return;
-      }
+      if (refuseUnjoinedGuild(client, res, guildId)) { return; }
       const enabled = req.body?.enabled === true || req.body?.enabled === 1 || req.body?.enabled === "true";
       await setModuleEnabled(guildId, moduleKey as ModuleKey, enabled);
       res.json({ guildId, module: moduleKey, enabled });
