@@ -12,7 +12,7 @@ Cette politique vous informe des données que traite le bot Discord **BlueGenji 
 
 ## 01. Responsable du traitement
 
-Le responsable du traitement est l'association **Bluegenji Esport**, association loi 1901 dont le siège est situé au 4 impasse des Cyprès, 51210 Janvilliers, France. Elle n'a pas désigné de délégué à la protection des données (désignation non obligatoire). Les moyens de la joindre figurent à la section Contact.
+Le responsable du traitement est l'association **Bluegenji Esport**, association loi 1901 dont le siège est situé au 4 impasse des Cyprès, 51210 Janvilliers, France. Elle n'a désigné ni délégué à la protection des données ni référent. Les moyens de la joindre figurent à la section Contact.
 
 Le Bot est réservé aux personnes d'au moins 15 ans ([Conditions d'Utilisation](https://bluegenji-esport.fr/terms-of-service-bot)).
 
@@ -62,8 +62,8 @@ Ces traitements reposent sur l'**intérêt légitime** de l'association (article
 - **Scrims et recrutement** : aucune suppression automatique à ce jour ; ces données sont conservées jusqu'à une demande d'effacement.
 - **Exclusions** : jusqu'à la levée de l'exclusion.
 - **Commande /link** : le code expire au bout de 10 minutes ; la ligne qui le porte n'est pas supprimée automatiquement à ce jour.
-- **Configuration des serveurs** : les salons relayés, jusqu'à leur retrait par les administrateurs ou le départ du Bot du serveur ; l'invitation et le rôle d'arbitrage (avec l'identifiant de qui les a posés) et le rôle d'administration du Bot, jusqu'à leur retrait par les administrateurs — ils restent si le Bot quitte le serveur, sans suppression automatique à ce jour.
-- **Adhésions et rappels programmés** : jusqu'au dernier envoi du rappel (pour une adhésion, sa date de péremption) ou sa suppression.
+- **Configuration des serveurs** (salons relayés et leurs filtres de rang, invitation et rôle d'arbitrage avec l'identifiant de qui les a posés, rôle d'administration du Bot, modules activés) : jusqu'à son retrait par les administrateurs, au plus tard jusqu'au départ du Bot du serveur, qui l'efface. Un retrait survenu pendant une interruption du Bot ne lui est pas signalé par Discord : cette configuration reste alors jusqu'à une demande d'effacement.
+- **Adhésions et rappels programmés** : jusqu'au dernier envoi du rappel (pour une adhésion, sa date de péremption) ou sa suppression, au plus tard jusqu'au départ du Bot du serveur où ils ont été enregistrés, qui les efface ; sous la même réserve qu'au point précédent : si le Bot en est retiré pendant une interruption, ils restent jusqu'à une demande d'effacement.
 - **Salon de journal privé du staff** : aucune suppression automatique à ce jour.
 - **Journaux du serveur** : selon leur rotation automatique.
 - **Sauvegardes** : la base du Bot est sauvegardée chaque semaine, chiffrée, et chaque copie est supprimée définitivement au bout de 30 jours au plus.
@@ -128,7 +128,6 @@ Cette politique peut évoluer avec le Bot. La version en vigueur est celle publi
 Pour toute question sur vos données ou pour exercer vos droits :
 
 - Formulaire **« Signaler un problème »** en bas de chaque page du site (catégorie « RGPD » pour vos données)
-- **Discord** : elessiah (hébergeur technique de l'association)
 - Courriel et téléphone de l'association : voir les [mentions légales](https://bluegenji-esport.fr/mentions-legales)
 
 ---

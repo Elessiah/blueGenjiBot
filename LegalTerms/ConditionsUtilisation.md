@@ -59,13 +59,21 @@ Les données traitées par le Bot, leurs durées de conservation et vos droits s
 
 ---
 
-## 07. Modification des conditions
+## 07. Code source et licence
+
+Le code source du Bot est publié dans son [dépôt public](https://github.com/Elessiah/blueGenjiBot) sous la licence **GNU Affero General Public License, version 3 uniquement** (AGPL-3.0-only), © 2026 Keryan Houssin. Chacun peut l'étudier, le réutiliser et le modifier aux conditions de cette licence, qui l'accompagne dans le dépôt.
+
+La licence couvre le code du Bot, et lui seul : ni le nom, le logo ou l'identité visuelle de l'association, ni les annonces relayées, ni les données traitées par le Bot, qui restent régies par ces conditions et par sa Politique de Confidentialité. Les dépendances du Bot gardent leurs propres licences.
+
+---
+
+## 08. Modification des conditions
 
 L'association peut modifier ces conditions. La version en vigueur est celle publiée sur cette page, avec sa date de mise à jour ; les changements importants sont annoncés sur le [serveur Discord de l'association](https://discord.gg/GB9ESEBZFW).
 
 ---
 
-## 08. Contact
+## 09. Contact
 
 Pour toute question, contestation ou demande concernant ces conditions :
 

@@ -12,7 +12,7 @@ This policy informs you of the data processed by the Discord bot **BlueGenji Bot
 
 ## 01. Data controller
 
-The data controller is the association **Bluegenji Esport**, a French non-profit association under the law of 1901 whose registered office is at 4 impasse des Cyprès, 51210 Janvilliers, France. It has not appointed a data protection officer (appointment not mandatory). The means of contacting it are listed in the Contact section.
+The data controller is the association **Bluegenji Esport**, a French non-profit association under the law of 1901 whose registered office is at 4 impasse des Cyprès, 51210 Janvilliers, France. It has appointed neither a data protection officer nor a privacy contact person. The means of contacting it are listed in the Contact section.
 
 The Bot is intended for people aged 15 or over ([Terms of Service](https://bluegenji-esport.fr/terms-of-service-bot)).
 
@@ -62,8 +62,8 @@ This processing is based on the association's **legitimate interest** (Article 6
 - **Scrims and recruitment**: no automatic deletion at present; this data is kept until an erasure request.
 - **Exclusions**: until the exclusion is lifted.
 - **/link command**: the code expires after 10 minutes; the row holding it is not deleted automatically at present.
-- **Server configuration**: relayed channels, until the administrators remove them or the Bot leaves the server; the invite and the referee role (with the ID of whoever set them) and the Bot administration role, until the administrators remove them — they remain if the Bot leaves the server, with no automatic deletion at present.
-- **Memberships and scheduled reminders**: until the reminder's last sending (for a membership, its expiry date) or its deletion.
+- **Server configuration** (relayed channels and their rank filters, the invite and the referee role with the ID of whoever set them, the Bot administration role, enabled modules): until the administrators remove it, and at the latest until the Bot leaves the server, which erases it. If the Bot is removed while it is down, Discord does not notify it: that configuration then remains until an erasure request.
+- **Memberships and scheduled reminders**: until the reminder's last sending (for a membership, its expiry date) or its deletion, and at the latest until the Bot leaves the server where they were recorded, which erases them; with the same caveat as above: if the Bot is removed from it while it is down, they remain until an erasure request.
 - **Staff private log channel**: no automatic deletion at present.
 - **Server logs**: according to their automatic rotation.
 - **Backups**: the Bot's database is backed up weekly, encrypted, and each copy is permanently deleted after 30 days at most.
@@ -128,7 +128,6 @@ This policy may change along with the Bot. The version in force is the one publi
 For any question about your data or to exercise your rights:
 
 - The **“Signaler un problème”** form at the bottom of every page of the site (“RGPD” category for your data)
-- **Discord**: elessiah (the association's technical host)
 - The association's email address and phone number: see the [legal notice](https://bluegenji-esport.fr/mentions-legales)
 
 ---

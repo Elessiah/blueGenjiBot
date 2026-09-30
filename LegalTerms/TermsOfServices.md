@@ -59,13 +59,21 @@ The data processed by the Bot, how long it is kept and your rights are described
 
 ---
 
-## 07. Changes to these terms
+## 07. Source code and licence
+
+The Bot's source code is published in its [public repository](https://github.com/Elessiah/blueGenjiBot) under the **GNU Affero General Public License, version 3 only** (AGPL-3.0-only), © 2026 Keryan Houssin. Anyone may study, reuse and modify it under the terms of that licence, which is included in the repository.
+
+The licence covers the Bot's code, and only that: not the association's name, logo or visual identity, nor the relayed announcements, nor the data processed by the Bot, which remain governed by these terms and by its Privacy Policy. The Bot's dependencies keep their own licences.
+
+---
+
+## 08. Changes to these terms
 
 The association may amend these terms. The version in force is the one published on this page, with its update date; significant changes are announced on the [association's Discord server](https://discord.gg/GB9ESEBZFW).
 
 ---
 
-## 08. Contact
+## 09. Contact
 
 For any question, dispute or request about these terms:
 
