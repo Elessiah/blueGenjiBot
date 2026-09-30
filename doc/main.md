@@ -50,5 +50,5 @@ in the `env` under `INFO_SERV`.
 
 ### GuildDelete
 
-Is called when the bot leave a server. We remove in our database all the data of this server, then we log it in the owner DM and the admin channel of the BlueGenji
+Is called when the bot leave a server. We first remove the server's configuration (`Bdd.forgetGuild`: invite link, referee role, bot admin role, modules, membership reminders and the rank filters of its channels), then its relayed channels and their services (`_resetServer`), and we log it in the owner DM and the admin channel of the BlueGenji
 

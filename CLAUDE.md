@@ -135,6 +135,12 @@ Cinq choses à savoir avant de lancer la génération :
 4. `jsdoc` est en `devDependencies`. Il n'y était pas, et `npm run docs:gen` échouait sur un binaire introuvable : une commande qui ne s'exécute pas est la meilleure explication d'une doc qui ne se met pas à jour.
 5. **Un module sans le moindre bloc JSDoc ne produit aucune page.** JSDoc ne signale pas ce qu’il ne sait pas documenter, il l’omet : trente fichiers de `dist/` sont ainsi absents de la référence, dont `main.ts` et `internalApi.ts`. Une régénération réussie ne prouve donc pas que le module est couvert — vérifier que sa page existe.
 
+## Textes légaux et licence
+
+- **`LegalTerms/` n'est qu'une copie.** Conditions d'utilisation et politique de confidentialité du bot (Markdown + PDF, FR / EN) font foi sur le site, `/terms-of-service-bot` et `/privacy-policy-bot`, dont la source unique est `lib/shared/bot-legal-content.ts` d'AppBlueGenji. Ne jamais corriger ces fichiers à la main : corriger le site, puis régénérer par `scripts/generate-legal-terms.py` (mode d'emploi en tête du script). Aucune adresse électronique ni invitation Discord écrite en dur : le contact passe par `/mentions-legales`.
+- **Licence `AGPL-3.0-only`**, titulaire Keryan Houssin : texte officiel dans `LICENSE`, portée dans `NOTICE`, champ `license` de `package.json` — même régime que le site.
+- **Quitter un serveur efface sa configuration** (`guildDelete` → `Bdd.forgetGuild`, puis `_resetServer` pour les salons relayés). Une table ajoutée demain qui porte un `id_guild` se range dans `forgetGuild`.
+
 ## Communication Style
 
 - **Exécute sans détailler** : ne décris pas ce que tu vas faire avant d'agir, fais le travail.
