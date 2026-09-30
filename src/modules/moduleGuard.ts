@@ -10,6 +10,11 @@
 
 import { getBddInstance } from "@/bdd/Bdd.js";
 
+/**
+ * Clés des modules. `oauth`, `notifications` et `stats` sont **réservées** :
+ * modules retirés, leurs préférences sont effacées à chaque ouverture de la
+ * base (`Bdd.initDatabase`) — un module nouveau ne doit pas reprendre ces noms.
+ */
 export const MODULE_KEYS = [
   "annonces",
   "scrims",

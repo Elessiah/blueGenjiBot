@@ -125,7 +125,8 @@ export async function forgetDepartedGuilds(client: Client): Promise<string[] | n
       await eraseGuild(guildId);
       forgotten.push(guildId);
     } catch (error) {
-      await reportError(client, "forgetDepartedGuilds", error);
+      // Le serveur nommé : un échec qui se répète chaque nuit doit dire lequel.
+      await reportError(client, `forgetDepartedGuilds (serveur ${guildId})`, error);
     }
   }
   if (forgotten.length > 0) {
@@ -172,9 +173,6 @@ let rerunRequested = false;
 async function runDataRetentionOnce(client: Client): Promise<void> {
   let relays = "échec";
   try {
-    // Base fermée (restauration en cours) : `Bdd.rm` n'y ferait rien sans le
-    // dire. Vérifié ici et non dans la purge, qui suit aussi chaque relais.
-    if (!(await getBddInstance()).isOpen()) { throw new Error("Base fermée : purge des relais non jouée."); }
     await manageMsgExpiration(client);
     relays = "jouée";
   } catch (error) {

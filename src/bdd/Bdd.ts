@@ -226,12 +226,16 @@ class Bdd {
       // liste libre, justement celles d'une table supprimée. Le coût (quelques
       // écritures de plus par purge de relais) est négligeable sur cette base.
       await this.Database?.exec("PRAGMA secure_delete = ON");
+    } catch (e) {
+      console.error("secure_delete error: ", (e as TypeError).message);
+    }
+    try {
       // Une écriture qui trouve la base verrouillée (sauvegarde en cours)
       // attend jusqu'à 5 s au lieu d'échouer aussitôt : les reprises des
       // appelants ne font alors plus dix échecs en rafale.
       await this.Database?.exec("PRAGMA busy_timeout = 5000");
     } catch (e) {
-      console.error("secure_delete error: ", (e as TypeError).message);
+      console.error("busy_timeout error: ", (e as TypeError).message);
     }
     try {
       await this.Database?.exec(
@@ -1034,14 +1038,6 @@ class Bdd {
   }
 
   /**
-   * Indique si la connexion est ouverte (elle ne l'est plus pendant une restauration).
-   * @returns `true` si une connexion est ouverte.
-   */
-  isOpen(): boolean {
-    return this.Database !== null && this.Database !== undefined;
-  }
-
-  /**
    * Retire un salon relayé : ses filtres de rang, puis ses services et le
    * salon partenaire lui-même (`deleteChannelServices`).
    *
@@ -1087,7 +1083,7 @@ class Bdd {
       }
     }
     return message.length === 0
-      ? {success: true, message: `${channels.length} salon(s) retiré(s).`, found: channels.length}
+      ? {success: true, message: "", found: channels.length}
       : {success: false, message, found: channels.length};
   }
 
