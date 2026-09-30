@@ -183,7 +183,8 @@ test("le rattrapage n'efface rien pour une autre application Discord que celle d
   assert.deepEqual([...forgotten].sort(), ["g-a", "g-b", "g-c", "g-d"]);
 });
 
-test("runDataRetention ne lève pas quand un ménage échoue", async () => {
+test("runDataRetention ne lève pas quand un ménage échoue, et les suivants passent", async () => {
+  await seedGuild("g-after-failure", "c-after-failure");
   const bdd = await getBddInstance();
   const original = bdd.anonymizeActivityAuthors;
   bdd.anonymizeActivityAuthors = async () => { throw new Error("boom"); };
@@ -192,6 +193,9 @@ test("runDataRetention ne lève pas quand un ménage échoue", async () => {
   } finally {
     bdd.anonymizeActivityAuthors = original;
   }
+  // Le rattrapage des serveurs, qui suit l'anonymisation en échec, a bien joué.
+  assert.equal(await count("SELECT COUNT(*) AS n FROM ChannelPartner WHERE id_guild = 'g-after-failure'"), 0);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM RefereeRole WHERE id_guild = 'g-after-failure'"), 0);
 });
 
 test("un cache de serveurs vide n'efface rien", async () => {

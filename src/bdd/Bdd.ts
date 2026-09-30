@@ -997,12 +997,20 @@ class Bdd {
    * (`_resetChannel`) et par le retrait de tous les salons d'un serveur
    * (`deleteGuildChannels`) : une table **par salon** ajoutée demain se range ici.
    * @param channelId Identifiant du salon.
-   * @returns Le `status` de `deleteChannelServices`.
+   * Le salon d'abord, ses filtres de rang ensuite : un salon encore relayé
+   * mais privé de ses filtres ne recevrait plus aucune annonce classée,
+   * alors que des filtres orphelins d'un salon retiré ne servent à rien et
+   * partent au passage suivant.
+   * @returns Le `status` de `deleteChannelServices` ; les filtres ne sont
+   *          retirés que si le salon l'a été.
    * @throws Si la suppression des filtres de rang échoue.
    */
   async deleteChannel(channelId: string): Promise<status> {
-    await this.rm("ChannelPartnerRank", {}, {query: "id_channel = ?", values: [channelId]});
-    return this.deleteChannelServices(channelId);
+    const ret: status = await this.deleteChannelServices(channelId);
+    if (ret.success) {
+      await this.rm("ChannelPartnerRank", {}, {query: "id_channel = ?", values: [channelId]});
+    }
+    return ret;
   }
 
   /**
@@ -1072,9 +1080,13 @@ class Bdd {
   async claimOwnerApplication(applicationId: string): Promise<boolean | null> {
     const database = this.Database;
     if (!database) { return null; }
+    // Les deux instructions sur la même connexion, capturée à l'entrée : une
+    // restauration qui la remplace entre les deux ferait lever (signalé par
+    // l'appelant), jamais conclure à tort « une autre application ».
     await database.run("INSERT OR IGNORE INTO BotOwner (id, application_id) VALUES (1, ?)", [applicationId]);
-    const rows = await this.raw<{ application_id: string }>("SELECT application_id FROM BotOwner WHERE id = 1");
-    return rows[0]?.application_id === applicationId;
+    const rows = await database.all("SELECT application_id FROM BotOwner WHERE id = 1") as { application_id: string }[];
+    if (rows.length === 0) { return null; }
+    return rows[0].application_id === applicationId;
   }
 
   /**

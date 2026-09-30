@@ -24,11 +24,13 @@ test("la route d'écriture d'un module refuse un serveur que le bot n'a pas rejo
 
 test("une restauration réussie rejoue la purge du flux et les durées de conservation", () => {
   const source = read("commandsHandlers", "admin", "restoreBackup.ts");
-  const branch = source.slice(source.indexOf("if (result.success) {"));
-  assert.ok(branch.indexOf("purgeFeedIdentifiers(client)") > 0);
-  assert.ok(branch.indexOf("runDataRetention(client)") > 0);
-  // Avant la réponse : la base restaurée est déjà servie par l'API interne.
-  assert.ok(source.indexOf("if (result.success) {") < source.indexOf("await safeReply(interaction, `${result.success"));
+  const reply = source.indexOf("await safeReply(interaction, `${result.success");
+  // La purge du flux avant la réponse : la base restaurée est déjà servie par l'API interne.
+  const purge = source.indexOf("await purgeFeedIdentifiers(client)");
+  assert.ok(purge > 0 && purge < reply);
+  // Le reste après, sans être attendu : il fait des appels réseau.
+  const retention = source.indexOf("void runDataRetention(client)");
+  assert.ok(retention > reply);
 });
 
 test("le démarrage et la tâche de nuit lancent les durées de conservation", () => {

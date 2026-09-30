@@ -83,8 +83,6 @@ export async function eraseGuild(guildId: string): Promise<void> {
   if (failure !== null) { throw failure; }
 }
 
-
-
 /**
  * Oublie les serveurs configurés en base que le bot n'a plus rejoints.
  *

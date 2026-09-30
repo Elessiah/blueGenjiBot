@@ -48,6 +48,8 @@ Everyone:
 - `/display-channel-filter-region channel:<channel>`
 - `/display-channel-filter-rank channel:<channel>`
 - `/show-bot-admin`
+- `/scrim <level>`: posts a scrim search, **Marvel Rivals only**.
+- `/recrute <role>`: posts a player or staff search, **Marvel Rivals only**.
 - `/stats`: shows **your own** recent activity (only you see the reply): partner messages from the last 7 days, scrims and searches from the last 30 days. Nobody can look up another player's activity.
 - `/stats-site`: shows BlueGenji website traffic (total visits, and unique visitors over the last 25 months).
 
@@ -55,10 +57,12 @@ Bans are **network-wide**: this is community moderation, decided by the admins o
 
 To link your Discord account to the BlueGenji website, sign in to the website with Discord, or use « Applications connectées » on your profile (the former `/link` command is gone).
 
-Retention: relayed messages 7 days; the author of a `/scrim` or `/recrute` 30 days, erased during the following night (then the author's ID is erased; the game, level or role, server and date remain for counters, and no longer identify anyone); a server's configuration is erased when the bot leaves it — including when it left while the bot was offline, at the next startup.
+Retention: relayed messages 7 days; the author of a `/scrim` or `/recrute` 30 days, erased during the following night (then the author's ID is erased; the game, level or role, server and date remain for counters, and no longer identify anyone); network bans until they are lifted; a server's configuration is erased when the bot leaves it — including when it left while the bot was offline, at the next startup.
 
 Server admins:
 - `/ban-list` (network-wide list, see above)
+- `/relay <channel>`: adds or removes an inter-server relay channel
+- `/config <module>`: turns a module on or off (annonces, scrims, recrutement, notifications, stats)
 - `/assign-channel channel:<channel> service:<service> region-filter:<region> [rank-min] [rank-max]`
 - `/edit-channel-filter-region channel:<channel> region:<region>`
 - `/edit-channel-filter-rank channel:<channel> rank-min:<rank> rank-max:<rank>`
