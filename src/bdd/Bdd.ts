@@ -1075,7 +1075,16 @@ class Bdd {
     const [channelTable, guildColumn] = GUILD_CHANNEL_TABLE;
     const channels = await this.get(channelTable, ["id_channel"], {}, {query: `${guildColumn} = ?`, values: [guildId]}) as {id_channel: string}[];
     let message = "";
-    for (const {id_channel} of channels) {
+    // Une clé `TEXT` admet `NULL` : `id_channel = NULL` ne désigne rien, la
+    // ligne serait déclarée retirée sans l'être. Retirée ici par le serveur.
+    if (channels.some(({id_channel}) => id_channel === null)) {
+      try {
+        await this.rm(channelTable, {}, {query: `${guildColumn} = ? AND id_channel IS NULL`, values: [guildId]});
+      } catch (err) {
+        message += `(salon sans identifiant): ${(err as Error).message}\n`;
+      }
+    }
+    for (const {id_channel} of channels.filter(({id_channel}) => id_channel !== null)) {
       // `deleteChannel` ne lève pas : son échec se lit sur `success`.
       const ret: status = await this.deleteChannel(id_channel);
       if (!ret.success) {

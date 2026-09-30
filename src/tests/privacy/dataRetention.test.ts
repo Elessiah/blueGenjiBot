@@ -203,6 +203,14 @@ test("runDataRetention ne lève pas quand un ménage échoue, et les suivants pa
   assert.equal(await count("SELECT COUNT(*) AS n FROM RefereeRole WHERE id_guild = 'g-after-failure'"), 0);
 });
 
+test("un salon partenaire sans identifiant est bien retiré avec son serveur", async () => {
+  const bdd = await getBddInstance();
+  await bdd.raw("INSERT INTO ChannelPartner (id_channel, id_guild) VALUES (NULL, 'g-null-chan')");
+  const removal = await bdd.deleteGuildChannels("g-null-chan");
+  assert.equal(removal.success, true);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM ChannelPartner WHERE id_guild = 'g-null-chan'"), 0);
+});
+
 test("channelDelete d'un salon jamais relayé n'écrit rien au journal", async () => {
   logs.length = 0;
   const ret = await _resetChannel(fakeClient(["g-stay"]), "c-never-relayed");
