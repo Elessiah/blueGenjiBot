@@ -18,6 +18,7 @@ import {
   runDataRetention,
 } from "../../privacy/dataRetention.js";
 import { formatPlayerStats } from "../../commandsHandlers/statsPlayer.js";
+import { _resetServer } from "../../commandsHandlers/services/resetServer.js";
 
 const logs: string[] = [];
 
@@ -49,6 +50,8 @@ test("une table UserLink existante est supprimée à l'ouverture de la base", as
   const before = await getBddInstance();
   await before.raw("CREATE TABLE IF NOT EXISTS UserLink (id_user TEXT PRIMARY KEY, code TEXT NOT NULL, expires_at DATETIME NOT NULL, linked_at DATETIME)");
   await before.raw("INSERT INTO UserLink (id_user, code, expires_at) VALUES ('u1', '123456', DATETIME('now'))");
+  // Préférence du module `oauth`, retiré avec `/link`.
+  await before.raw("INSERT INTO ServerModule (id_guild, module_key, enabled) VALUES ('g-oauth', 'oauth', 1)");
   assert.equal(
     await count("SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table' AND name = 'UserLink'"),
     1,
@@ -58,6 +61,40 @@ test("une table UserLink existante est supprimée à l'ouverture de la base", as
     await count("SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table' AND name = 'UserLink'"),
     0,
   );
+  assert.equal(await count("SELECT COUNT(*) AS n FROM ServerModule WHERE module_key = 'oauth'"), 0);
+});
+
+test("deleteGuildChannels continue après un salon en échec et nomme l'échec", async () => {
+  await seedGuild("g-chan", "c-chan-1");
+  const bdd = await getBddInstance();
+  await bdd.raw("INSERT INTO ChannelPartner (id_channel, id_guild) VALUES ('c-chan-2', 'g-chan')");
+  const original = bdd.deleteChannelServices;
+  bdd.deleteChannelServices = async (id: string) =>
+    id === "c-chan-1" ? { success: false, message: "busy c-chan-1" } : original.call(bdd, id);
+  let removal;
+  try {
+    removal = await bdd.deleteGuildChannels("g-chan");
+  } finally {
+    bdd.deleteChannelServices = original;
+  }
+  assert.equal(removal.success, false);
+  assert.equal(removal.found, 2);
+  assert.match(removal.message, /busy c-chan-1/);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM ChannelPartner WHERE id_channel = 'c-chan-2'"), 0);
+  await bdd.forgetGuild("g-chan");
+  await bdd.deleteGuildChannels("g-chan");
+});
+
+test("_resetServer réussit même quand Discord ne connaît plus le serveur", async () => {
+  await seedGuild("g-left", "c-left");
+  const client = {
+    ...fakeClient(["g-stay"]),
+    guilds: { cache: new Map(), fetch: async () => { throw new Error("Unknown Guild"); } },
+  } as unknown as Client;
+  const ret = await _resetServer(client, "g-left");
+  assert.equal(ret.success, true);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM ChannelPartner WHERE id_guild = 'g-left'"), 0);
+  await (await getBddInstance()).forgetGuild("g-left");
 });
 
 test("l'auteur d'un scrim ou d'une recherche est effacé au-delà de 30 jours, la ligne reste", async () => {

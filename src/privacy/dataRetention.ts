@@ -102,10 +102,13 @@ export async function forgetDepartedGuilds(client: Client): Promise<string[]> {
   const applicationId = client.user?.id;
   if (!applicationId) { return []; }
   const bdd = await getBddInstance();
-  if (!(await bdd.claimOwnerApplication(applicationId))) {
+  const owned = await bdd.claimOwnerApplication(applicationId);
+  if (owned === null) { return []; }
+  if (!owned) {
     await sendLog(
       client,
-      "Rattrapage des serveurs quittés ignoré : cette base appartient à une autre application Discord.",
+      "Rattrapage des serveurs quittés ignoré : cette base appartient à une autre application Discord " +
+        "(si le bot a changé d'application, vider la table BotOwner).",
     );
     return [];
   }

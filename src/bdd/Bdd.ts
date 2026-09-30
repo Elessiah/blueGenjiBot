@@ -516,6 +516,9 @@ class Bdd {
       // Discord et des codes expirés. La supprimer efface les lignes des
       // bases qui tournent ; aucune ne sera plus jamais écrite.
       await this.Database?.exec("DROP TABLE IF EXISTS UserLink");
+      // Le module `oauth` n'existait que pour `/link` : ses préférences,
+      // qu'aucun code ne relit plus, partent avec lui.
+      await this.Database?.exec("DELETE FROM ServerModule WHERE module_key = 'oauth'");
     } catch (e) {
       console.error("UserLink error: ", (e as TypeError).message);
     }
@@ -1045,13 +1048,17 @@ class Bdd {
    * appartient déjà.
    *
    * La première application qui démarre sur une base l'enregistre ; ensuite,
-   * seule celle-là est reconnue.
+   * seule celle-là est reconnue. Pour confier la base à une autre application
+   * (changement d'application Discord du bot), vider la table à la main :
+   * `DELETE FROM BotOwner` — la suivante à démarrer la revendique.
    * @param applicationId Identifiant de l'application connectée (`client.user.id`).
-   * @returns `true` si la base appartient à cette application (ou vient de lui être attribuée).
+   * @returns `true` si la base appartient à cette application (ou vient de lui
+   *          être attribuée), `false` si elle en a une autre, `null` si la
+   *          connexion est fermée (restauration en cours) : rien à conclure.
    */
-  async claimOwnerApplication(applicationId: string): Promise<boolean> {
+  async claimOwnerApplication(applicationId: string): Promise<boolean | null> {
     const database = this.Database;
-    if (!database) { return false; }
+    if (!database) { return null; }
     await database.run("INSERT OR IGNORE INTO BotOwner (id, application_id) VALUES (1, ?)", [applicationId]);
     const rows = await this.raw<{ application_id: string }>("SELECT application_id FROM BotOwner WHERE id = 1");
     return rows[0]?.application_id === applicationId;

@@ -78,17 +78,17 @@ Publiques :
 
 Pour lier votre compte Discord au site, connectez-vous au site avec Discord, ou utilisez « Applications connectées » sur votre profil.
 
+Admin :
+- `/relay <channel>` : ajoute ou retire un salon de relais inter-serveurs.
+- `/config <module>` : active/désactive un module (annonces, scrims, recrutement, notifications, stats).
+
 ## Durées de conservation
 - Messages relayés : 7 jours.
-- Auteur d'un `/scrim` ou d'un `/recrute` : 30 jours. Au-delà, l'identifiant de l'auteur est effacé ; seule la date et le serveur restent, pour les compteurs.
+- Auteur d'un `/scrim` ou d'un `/recrute` : 30 jours. Au-delà, l'identifiant de l'auteur est effacé ; restent, pour les compteurs, le jeu, le niveau ou le rôle, le serveur et la date, qui ne désignent plus personne.
 - Configuration d'un serveur : effacée quand le bot le quitte — y compris s'il l'a quitté pendant un arrêt du bot, au démarrage suivant.
 
 ## `/ban-list` et exclusions du réseau
 Une exclusion s'applique à **tout le réseau** : c'est une modération communautaire, prononcée par les administrateurs des serveurs de 50 membres et plus. `/ban-list` montre donc à l'administrateur de tout serveur partenaire la liste complète des exclusions du réseau (joueur exclu, modérateur, motif, date), pour qu'il sache qui ne peut plus publier par le bot et pourquoi.
-
-Admin :
-- `/relay <channel>` : ajoute ou retire un salon de relais inter-serveurs.
-- `/config <module>` : active/désactive un module (annonces, scrims, recrutement, notifications, stats).
 
 ## Support
 Besoin d'aide, une suggestion ou un problème ?
