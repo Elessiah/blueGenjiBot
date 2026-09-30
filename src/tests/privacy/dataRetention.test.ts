@@ -64,6 +64,8 @@ test("une table UserLink existante est supprimée à l'ouverture de la base", as
     0,
   );
   assert.equal(await count("SELECT COUNT(*) AS n FROM ServerModule WHERE module_key = 'oauth'"), 0);
+  // Réglage de connexion rejoué à l'ouverture.
+  assert.equal(await count("SELECT secure_delete AS n FROM pragma_secure_delete"), 1);
 });
 
 test("deleteGuildChannels continue après un salon en échec et nomme l'échec", async () => {
@@ -134,7 +136,7 @@ test("un serveur quitté pendant l'arrêt est oublié au démarrage, les autres 
 
   logs.length = 0;
   const forgotten = await forgetDepartedGuilds(fakeClient(["g-stay"]));
-  assert.deepEqual([...forgotten].sort(), ["g-gone", "g-orphan"]);
+  assert.deepEqual([...(forgotten ?? [])].sort(), ["g-gone", "g-orphan"]);
   assert.equal(await count("SELECT COUNT(*) AS n FROM ChannelPartner WHERE id_guild = 'g-gone'"), 0);
   assert.equal(await count("SELECT COUNT(*) AS n FROM ChannelPartnerRank WHERE id_channel = 'c-gone'"), 0);
   assert.equal(await count("SELECT COUNT(*) AS n FROM RefereeRole WHERE id_guild = 'g-gone'"), 0);
@@ -177,12 +179,12 @@ test("le rattrapage n'efface rien pour une autre application Discord que celle d
   assert.equal(await (await getBddInstance()).claimOwnerApplication("app-prod"), true);
   logs.length = 0;
   // Bot de développement lancé sur la base de production : son cache ne la décrit pas.
-  assert.deepEqual(await forgetDepartedGuilds(fakeClient(["g-dev"], "app-dev")), []);
+  assert.equal(await forgetDepartedGuilds(fakeClient(["g-dev"], "app-dev")), null);
   assert.equal(await count("SELECT COUNT(*) AS n FROM ChannelPartner WHERE id_guild IN ('g-a', 'g-b', 'g-c', 'g-d', 'g-stay')"), 5);
   assert.ok(logs.some((line) => line.includes("autre application")));
   // L'application propriétaire, elle, rattrape tout l'arriéré d'un coup.
   const forgotten = await forgetDepartedGuilds(fakeClient(["g-stay"]));
-  assert.deepEqual([...forgotten].sort(), ["g-a", "g-b", "g-c", "g-d"]);
+  assert.deepEqual([...(forgotten ?? [])].sort(), ["g-a", "g-b", "g-c", "g-d"]);
 });
 
 test("runDataRetention ne lève pas quand un ménage échoue, et les suivants passent", async () => {
@@ -215,7 +217,7 @@ test("les filtres de rang d'un salon pas encore relayé survivent au ménage", a
 });
 
 test("un cache de serveurs vide n'efface rien", async () => {
-  assert.deepEqual(await forgetDepartedGuilds(fakeClient([])), []);
+  assert.equal(await forgetDepartedGuilds(fakeClient([])), null);
   assert.equal(await count("SELECT COUNT(*) AS n FROM ChannelPartner WHERE id_guild = 'g-stay'"), 1);
 });
 

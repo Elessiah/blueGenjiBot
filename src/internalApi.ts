@@ -643,10 +643,6 @@ export function startInternalApi(client: Client) {
       const bdd = await getBddInstance();
       const modules = await listModules(guildId);
 
-      const relayRows = await bdd.raw<{ total: number }>(
-        "SELECT COUNT(*) AS total FROM DPMsg d JOIN ChannelPartner c ON d.id_channel = c.id_channel WHERE c.id_guild = ? AND d.date >= datetime('now', '-30 day')",
-        [guildId]
-      );
       const scrimRows = await bdd.raw<{ total: number }>(
         "SELECT COUNT(*) AS total FROM Scrim WHERE id_guild = ? AND date >= datetime('now', '-30 day')",
         [guildId]
@@ -663,8 +659,6 @@ export function startInternalApi(client: Client) {
         annonces: Number(annonceRows[0]?.total ?? 0),
         scrims: Number(scrimRows[0]?.total ?? 0),
         recrutement: Number(recruteRows[0]?.total ?? 0),
-        notifications: Number(relayRows[0]?.total ?? 0),
-        stats: Number(relayRows[0]?.total ?? 0),
       };
 
       const enriched = modules.map((m) => ({ key: m.key, enabled: m.enabled, count30j: counters[m.key] }));

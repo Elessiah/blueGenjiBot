@@ -19,15 +19,14 @@ async function _resetChannel(client: Client, channel_id: string): Promise<status
     while (nTry < 10 && !success) {
         try {
             // `channelDelete` arrive pour tout salon supprimé de tout serveur :
-            // un salon jamais relayé n'a rien à annoncer au journal. Ses
-            // éventuels filtres de rang partent quand même, comme avant : ils
-            // n'ont pas d'identifiant de serveur, rien d'autre ne les retrouverait.
+            // un salon jamais relayé n'a rien à annoncer au journal. Le retrait
+            // est joué dans les deux cas (restes éventuels : filtres de rang,
+            // services), seul le journal est réservé aux salons relayés.
             const relayed = await bdd.get("ChannelPartner", ["id_channel"], {}, {query: "id_channel = ?", values: [channel_id]}) as {id_channel: string}[];
-            if (relayed.length === 0) {
-                await bdd.rm("ChannelPartnerRank", {}, {query: "id_channel = ?", values: [channel_id]});
+            const ret: status = await bdd.deleteChannel(channel_id);
+            if (ret.success && relayed.length === 0) {
                 return {success: true, message: "Ce salon n'est pas relayé."};
             }
-            const ret: status = await bdd.deleteChannel(channel_id);
             if (ret.success) {
                 // Le nom du serveur ne sert qu'au journal. Sur `channelDelete`
                 // le salon n'existe plus chez Discord : la relecture échoue, et

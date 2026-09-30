@@ -94,28 +94,31 @@ export async function eraseGuild(guildId: string): Promise<void> {
  * momentanément indisponible (panne Discord) reste dans le cache, marqué
  * `available: false` : il n'est donc pas oublié.
  * @param client Client Discord connecté (`client.guilds.cache` rempli).
- * @returns Identifiants des serveurs oubliés.
+ * @returns Identifiants des serveurs oubliés, ou `null` si le rattrapage n'a
+ *          pas été joué (cache vide, application inconnue, base fermée ou
+ *          appartenant à une autre application) — à distinguer d'une passe
+ *          qui n'a rien trouvé.
  */
-export async function forgetDepartedGuilds(client: Client): Promise<string[]> {
+export async function forgetDepartedGuilds(client: Client): Promise<string[] | null> {
   const joined = client.guilds.cache;
-  if (joined.size === 0) { return []; }
+  if (joined.size === 0) { return null; }
   // L'application (celle de `CLIENT_ID`), pas l'utilisateur du bot : sur une
   // application ancienne les deux identifiants diffèrent, et c'est celui de
   // l'application que l'exploitant reconnaît dans `BotOwner`.
   // Sans elle, rien : revendiquer la base avec l'identifiant de l'utilisateur
   // la fermerait ensuite à l'application elle-même.
   const applicationId = client.application?.id;
-  if (!applicationId) { return []; }
+  if (!applicationId) { return null; }
   const bdd = await getBddInstance();
   const owned = await bdd.claimOwnerApplication(applicationId);
-  if (owned === null) { return []; }
+  if (owned === null) { return null; }
   if (!owned) {
     await sendLog(
       client,
       "Rattrapage des serveurs quittés ignoré : cette base appartient à une autre application Discord " +
         "(si le bot a changé d'application, vider la table BotOwner).",
     );
-    return [];
+    return null;
   }
   const departed = (await bdd.listConfiguredGuildIds()).filter((id) => !joined.has(id));
   const forgotten: string[] = [];
@@ -150,9 +153,10 @@ export async function runDataRetention(client: Client): Promise<void> {
     await reportError(client, "manageMsgExpiration", error);
   }
   const anonymized = await anonymizeOldActivity(client);
-  let forgotten: number | null = null;
+  let forgotten: string = "échec";
   try {
-    forgotten = (await forgetDepartedGuilds(client)).length;
+    const result = await forgetDepartedGuilds(client);
+    forgotten = result === null ? "non joué" : String(result.length);
   } catch (error) {
     await reportError(client, "forgetDepartedGuilds", error);
   }
@@ -160,6 +164,6 @@ export async function runDataRetention(client: Client): Promise<void> {
   // zéro se distingue ainsi d'un ménage qui n'a pas tourné. Aucun identifiant.
   console.log(
     `[data-retention] auteurs anonymisés : ${anonymized ?? "échec"}, ` +
-      `serveurs oubliés : ${forgotten ?? "échec"}`,
+      `serveurs oubliés : ${forgotten}`,
   );
 }

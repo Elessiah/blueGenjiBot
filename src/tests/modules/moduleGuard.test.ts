@@ -15,8 +15,8 @@ process.env.BDD_PATH = TMP_DB;
 import { MODULE_KEYS, isValidModule, isModuleEnabled, setModuleEnabled, listModules } from "../../modules/moduleGuard.js";
 import { closeBddInstance } from "../../bdd/Bdd.js";
 
-test("MODULE_KEYS contient les 5 modules attendus (oauth retire avec /link)", () => {
-  assert.deepEqual([...MODULE_KEYS].sort(), ["annonces", "notifications", "recrutement", "scrims", "stats"]);
+test("MODULE_KEYS contient les 3 modules que le code relit (oauth, notifications, stats retires)", () => {
+  assert.deepEqual([...MODULE_KEYS].sort(), ["annonces", "recrutement", "scrims"]);
 });
 
 test("isValidModule reconnait les cles valides et rejette les autres", () => {
@@ -40,11 +40,11 @@ test("setModuleEnabled persiste l'etat puis isModuleEnabled le retrouve", async 
   assert.equal(await isModuleEnabled(guildId, "scrims"), true);
 });
 
-test("listModules retourne les 5 modules; defaut true sans preference", async () => {
+test("listModules retourne les 3 modules; defaut true sans preference", async () => {
   const guildId = "444444444444";
   await setModuleEnabled(guildId, "annonces", false);
   const mods = await listModules(guildId);
-  assert.equal(mods.length, 5);
+  assert.equal(mods.length, 3);
   const map = new Map(mods.map((m) => [m.key, m.enabled]));
   assert.equal(map.get("annonces"), false);
   assert.equal(map.get("scrims"), true); // pas de ligne -> defaut true

@@ -205,6 +205,15 @@ class Bdd {
    */
   async initDatabase(): Promise<void> {
     try {
+      // Une ligne effacée ou réécrite (auteur anonymisé, table `UserLink`
+      // supprimée, serveur oublié) laisserait sinon ses octets dans les pages
+      // libérées du fichier — et la sauvegarde, qui copie les pages telles
+      // quelles, les emporterait. Réglage de connexion, rejoué à chaque ouverture.
+      await this.Database?.exec("PRAGMA secure_delete = ON");
+    } catch (e) {
+      console.error("secure_delete error: ", (e as TypeError).message);
+    }
+    try {
       await this.Database?.exec(
           `CREATE TABLE IF NOT EXISTS OGMsg
            (
@@ -530,9 +539,10 @@ class Bdd {
       console.error("UserLink error: ", (e as TypeError).message);
     }
     try {
-      // Le module `oauth` n'existait que pour `/link` : ses préférences,
-      // qu'aucun code ne relit plus, partent avec lui.
-      await this.Database?.exec("DELETE FROM ServerModule WHERE module_key = 'oauth'");
+      // Modules retirés : `oauth` n'existait que pour `/link`, `notifications`
+      // et `stats` n'étaient relus par aucune commande. Leurs préférences,
+      // qu'aucun code ne relit plus, partent avec eux.
+      await this.Database?.exec("DELETE FROM ServerModule WHERE module_key IN ('oauth', 'notifications', 'stats')");
     } catch (e) {
       console.error("ServerModule oauth cleanup error: ", (e as TypeError).message);
     }

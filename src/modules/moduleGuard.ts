@@ -14,8 +14,6 @@ export const MODULE_KEYS = [
   "annonces",
   "scrims",
   "recrutement",
-  "notifications",
-  "stats",
 ] as const;
 export type ModuleKey = typeof MODULE_KEYS[number];
 

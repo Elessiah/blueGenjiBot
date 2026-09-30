@@ -48,6 +48,9 @@ export async function relay(client: Client, interaction: ChatInputCommandInterac
         removal = { success: false, message: (error as Error).message };
       }
       if (!removal.success) {
+        await sendLog(client, `/relay: echec du retrait de ${channel.id} : ${removal.message}`);
+      }
+      if (!removal.success) {
         await safeReply(interaction, "Echec du retrait du relais.", true, false);
         return;
       }
