@@ -1176,42 +1176,55 @@ class Bdd {
    * est repliée sous un jour vide.
    *
    * Repli et suppression dans une seule transaction, sur un seuil calculé une
-   * fois : sans elle, un arrêt entre les deux compterait deux fois les lignes.
+   * fois et sur une connexion à part : sans elle, un arrêt entre les deux
+   * compterait deux fois les lignes.
    * @param days Âge au-delà duquel les lignes sont repliées.
    * @returns Nombre de lignes repliées, par table.
    */
   async anonymizeActivityAuthors(days: number): Promise<{ Scrim: number; Recrute: number }> {
-    const database = this.Database;
     // Base fermée (restauration en cours) : lever plutôt que rendre 0, que le
     // journal lirait comme une nuit sans rien à effacer.
-    if (!database) { throw new Error("Base fermée : anonymisation non jouée."); }
-    const [{ cutoff }] = await database.all("SELECT DATETIME('now', ?) AS cutoff", [`-${days} days`]) as { cutoff: string }[];
-    // Le seuil est inliné (une transaction multi-instructions ne se lie pas) :
-    // il vient de SQLite, mais sa forme est vérifiée avant d'entrer dans le SQL.
-    if (!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(cutoff)) {
-      throw new Error(`Seuil de date inattendu : ${cutoff}`);
+    if (!this.Database) { throw new Error("Base fermée : anonymisation non jouée."); }
+    // Connexion dédiée et brève : une transaction sur la connexion partagée
+    // engloberait (et un `ROLLBACK` déferait) les écritures que les autres
+    // gestionnaires y glissent entre deux `await`. Seuil lié, jamais inliné.
+    const fold = await open({ filename: this.name, driver: sqlite3.Database });
+    try {
+      await fold.exec("PRAGMA busy_timeout = 5000");
+      await fold.exec("PRAGMA secure_delete = ON");
+      const [{ cutoff }] = await fold.all("SELECT DATETIME('now', ?) AS cutoff", [`-${days} days`]) as { cutoff: string }[];
+      const old = "(date IS NULL OR date < ?)";
+      await fold.exec("BEGIN IMMEDIATE");
+      try {
+        const [counts] = await fold.all(
+          `SELECT (SELECT COUNT(*) FROM Scrim WHERE ${old}) AS scrim, (SELECT COUNT(*) FROM Recrute WHERE ${old}) AS recrute`,
+          [cutoff, cutoff],
+        ) as { scrim: number; recrute: number }[];
+        await fold.run(
+          `INSERT INTO ActivityDaily (kind, day, id_guild, detail, count)
+             SELECT 'scrim', COALESCE(DATE(date), ''), COALESCE(id_guild, ''), COALESCE(level, ''), COUNT(*)
+             FROM Scrim WHERE ${old} GROUP BY 2, 3, 4
+             ON CONFLICT(kind, day, id_guild, detail) DO UPDATE SET count = count + excluded.count`,
+          [cutoff],
+        );
+        await fold.run(
+          `INSERT INTO ActivityDaily (kind, day, id_guild, detail, count)
+             SELECT 'recrute', COALESCE(DATE(date), ''), COALESCE(id_guild, ''), COALESCE(role, ''), COUNT(*)
+             FROM Recrute WHERE ${old} GROUP BY 2, 3, 4
+             ON CONFLICT(kind, day, id_guild, detail) DO UPDATE SET count = count + excluded.count`,
+          [cutoff],
+        );
+        await fold.run(`DELETE FROM Scrim WHERE ${old}`, [cutoff]);
+        await fold.run(`DELETE FROM Recrute WHERE ${old}`, [cutoff]);
+        await fold.exec("COMMIT");
+        return { Scrim: Number(counts.scrim), Recrute: Number(counts.recrute) };
+      } catch (error) {
+        await fold.exec("ROLLBACK").catch(() => {});
+        throw error;
+      }
+    } finally {
+      await fold.close();
     }
-    const old = `(date IS NULL OR date < '${cutoff}')`;
-    const [counts] = await database.all(
-      `SELECT (SELECT COUNT(*) FROM Scrim WHERE ${old}) AS scrim, (SELECT COUNT(*) FROM Recrute WHERE ${old}) AS recrute`,
-    ) as { scrim: number; recrute: number }[];
-    if (counts.scrim + counts.recrute === 0) { return { Scrim: 0, Recrute: 0 }; }
-    await database.exec(`BEGIN IMMEDIATE;
-      INSERT INTO ActivityDaily (kind, day, id_guild, detail, count)
-        SELECT 'scrim', COALESCE(DATE(date), ''), COALESCE(id_guild, ''), COALESCE(level, ''), COUNT(*)
-        FROM Scrim WHERE ${old} GROUP BY 2, 3, 4
-        ON CONFLICT(kind, day, id_guild, detail) DO UPDATE SET count = count + excluded.count;
-      INSERT INTO ActivityDaily (kind, day, id_guild, detail, count)
-        SELECT 'recrute', COALESCE(DATE(date), ''), COALESCE(id_guild, ''), COALESCE(role, ''), COUNT(*)
-        FROM Recrute WHERE ${old} GROUP BY 2, 3, 4
-        ON CONFLICT(kind, day, id_guild, detail) DO UPDATE SET count = count + excluded.count;
-      DELETE FROM Scrim WHERE ${old};
-      DELETE FROM Recrute WHERE ${old};
-      COMMIT;`).catch(async (error: unknown) => {
-      await database.exec("ROLLBACK").catch(() => {});
-      throw error;
-    });
-    return { Scrim: Number(counts.scrim), Recrute: Number(counts.recrute) };
   }
 
   /**
