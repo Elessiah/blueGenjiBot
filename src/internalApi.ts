@@ -335,7 +335,8 @@ export function startInternalApi(client: Client) {
         res.status(504).json({ error: "BOT_RESOLVE_TIMEOUT" });
         return;
       }
-      await sendLog(client, `Failed to resolve discord handle "${handle}": ${(error as Error).message}`);
+      // Le tag cherché est le pseudo d'une personne : il ne part pas au journal.
+      await sendLog(client, `Failed to resolve a discord handle: ${(error as Error).message}`);
       res.status(500).json({ error: "INTERNAL_RESOLVE_ERROR" });
     }
   });
