@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>JSDoc: Source: notifications/notifications.js</title>
+    <title>JSDoc: Source: privacy/dataRetention.js</title>
 
     <script src="scripts/prettify/prettify.js"> </script>
     <script src="scripts/prettify/lang-css.js"> </script>
@@ -17,7 +17,7 @@
 
 <div id="main">
 
-    <h1 class="page-title">Source: notifications/notifications.js</h1>
+    <h1 class="page-title">Source: privacy/dataRetention.js</h1>
 
     
 
@@ -27,228 +27,102 @@
     <section>
         <article>
             <pre class="prettyprint source linenums"><code>/**
- * Messages automatisés poussés par l'app web (`appbluegenji`).
+ * Durées de conservation des données personnelles que le bot garde en base,
+ * hors messages relayés (voir `messages/manageMsgExpiration.ts`).
  *
- * Le bot ne décide de rien ici : il **distribue**. L'app connaît le domaine
- * (tournois, matchs, équipes, inscrits) et rédige le texte ; le bot sait à quel
- * compte Discord l'écrire et quels arbitres alerter. Le sens des appels reste
- * app → bot, comme pour l'auth, les logs et la fréquentation du site.
+ * Deux ménages, tous deux joués au démarrage puis chaque nuit par la tâche
+ * `cron` existante — aucun ordonnanceur de plus :
  *
- * Ce module est **pur** : il valide et normalise les corps reçus, sans toucher
- * ni à Discord ni à la base. La distribution vit dans `deliver.ts`.
+ * - **auteurs des scrims et des recherches** : effacés au-delà de
+ *   `ACTIVITY_AUTHOR_RETENTION_DAYS`, les lignes restant pour les compteurs ;
+ * - **serveurs quittés pendant un arrêt** : Discord n'envoie `guildDelete` qu'à
+ *   un bot connecté. Un serveur quitté pendant que le bot était arrêté — ou
+ *   dont l'oubli a échoué à mi-chemin — garderait sinon sa configuration sans
+ *   limite, alors que plus personne sur ce serveur ne peut la retirer.
  */
+import { getBddInstance } from "../bdd/Bdd.js";
+import { reportError } from "../safe/processGuards.js";
+import { sendLog } from "../safe/sendLog.js";
 /**
- * Plafond de longueur d'un message privé.
- *
- * Discord coupe à 2000 caractères ; on tronque plus tôt pour laisser la place à
- * la mention de troncature sans jamais risquer un envoi refusé en bloc.
+ * Âge au-delà duquel l'auteur d'un scrim ou d'une recherche est effacé.
+ * C'est la fenêtre de `/stats`, seul lecteur de l'auteur.
  */
-export const MAX_MESSAGE_LENGTH = 1800;
+export const ACTIVITY_AUTHOR_RETENTION_DAYS = 30;
 /**
- * Plafond de destinataires par appel. Une équipe compte une poignée de joueurs,
- * un match deux équipes : au-delà de cent, c'est une erreur de l'appelant, pas
- * un rappel de match — et cent DM sont déjà une longue file côté Discord.
+ * Efface l'auteur des scrims et recherches plus vieux que la durée de
+ * conservation. N'échoue jamais bruyamment : l'erreur est signalée.
+ * @param client Client Discord, pour le signalement d'erreur.
+ * @returns Nombre de lignes anonymisées, ou `null` si le ménage a échoué.
  */
-export const MAX_RECIPIENTS = 100;
-/**
- * Plafond de messages privés par alerte arbitres.
- *
- * Le rôle arbitre est choisi à la main par un administrateur de serveur : rien
- * n'empêche de désigner un rôle très large — `@everyone` est refusé à la
- * configuration, mais un rôle « Membre » ne l'est pas. Sans borne ici, un seul
- * signalement ferait écrire le bot à des centaines de comptes d'un coup, ce que
- * Discord traite comme du spam et sanctionne par une suspension. Vingt-cinq
- * suffisent largement à une équipe d'arbitrage.
- */
-export const MAX_REFEREE_DMS = 25;
-/**
- * Borne une liste de destinataires d'alerte, et dit combien ont été écartés.
- *
- * Pur, donc testable sans Discord : c'est la règle qui compte, pas le canal.
- *
- * @param targets Membres du rôle arbitre, dans l'ordre où Discord les rend.
- * @returns Les destinataires retenus et le nombre d'écartés.
- */
-export function capRefereeTargets(targets) {
-    if (targets.length &lt;= MAX_REFEREE_DMS) {
-        return { kept: [...targets], skipped: 0 };
+export async function anonymizeOldActivity(client) {
+    try {
+        const bdd = await getBddInstance();
+        const removed = await bdd.anonymizeActivityAuthors(ACTIVITY_AUTHOR_RETENTION_DAYS);
+        return removed.Scrim + removed.Recrute;
     }
-    return {
-        kept: targets.slice(0, MAX_REFEREE_DMS),
-        skipped: targets.length - MAX_REFEREE_DMS,
-    };
-}
-/** Un ID Discord (snowflake) tel que l'app peut en transmettre. */
-const DISCORD_ID_RE = /^\d{5,32}$/;
-function toTrimmedString(value) {
-    if (typeof value !== "string") {
+    catch (error) {
+        await reportError(client, "anonymizeOldActivity", error);
         return null;
     }
-    const trimmed = value.trim();
-    return trimmed.length > 0 ? trimmed : null;
 }
 /**
- * Tronque un message trop long en le signalant.
+ * Oublie les serveurs configurés en base que le bot n'a plus rejoints.
  *
- * Tronquer plutôt que refuser : un rappel légèrement trop long doit partir
- * amputé, pas se perdre — le joueur a besoin de l'heure de son match, pas de
- * l'intégralité de la description du tournoi.
- *
- * @param message Message brut.
- * @returns Message borné à `MAX_MESSAGE_LENGTH` caractères.
+ * Même effacement que `guildDelete` (`forgetGuild` puis retrait des salons
+ * relayés), sans relire le serveur chez Discord : il n'y est plus joignable.
+ * Refuse d'agir sur un cache vide — un démarrage où Discord n'a encore livré
+ * aucun serveur effacerait sinon la configuration de tous. Un serveur
+ * momentanément indisponible (panne Discord) reste dans le cache, marqué
+ * `available: false` : il n'est donc pas oublié.
+ * @param client Client Discord connecté (`client.guilds.cache` rempli).
+ * @returns Identifiants des serveurs oubliés.
  */
-export function truncateMessage(message) {
-    if (message.length &lt;= MAX_MESSAGE_LENGTH) {
-        return message;
+export async function forgetDepartedGuilds(client) {
+    const joined = client.guilds.cache;
+    if (joined.size === 0) {
+        return [];
     }
-    const suffix = "\n… (message tronqué)";
-    return message.slice(0, MAX_MESSAGE_LENGTH - suffix.length) + suffix;
-}
-/**
- * Dédoublonne une liste de destinataires.
- *
- * Un joueur peut apparaître deux fois (deux équipes d'un même match, une équipe
- * et son coach) : sans ce filtre, il recevrait le même rappel en double. L'ID
- * prime sur le tag, seule identité fiable ; à défaut, le tag est comparé en
- * minuscules — les usernames Discord ne sont pas sensibles à la casse.
- *
- * @param recipients Destinataires bruts, dans l'ordre d'arrivée.
- * @returns Les mêmes, sans doublon, dans l'ordre d'arrivée.
- */
-export function dedupeRecipients(recipients) {
-    const seen = new Set();
-    const unique = [];
-    for (const recipient of recipients) {
-        const key = recipient.discordId
-            ? `id:${recipient.discordId}`
-            : `tag:${(recipient.handle ?? "").toLowerCase()}`;
-        if (seen.has(key)) {
-            continue;
+    const bdd = await getBddInstance();
+    const departed = (await bdd.listConfiguredGuildIds()).filter((id) => !joined.has(id));
+    const forgotten = [];
+    for (const guildId of departed) {
+        try {
+            // La configuration d'abord : les filtres de rang se retrouvent par les
+            // salons partenaires, retirés ensuite.
+            await bdd.forgetGuild(guildId);
+            const channels = await bdd.raw("SELECT id_channel FROM ChannelPartner WHERE id_guild = ?", [guildId]);
+            for (const { id_channel } of channels) {
+                const ret = await bdd.deleteChannelServices(id_channel);
+                if (!ret.success) {
+                    throw new Error(ret.message);
+                }
+            }
+            forgotten.push(guildId);
         }
-        seen.add(key);
-        unique.push(recipient);
+        catch (error) {
+            await reportError(client, "forgetDepartedGuilds", error);
+        }
     }
-    return unique;
-}
-function parseRecipient(raw) {
-    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
-        return null;
+    if (forgotten.length > 0) {
+        await sendLog(client, `${forgotten.length} serveur(s) quitté(s) pendant un arrêt du bot : configuration effacée.`);
     }
-    const record = raw;
-    const rawId = toTrimmedString(record.discordId);
-    const discordId = rawId !== null &amp;&amp; DISCORD_ID_RE.test(rawId) ? rawId : null;
-    const handle = toTrimmedString(record.handle);
-    // Sans ID valide **ni** tag, il n'y a personne à joindre : le destinataire est
-    // écarté ici plutôt que compté comme un échec d'envoi plus loin.
-    if (discordId === null &amp;&amp; handle === null) {
-        return null;
-    }
-    return {
-        discordId,
-        handle,
-        label: toTrimmedString(record.label) ?? handle ?? discordId ?? "inconnu",
-    };
+    return forgotten;
 }
 /**
- * Valide un corps de `POST /internal/notify/dm`.
- *
- * @param payload Corps JSON reçu.
- * @returns La demande normalisée, ou `null` si elle est inexploitable (message
- *          vide, aucun destinataire joignable).
+ * Les deux ménages, dans l'ordre. Chacun signale son propre échec sans priver
+ * l'autre de passer.
+ * @param client Client Discord connecté.
  */
-export function parseDirectMessageRequest(payload) {
-    if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
-        return null;
+export async function runDataRetention(client) {
+    await anonymizeOldActivity(client);
+    try {
+        await forgetDepartedGuilds(client);
     }
-    const raw = payload;
-    const message = toTrimmedString(raw.message);
-    if (message === null) {
-        return null;
+    catch (error) {
+        await reportError(client, "forgetDepartedGuilds", error);
     }
-    if (!Array.isArray(raw.recipients)) {
-        return null;
-    }
-    const recipients = dedupeRecipients(raw.recipients
-        .map(parseRecipient)
-        .filter((recipient) => recipient !== null)).slice(0, MAX_RECIPIENTS);
-    if (recipients.length === 0) {
-        return null;
-    }
-    return {
-        message: truncateMessage(message),
-        recipients,
-        context: toTrimmedString(raw.context) ?? "site",
-    };
 }
-/**
- * Valide un corps de `POST /internal/notify/referees`.
- *
- * @param payload Corps JSON reçu.
- * @returns La demande normalisée, ou `null` si le message est vide.
- */
-export function parseRefereeAlert(payload) {
-    if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
-        return null;
-    }
-    const raw = payload;
-    const message = toTrimmedString(raw.message);
-    if (message === null) {
-        return null;
-    }
-    return {
-        message: truncateMessage(message),
-        context: toTrimmedString(raw.context) ?? "site",
-    };
-}
-/**
- * Les serveurs BlueGenji, seule population que le bot démarche par message
- * privé.
- *
- * L'envoi lisait `GUILD_ID`, une variable que la configuration réelle du bot
- * n'a jamais portée : les serveurs BlueGenji y sont nommés `SERV_GENJI` et
- * `SERV_RIVALS` (ce sont eux qui reçoivent déjà les commandes réservées,
- * `updateCommands`). Faute de valeur, **aucun** message poussé par le site ne
- * partait — rappels de match comme annonces RGPD —, et la panne passait pour
- * « tous les joueurs sont absents du serveur ».
- *
- * `GUILD_ID` reste la surcharge explicite (une ou plusieurs valeurs séparées par
- * des virgules) ; sans elle, les deux serveurs BlueGenji. Un joueur de Marvel
- * Rivals peut n'être que sur le second : il est membre de BlueGenji autant que
- * celui du premier.
- *
- * Pur : l'environnement est passé en argument.
- *
- * @param env Variables d'environnement (`process.env` en production).
- * @returns Les identifiants de serveur, dédoublonnés, sans valeur vide.
- */
-export function homeGuildIds(env) {
-    const explicit = env.GUILD_ID?.trim();
-    const raw = explicit ? explicit.split(",") : [env.SERV_GENJI, env.SERV_RIVALS];
-    const ids = raw.map((value) => value?.trim() ?? "").filter((value) => /^\d{5,25}$/.test(value));
-    return [...new Set(ids)];
-}
-/**
- * La direction de l'association, destinataire des alertes de signalement du
- * site : le propriétaire du bot (`OWNER_ID`) et le président (`PRESIDENT`).
- *
- * Le site ne connaît pas ces comptes — ils ne sont écrits que dans la
- * configuration du bot, qui les sert déjà aux commandes réservées
- * (`checkPermissions`). Une valeur vide ou qui n'a pas la forme d'un
- * identifiant Discord est écartée ; une même personne aux deux postes n'est
- * écrite qu'une fois.
- *
- * Pur : l'environnement est passé en argument.
- *
- * @param env Variables d'environnement (`process.env` en production).
- * @returns Les identifiants à prévenir, dédoublonnés.
- */
-export function leadershipIds(env) {
-    const ids = [env.OWNER_ID, env.PRESIDENT]
-        .map((value) => value?.trim() ?? "")
-        .filter((value) => /^\d{5,25}$/.test(value));
-    return [...new Set(ids)];
-}
-//# sourceMappingURL=notifications.js.map</code></pre>
+//# sourceMappingURL=dataRetention.js.map</code></pre>
         </article>
     </section>
 
