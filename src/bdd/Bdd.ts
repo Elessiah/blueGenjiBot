@@ -1152,7 +1152,10 @@ class Bdd {
    * serveur. La ligne reste donc, sans auteur — une anonymisation réelle, là
    * où un hachage de l'identifiant n'en serait qu'une pseudonymisation. La
    * colonne est `NOT NULL` sur les bases existantes : l'auteur effacé s'écrit
-   * chaîne vide, qu'aucun identifiant Discord ne peut valoir. Une ligne sans
+   * chaîne vide, qu'aucun identifiant Discord ne peut valoir. La date est
+   * ramenée au jour dans la même instruction : à la seconde, croisée avec la
+   * réponse publique de la commande ou le fil d'activité, elle redonnerait
+   * l'auteur. Compteurs et graphe ne lisent que le jour. Une ligne sans
    * date (la colonne l'admet) ne peut prouver son âge : elle est anonymisée.
    * @param days Âge au-delà duquel l'auteur est effacé.
    * @returns Nombre de lignes anonymisées, par table.
@@ -1164,11 +1167,11 @@ class Bdd {
     if (!database) { throw new Error("Base fermée : anonymisation non jouée."); }
     const modifier = `-${days} days`;
     const scrim = await database.run(
-      "UPDATE Scrim SET id_author = '' WHERE id_author <> '' AND (date IS NULL OR date < DATETIME('now', ?))",
+      "UPDATE Scrim SET id_author = '', date = DATE(date) WHERE id_author <> '' AND (date IS NULL OR date < DATETIME('now', ?))",
       [modifier],
     );
     const recrute = await database.run(
-      "UPDATE Recrute SET id_author = '' WHERE id_author <> '' AND (date IS NULL OR date < DATETIME('now', ?))",
+      "UPDATE Recrute SET id_author = '', date = DATE(date) WHERE id_author <> '' AND (date IS NULL OR date < DATETIME('now', ?))",
       [modifier],
     );
     return { Scrim: scrim.changes ?? 0, Recrute: recrute.changes ?? 0 };

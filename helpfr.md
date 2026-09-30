@@ -84,7 +84,7 @@ Admin :
 
 ## Durées de conservation
 - Suivi des messages relayés (identifiants, date) : 7 jours, effacé au plus tard dans la nuit qui suit. Les copies publiées dans les salons partenaires restent ensuite sur Discord (voir « Effacer un message retransmis »).
-- Auteur d'un `/scrim` ou d'un `/recrute` : 30 jours, effacé dans la nuit qui suit. Au-delà, l'identifiant de l'auteur est effacé ; restent, pour les compteurs, le jeu, le niveau ou le rôle, le serveur et la date, qui ne désignent plus personne.
+- Auteur d'un `/scrim` ou d'un `/recrute` : 30 jours, effacé dans la nuit qui suit. Au-delà, l'identifiant de l'auteur est effacé ; restent, pour les compteurs, le jeu, le niveau ou le rôle, le serveur et le jour (sans l'heure), qui ne désignent plus personne.
 - Exclusions du réseau : jusqu'à leur levée (les avis d'exclusion du salon de journal privé du staff ne sont pas supprimés automatiquement).
 - Configuration d'un serveur : effacée quand le bot le quitte — y compris s'il l'a quitté pendant un arrêt du bot, au démarrage suivant.
 

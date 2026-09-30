@@ -114,6 +114,9 @@ test("l'auteur d'un scrim ou d'une recherche est effacé au-delà de 30 jours, l
   assert.equal(await count("SELECT COUNT(*) AS n FROM Scrim WHERE id_author = 'u-old'"), 0);
   assert.equal(await count("SELECT COUNT(*) AS n FROM Recrute WHERE id_author = 'u-old'"), 0);
   assert.equal(await count("SELECT COUNT(*) AS n FROM Scrim WHERE id_author = 'u-new'"), 1);
+  // La date d'une ligne anonymisée est ramenée au jour, jamais celle d'une ligne récente.
+  assert.equal(await count("SELECT COUNT(*) AS n FROM Scrim WHERE id_author = '' AND date <> DATE(date)"), 0);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM Recrute WHERE id_author = '' AND date = DATE(date)"), 1);
   // Les compteurs par serveur ne perdent rien.
   assert.equal(await count("SELECT COUNT(*) AS n FROM Scrim WHERE id_guild = 'g1'"), 2);
   assert.equal(await count("SELECT COUNT(*) AS n FROM Recrute WHERE id_guild = 'g1'"), 1);
