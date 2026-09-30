@@ -293,8 +293,8 @@ client.on("guildDelete", async (guild) => {
       if (!(await eraseLeftGuild(client, guild.id))) {
         await sendLog(
           client,
-          `guildDelete: configuration du serveur ${guild.id} gardée (base d'une autre application, ou fermée) ; ` +
-            "le rattrapage des serveurs quittés la reprendra.",
+          `guildDelete: configuration du serveur ${guild.id} gardée : base d'une autre application Discord ` +
+            "(elle ne sera effacée que par l'application propriétaire), ou base fermée (le rattrapage suivant la reprendra).",
         );
       }
     } catch (error) {
