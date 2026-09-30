@@ -12,7 +12,7 @@ Cette politique vous informe des données que traite le bot Discord **BlueGenji 
 
 ## 01. Responsable du traitement
 
-Le responsable du traitement est l'association **Bluegenji Esport**, association loi 1901 dont le siège est situé au 4 impasse des Cyprès, 51210 Janvilliers, France. Elle n'a désigné ni délégué à la protection des données ni référent. Les moyens de la joindre figurent à la section Contact.
+Le responsable du traitement est l'association **Bluegenji Esport**, association loi 1901 dont le siège est situé au 4 impasse des Cyprès, 51210 Janvilliers, France. Elle a chargé **Keryan Houssin**, hébergeur technique du site, de recevoir les demandes relatives à vos données ; ce n'est pas un délégué à la protection des données au sens de l'article 37 du RGPD. Les moyens de les joindre figurent à la section Contact.
 
 Le Bot est réservé aux personnes d'au moins 15 ans ([Conditions d'Utilisation](https://bluegenji-esport.fr/terms-of-service-bot)).
 
@@ -26,15 +26,14 @@ Identifiant du message d'origine et de son auteur, date, identifiants des copies
 
 ### Scrims et recrutement
 
-Pour les commandes **/scrim** et **/recrute** : identifiant de l'auteur, jeu, niveau ou rôle recherché, serveur et date, qui alimentent les statistiques d'activité (commande **/stats** et tableau de bord du bot).
+Pour les commandes **/scrim** et **/recrute** : identifiant de l'auteur, jeu, niveau ou rôle recherché, serveur et date, qui alimentent les statistiques d'activité (commande **/stats**, qui ne montre à chacun que sa propre activité, et tableau de bord du bot). Au-delà de 30 jours, ces lignes sont repliées en simples nombres par jour, serveur et niveau (ou rôle)  : ni auteur, ni heure, ni ordre ne restent.
 
 ### Exclusions du relais
 
-Identifiants de l'utilisateur exclu et du modérateur, date, et référence du message de journal qui porte le motif. Les pseudos de l'exclu et du modérateur et le motif sont publiés dans le salon de journal privé du staff, et la commande **/ban-list** affiche la liste complète des exclusions (pseudos, motif, date, identifiant) aux administrateurs de tout serveur où le Bot est installé et aux titulaires du rôle d'administration du Bot.
+Identifiants de l'utilisateur exclu et du modérateur, date, et référence du message de journal qui porte le motif. Les identifiants de l'exclu et du modérateur et le motif sont publiés dans le salon de journal privé du staff. Une exclusion vaut pour **tout le réseau** de serveurs partenaires : c'est une modération communautaire, prononcée par la modération des serveurs partenaires dans les conditions de la section « Modération du relais » des Conditions d'Utilisation. La commande **/ban-list** affiche donc la liste complète des exclusions du réseau (pseudos, motif, date, identifiant) aux administrateurs de tout serveur où le Bot est installé et aux titulaires du rôle d'administration du Bot, pour qu'ils sachent qui ne peut plus publier par le Bot et pourquoi.
 
-### Commande /link, adhésions et rappels programmés
+### Adhésions et rappels programmés
 
-- **Commande /link** : identifiant Discord, code à six chiffres valable 10 minutes et son échéance. Le site ne propose à ce jour aucun endroit où saisir ce code : la commande ne relie donc aucun compte.
 - **Adhésions à l'association** (commandes réservées aux serveurs de l'association) : quand l'adhésion d'un membre est validée, le Bot lui envoie en message privé la confirmation, et l'attestation d'adhésion si elle est jointe, sans la conserver ; il enregistre alors un rappel pour la date de péremption de l'adhésion — ce qui revient à garder, jusqu'à ce rappel, le fait que ce membre adhère à l'association et jusqu'à quand.
 - **Rappels programmés** (mêmes commandes) : identifiant du membre ou du rôle visé et de l'auteur, message, date du prochain envoi et fréquence.
 
@@ -48,7 +47,7 @@ Le site transmet au Bot un identifiant ou un pseudo Discord et le message à rem
 
 ### Journaux
 
-Le fil d'activité public de la page du bot ne contient aucun identifiant de personne. Le salon de journal privé du staff et les journaux du serveur reçoivent le nom des serveurs qui ajoutent ou retirent le Bot, les erreurs de fonctionnement, qui peuvent citer un pseudo ou un identifiant Discord, et le journal d'activité du site (inscriptions, matchs, tournois), rédigé par le site sans pseudo de joueur.
+Le fil d'activité public de la page du bot ne contient aucun identifiant de personne. Le salon de journal privé du staff (dont chaque ligne part aussi en message privé au titulaire du Bot) et les journaux du serveur reçoivent le nom des serveurs qui ajoutent ou retirent le Bot, les erreurs de fonctionnement, qui peuvent citer un identifiant Discord, et le journal d'activité du site (inscriptions, matchs, tournois), rédigé par le site sans pseudo de joueur. Le Bot n'y écrit aucun pseudo — seul le motif d'une exclusion, texte libre du modérateur, peut en citer un.
 
 ### Base légale
 
@@ -58,12 +57,11 @@ Ces traitements reposent sur l'**intérêt légitime** de l'association (article
 
 ## 03. Durées de conservation
 
-- **Suivi des annonces relayées** (identifiants, date) : 7 jours ; il est effacé lors du premier relais qui suit cette échéance. Rien n'est effacé au redémarrage du Bot. Les copies publiées dans les salons partenaires restent sur Discord (section 02).
-- **Scrims et recrutement** : aucune suppression automatique à ce jour ; ces données sont conservées jusqu'à une demande d'effacement.
+- **Suivi des annonces relayées** (identifiants, date) : 7 jours ; il est effacé au premier relais qui suit cette échéance, et au plus tard dans la nuit ou au redémarrage du Bot. Les copies publiées dans les salons partenaires restent sur Discord (section 02).
+- **Scrims et recrutement** : 30 jours avec l'identifiant de l'auteur ; lors du ménage de la nuit qui suit (ou d'un redémarrage du Bot), l'identifiant de l'auteur est effacé et les lignes sont repliées en nombres par jour, serveur et niveau (ou rôle), gardés pour les compteurs d'activité.
 - **Exclusions** : jusqu'à la levée de l'exclusion.
-- **Commande /link** : le code expire au bout de 10 minutes ; la ligne qui le porte n'est pas supprimée automatiquement à ce jour.
-- **Configuration des serveurs** (salons relayés et leurs filtres de rang, invitation et rôle d'arbitrage avec l'identifiant de qui les a posés, rôle d'administration du Bot, modules activés) : jusqu'à son retrait par les administrateurs, au plus tard jusqu'au départ du Bot du serveur, qui l'efface. Un retrait survenu pendant une interruption du Bot ne lui est pas signalé par Discord : cette configuration reste alors jusqu'à une demande d'effacement.
-- **Adhésions et rappels programmés** : jusqu'au dernier envoi du rappel (pour une adhésion, sa date de péremption) ou sa suppression, au plus tard jusqu'au départ du Bot du serveur où ils ont été enregistrés, qui les efface ; sous la même réserve qu'au point précédent : si le Bot en est retiré pendant une interruption, ils restent jusqu'à une demande d'effacement.
+- **Configuration des serveurs** (salons relayés et leurs filtres de rang, invitation et rôle d'arbitrage avec l'identifiant de qui les a posés, rôle d'administration du Bot, modules activés) : jusqu'à son retrait par les administrateurs, au plus tard jusqu'au départ du Bot du serveur, qui l'efface. Un départ survenu pendant une interruption du Bot, que Discord ne lui signale pas, est rattrapé à son redémarrage.
+- **Adhésions et rappels programmés** : jusqu'au dernier envoi du rappel (pour une adhésion, sa date de péremption) ou sa suppression, au plus tard jusqu'au départ du Bot du serveur où ils ont été enregistrés, qui les efface — départ survenu pendant une interruption compris, rattrapé au redémarrage.
 - **Salon de journal privé du staff** : aucune suppression automatique à ce jour.
 - **Journaux du serveur** : selon leur rotation automatique.
 - **Sauvegardes** : la base du Bot est sauvegardée chaque semaine, chiffrée, et chaque copie est supprimée définitivement au bout de 30 jours au plus.
@@ -76,10 +74,10 @@ Ces traitements reposent sur l'**intérêt légitime** de l'association (article
 - Les membres des serveurs partenaires, qui lisent les annonces relayées.
 - Les membres du rôle d'arbitrage de chaque serveur qui en a défini un, pour les alertes d'arbitrage du site.
 - Les administrateurs de tout serveur où le Bot est installé, et les titulaires du rôle d'administration du Bot que chaque serveur désigne (**/set-bot-admin**), qui peuvent lire la liste des exclusions (commande **/ban-list**, réponse visible du seul demandeur).
-- Tout utilisateur du Bot, par la commande **/stats**, peut voir combien d'annonces un autre utilisateur a publiées (messages relayés, scrims, recherches) ; la réponse n'est visible que de celui qui la demande, et le compteur de messages ne porte que sur ceux dont le suivi est encore conservé (section 03).
 - L'hébergeur technique, Keryan Houssin, qui fournit la machine sur laquelle tourne le Bot (un Raspberry Pi, à Caen) : sous-traitant.
 - Discord, plateforme sur laquelle le Bot fonctionne.
-- Microsoft, qui stocke sur le OneDrive personnel de l'hébergeur technique les sauvegardes, chiffrées avant envoi avec une clé que Microsoft ne détient pas.
+- Microsoft, qui stocke sur le OneDrive personnel de l'hébergeur technique les sauvegardes, chiffrées avant envoi avec une clé que Microsoft ne détient pas ; et qui héberge la messagerie personnelle (Outlook.com) de l'hébergeur technique, par où passent, non chiffrées par l'association et lisibles par Microsoft, toute demande relative à vos données que vous envoyez par courriel à l'hébergeur technique et la réponse que celui-ci vous adresse par courriel.
+- L'opérateur téléphonique de l'hébergeur technique, si vous l'appelez ou lui laissez un SMS ou un message vocal au sujet de vos données.
 - Aucune donnée n'est vendue, ni cédée à d'autres destinataires que ceux listés ici.
 
 ---
@@ -87,7 +85,7 @@ Ces traitements reposent sur l'**intérêt légitime** de l'association (article
 ## 05. Transferts hors de l'Union européenne
 
 - **Discord** (États-Unis) : décision d'adéquation (UE) 2023/1795 de la Commission européenne du 10 juillet 2023 (EU-U.S. Data Privacy Framework).
-- **Microsoft** : transfert possible vers les États-Unis, Microsoft ne garantissant pas le lieu de stockage d'un compte personnel ; il ne reçoit que des données chiffrées — décision d'adéquation (UE) 2023/1795 de la Commission européenne du 10 juillet 2023 (EU-U.S. Data Privacy Framework).
+- **Microsoft** : transfert possible vers les États-Unis, Microsoft ne garantissant pas le lieu de stockage d'un compte personnel ; il ne reçoit que des données chiffrées pour les sauvegardes, mais une demande envoyée par courriel à l'hébergeur technique, et sa réponse par courriel, lui parviennent non chiffrées par l'association, donc lisibles par Microsoft — décision d'adéquation (UE) 2023/1795 de la Commission européenne du 10 juillet 2023 (EU-U.S. Data Privacy Framework).
 
 ---
 
@@ -127,6 +125,7 @@ Cette politique peut évoluer avec le Bot. La version en vigueur est celle publi
 
 Pour toute question sur vos données ou pour exercer vos droits :
 
+- Personne à contacter pour vos demandes relatives à vos données : **Keryan Houssin**, hébergeur technique du site — courriel et téléphone dans la [politique de confidentialité du site](https://bluegenji-esport.fr/rgpd#exercer-vos-droits). Ce n'est pas un délégué à la protection des données au sens de l'article 37 du RGPD : l'association reste responsable du traitement. Ce traitement (base légale, données, durée de conservation) est décrit dans la politique de confidentialité du site ; ses destinataires et transferts figurent aussi aux sections 04 et 05 de la présente politique
 - Formulaire **« Signaler un problème »** en bas de chaque page du site (catégorie « RGPD » pour vos données)
 - Courriel et téléphone de l'association : voir les [mentions légales](https://bluegenji-esport.fr/mentions-legales)
 

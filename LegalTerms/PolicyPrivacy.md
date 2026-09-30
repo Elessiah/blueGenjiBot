@@ -12,7 +12,7 @@ This policy informs you of the data processed by the Discord bot **BlueGenji Bot
 
 ## 01. Data controller
 
-The data controller is the association **Bluegenji Esport**, a French non-profit association under the law of 1901 whose registered office is at 4 impasse des Cyprès, 51210 Janvilliers, France. It has appointed neither a data protection officer nor a privacy contact person. The means of contacting it are listed in the Contact section.
+The data controller is the association **Bluegenji Esport**, a French non-profit association under the law of 1901 whose registered office is at 4 impasse des Cyprès, 51210 Janvilliers, France. It has put **Keryan Houssin**, the website's technical host, in charge of receiving requests about your data; this person is not a data protection officer within the meaning of Article 37 GDPR. The means of contacting them are listed in the Contact section.
 
 The Bot is intended for people aged 15 or over ([Terms of Service](https://bluegenji-esport.fr/terms-of-service-bot)).
 
@@ -26,15 +26,14 @@ ID of the original message and of its author, date, IDs of the relayed copies an
 
 ### Scrims and recruitment
 
-For the **/scrim** and **/recrute** commands: author ID, game, level or role sought, server and date, which feed the activity statistics (**/stats** command and the bot's dashboard).
+For the **/scrim** and **/recrute** commands: author ID, game, level or role sought, server and date, which feed the activity statistics (**/stats** command, which only shows each user their own activity, and the bot's dashboard). After 30 days these rows are folded into plain counts per day, server and level (or role): no author, time or order remains.
 
 ### Relay exclusions
 
-IDs of the excluded user and of the moderator, date, and a reference to the log message holding the reason. The usernames of the excluded user and of the moderator, and the reason, are posted in the staff's private log channel, and the **/ban-list** command shows the full list of exclusions (usernames, reason, date, ID) to the administrators of any server where the Bot is installed and to the holders of the Bot administration role.
+IDs of the excluded user and of the moderator, date, and a reference to the log message holding the reason. The IDs of the excluded user and of the moderator, and the reason, are posted in the staff's private log channel. An exclusion applies to the **whole network** of partner servers: this is community moderation, decided by the moderators of partner servers under the conditions of the « Relay moderation » section of the Terms of Service. The **/ban-list** command therefore shows the full list of network exclusions (usernames, reason, date, ID) to the administrators of any server where the Bot is installed and to the holders of the Bot administration role, so that they know who can no longer post through the Bot and why.
 
-### /link command, memberships and scheduled reminders
+### Memberships and scheduled reminders
 
-- **/link command**: Discord ID, six-digit code valid for 10 minutes and its expiry. The website currently offers nowhere to enter this code: the command therefore links no account.
 - **Association memberships** (commands restricted to the association's servers): when a member's membership is validated, the Bot sends them the confirmation by direct message, with the membership certificate if one is attached, without keeping it; it then records a reminder for the membership's expiry date — which means keeping, until that reminder, the fact that this member belongs to the association and until when.
 - **Scheduled reminders** (same commands): ID of the targeted member or role and of the author, message, next sending date and frequency.
 
@@ -48,7 +47,7 @@ The website sends the Bot a Discord ID or username and the message to deliver (l
 
 ### Logs
 
-The public activity feed on the bot's page contains no personal identifier. The staff's private log channel and the server logs receive the names of servers that add or remove the Bot, operating errors, which may mention a Discord username or ID, and the website's activity journal (sign-ups, matches, tournaments), written by the website without any player's username.
+The public activity feed on the bot's page contains no personal identifier. The staff's private log channel (each line of which is also sent by direct message to the Bot's owner) and the server logs receive the names of servers that add or remove the Bot, operating errors, which may mention a Discord ID, and the website's activity journal (sign-ups, matches, tournaments), written by the website without any player's username. The Bot writes no username there — only the reason for an exclusion, free text written by the moderator, may quote one.
 
 ### Legal basis
 
@@ -58,12 +57,11 @@ This processing is based on the association's **legitimate interest** (Article 6
 
 ## 03. Retention periods
 
-- **Tracking of relayed advertisements** (IDs, date): 7 days; it is erased at the first relay after that deadline. Nothing is erased when the Bot restarts. The copies posted in partner channels remain on Discord (section 02).
-- **Scrims and recruitment**: no automatic deletion at present; this data is kept until an erasure request.
+- **Tracking of relayed advertisements** (IDs, date): 7 days; it is erased at the first relay after that deadline, and at the latest during the night or when the Bot restarts. The copies posted in partner channels remain on Discord (section 02).
+- **Scrims and recruitment**: 30 days with the author's ID; at the clean-up of the following night (or a restart of the Bot), the author's ID is erased and the rows are folded into counts per day, server and level (or role), kept for the activity counters.
 - **Exclusions**: until the exclusion is lifted.
-- **/link command**: the code expires after 10 minutes; the row holding it is not deleted automatically at present.
-- **Server configuration** (relayed channels and their rank filters, the invite and the referee role with the ID of whoever set them, the Bot administration role, enabled modules): until the administrators remove it, and at the latest until the Bot leaves the server, which erases it. If the Bot is removed while it is down, Discord does not notify it: that configuration then remains until an erasure request.
-- **Memberships and scheduled reminders**: until the reminder's last sending (for a membership, its expiry date) or its deletion, and at the latest until the Bot leaves the server where they were recorded, which erases them; with the same caveat as above: if the Bot is removed from it while it is down, they remain until an erasure request.
+- **Server configuration** (relayed channels and their rank filters, the invite and the referee role with the ID of whoever set them, the Bot administration role, enabled modules): until the administrators remove it, and at the latest until the Bot leaves the server, which erases it. A departure while the Bot is down, which Discord does not notify, is caught up when it restarts.
+- **Memberships and scheduled reminders**: until the reminder's last sending (for a membership, its expiry date) or its deletion, and at the latest until the Bot leaves the server where they were recorded, which erases them — including a departure while the Bot is down, caught up when it restarts.
 - **Staff private log channel**: no automatic deletion at present.
 - **Server logs**: according to their automatic rotation.
 - **Backups**: the Bot's database is backed up weekly, encrypted, and each copy is permanently deleted after 30 days at most.
@@ -76,10 +74,10 @@ This processing is based on the association's **legitimate interest** (Article 6
 - Members of partner servers, who read the relayed advertisements.
 - Members of the referee role of every server that has set one, for the website's referee alerts.
 - The administrators of any server where the Bot is installed, and the holders of the Bot administration role each server designates (**/set-bot-admin**), who can read the list of exclusions (**/ban-list** command, reply visible only to the person who asked).
-- Any user of the Bot can, with the **/stats** command, see how many advertisements another user has published (relayed messages, scrims, searches); the reply is visible only to the person who asked, and the message count only covers messages whose tracking is still kept (section 03).
 - The technical host, Keryan Houssin, who provides the machine the Bot runs on (a Raspberry Pi in Caen, France): processor.
 - Discord, the platform the Bot runs on.
-- Microsoft, which stores the backups on the technical host's personal OneDrive, encrypted before upload with a key Microsoft does not hold.
+- Microsoft, which stores the backups on the technical host's personal OneDrive, encrypted before upload with a key Microsoft does not hold; and which hosts the technical host's personal mailbox (Outlook.com), through which any request about your data that you email to them, and their emailed reply, pass without encryption by the association, readable by Microsoft.
+- The technical host's phone operator, if you call them or leave them a text or voicemail about your data.
 - No data is sold, or handed over to any recipient other than those listed here.
 
 ---
@@ -87,7 +85,7 @@ This processing is based on the association's **legitimate interest** (Article 6
 ## 05. Transfers outside the European Union
 
 - **Discord** (United States): European Commission adequacy decision (EU) 2023/1795 of 10 July 2023 (EU-U.S. Data Privacy Framework).
-- **Microsoft**: possible transfer to the United States, as Microsoft does not guarantee the storage location of a personal account; it only receives encrypted data — European Commission adequacy decision (EU) 2023/1795 of 10 July 2023 (EU-U.S. Data Privacy Framework).
+- **Microsoft**: possible transfer to the United States, as Microsoft does not guarantee the storage location of a personal account; it only receives encrypted data for the backups, but a request emailed to the technical host, and their emailed reply, reach it without encryption by the association, and so readable by Microsoft — European Commission adequacy decision (EU) 2023/1795 of 10 July 2023 (EU-U.S. Data Privacy Framework).
 
 ---
 
@@ -127,6 +125,7 @@ This policy may change along with the Bot. The version in force is the one publi
 
 For any question about your data or to exercise your rights:
 
+- Person to contact for requests about your data: **Keryan Houssin**, the website's technical host — email address and phone number in the [website's privacy policy](https://bluegenji-esport.fr/rgpd#exercer-vos-droits) (in French). This person is not a data protection officer within the meaning of Article 37 GDPR: the association remains the data controller. This processing (legal basis, data, retention period) is described in the website's privacy policy; its recipients and transfers are also listed in sections 04 and 05 of this policy
 - The **“Signaler un problème”** form at the bottom of every page of the site (“RGPD” category for your data)
 - The association's email address and phone number: see the [legal notice](https://bluegenji-esport.fr/mentions-legales)
 
