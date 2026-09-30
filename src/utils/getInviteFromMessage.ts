@@ -37,7 +37,9 @@ async function getInviteFromMessage(client: Client,
         }
         return await getInviteFromChannel(client, channel);
     } catch (e) {
-        await sendLog(client, "(getInviteFromMessage)Erreur pour : " + message.content + "\nMessage d'erreur : \n" + (e as TypeError).message);
+        // L'identifiant du message, jamais son texte : une annonce cite des
+        // pseudos, que le journal ne reçoit pas.
+        await sendLog(client, "(getInviteFromMessage)Erreur pour le message " + message.id + "\nMessage d'erreur : \n" + (e as TypeError).message);
         return ("");
     }
 }
