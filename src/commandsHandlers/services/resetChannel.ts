@@ -9,9 +9,10 @@ import {status} from "@/types.js";
  * Réinitialise en base la configuration d'un salon cible.
  * @param client Client Discord utilisé pour les appels API.
  * @param channel_id Identifiant du salon cible.
+ * @param guildName Nom du serveur, quand l'appelant le tient déjà (`channelDelete`) : évite de relire le salon.
  * @returns Objet `status` avec `success=true` si la suppression des liens du salon réussit, sinon `success=false` et un message d'erreur.
  */
-async function _resetChannel(client: Client, channel_id: string): Promise<status> {
+async function _resetChannel(client: Client, channel_id: string, guildName?: string): Promise<status> {
     const bdd: Bdd = await getBddInstance();
     let err_msg: string = "";
     const success: boolean = false;
@@ -32,14 +33,18 @@ async function _resetChannel(client: Client, channel_id: string): Promise<status
                 // le salon n'existe plus chez Discord : la relecture échoue, et
                 // la suppression, faite, reste un succès — la retenter dix
                 // fois ne la rendrait pas plus faite.
-                let where = `channel ${channel_id}`;
-                try {
-                    const channel = await client.channels.fetch(channel_id) as TextChannel | null;
-                    if (channel) {
-                        const guild: Guild = channel.guild;
-                        where = guild.name;
-                    }
-                } catch { /* salon supprimé : on journalise son identifiant */ }
+                // `channelDelete` passe le nom, qu'il tient déjà : relire un
+                // salon supprimé coûterait un appel REST voué au 404.
+                let where = guildName ?? `channel ${channel_id}`;
+                if (guildName === undefined) {
+                    try {
+                        const channel = await client.channels.fetch(channel_id) as TextChannel | null;
+                        if (channel) {
+                            const guild: Guild = channel.guild;
+                            where = guild.name;
+                        }
+                    } catch { /* salon introuvable : on journalise son identifiant */ }
+                }
                 await sendLog(client, 'A service has been unlinked from a channel of ' + where + '.');
                 return {success: true, message: `Channel reseted`};
             } else {

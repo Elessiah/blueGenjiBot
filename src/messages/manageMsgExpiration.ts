@@ -51,6 +51,11 @@ function olderThanRetention() {
  */
 async function manageMsgExpiration(_client: Client): Promise<void> {
     const bdd: Bdd = await getBddInstance();
+    // Base fermée (restauration en cours) : `rm` n'y ferait rien sans le dire,
+    // et le ménage de la nuit croirait la purge jouée.
+    if (!bdd.isOpen()) {
+        throw new Error("Base fermée : purge des relais non jouée.");
+    }
 
     await bdd.rm('DPMsg', {}, olderThanRetention());
 

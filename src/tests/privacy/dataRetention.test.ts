@@ -217,6 +217,18 @@ test("les filtres de rang d'un salon pas encore relayé survivent au ménage", a
   assert.equal(await count("SELECT COUNT(*) AS n FROM ChannelPartnerRank WHERE id_channel = 'c-future'"), 1);
 });
 
+test("deux passes simultanées n'en font qu'une, puis une relance", async () => {
+  const client = fakeClient(["g-stay"]);
+  const first = runDataRetention(client);
+  const second = runDataRetention(client);
+  assert.equal(first, second);
+  await first;
+  // Terminée : un appel suivant lance une passe neuve.
+  const third = runDataRetention(client);
+  assert.notEqual(third, first);
+  await third;
+});
+
 test("un client pas encore prêt n'efface rien", async () => {
   assert.equal(await forgetDepartedGuilds(fakeClient([], "app-prod", false)), null);
   assert.equal(await count("SELECT COUNT(*) AS n FROM ChannelPartner WHERE id_guild = 'g-stay'"), 1);

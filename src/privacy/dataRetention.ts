@@ -141,11 +141,37 @@ export async function forgetDepartedGuilds(client: Client): Promise<string[] | n
  * les autres de passer ; la fonction ne lève jamais.
  * @param client Client Discord connecté.
  */
-export async function runDataRetention(client: Client): Promise<void> {
+export function runDataRetention(client: Client): Promise<void> {
+  // Une passe à la fois : démarrage, nuit et restauration peuvent se croiser.
+  // Un appel pendant une passe la rejoint, puis en relance une (la
+  // restauration a pu ramener des lignes que la passe en cours a déjà lues).
+  if (running) {
+    rerunRequested = true;
+    return running;
+  }
+  running = (async () => {
+    try {
+      do {
+        rerunRequested = false;
+        await runDataRetentionOnce(client);
+      } while (rerunRequested);
+    } finally {
+      running = null;
+    }
+  })();
+  return running;
+}
+
+let running: Promise<void> | null = null;
+let rerunRequested = false;
+
+/**
+ * Une passe des trois ménages (voir `runDataRetention`).
+ * @param client Client Discord connecté.
+ */
+async function runDataRetentionOnce(client: Client): Promise<void> {
   let relays = "échec";
   try {
-    // Base fermée : `Bdd.rm` n'y ferait rien sans le dire.
-    if (!(await getBddInstance()).isOpen()) { throw new Error("Base fermée : purge des relais non jouée."); }
     await manageMsgExpiration(client);
     relays = "jouée";
   } catch (error) {

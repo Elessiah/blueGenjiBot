@@ -1039,7 +1039,7 @@ class Bdd {
     try {
       await this.rm("ChannelPartnerRank", {}, {query: "id_channel = ?", values: [channelId]});
     } catch (err) {
-      return {success: false, message: `Failed to delete rank filters: ${(err as Error).message}`};
+      return {success: false, message: `Échec du retrait des filtres de rang : ${(err as Error).message}`};
     }
     return this.deleteChannelServices(channelId);
   }
@@ -1066,7 +1066,7 @@ class Bdd {
       }
     }
     return message.length === 0
-      ? {success: true, message: `${channels.length} channel(s) removed.`, found: channels.length}
+      ? {success: true, message: `${channels.length} salon(s) retiré(s).`, found: channels.length}
       : {success: false, message, found: channels.length};
   }
 
