@@ -1,5 +1,5 @@
 /**
- * Handler de `/config` : bascule un module (annonces, scrims, recrutement, notifications, stats) pour le serveur courant.
+ * Handler de `/config` : bascule un module (annonces, scrims, recrutement ; `notifications` et `stats` ne sont relus par aucune commande et ne sont plus proposes) pour le serveur courant.
  *
  * Reserve aux administrateurs Discord du serveur, pas au role admin du bot :
  * activer ou desactiver un module change ce que les membres peuvent faire

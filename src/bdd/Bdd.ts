@@ -1004,45 +1004,24 @@ class Bdd {
   }
 
   /**
-   * Retire un salon relayé : ses services et le salon partenaire lui-même,
-   * puis ses filtres de rang.
+   * Retire un salon relayé : ses filtres de rang, puis ses services et le
+   * salon partenaire lui-même (`deleteChannelServices`).
    *
-   * Unique retrait d'un salon, partagé par `/reset-channel` et `channelDelete`
-   * (`_resetChannel`) et par le retrait de tous les salons d'un serveur
-   * (`deleteGuildChannels`) : une table **par salon** ajoutée demain se range ici.
-   *
-   * Le salon d'abord, ses filtres ensuite : un salon encore relayé mais privé
-   * de ses filtres ne recevrait plus aucune annonce classée, alors que des
-   * filtres orphelins d'un salon retiré ne servent à rien — et
-   * `purgeOrphanRankFilters`, joué chaque nuit, les retire.
+   * Unique retrait d'un salon, partagé par `/relay`, `/reset-channel` et
+   * `channelDelete` (`_resetChannel`) et par le retrait de tous les salons d'un
+   * serveur (`deleteGuildChannels`) : une table **par salon** ajoutée demain se
+   * range ici. Les filtres d'abord, ordre d'origine : tant que la ligne
+   * `ChannelPartner` reste, un retrait interrompu se retrouve et se rejoue
+   * (le rattrapage d'un serveur quitté relit cette table). Les filtres d'un
+   * salon **non** relayé ne sont jamais purgés ailleurs : un administrateur
+   * peut les poser avant de relayer le salon.
    * @param channelId Identifiant du salon.
-   * @returns Le `status` de `deleteChannelServices` ; les filtres ne sont
-   *          retirés que si le salon l'a été.
+   * @returns Le `status` de `deleteChannelServices`.
    * @throws Si la suppression des filtres de rang échoue.
    */
   async deleteChannel(channelId: string): Promise<status> {
-    const ret: status = await this.deleteChannelServices(channelId);
-    if (ret.success) {
-      await this.rm("ChannelPartnerRank", {}, {query: "id_channel = ?", values: [channelId]});
-    }
-    return ret;
-  }
-
-  /**
-   * Retire les filtres de rang dont le salon n'est plus relayé : restes d'un
-   * retrait interrompu entre le salon et ses filtres (`deleteChannel`).
-   * @returns Nombre de lignes supprimées.
-   */
-  async purgeOrphanRankFilters(): Promise<number> {
-    const database = this.Database;
-    if (!database) { return 0; }
-    const result = await database.run(
-      // `NOT EXISTS` et non `NOT IN` : une seule ligne `ChannelPartner` à
-      // `id_channel` NULL rendrait `NOT IN` NULL pour toutes, et la purge
-      // n'effacerait plus rien, sans erreur.
-      "DELETE FROM ChannelPartnerRank WHERE NOT EXISTS (SELECT 1 FROM ChannelPartner WHERE ChannelPartner.id_channel = ChannelPartnerRank.id_channel)",
-    );
-    return result.changes ?? 0;
+    await this.rm("ChannelPartnerRank", {}, {query: "id_channel = ?", values: [channelId]});
+    return this.deleteChannelServices(channelId);
   }
 
   /**

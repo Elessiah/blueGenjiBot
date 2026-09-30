@@ -99,7 +99,10 @@ export async function eraseGuild(guildId: string): Promise<void> {
 export async function forgetDepartedGuilds(client: Client): Promise<string[]> {
   const joined = client.guilds.cache;
   if (joined.size === 0) { return []; }
-  const applicationId = client.user?.id;
+  // L'application (celle de `CLIENT_ID`), pas l'utilisateur du bot : sur une
+  // application ancienne les deux identifiants diffèrent, et c'est celui de
+  // l'application que l'exploitant reconnaît dans `BotOwner`.
+  const applicationId = client.application?.id ?? client.user?.id;
   if (!applicationId) { return []; }
   const bdd = await getBddInstance();
   const owned = await bdd.claimOwnerApplication(applicationId);
@@ -151,17 +154,10 @@ export async function runDataRetention(client: Client): Promise<void> {
   } catch (error) {
     await reportError(client, "forgetDepartedGuilds", error);
   }
-  // Après le rattrapage, qui peut en laisser : filtres de rang orphelins.
-  let orphans: number | null = null;
-  try {
-    orphans = await (await getBddInstance()).purgeOrphanRankFilters();
-  } catch (error) {
-    await reportError(client, "purgeOrphanRankFilters", error);
-  }
   // Une ligne par passage dans les journaux du serveur (pm2) : une nuit à
   // zéro se distingue ainsi d'un ménage qui n'a pas tourné. Aucun identifiant.
   console.log(
     `[data-retention] auteurs anonymisés : ${anonymized ?? "échec"}, ` +
-      `serveurs oubliés : ${forgotten ?? "échec"}, filtres orphelins : ${orphans ?? "échec"}`,
+      `serveurs oubliés : ${forgotten ?? "échec"}`,
   );
 }

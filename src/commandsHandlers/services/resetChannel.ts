@@ -16,6 +16,13 @@ async function _resetChannel(client: Client, channel_id: string): Promise<status
     let err_msg: string = "";
     const success: boolean = false;
     let nTry: number = 0;
+    // `channelDelete` arrive pour tout salon supprimé de tout serveur : un salon
+    // jamais relayé n'a rien à retirer, ni à annoncer au journal.
+    const relayed = await bdd.get("ChannelPartner", ["id_channel"], {}, {query: "id_channel = ?", values: [channel_id]}) as {id_channel: string}[];
+    if (relayed.length === 0) {
+        await bdd.rm("ChannelPartnerRank", {}, {query: "id_channel = ?", values: [channel_id]});
+        return {success: true, message: "Channel not relayed."};
+    }
     while (nTry < 10 && !success) {
         try {
             const ret: status = await bdd.deleteChannel(channel_id);

@@ -469,9 +469,7 @@ const commands = {
                     choices: [
                         { name: "Annonces", value: "annonces" },
                         { name: "Scrims", value: "scrims" },
-                        { name: "Recrutement", value: "recrutement" },
-                        { name: "Notifications", value: "notifications" },
-                        { name: "Stats", value: "stats" }
+                        { name: "Recrutement", value: "recrutement" }
                     ]
                 }
             ]

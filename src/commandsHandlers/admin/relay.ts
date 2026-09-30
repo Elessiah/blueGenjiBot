@@ -41,7 +41,12 @@ export async function relay(client: Client, interaction: ChatInputCommandInterac
     if (existing.length > 0) {
       // Le retrait commun d'un salon, filtres de rang compris : sans eux, un
       // salon réajouté retrouverait des filtres que l'administrateur croit partis.
-      const removal = await bdd.deleteChannel(channel.id);
+      let removal;
+      try {
+        removal = await bdd.deleteChannel(channel.id);
+      } catch (error) {
+        removal = { success: false, message: (error as Error).message };
+      }
       if (!removal.success) {
         await safeReply(interaction, "Echec du retrait du relais.", true, false);
         return;
