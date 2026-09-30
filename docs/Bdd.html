@@ -307,7 +307,7 @@ date (la colonne l'admet) ne peut prouver son âge : elle est anonymisée.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line1049">line 1049</a>
+        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line1028">line 1028</a>
     </li></ul></dd>
     
 
@@ -588,7 +588,7 @@ seule celle-là est reconnue. Pour confier la base à une autre application
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line1019">line 1019</a>
+        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line998">line 998</a>
     </li></ul></dd>
     
 
@@ -825,17 +825,17 @@ quelques instants après le retour. Toute opération qui remplace le fichier
 
 
 <div class="description">
-    Retire un salon relayé : ses services et le salon partenaire lui-même,
-puis ses filtres de rang.
+    Retire un salon relayé : ses filtres de rang, puis ses services et le
+salon partenaire lui-même (`deleteChannelServices`).
 
-Unique retrait d'un salon, partagé par `/reset-channel` et `channelDelete`
-(`_resetChannel`) et par le retrait de tous les salons d'un serveur
-(`deleteGuildChannels`) : une table **par salon** ajoutée demain se range ici.
-
-Le salon d'abord, ses filtres ensuite : un salon encore relayé mais privé
-de ses filtres ne recevrait plus aucune annonce classée, alors que des
-filtres orphelins d'un salon retiré ne servent à rien — et
-`purgeOrphanRankFilters`, joué chaque nuit, les retire.
+Unique retrait d'un salon, partagé par `/relay`, `/reset-channel` et
+`channelDelete` (`_resetChannel`) et par le retrait de tous les salons d'un
+serveur (`deleteGuildChannels`) : une table **par salon** ajoutée demain se
+range ici. Les filtres d'abord, ordre d'origine : tant que la ligne
+`ChannelPartner` reste, un retrait interrompu se retrouve et se rejoue
+(le rattrapage d'un serveur quitté relit cette table). Les filtres d'un
+salon **non** relayé ne sont jamais purgés ailleurs : un administrateur
+peut les poser avant de relayer le salon.
 </div>
 
 
@@ -923,7 +923,7 @@ filtres orphelins d'un salon retiré ne servent à rien — et
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line934">line 934</a>
+        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line933">line 933</a>
     </li></ul></dd>
     
 
@@ -964,8 +964,7 @@ filtres orphelins d'un salon retiré ne servent à rien — et
 
         
 <div class="param-desc">
-    Le `status` de `deleteChannelServices` ; les filtres ne sont
-         retirés que si le salon l'a été.
+    Le `status` de `deleteChannelServices`.
 </div>
 
 
@@ -1224,7 +1223,7 @@ identifiant est nommé dans le message.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line969">line 969</a>
+        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line948">line 948</a>
     </li></ul></dd>
     
 
@@ -2434,7 +2433,7 @@ relayés que `deleteGuildChannels` retire.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line997">line 997</a>
+        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line976">line 976</a>
     </li></ul></dd>
     
 
@@ -2624,105 +2623,6 @@ relayés que `deleteGuildChannels` retire.
         
 <div class="param-desc">
     `true` dès qu'au moins un rang demandé est lié au salon; sinon `false`.
-</div>
-
-
-
-    
-
-
-
-
-
-        
-            
-
-    
-
-    
-    <h4 class="name" id="purgeOrphanRankFilters"><span class="type-signature">(async) </span>purgeOrphanRankFilters<span class="signature">()</span><span class="type-signature"></span></h4>
-    
-
-    
-
-
-
-<div class="description">
-    Retire les filtres de rang dont le salon n'est plus relayé : restes d'un
-retrait interrompu entre le salon et ses filtres (`deleteChannel`).
-</div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-<dl class="details">
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-    <dt class="tag-source">Source:</dt>
-    <dd class="tag-source"><ul class="dummy"><li>
-        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line946">line 946</a>
-    </li></ul></dd>
-    
-
-    
-
-    
-
-    
-</dl>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-<h5>Returns:</h5>
-
-        
-<div class="param-desc">
-    Nombre de lignes supprimées.
 </div>
 
 
@@ -3067,7 +2967,7 @@ retrait interrompu entre le salon et ses filtres (`deleteChannel`).
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line1065">line 1065</a>
+        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line1044">line 1044</a>
     </li></ul></dd>
     
 
@@ -4630,7 +4530,7 @@ Crée le salon si nécessaire puis enregistre le lien service.
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Wed Sep 30 2026 12:31:21 GMT+0200 (heure d’été d’Europe centrale)
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Wed Sep 30 2026 12:42:12 GMT+0200 (heure d’été d’Europe centrale)
 </footer>
 
 <script> prettyPrint(); </script>
