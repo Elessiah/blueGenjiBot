@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>JSDoc: Source: safe/safeReact.js</title>
+    <title>JSDoc: Source: privacy/retentionPeriods.js</title>
 
     <script src="scripts/prettify/prettify.js"> </script>
     <script src="scripts/prettify/lang-css.js"> </script>
@@ -17,7 +17,7 @@
 
 <div id="main">
 
-    <h1 class="page-title">Source: safe/safeReact.js</h1>
+    <h1 class="page-title">Source: privacy/retentionPeriods.js</h1>
 
     
 
@@ -26,37 +26,19 @@
     
     <section>
         <article>
-            <pre class="prettyprint source linenums"><code>import { classifyError, describeError } from "./errorGuards.js";
-import { sendLog } from "./sendLog.js";
-/**
- * Ajoute une réaction à un message sans jamais lever.
- *
- * Un utilisateur qui supprime son message juste après l'avoir posté fait
- * échouer la réaction avec un `DiscordAPIError[10008] Unknown Message`. Le cas
- * est normal côté produit et ne doit ni interrompre la diffusion en cours ni
- * réveiller le canal de supervision.
- *
- * @param client Client Discord utilisé pour les appels API.
- * @param message Message à réagir (éventuellement partiel, comme sur `messageUpdate`).
- * @param emoji Émoji de la réaction.
- * @returns La réaction créée, ou `null` si le message n'est plus joignable.
+            <pre class="prettyprint source linenums"><code>/**
+ * Durées de conservation du bot, sans dépendance : lues par le ménage
+ * (`privacy/dataRetention.ts`) comme par les commandes qui annoncent leur
+ * fenêtre (`/stats`), sans que celles-ci chargent tout le ménage.
  */
-async function safeReact(client, message, emoji) {
-    try {
-        return await message.react(emoji);
-    }
-    catch (error) {
-        if (classifyError(error) === "fatal") {
-            await sendLog(client, `safeReact (${emoji}) : ${describeError(error)}`);
-        }
-        else {
-            console.error(`safeReact (${emoji}) : ${describeError(error)}`);
-        }
-        return null;
-    }
-}
-export { safeReact };
-//# sourceMappingURL=safeReact.js.map</code></pre>
+/**
+ * Âge au-delà duquel l'auteur d'un scrim ou d'une recherche est effacé.
+ * C'est la fenêtre de `/stats`, seul lecteur de l'auteur. Le ménage passant
+ * chaque nuit, l'effacement a lieu dans la nuit qui suit cette échéance
+ * (au plus un jour de plus) — les textes le disent ainsi.
+ */
+export const ACTIVITY_AUTHOR_RETENTION_DAYS = 30;
+//# sourceMappingURL=retentionPeriods.js.map</code></pre>
         </article>
     </section>
 
