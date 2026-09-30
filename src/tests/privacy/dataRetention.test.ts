@@ -140,7 +140,7 @@ test("un serveur quitté pendant l'arrêt est oublié au démarrage, les autres 
   assert.equal(await count("SELECT COUNT(*) AS n FROM ServerModule WHERE id_guild = 'g-orphan'"), 0);
   assert.equal(await count("SELECT COUNT(*) AS n FROM ChannelPartner WHERE id_guild = 'g-stay'"), 1);
   assert.equal(await count("SELECT COUNT(*) AS n FROM RefereeRole WHERE id_guild = 'g-stay'"), 1);
-  assert.ok(logs.some((line) => line.includes("2 serveur(s)")));
+  assert.ok(logs.some((line) => line.includes("2 serveur(s) que le bot ne rejoint plus")));
 });
 
 test("un identifiant de serveur NULL n'est jamais compté comme oublié", async () => {

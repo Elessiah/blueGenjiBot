@@ -20,14 +20,19 @@ async function _resetChannel(client: Client, channel_id: string): Promise<status
         try {
             const ret: status = await bdd.deleteChannel(channel_id);
             if (ret.success) {
-                const channel: TextChannel | null = await client.channels.fetch(channel_id) as TextChannel | null;
-                if (!channel) {
-                    await sendLog(client, "Failed to retrieve the targeted channel to reset");
-                    return {success: false, message: "Failed, retrieving targeted channel to reset!"};
-                }
-                const guild: Guild = channel.guild;
-                const content: string = 'A service has been unlinked from a channel of ' + guild.name + '.';
-                await sendLog(client, content);
+                // Le nom du serveur ne sert qu'au journal. Sur `channelDelete`
+                // le salon n'existe plus chez Discord : la relecture échoue, et
+                // la suppression, faite, reste un succès — la retenter dix
+                // fois ne la rendrait pas plus faite.
+                let where = `channel ${channel_id}`;
+                try {
+                    const channel = await client.channels.fetch(channel_id) as TextChannel | null;
+                    if (channel) {
+                        const guild: Guild = channel.guild;
+                        where = guild.name;
+                    }
+                } catch { /* salon supprimé : on journalise son identifiant */ }
+                await sendLog(client, 'A service has been unlinked from a channel of ' + where + '.');
                 return {success: true, message: `Channel reseted`};
             } else {
                 return {success: false, message: ret.message};

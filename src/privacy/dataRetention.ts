@@ -126,7 +126,9 @@ export async function forgetDepartedGuilds(client: Client): Promise<string[]> {
     }
   }
   if (forgotten.length > 0) {
-    await sendLog(client, `${forgotten.length} serveur(s) quitté(s) pendant un arrêt du bot : configuration effacée.`);
+    // Pas « pendant un arrêt » : après une restauration, ce sont aussi des
+    // serveurs quittés depuis longtemps, que la sauvegarde avait ramenés.
+    await sendLog(client, `${forgotten.length} serveur(s) que le bot ne rejoint plus : configuration effacée.`);
   }
   return forgotten;
 }

@@ -124,7 +124,10 @@ function assertSqlIdentifier(name: string): string {
   return name;
 }
 
-for (const [table, column] of GUILD_CONFIG_TABLES) {
+/** Salons relayés : lus par le rattrapage, retirés par `deleteGuildChannels`. */
+const GUILD_CHANNEL_TABLE = ["ChannelPartner", "id_guild"] as const;
+
+for (const [table, column] of [...GUILD_CONFIG_TABLES, GUILD_CHANNEL_TABLE]) {
   assertSqlIdentifier(table);
   assertSqlIdentifier(column);
 }
@@ -1082,7 +1085,7 @@ class Bdd {
    * @returns Identifiants distincts, dans un ordre quelconque.
    */
   async listConfiguredGuildIds(): Promise<string[]> {
-    const sources = [["ChannelPartner", "id_guild"], ...GUILD_CONFIG_TABLES]
+    const sources = [GUILD_CHANNEL_TABLE, ...GUILD_CONFIG_TABLES]
       .map(([table, column]) => `SELECT ${column} AS id FROM ${table}`)
       .join(" UNION ");
     // Filtré après l'union : une clé primaire `TEXT` admet `NULL` en SQLite,
@@ -1160,6 +1163,6 @@ class Bdd {
   }
 }
 
-export { Bdd, getBddInstance, closeBddInstance, resetBddInstance, GUILD_CONFIG_TABLES };
+export { Bdd, getBddInstance, closeBddInstance, resetBddInstance };
 
 

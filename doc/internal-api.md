@@ -158,7 +158,10 @@ Les codes en usage : `INTERNAL_FEED_ERROR`, `INTERNAL_STATUS_ERROR`,
 `INTERNAL_STATS_ERROR`, `INTERNAL_KPIS_ERROR`, `INTERNAL_SERVERS_ERROR`,
 `INTERNAL_ACTIVITY_ERROR`, `INTERNAL_MODULES_ERROR`,
 `INTERNAL_MODULE_TOGGLE_ERROR`, plus les codes propres aux routes d'écriture
-déjà décrits ci-dessus.
+déjà décrits ci-dessus. `PUT /internal/servers/:id/modules/:moduleKey` répond
+en outre `404 GUILD_NOT_JOINED` pour un serveur que le bot n'a pas rejoint : le
+réglage serait effacé au prochain rattrapage des serveurs quittés, on le refuse
+plutôt que de répondre 200 pour une écriture vouée à disparaître.
 
 Cas particulier de `GET /internal/feed/stream` : les en-têtes SSE sont envoyés
 d'emblée (`flushHeaders()`), si bien qu'une erreur survenant ensuite ne peut
