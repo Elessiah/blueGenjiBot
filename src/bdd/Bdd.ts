@@ -1014,6 +1014,14 @@ class Bdd {
   }
 
   /**
+   * Indique si la connexion est ouverte (elle ne l'est plus pendant une restauration).
+   * @returns `true` si une connexion est ouverte.
+   */
+  isOpen(): boolean {
+    return this.Database !== null && this.Database !== undefined;
+  }
+
+  /**
    * Retire un salon relayé : ses filtres de rang, puis ses services et le
    * salon partenaire lui-même (`deleteChannelServices`).
    *
@@ -1051,13 +1059,10 @@ class Bdd {
     const channels = await this.get("ChannelPartner", ["id_channel"], {}, {query: "id_guild = ?", values: [guildId]}) as {id_channel: string}[];
     let message = "";
     for (const {id_channel} of channels) {
-      try {
-        const ret: status = await this.deleteChannel(id_channel);
-        if (!ret.success) {
-          message += `${id_channel}: ${ret.message}\n`;
-        }
-      } catch (err) {
-        message += `${id_channel}: ${(err as Error).message}\n`;
+      // `deleteChannel` ne lève pas : son échec se lit sur `success`.
+      const ret: status = await this.deleteChannel(id_channel);
+      if (!ret.success) {
+        message += `${id_channel}: ${ret.message}\n`;
       }
     }
     return message.length === 0

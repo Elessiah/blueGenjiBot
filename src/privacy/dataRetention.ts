@@ -142,8 +142,12 @@ export async function forgetDepartedGuilds(client: Client): Promise<string[] | n
  * @param client Client Discord connecté.
  */
 export async function runDataRetention(client: Client): Promise<void> {
+  let relays = "échec";
   try {
+    // Base fermée : `Bdd.rm` n'y ferait rien sans le dire.
+    if (!(await getBddInstance()).isOpen()) { throw new Error("Base fermée : purge des relais non jouée."); }
     await manageMsgExpiration(client);
+    relays = "jouée";
   } catch (error) {
     await reportError(client, "manageMsgExpiration", error);
   }
@@ -158,7 +162,7 @@ export async function runDataRetention(client: Client): Promise<void> {
   // Une ligne par passage dans les journaux du serveur (pm2) : une nuit à
   // zéro se distingue ainsi d'un ménage qui n'a pas tourné. Aucun identifiant.
   console.log(
-    `[data-retention] auteurs anonymisés : ${anonymized ?? "échec"}, ` +
+    `[data-retention] purge des relais : ${relays}, auteurs anonymisés : ${anonymized ?? "échec"}, ` +
       `serveurs oubliés : ${forgotten}`,
   );
 }
