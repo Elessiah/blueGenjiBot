@@ -1,0 +1,29 @@
+BlueGenji Bot — bot Discord de l'association Bluegenji Esport
+Copyright (C) 2026 Keryan Houssin
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, version 3 of the License only
+(SPDX-License-Identifier: AGPL-3.0-only).
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program (see the LICENSE file).  If not, see
+<https://www.gnu.org/licenses/>.
+
+Source code: https://github.com/Elessiah/blueGenjiBot
+
+Scope
+-----
+The AGPL-3.0 covers the source code of this repository.  Third-party
+components keep their own licenses: npm dependencies (see package.json)
+and the JSDoc template assets generated under docs/.  The names, logos and
+trademarks of Discord, of the games Overwatch (Blizzard Entertainment) and
+Marvel Rivals (NetEase, Marvel) belong to their owners.  The association's
+name, logo and visual identity, and the legal texts under LegalTerms/
+(copies of the pages published on https://bluegenji-esport.fr), are not
+licensed under the AGPL.

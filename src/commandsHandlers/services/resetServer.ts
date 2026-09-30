@@ -22,7 +22,7 @@ async function _resetServer(client: Client,
         let message: string = "";
         let success: boolean = true;
         for (const channel_id of channels_id) {
-            await bdd.rm("ChannelPartnerRank", {}, {query: "id_channel = ?", values: [channel_id]});
+            await bdd.rm("ChannelPartnerRank", {}, {query: "id_channel = ?", values: [channel_id.id_channel]});
             const ret: status = await bdd.deleteChannelServices(channel_id.id_channel);
             if (!ret.success) {
                 success = false;

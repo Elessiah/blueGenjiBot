@@ -262,6 +262,9 @@ client.on("guildCreate", async (guild) => {
 
 client.on("guildDelete", async (guild) => {
   try {
+    // La configuration d'abord : les filtres de rang se retrouvent par les
+    // salons partenaires, que `_resetServer` supprime.
+    await (await getBddInstance()).forgetGuild(guild.id);
     await _resetServer(client, guild.id);
     for (const currentGuild of client.guilds.cache.values()) {
       await updateCommands(client, currentGuild.id);

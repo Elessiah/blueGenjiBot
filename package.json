@@ -3,7 +3,7 @@
   "version": "2.0.0",
   "type": "module",
   "main": "dist/main.js",
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
   "dependencies": {
     "discord.js": "^14.16.3",
     "dotenv": "^16.4.5",
