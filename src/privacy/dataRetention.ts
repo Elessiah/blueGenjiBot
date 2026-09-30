@@ -136,6 +136,10 @@ export async function eraseLeftGuild(client: Client, guildId: string): Promise<b
 export async function forgetDepartedGuilds(client: Client): Promise<string[] | null> {
   const joined = client.guilds.cache;
   if (!client.isReady()) { return null; }
+  // Un processus par shard ne voit que ses serveurs : il prendrait ceux des
+  // autres pour quittés. Le bot ne se partitionne pas ; s'il le fait un jour,
+  // le rattrapage se tait plutôt que d'effacer la moitié du réseau.
+  if ((client.shard?.count ?? 1) > 1) { return null; }
   const bdd = await getBddInstance();
   const owned = await ownsDatabase(client);
   if (owned === null) { return null; }
