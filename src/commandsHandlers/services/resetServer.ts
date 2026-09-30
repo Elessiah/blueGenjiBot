@@ -19,17 +19,8 @@ async function _resetServer(client: Client,
         const channels_id: {id_channel: string}[] = await bdd.get("channelPartner", ["id_channel"], {}, {query: "id_guild = ?", values: [guild_id]}) as {id_channel: string}[];
         if (channels_id.length === 0)
             return ( {success: false, message: "Server already reseted"} );
-        let message: string = "";
-        let success: boolean = true;
-        for (const channel_id of channels_id) {
-            await bdd.rm("ChannelPartnerRank", {}, {query: "id_channel = ?", values: [channel_id.id_channel]});
-            const ret: status = await bdd.deleteChannelServices(channel_id.id_channel);
-            if (!ret.success) {
-                success = false;
-                message += ret.message + "\n";
-            }
-        }
-        if (success) {
+        const removal: status = await bdd.deleteGuildChannels(guild_id);
+        if (removal.success) {
             try {
                 const guild: Guild = await client.guilds.fetch(guild_id);
                 await sendLog(client, `Server "${guild.name}" has deleted all services.`);
@@ -39,7 +30,7 @@ async function _resetServer(client: Client,
                 return {success: false, message: (error as TypeError).message};
             }
         } else {
-            return {success: false, message: message};
+            return {success: false, message: removal.message};
         }
     } catch (err) {
         console.error(err);

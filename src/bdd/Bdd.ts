@@ -949,6 +949,32 @@ class Bdd {
   }
 
   /**
+   * Retire tous les salons relayés d'un serveur : filtres de rang, services,
+   * puis le salon partenaire lui-même.
+   *
+   * Unique boucle de retrait, partagée par `/reset-all` (`_resetServer`) et
+   * l'oubli d'un serveur quitté (`eraseGuild`) : une table par salon ajoutée
+   * demain n'a qu'un endroit où se ranger. Un salon en échec n'arrête pas les
+   * suivants.
+   * @param guildId Identifiant du serveur.
+   * @returns `success` si tous les salons sont retirés ; sinon les messages d'échec, un par ligne.
+   */
+  async deleteGuildChannels(guildId: string): Promise<status> {
+    const channels = await this.get("ChannelPartner", ["id_channel"], {}, {query: "id_guild = ?", values: [guildId]}) as {id_channel: string}[];
+    let message = "";
+    for (const {id_channel} of channels) {
+      await this.rm("ChannelPartnerRank", {}, {query: "id_channel = ?", values: [id_channel]});
+      const ret: status = await this.deleteChannelServices(id_channel);
+      if (!ret.success) {
+        message += ret.message + "\n";
+      }
+    }
+    return message.length === 0
+      ? {success: true, message: `${channels.length} channel(s) removed.`}
+      : {success: false, message};
+  }
+
+  /**
    * Identifiants de tous les serveurs dont la base garde une configuration.
    *
    * Sert à rattraper, au démarrage, les serveurs quittés pendant que le bot

@@ -13,7 +13,9 @@ import { getBddInstance, closeBddInstance, resetBddInstance } from "../../bdd/Bd
 import {
   ACTIVITY_AUTHOR_RETENTION_DAYS,
   anonymizeOldActivity,
+  eraseGuild,
   forgetDepartedGuilds,
+  runDataRetention,
 } from "../../privacy/dataRetention.js";
 import { formatPlayerStats } from "../../commandsHandlers/statsPlayer.js";
 
@@ -108,6 +110,47 @@ test("un identifiant de serveur NULL n'est jamais compté comme oublié", async 
   await bdd.raw("INSERT INTO RefereeRole (id_guild, id_role, set_by) VALUES (NULL, 'role-x', 'admin-1')");
   assert.equal((await bdd.listConfiguredGuildIds()).includes("null"), false);
   assert.deepEqual(await forgetDepartedGuilds(fakeClient(["g-stay"])), []);
+});
+
+test("eraseGuild retire les salons relayés même si l'oubli de la configuration échoue", async () => {
+  await seedGuild("g-partial", "c-partial");
+  const bdd = await getBddInstance();
+  const original = bdd.forgetGuild;
+  bdd.forgetGuild = async () => { throw new Error("SQLITE_BUSY"); };
+  try {
+    await assert.rejects(eraseGuild("g-partial"), /SQLITE_BUSY/);
+  } finally {
+    bdd.forgetGuild = original;
+  }
+  assert.equal(await count("SELECT COUNT(*) AS n FROM ChannelPartner WHERE id_guild = 'g-partial'"), 0);
+  // La configuration restée en place est reprise par le rattrapage suivant.
+  assert.equal(await count("SELECT COUNT(*) AS n FROM RefereeRole WHERE id_guild = 'g-partial'"), 1);
+  assert.deepEqual(await forgetDepartedGuilds(fakeClient(["g-stay"])), ["g-partial"]);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM RefereeRole WHERE id_guild = 'g-partial'"), 0);
+});
+
+test("le rattrapage refuse d'oublier d'un coup la majorité des serveurs configurés", async () => {
+  for (const id of ["g-a", "g-b", "g-c", "g-d"]) {
+    await seedGuild(id, `c-${id}`);
+  }
+  logs.length = 0;
+  // Cache d'un autre bot : seul `g-stay` y figure, quatre serveurs sur cinq manqueraient.
+  assert.deepEqual(await forgetDepartedGuilds(fakeClient(["g-stay"])), []);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM ChannelPartner WHERE id_guild = 'g-a'"), 1);
+  assert.ok(logs.some((line) => line.includes("suspendu")));
+  // Le vrai cache : rien ne manque, rien n'est effacé.
+  assert.deepEqual(await forgetDepartedGuilds(fakeClient(["g-stay", "g-a", "g-b", "g-c", "g-d"])), []);
+});
+
+test("runDataRetention ne lève pas quand un ménage échoue", async () => {
+  const bdd = await getBddInstance();
+  const original = bdd.anonymizeActivityAuthors;
+  bdd.anonymizeActivityAuthors = async () => { throw new Error("boom"); };
+  try {
+    await runDataRetention(fakeClient(["g-stay", "g-a", "g-b", "g-c", "g-d"]));
+  } finally {
+    bdd.anonymizeActivityAuthors = original;
+  }
 });
 
 test("un cache de serveurs vide n'efface rien", async () => {

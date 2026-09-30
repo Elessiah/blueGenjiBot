@@ -192,15 +192,17 @@ client.on("clientReady", async () => {
     // lecteur. La purge n'echoue jamais bruyamment : le bot doit demarrer meme
     // si elle ne passe pas.
     await purgeFeedIdentifiers(client);
-    // Au démarrage puis chaque nuit : c'est au démarrage qu'on rattrape les
-    // serveurs quittés pendant l'arrêt, qu'aucun `guildDelete` n'annoncera.
-    // Placé en tête, et la fonction ne levant jamais : un échec des étapes
-    // suivantes ne peut pas le priver de passer.
-    await runDataRetention(client);
 
     if (!internalApiServer) {
       internalApiServer = startInternalApi(client);
     }
+
+    // Au démarrage puis chaque nuit : c'est au démarrage qu'on rattrape les
+    // serveurs quittés pendant l'arrêt, qu'aucun `guildDelete` n'annoncera.
+    // Après l'API interne, pour ne pas retarder la connexion par le site ;
+    // avant les étapes suivantes, et ne levant jamais : leur échec ne peut
+    // pas le priver de passer.
+    await runDataRetention(client);
 
     for (const guild of client.guilds.cache.values()) {
       console.log("Server ready : ", guild.name);

@@ -20,6 +20,7 @@
 import type { Client } from "discord.js";
 
 import { getBddInstance } from "@/bdd/Bdd.js";
+import { purgeFeedIdentifiers } from "@/feed/feedBus.js";
 import { manageMsgExpiration } from "@/messages/manageMsgExpiration.js";
 import { reportError } from "@/safe/processGuards.js";
 import { sendLog } from "@/safe/sendLog.js";
@@ -55,24 +56,40 @@ export async function anonymizeOldActivity(client: Client): Promise<number | nul
  * démarrage : deux copies divergeraient à la prochaine table ajoutée. Le
  * serveur n'est pas relu chez Discord — il n'y est plus joignable, et
  * `_resetServer`, qui le relit pour journaliser son nom, échouait justement là.
+ * Un échec de la configuration ne prive pas le serveur du retrait de ses
+ * salons relayés — qui cesseraient sinon d'être visés par des relais
+ * voués à l'échec : les deux sont tentés, puis la première erreur remonte.
+ * Ce qui reste est repris par le rattrapage suivant.
  * @param guildId Identifiant du serveur quitté.
- * @throws La première suppression qui échoue ; les précédentes restent faites,
- *         et le rattrapage suivant reprend là où celle-ci s'est arrêtée.
+ * @throws La première erreur rencontrée, une fois les deux étapes tentées.
  */
 export async function eraseGuild(guildId: string): Promise<void> {
   const bdd = await getBddInstance();
+  let failure: unknown = null;
   // La configuration d'abord : les filtres de rang se retrouvent par les
   // salons partenaires, retirés ensuite.
-  await bdd.forgetGuild(guildId);
-  const channels = await bdd.get("ChannelPartner", ["id_channel"], {}, {
-    query: "id_guild = ?",
-    values: [guildId],
-  }) as { id_channel: string }[];
-  for (const { id_channel } of channels) {
-    const ret = await bdd.deleteChannelServices(id_channel);
-    if (!ret.success) { throw new Error(ret.message); }
+  try {
+    await bdd.forgetGuild(guildId);
+  } catch (error) {
+    failure = error;
   }
+  try {
+    const removal = await bdd.deleteGuildChannels(guildId);
+    if (!removal.success) { throw new Error(removal.message); }
+  } catch (error) {
+    failure ??= error;
+  }
+  if (failure !== null) { throw failure; }
 }
+
+/**
+ * Au-delà de ce nombre de serveurs à oublier d'un coup, et s'ils forment la
+ * majorité des serveurs configurés, le rattrapage refuse d'agir. Un effacement
+ * irréversible ne se fie pas à un cache qui décrit peut-être un autre bot : un
+ * jeton de développement lancé sur une copie de la base de production effacerait
+ * sinon la configuration de tout le réseau.
+ */
+export const MAX_SILENT_GUILD_FORGETS = 3;
 
 /**
  * Oublie les serveurs configurés en base que le bot n'a plus rejoints.
@@ -88,7 +105,16 @@ export async function forgetDepartedGuilds(client: Client): Promise<string[]> {
   const joined = client.guilds.cache;
   if (joined.size === 0) { return []; }
   const bdd = await getBddInstance();
-  const departed = (await bdd.listConfiguredGuildIds()).filter((id) => !joined.has(id));
+  const configured = await bdd.listConfiguredGuildIds();
+  const departed = configured.filter((id) => !joined.has(id));
+  if (departed.length > MAX_SILENT_GUILD_FORGETS && departed.length * 2 > configured.length) {
+    await sendLog(
+      client,
+      `Rattrapage des serveurs quittés suspendu : ${departed.length} serveur(s) sur ${configured.length} ` +
+        "absents du cache. Vérifier le jeton du bot et la base, puis oublier ces serveurs à la main.",
+    );
+    return [];
+  }
   const forgotten: string[] = [];
   for (const guildId of departed) {
     try {
@@ -105,11 +131,14 @@ export async function forgetDepartedGuilds(client: Client): Promise<string[]> {
 }
 
 /**
- * Les trois ménages, dans l'ordre. Chacun signale son propre échec sans priver
+ * Les quatre ménages, dans l'ordre (le flux d'activité en tête : une base
+ * restaurée peut y ramener des identifiants Discord que la page publique
+ * `/bot` rejouerait). Chacun signale son propre échec sans priver
  * les autres de passer ; la fonction ne lève jamais.
  * @param client Client Discord connecté.
  */
 export async function runDataRetention(client: Client): Promise<void> {
+  await purgeFeedIdentifiers(client);
   try {
     await manageMsgExpiration(client);
   } catch (error) {
