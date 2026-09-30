@@ -12,7 +12,7 @@ npm run lint
 
 Documentation :
 
-- [`doc/`](doc) : pages Markdown, publiées telles quelles sur [/bot/docs](https://bluegenji-esport.fr/bot/docs)
+- [`doc/`](doc), [`help.md`](help.md), [`helpfr.md`](helpfr.md) : Markdown relu à chaud par le site et publié sur [/bot/docs](https://bluegenji-esport.fr/bot/docs) — pour les pages que liste son registre `BOT_DOC_SECTIONS` ; une correction y est en ligne dans la minute
 - `docs/` : référence JSDoc générée (`npm run docs`)
 - [`LegalTerms/`](LegalTerms) : conditions d'utilisation et politique de confidentialité du bot (Markdown et PDF, FR / EN) — copies des pages [/terms-of-service-bot](https://bluegenji-esport.fr/terms-of-service-bot) et [/privacy-policy-bot](https://bluegenji-esport.fr/privacy-policy-bot), qui font foi ; régénérées par `scripts/generate-legal-terms.py`
 - [`CLAUDE.md`](CLAUDE.md) : architecture et conventions

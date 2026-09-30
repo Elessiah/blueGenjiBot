@@ -5,13 +5,16 @@ La source unique des conditions et de la politique du bot est
 /terms-of-service-bot et /privacy-policy-bot. Ce script n'en est qu'une mise en
 page : on ne corrige jamais un fichier de LegalTerms/ à la main.
 
-1. Dans AppBlueGenji, exporter le contenu en JSON :
-     cat > __dump.ts <<'TS'
-     import { TERMS_OF_SERVICE, PRIVACY_POLICY, HEBERGEUR_HREF } from "@/lib/shared/bot-legal-content";
-     import { writeFileSync } from "node:fs";
-     writeFileSync(process.argv[2], JSON.stringify({ TERMS_OF_SERVICE, PRIVACY_POLICY, HEBERGEUR_HREF }));
-     TS
-     npx tsx __dump.ts /chemin/legal.json && rm __dump.ts
+1. Dans AppBlueGenji, exporter le contenu en JSON (bloc à coller tel quel,
+   la fin du heredoc devant rester en début de ligne) :
+
+cat > __dump.ts <<'TS'
+import { TERMS_OF_SERVICE, PRIVACY_POLICY, HEBERGEUR_HREF } from "@/lib/shared/bot-legal-content";
+import { writeFileSync } from "node:fs";
+writeFileSync(process.argv[2], JSON.stringify({ TERMS_OF_SERVICE, PRIVACY_POLICY, HEBERGEUR_HREF }));
+TS
+npx tsx __dump.ts /chemin/legal.json && rm __dump.ts
+
 2. Ici :  python scripts/generate-legal-terms.py /chemin/legal.json
    (dépend de `reportlab` ; polices Arial par défaut, `LEGAL_FONT_DIR` pour
    désigner un dossier contenant arial.ttf, arialbd.ttf et ariali.ttf).
