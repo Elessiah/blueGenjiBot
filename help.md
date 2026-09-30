@@ -57,7 +57,7 @@ Bans are **network-wide**: this is community moderation, decided by the admins o
 
 To link your Discord account to the BlueGenji website, sign in to the website with Discord, or use « Applications connectées » on your profile (the former `/link` command is gone).
 
-Retention: relayed messages 7 days; the author of a `/scrim` or `/recrute` 30 days, erased during the following night (then the author's ID is erased; the game, level or role, server and date remain for counters, and no longer identify anyone); network bans until they are lifted (the ban notices in the staff's private log channel are not deleted automatically); a server's configuration is erased when the bot leaves it — including when it left while the bot was offline, at the next startup.
+Retention: tracking of relayed messages (IDs, date) 7 days — the copies posted in partner channels then stay on Discord; the author of a `/scrim` or `/recrute` 30 days, erased during the following night (then the author's ID is erased; the game, level or role, server and date remain for counters, and no longer identify anyone); network bans until they are lifted (the ban notices in the staff's private log channel are not deleted automatically); a server's configuration is erased when the bot leaves it — including when it left while the bot was offline, at the next startup.
 
 Server admins:
 - `/ban-list` (network-wide list, see above)
