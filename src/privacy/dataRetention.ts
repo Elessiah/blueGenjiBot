@@ -20,7 +20,6 @@
 import type { Client } from "discord.js";
 
 import { getBddInstance } from "@/bdd/Bdd.js";
-import { purgeFeedIdentifiers } from "@/feed/feedBus.js";
 import { manageMsgExpiration } from "@/messages/manageMsgExpiration.js";
 import { reportError } from "@/safe/processGuards.js";
 import { sendLog } from "@/safe/sendLog.js";
@@ -83,11 +82,12 @@ export async function eraseGuild(guildId: string): Promise<void> {
 }
 
 /**
- * Au-delà de ce nombre de serveurs à oublier d'un coup, et s'ils forment la
- * majorité des serveurs configurés, le rattrapage refuse d'agir. Un effacement
- * irréversible ne se fie pas à un cache qui décrit peut-être un autre bot : un
- * jeton de développement lancé sur une copie de la base de production effacerait
- * sinon la configuration de tout le réseau.
+ * Quand les serveurs à oublier sont plus nombreux que ce seuil **et** forment
+ * la majorité des serveurs configurés, le rattrapage n'en oublie que ce nombre
+ * par passage. Un effacement irréversible ne se fie pas entièrement à un cache
+ * qui décrit peut-être un autre bot (jeton de développement lancé sur la base
+ * de production) : le dégât est borné à quelques serveurs, signalé, et un
+ * vrai arriéré se résorbe tout de même en quelques nuits.
  */
 export const MAX_SILENT_GUILD_FORGETS = 3;
 
@@ -107,16 +107,17 @@ export async function forgetDepartedGuilds(client: Client): Promise<string[]> {
   const bdd = await getBddInstance();
   const configured = await bdd.listConfiguredGuildIds();
   const departed = configured.filter((id) => !joined.has(id));
-  if (departed.length > MAX_SILENT_GUILD_FORGETS && departed.length * 2 > configured.length) {
+  const suspicious = departed.length > MAX_SILENT_GUILD_FORGETS && departed.length * 2 > configured.length;
+  if (suspicious) {
     await sendLog(
       client,
-      `Rattrapage des serveurs quittés suspendu : ${departed.length} serveur(s) sur ${configured.length} ` +
-        "absents du cache. Vérifier le jeton du bot et la base, puis oublier ces serveurs à la main.",
+      `Rattrapage des serveurs quittés limité à ${MAX_SILENT_GUILD_FORGETS} : ${departed.length} serveur(s) ` +
+        `sur ${configured.length} absents du cache. Vérifier le jeton du bot si ce nombre surprend.`,
     );
-    return [];
   }
+  const batch = suspicious ? departed.slice(0, MAX_SILENT_GUILD_FORGETS) : departed;
   const forgotten: string[] = [];
-  for (const guildId of departed) {
+  for (const guildId of batch) {
     try {
       await eraseGuild(guildId);
       forgotten.push(guildId);
@@ -131,14 +132,11 @@ export async function forgetDepartedGuilds(client: Client): Promise<string[]> {
 }
 
 /**
- * Les quatre ménages, dans l'ordre (le flux d'activité en tête : une base
- * restaurée peut y ramener des identifiants Discord que la page publique
- * `/bot` rejouerait). Chacun signale son propre échec sans priver
+ * Les trois ménages, dans l'ordre. Chacun signale son propre échec sans priver
  * les autres de passer ; la fonction ne lève jamais.
  * @param client Client Discord connecté.
  */
 export async function runDataRetention(client: Client): Promise<void> {
-  await purgeFeedIdentifiers(client);
   try {
     await manageMsgExpiration(client);
   } catch (error) {

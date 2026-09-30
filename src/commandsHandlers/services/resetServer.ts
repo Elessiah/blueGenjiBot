@@ -16,10 +16,9 @@ async function _resetServer(client: Client,
                             guild_id: string): Promise<status> {
     const bdd: Bdd = await getBddInstance();
     try {
-        const channels_id: {id_channel: string}[] = await bdd.get("channelPartner", ["id_channel"], {}, {query: "id_guild = ?", values: [guild_id]}) as {id_channel: string}[];
-        if (channels_id.length === 0)
+        const removal = await bdd.deleteGuildChannels(guild_id);
+        if (removal.found === 0)
             return ( {success: false, message: "Server already reseted"} );
-        const removal: status = await bdd.deleteGuildChannels(guild_id);
         if (removal.success) {
             try {
                 const guild: Guild = await client.guilds.fetch(guild_id);

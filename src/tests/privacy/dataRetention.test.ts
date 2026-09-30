@@ -129,17 +129,22 @@ test("eraseGuild retire les salons relayés même si l'oubli de la configuration
   assert.equal(await count("SELECT COUNT(*) AS n FROM RefereeRole WHERE id_guild = 'g-partial'"), 0);
 });
 
-test("le rattrapage refuse d'oublier d'un coup la majorité des serveurs configurés", async () => {
+test("le rattrapage borne l'oubli quand la majorité des serveurs configurés manque", async () => {
   for (const id of ["g-a", "g-b", "g-c", "g-d"]) {
     await seedGuild(id, `c-${id}`);
   }
-  logs.length = 0;
-  // Cache d'un autre bot : seul `g-stay` y figure, quatre serveurs sur cinq manqueraient.
-  assert.deepEqual(await forgetDepartedGuilds(fakeClient(["g-stay"])), []);
-  assert.equal(await count("SELECT COUNT(*) AS n FROM ChannelPartner WHERE id_guild = 'g-a'"), 1);
-  assert.ok(logs.some((line) => line.includes("suspendu")));
   // Le vrai cache : rien ne manque, rien n'est effacé.
   assert.deepEqual(await forgetDepartedGuilds(fakeClient(["g-stay", "g-a", "g-b", "g-c", "g-d"])), []);
+
+  logs.length = 0;
+  // Quatre serveurs sur cinq manquent : trois au plus par passage, signalé.
+  const first = await forgetDepartedGuilds(fakeClient(["g-stay"]));
+  assert.equal(first.length, 3);
+  assert.ok(logs.some((line) => line.includes("limité à 3")));
+  assert.equal(await count("SELECT COUNT(*) AS n FROM ChannelPartner WHERE id_guild IN ('g-a', 'g-b', 'g-c', 'g-d')"), 1);
+  // L'arriéré se résorbe au passage suivant.
+  assert.equal((await forgetDepartedGuilds(fakeClient(["g-stay"]))).length, 1);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM ChannelPartner WHERE id_guild IN ('g-a', 'g-b', 'g-c', 'g-d')"), 0);
 });
 
 test("runDataRetention ne lève pas quand un ménage échoue", async () => {
@@ -147,7 +152,7 @@ test("runDataRetention ne lève pas quand un ménage échoue", async () => {
   const original = bdd.anonymizeActivityAuthors;
   bdd.anonymizeActivityAuthors = async () => { throw new Error("boom"); };
   try {
-    await runDataRetention(fakeClient(["g-stay", "g-a", "g-b", "g-c", "g-d"]));
+    await runDataRetention(fakeClient(["g-stay"]));
   } finally {
     bdd.anonymizeActivityAuthors = original;
   }

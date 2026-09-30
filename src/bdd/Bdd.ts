@@ -957,21 +957,27 @@ class Bdd {
    * demain n'a qu'un endroit où se ranger. Un salon en échec n'arrête pas les
    * suivants.
    * @param guildId Identifiant du serveur.
-   * @returns `success` si tous les salons sont retirés ; sinon les messages d'échec, un par ligne.
+   * @returns `success` si tous les salons sont retirés (sinon les messages
+   *          d'échec, un par ligne) et `found`, le nombre de salons trouvés —
+   *          zéro dit « rien à retirer ».
    */
-  async deleteGuildChannels(guildId: string): Promise<status> {
+  async deleteGuildChannels(guildId: string): Promise<status & { found: number }> {
     const channels = await this.get("ChannelPartner", ["id_channel"], {}, {query: "id_guild = ?", values: [guildId]}) as {id_channel: string}[];
     let message = "";
     for (const {id_channel} of channels) {
-      await this.rm("ChannelPartnerRank", {}, {query: "id_channel = ?", values: [id_channel]});
-      const ret: status = await this.deleteChannelServices(id_channel);
-      if (!ret.success) {
-        message += ret.message + "\n";
+      try {
+        await this.rm("ChannelPartnerRank", {}, {query: "id_channel = ?", values: [id_channel]});
+        const ret: status = await this.deleteChannelServices(id_channel);
+        if (!ret.success) {
+          message += ret.message + "\n";
+        }
+      } catch (err) {
+        message += `${id_channel}: ${(err as Error).message}\n`;
       }
     }
     return message.length === 0
-      ? {success: true, message: `${channels.length} channel(s) removed.`}
-      : {success: false, message};
+      ? {success: true, message: `${channels.length} channel(s) removed.`, found: channels.length}
+      : {success: false, message, found: channels.length};
   }
 
   /**

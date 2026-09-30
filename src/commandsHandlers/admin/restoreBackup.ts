@@ -5,6 +5,7 @@ import { MessageFlags, type ChatInputCommandInteraction, type Client } from "dis
 
 import { restoreDatabase } from "@/backup/restoreDatabase.js";
 import { runDataRetention } from "@/privacy/dataRetention.js";
+import { purgeFeedIdentifiers } from "@/feed/feedBus.js";
 import { safeReply } from "@/safe/safeReply.js";
 import { sendLog } from "@/safe/sendLog.js";
 
@@ -90,8 +91,11 @@ export async function restoreBackup(
     );
     // Une sauvegarde ramène ce que les durées de conservation avaient effacé
     // depuis (auteurs de plus de 30 jours, serveurs quittés) : on ne l'attend
-    // pas jusqu'à la nuit. `runDataRetention` ne lève jamais.
+    // pas jusqu'à la nuit — ni jusqu'au redémarrage pour le flux d'activité,
+    // qui rejouerait sinon à la page publique `/bot` les identifiants Discord
+    // d'une sauvegarde antérieure à leur anonymisation. Aucune des deux ne lève.
     if (result.success) {
+      await purgeFeedIdentifiers(client);
       await runDataRetention(client);
     }
   } catch (error) {
