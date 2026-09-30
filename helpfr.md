@@ -84,7 +84,7 @@ Admin :
 
 ## Durées de conservation
 - Messages relayés : 7 jours.
-- Auteur d'un `/scrim` ou d'un `/recrute` : 30 jours. Au-delà, l'identifiant de l'auteur est effacé ; restent, pour les compteurs, le jeu, le niveau ou le rôle, le serveur et la date, qui ne désignent plus personne.
+- Auteur d'un `/scrim` ou d'un `/recrute` : 30 jours, effacé dans la nuit qui suit. Au-delà, l'identifiant de l'auteur est effacé ; restent, pour les compteurs, le jeu, le niveau ou le rôle, le serveur et la date, qui ne désignent plus personne.
 - Configuration d'un serveur : effacée quand le bot le quitte — y compris s'il l'a quitté pendant un arrêt du bot, au démarrage suivant.
 
 ## `/ban-list` et exclusions du réseau

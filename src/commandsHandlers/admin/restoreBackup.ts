@@ -81,6 +81,16 @@ export async function restoreBackup(
     await fs.promises.writeFile(tmpPath, Buffer.from(await response.arrayBuffer()));
 
     const result = await restoreDatabase(tmpPath);
+    // Une sauvegarde ramène ce que les durées de conservation avaient effacé
+    // depuis (auteurs de plus de 30 jours, serveurs quittés) : on ne l'attend
+    // pas jusqu'à la nuit — ni jusqu'au redémarrage pour le flux d'activité,
+    // que l'API interne servirait sinon, identifiants Discord compris, à la
+    // page publique `/bot`. Avant la réponse et le journal, qui sont des
+    // appels réseau : la base restaurée est déjà ouverte. Aucune ne lève.
+    if (result.success) {
+      await purgeFeedIdentifiers(client);
+      await runDataRetention(client);
+    }
     const rollback = result.rollbackPath ? `\nSauvegarde de l'ancienne base : \`${result.rollbackPath}\`` : "";
 
     await safeReply(interaction, `${result.success ? "✅" : "❌"} ${result.message}${rollback}`, true, true);
@@ -89,15 +99,6 @@ export async function restoreBackup(
       `Restauration de la base par le compte ${interaction.user.id} (${attachment.name}) : ` +
         `${result.success ? "succès" : "échec"} — ${result.message}`,
     );
-    // Une sauvegarde ramène ce que les durées de conservation avaient effacé
-    // depuis (auteurs de plus de 30 jours, serveurs quittés) : on ne l'attend
-    // pas jusqu'à la nuit — ni jusqu'au redémarrage pour le flux d'activité,
-    // qui rejouerait sinon à la page publique `/bot` les identifiants Discord
-    // d'une sauvegarde antérieure à leur anonymisation. Aucune des deux ne lève.
-    if (result.success) {
-      await purgeFeedIdentifiers(client);
-      await runDataRetention(client);
-    }
   } catch (error) {
     await safeReply(interaction, `❌ Restauration échouée : ${(error as Error).message}`, true, true);
     await sendLog(client, `Restauration de la base échouée : ${(error as Error).message}`);

@@ -990,13 +990,27 @@ class Bdd {
   }
 
   /**
-   * Retire tous les salons relayés d'un serveur : filtres de rang, services,
-   * puis le salon partenaire lui-même.
+   * Retire un salon relayé : ses filtres de rang, ses services, puis le salon
+   * partenaire lui-même.
    *
-   * Unique boucle de retrait, partagée par `/reset-all` (`_resetServer`) et
-   * l'oubli d'un serveur quitté (`eraseGuild`) : une table par salon ajoutée
-   * demain n'a qu'un endroit où se ranger. Un salon en échec n'arrête pas les
-   * suivants.
+   * Unique retrait d'un salon, partagé par `/reset-channel` et `channelDelete`
+   * (`_resetChannel`) et par le retrait de tous les salons d'un serveur
+   * (`deleteGuildChannels`) : une table **par salon** ajoutée demain se range ici.
+   * @param channelId Identifiant du salon.
+   * @returns Le `status` de `deleteChannelServices`.
+   * @throws Si la suppression des filtres de rang échoue.
+   */
+  async deleteChannel(channelId: string): Promise<status> {
+    await this.rm("ChannelPartnerRank", {}, {query: "id_channel = ?", values: [channelId]});
+    return this.deleteChannelServices(channelId);
+  }
+
+  /**
+   * Retire tous les salons relayés d'un serveur, un par un (`deleteChannel`).
+   *
+   * Partagé par `/reset-all` (`_resetServer`) et l'oubli d'un serveur quitté
+   * (`eraseGuild`). Un salon en échec n'arrête pas les suivants, et son
+   * identifiant est nommé dans le message.
    * @param guildId Identifiant du serveur.
    * @returns `success` si tous les salons sont retirés (sinon les messages
    *          d'échec, un par ligne) et `found`, le nombre de salons trouvés —
@@ -1007,10 +1021,9 @@ class Bdd {
     let message = "";
     for (const {id_channel} of channels) {
       try {
-        await this.rm("ChannelPartnerRank", {}, {query: "id_channel = ?", values: [id_channel]});
-        const ret: status = await this.deleteChannelServices(id_channel);
+        const ret: status = await this.deleteChannel(id_channel);
         if (!ret.success) {
-          message += ret.message + "\n";
+          message += `${id_channel}: ${ret.message}\n`;
         }
       } catch (err) {
         message += `${id_channel}: ${(err as Error).message}\n`;
@@ -1074,7 +1087,8 @@ class Bdd {
    * serveur. La ligne reste donc, sans auteur — une anonymisation réelle, là
    * où un hachage de l'identifiant n'en serait qu'une pseudonymisation. La
    * colonne est `NOT NULL` sur les bases existantes : l'auteur effacé s'écrit
-   * chaîne vide, qu'aucun identifiant Discord ne peut valoir.
+   * chaîne vide, qu'aucun identifiant Discord ne peut valoir. Une ligne sans
+   * date (la colonne l'admet) ne peut prouver son âge : elle est anonymisée.
    * @param days Âge au-delà duquel l'auteur est effacé.
    * @returns Nombre de lignes anonymisées, par table.
    */
@@ -1083,11 +1097,11 @@ class Bdd {
     if (!database) { return { Scrim: 0, Recrute: 0 }; }
     const modifier = `-${days} days`;
     const scrim = await database.run(
-      "UPDATE Scrim SET id_author = '' WHERE id_author <> '' AND date < DATETIME('now', ?)",
+      "UPDATE Scrim SET id_author = '' WHERE id_author <> '' AND (date IS NULL OR date < DATETIME('now', ?))",
       [modifier],
     );
     const recrute = await database.run(
-      "UPDATE Recrute SET id_author = '' WHERE id_author <> '' AND date < DATETIME('now', ?)",
+      "UPDATE Recrute SET id_author = '' WHERE id_author <> '' AND (date IS NULL OR date < DATETIME('now', ?))",
       [modifier],
     );
     return { Scrim: scrim.changes ?? 0, Recrute: recrute.changes ?? 0 };

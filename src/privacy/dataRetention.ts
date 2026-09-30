@@ -26,7 +26,9 @@ import { sendLog } from "@/safe/sendLog.js";
 
 /**
  * Âge au-delà duquel l'auteur d'un scrim ou d'une recherche est effacé.
- * C'est la fenêtre de `/stats`, seul lecteur de l'auteur.
+ * C'est la fenêtre de `/stats`, seul lecteur de l'auteur. Le ménage passant
+ * chaque nuit, l'effacement a lieu dans la nuit qui suit cette échéance
+ * (au plus un jour de plus) — les textes le disent ainsi.
  */
 export const ACTIVITY_AUTHOR_RETENTION_DAYS = 30;
 
@@ -65,8 +67,8 @@ export async function anonymizeOldActivity(client: Client): Promise<number | nul
 export async function eraseGuild(guildId: string): Promise<void> {
   const bdd = await getBddInstance();
   let failure: unknown = null;
-  // La configuration d'abord : les filtres de rang se retrouvent par les
-  // salons partenaires, retirés ensuite.
+  // Deux étapes indépendantes (l'ordre n'importe pas) : chacune est tentée
+  // même si l'autre échoue.
   try {
     await bdd.forgetGuild(guildId);
   } catch (error) {

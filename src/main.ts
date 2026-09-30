@@ -216,13 +216,14 @@ client.on("clientReady", async () => {
     cron.schedule(
       "5 0 * * *",
       async () => {
+        // Le ménage d'abord, pour que l'instantané du jour ne compte pas les
+        // salons d'un serveur quitté. Il signale son propre échec.
+        await runDataRetention(client);
         try {
           await recordDailySnapshot(client);
         } catch (error) {
           await reportError(client, "cron recordDailySnapshot", error);
         }
-        // Chaque ménage signale son propre échec (voir `privacy/dataRetention.ts`).
-        await runDataRetention(client);
       },
       { timezone: "Europe/Paris" },
     );

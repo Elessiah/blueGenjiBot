@@ -27,6 +27,8 @@ test("une restauration réussie rejoue la purge du flux et les durées de conser
   const branch = source.slice(source.indexOf("if (result.success) {"));
   assert.ok(branch.indexOf("purgeFeedIdentifiers(client)") > 0);
   assert.ok(branch.indexOf("runDataRetention(client)") > 0);
+  // Avant la réponse : la base restaurée est déjà servie par l'API interne.
+  assert.ok(source.indexOf("if (result.success) {") < source.indexOf("await safeReply(interaction, `${result.success"));
 });
 
 test("le démarrage et la tâche de nuit lancent les durées de conservation", () => {
