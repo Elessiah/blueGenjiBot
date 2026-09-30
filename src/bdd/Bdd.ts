@@ -209,6 +209,9 @@ class Bdd {
       // supprimée, serveur oublié) laisserait sinon ses octets dans les pages
       // libérées du fichier — et la sauvegarde, qui copie les pages telles
       // quelles, les emporterait. Réglage de connexion, rejoué à chaque ouverture.
+      // `ON` plutôt que `FAST` : `FAST` ne réécrit pas les pages rendues à la
+      // liste libre, justement celles d'une table supprimée. Le coût (quelques
+      // écritures de plus par purge de relais) est négligeable sur cette base.
       await this.Database?.exec("PRAGMA secure_delete = ON");
     } catch (e) {
       console.error("secure_delete error: ", (e as TypeError).message);

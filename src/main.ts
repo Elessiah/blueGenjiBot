@@ -217,8 +217,13 @@ client.on("clientReady", async () => {
       "5 0 * * *",
       async () => {
         // Le ménage d'abord, pour que l'instantané du jour ne compte pas les
-        // salons d'un serveur quitté. Il signale son propre échec.
-        await runDataRetention(client);
+        // salons d'un serveur quitté. Il signale son propre échec ; la garde
+        // ne sert que si cela cessait d'être vrai.
+        try {
+          await runDataRetention(client);
+        } catch (error) {
+          await reportError(client, "cron runDataRetention", error);
+        }
         try {
           await recordDailySnapshot(client);
         } catch (error) {

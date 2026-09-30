@@ -48,7 +48,10 @@ async function _resetChannel(client: Client, channel_id: string, guildName?: str
                 await sendLog(client, 'A service has been unlinked from a channel of ' + where + '.');
                 return {success: true, message: `Channel reseted`};
             } else {
-                return {success: false, message: ret.message};
+                // `deleteChannel` rend son échec au lieu de lever (base
+                // occupée, par exemple) : il se retente comme une exception.
+                err_msg = ret.message;
+                nTry++;
             }
         } catch (err) {
             err_msg = (err as TypeError).message;
