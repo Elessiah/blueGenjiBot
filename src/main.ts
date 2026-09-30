@@ -209,8 +209,18 @@ client.on("clientReady", async () => {
       await updateCommands(client, guild.id);
     }
 
-    await checkIntervalleAdhesion(client);
-    await recordDailySnapshot(client);
+    // Chacun sous sa garde : un échec au démarrage ne doit pas empêcher la
+    // pose des tâches cron qui suivent — le ménage de la nuit en fait partie.
+    try {
+      await checkIntervalleAdhesion(client);
+    } catch (error) {
+      await reportError(client, "clientReady checkIntervalleAdhesion", error);
+    }
+    try {
+      await recordDailySnapshot(client);
+    } catch (error) {
+      await reportError(client, "clientReady recordDailySnapshot", error);
+    }
     // Une tâche cron s'exécute hors de toute pile applicative : sans garde, son
     // échec devient un rejet non capturé, donc un arrêt du process.
     cron.schedule(
@@ -280,7 +290,13 @@ client.on("guildDelete", async (guild) => {
     // Même chemin que le rattrapage du démarrage (`eraseGuild`). Un échec est
     // signalé ; ce qui reste sera repris au prochain démarrage ou à la nuit.
     try {
-      await eraseLeftGuild(client, guild.id);
+      if (!(await eraseLeftGuild(client, guild.id))) {
+        await sendLog(
+          client,
+          `guildDelete: configuration du serveur ${guild.id} gardée (base d'une autre application, ou fermée) ; ` +
+            "le rattrapage des serveurs quittés la reprendra.",
+        );
+      }
     } catch (error) {
       await reportError(client, "guildDelete (eraseGuild)", error);
     }
