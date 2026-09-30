@@ -306,7 +306,7 @@ chaîne vide, qu'aucun identifiant Discord ne peut valoir.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line984">line 984</a>
+        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line991">line 991</a>
     </li></ul></dd>
     
 
@@ -497,7 +497,9 @@ Garantit une copie non corrompue même si des écritures sont en cours.
 appartient déjà.
 
 La première application qui démarre sur une base l'enregistre ; ensuite,
-seule celle-là est reconnue.
+seule celle-là est reconnue. Pour confier la base à une autre application
+(changement d'application Discord du bot), vider la table à la main :
+`DELETE FROM BotOwner` — la suivante à démarrer la revendique.
 </div>
 
 
@@ -585,7 +587,7 @@ seule celle-là est reconnue.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line961">line 961</a>
+        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line968">line 968</a>
     </li></ul></dd>
     
 
@@ -614,7 +616,9 @@ seule celle-là est reconnue.
 
         
 <div class="param-desc">
-    `true` si la base appartient à cette application (ou vient de lui être attribuée).
+    `true` si la base appartient à cette application (ou vient de lui
+         être attribuée), `false` si elle en a une autre, `null` si la
+         connexion est fermée (restauration en cours) : rien à conclure.
 </div>
 
 
@@ -908,7 +912,7 @@ quelques instants après le retour. Toute opération qui remplace le fichier
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line697">line 697</a>
+        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line700">line 700</a>
     </li></ul></dd>
     
 
@@ -1056,7 +1060,7 @@ suivants.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line914">line 914</a>
+        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line917">line 917</a>
     </li></ul></dd>
     
 
@@ -1200,7 +1204,7 @@ suivants.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line723">line 723</a>
+        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line726">line 726</a>
     </li></ul></dd>
     
 
@@ -1352,7 +1356,7 @@ l'appelant.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line889">line 889</a>
+        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line892">line 892</a>
     </li></ul></dd>
     
 
@@ -1584,7 +1588,7 @@ l'appelant.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line603">line 603</a>
+        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line606">line 606</a>
     </li></ul></dd>
     
 
@@ -1702,7 +1706,7 @@ SQL, là où les deux côtés parlent le même format.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line757">line 757</a>
+        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line760">line 760</a>
     </li></ul></dd>
     
 
@@ -1844,7 +1848,7 @@ SQL, là où les deux côtés parlent le même format.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line834">line 834</a>
+        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line837">line 837</a>
     </li></ul></dd>
     
 
@@ -1986,7 +1990,7 @@ SQL, là où les deux côtés parlent le même format.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line789">line 789</a>
+        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line792">line 792</a>
     </li></ul></dd>
     
 
@@ -2266,7 +2270,7 @@ relayés que `deleteGuildChannels` retire.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line943">line 943</a>
+        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line946">line 946</a>
     </li></ul></dd>
     
 
@@ -2426,7 +2430,7 @@ relayés que `deleteGuildChannels` retire.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line772">line 772</a>
+        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line775">line 775</a>
     </li></ul></dd>
     
 
@@ -2640,7 +2644,7 @@ relayés que `deleteGuildChannels` retire.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line629">line 629</a>
+        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line632">line 632</a>
     </li></ul></dd>
     
 
@@ -2800,7 +2804,7 @@ relayés que `deleteGuildChannels` retire.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line1000">line 1000</a>
+        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line1007">line 1007</a>
     </li></ul></dd>
     
 
@@ -2942,7 +2946,7 @@ relayés que `deleteGuildChannels` retire.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line866">line 866</a>
+        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line869">line 869</a>
     </li></ul></dd>
     
 
@@ -3084,7 +3088,7 @@ relayés que `deleteGuildChannels` retire.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line821">line 821</a>
+        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line824">line 824</a>
     </li></ul></dd>
     
 
@@ -3262,7 +3266,7 @@ relayés que `deleteGuildChannels` retire.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line615">line 615</a>
+        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line618">line 618</a>
     </li></ul></dd>
     
 
@@ -3430,7 +3434,7 @@ relayés que `deleteGuildChannels` retire.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line552">line 552</a>
+        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line555">line 555</a>
     </li></ul></dd>
     
 
@@ -3627,7 +3631,7 @@ Crée le salon si nécessaire puis enregistre le lien service.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line670">line 670</a>
+        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line673">line 673</a>
     </li></ul></dd>
     
 
@@ -3805,7 +3809,7 @@ Crée le salon si nécessaire puis enregistre le lien service.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line848">line 848</a>
+        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line851">line 851</a>
     </li></ul></dd>
     
 
@@ -3983,7 +3987,7 @@ Crée le salon si nécessaire puis enregistre le lien service.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line803">line 803</a>
+        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line806">line 806</a>
     </li></ul></dd>
     
 
@@ -4161,7 +4165,7 @@ Crée le salon si nécessaire puis enregistre le lien service.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line574">line 574</a>
+        <a href="bdd_Bdd.js.html">bdd/Bdd.js</a>, <a href="bdd_Bdd.js.html#line577">line 577</a>
     </li></ul></dd>
     
 
@@ -4363,7 +4367,7 @@ Crée le salon si nécessaire puis enregistre le lien service.
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Wed Sep 30 2026 11:31:09 GMT+0200 (heure d’été d’Europe centrale)
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Wed Sep 30 2026 11:46:34 GMT+0200 (heure d’été d’Europe centrale)
 </footer>
 
 <script> prettyPrint(); </script>
