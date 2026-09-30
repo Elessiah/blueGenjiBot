@@ -1,78 +1,82 @@
-*For the english version, click [here](https://bluegenji-esport.fr/bot-legal-terms/termsOfService.pdf).*
-# Conditions d'Utilisation de _BlueGenji Bot_
-**Dernière mise à jour** : `6 janvier 2024`
+*For the English version, see [TermsOfServices.md](TermsOfServices.md).*
 
-En utilisant le bot Discord (_BlueGenji Bot_), vous acceptez de respecter ces Conditions d'Utilisation. Si vous n'acceptez pas ces Conditions, veuillez ne pas utiliser le Bot.
+# Conditions d'Utilisation — BlueGenji Bot
 
----
+**Dernière mise à jour** : 30 septembre 2026
 
-## 1. Introduction
-_BlueGenji Bot_ est un bot Discord développé par Keryan HOUSSIN pour synchroniser les annonces et autres contenus liés à la communauté esport Marvel Rivals entre des serveurs affiliés. Ces Conditions régissent votre utilisation du Bot et de ses services.
+> Copie du texte publié sur [https://bluegenji-esport.fr/terms-of-service-bot](https://bluegenji-esport.fr/terms-of-service-bot), **qui fait foi** en cas de divergence. Ne modifiez pas ce fichier à la main : il est régénéré depuis le site (`lib/shared/bot-legal-content.ts` d'AppBlueGenji).
 
----
-
-## 2. Éligibilité
-- Vous devez avoir au moins 13 ans pour utiliser le Bot.
-- Vous devez respecter les [Conditions d'Utilisation de Discord](https://discord.com/terms) et les [Règles Communautaires](https://discord.com/guidelines).
-- En utilisant le Bot, vous confirmez que vous remplissez ces critères.
+Ces conditions encadrent l'utilisation du bot Discord **BlueGenji Bot** : ses commandes et le relais d'annonces entre serveurs partenaires. Si vous ne les acceptez pas, n'utilisez pas le Bot.
 
 ---
 
-## 3. Règles d'Utilisation
-En utilisant _BlueGenji Bot_, vous acceptez de :
-- Ne pas utiliser le Bot à des fins illégales, nuisibles ou perturbatrices.
-- Ne pas exploiter ou abuser des fonctionnalités du Bot ou tenter de contourner ses limitations.
-- Ne pas utiliser le Bot pour harceler, spammer ou usurper l'identité d'autres utilisateurs.
-- Signaler tout bug, vulnérabilité ou utilisation abusive de manière responsable.
+## 01. Éditeur et objet
 
-Nous nous réservons le droit de restreindre, suspendre ou résilier votre accès au Bot en cas de violation de ces règles ou pour toute autre raison à notre discrétion.
+**BlueGenji Bot** est édité par l'association **Bluegenji Esport** (association loi 1901, siège : 4 impasse des Cyprès, 51210 Janvilliers, France). Il est développé et administré bénévolement par Keryan Houssin, hébergeur technique de l'association.
+
+Le Bot relaie les annonces de la communauté esport BlueGenji — Overwatch et Marvel Rivals — entre les salons des serveurs partenaires (recherches de scrims, recrutements et autres services). Il remet aussi en message privé les messages du site BlueGenji : codes de connexion, rappels de match, alertes d'arbitrage, avis de modération, demandes d'adhésion à une équipe et informations sur les données. Il est gratuit.
 
 ---
 
-## 4. Collecte de Données et Confidentialité
-_BlueGenji Bot_ peut collecter et traiter les types de données suivants :
+## 02. Accès
 
-### **Données Collectées**
-- **Données Utilisateur** : Identifiants d’utilisateur (User IDs), identifiants et contenu des messages (utilisés pour la modération et les fonctionnalités de cooldown).
-- **Données Serveur** : Identifiants des canaux (utilisés pour synchroniser et lier les canaux entre les serveurs).
-- **Paramètres Serveur** : Vérifiés pour contrôler les permissions des utilisateurs (par exemple, statut d’administrateur).
-
-### **Utilisation de vos Données**
-- **User IDs** : Stockés et utilisés pour les cooldowns et la modération.
-- **Contenu et Identifiants des Messages** : Les contenus des messages sont traités mais non stockés. Les identifiants des messages sont stockés pour les cooldowns et le suivi des modifications. Les messages supprimés ne peuvent pas être récupérés.
-- **Identifiants des Canaux** : Stockés pour permettre la liaison et la synchronisation des canaux entre serveurs.
-- **Paramètres Serveur** : Traités pour vérifier les rôles et permissions des utilisateurs.
-
-### **Durée de Conservation des Données**
-- Les identifiants des canaux sont conservés tant qu'ils restent utilisés pour la synchronisation.
-- Les identifiants des messages sont supprimés après 72 heures ou au redémarrage du bot.
-- Aucune donnée personnelle n'est stockée de manière permanente, sauf si nécessaire pour les fonctionnalités essentielles.
-
-Pour plus de détails, veuillez consulter notre [Politique de Confidentialité](#).
+- Vous devez avoir au moins 15 ans pour utiliser le Bot.
+- Vous devez respecter les [Conditions d'Utilisation de Discord](https://discord.com/terms) et ses [Règles Communautaires](https://discord.com/guidelines).
 
 ---
 
-## 5. Responsabilité et Exclusions de Garantie
-- Le Bot est fourni "tel quel", sans aucune garantie ou promesse de fonctionnement.
-- Nous ne garantissons pas une performance ininterrompue ou exempte d’erreurs.
-- Nous ne sommes pas responsables des dommages, pertes ou problèmes découlant de l’utilisation du Bot, y compris les interruptions de serveur ou la perte de données.
-- Nous ne sommes pas responsables des abus commis par les utilisateurs du Bot, même si des outils de modération sont fournis.
+## 03. Règles d'utilisation
+
+En utilisant **BlueGenji Bot**, vous vous engagez à :
+
+- ne pas l'utiliser à des fins illégales, nuisibles ou perturbatrices ;
+- ne pas exploiter ses fonctionnalités de façon abusive ni tenter de contourner ses limites (temps de recharge, exclusions) ;
+- ne pas l'utiliser pour harceler, spammer ou usurper l'identité d'autrui ;
+- signaler de façon responsable tout bug, faille ou usage abusif.
+
+Chacun reste responsable des annonces qu'il publie : le Bot les recopie telles quelles dans les salons des serveurs partenaires.
 
 ---
 
-## 6. Modifications des Conditions
-Nous nous réservons le droit de modifier ces Conditions à tout moment. Les mises à jour seront annoncées sur notre [Serveur Discord](https://discord.gg/5kG9DDKx). La poursuite de l'utilisation du Bot après les modifications constitue une acceptation des nouvelles Conditions.
+## 04. Modération du relais
+
+Les administrateurs des serveurs partenaires d'au moins 50 membres (ou les titulaires du rôle d'administration du Bot que ces serveurs désignent) et le staff de l'association peuvent **exclure un utilisateur du relais** en cas de manquement à ces conditions : il ne peut plus utiliser les commandes du Bot, ses annonces ne sont plus relayées et les copies de celles que le Bot suit encore (au moins les 7 derniers jours) sont retirées. L'exclusion vaut pour tout le réseau de serveurs partenaires ; son motif est obligatoire et consigné au journal de modération.
+
+L'association peut aussi restreindre ou suspendre l'accès au Bot en cas de manquement. Une exclusion se conteste par les moyens indiqués à la section Contact.
 
 ---
 
-## 7. Résiliation
-Nous, ainsi que les modérateurs des serveurs affiliés, nous réservons le droit de résilier votre accès à _BlueGenji Bot_ à tout moment, avec ou sans préavis, en cas de violation de ces Conditions ou pour d'autres raisons. Pour toute contestation ou demande, contactez-nous :
-- Discord : `elessiah`
-- Email : `keryan.h@outlook.fr`
+## 05. Données personnelles
+
+Les données traitées par le Bot, leurs durées de conservation et vos droits sont décrits dans sa [Politique de Confidentialité](https://bluegenji-esport.fr/privacy-policy-bot).
 
 ---
 
-## 8. Nous Contacter
-Si vous avez des questions ou des préoccupations concernant ces Conditions, veuillez nous contacter :
-- **Email** : `keryan.h@outlook.fr`
-- **Discord** : `elessiah`
+## 06. Responsabilité
+
+- Le Bot est un service gratuit, maintenu par des bénévoles : il est fourni sans garantie de disponibilité continue ni d'absence d'erreur.
+- Dans les limites permises par la loi, l'association n'est pas responsable des interruptions du service, ni des contenus publiés par les utilisateurs et relayés par le Bot.
+
+---
+
+## 07. Modification des conditions
+
+L'association peut modifier ces conditions. La version en vigueur est celle publiée sur cette page, avec sa date de mise à jour ; les changements importants sont annoncés sur le [serveur Discord de l'association](https://discord.gg/GB9ESEBZFW).
+
+---
+
+## 08. Contact
+
+Pour toute question, contestation ou demande concernant ces conditions :
+
+- Formulaire **« Signaler un problème »** en bas de chaque page du site (catégorie « RGPD » pour vos données)
+- **Discord** : elessiah (hébergeur technique de l'association)
+- Courriel et téléphone de l'association : voir les [mentions légales](https://bluegenji-esport.fr/mentions-legales)
+
+---
+
+## Hébergement
+
+Le bot et le site tournent sur la même machine, un Raspberry Pi, à Caen, fournie et administrée par leur hébergeur technique, Keryan Houssin. Ses coordonnées complètes figurent dans les mentions légales du site.
+
+[Voir la section Hébergement des mentions légales](https://bluegenji-esport.fr/mentions-legales#hebergement)
