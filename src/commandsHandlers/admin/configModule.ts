@@ -5,9 +5,6 @@
  * activer ou desactiver un module change ce que les membres peuvent faire
  * (ecrire en base via `/scrim`, `/recrute`, ...), une decision qui reste au
  * niveau de la permission Discord native plutot que d'une delegation du bot.
- * Le module `oauth` (liaison compte) est expressement exclu : il reste
- * toujours actif, la liaison de compte n'est pas une fonctionnalite qu'un
- * serveur peut couper pour ses membres.
  */
 
 import { PermissionFlagsBits } from "discord.js";
@@ -35,10 +32,6 @@ export async function configModule(client: Client, interaction: ChatInputCommand
     const moduleKey = interaction.options.getString("module", true);
     if (!isValidModule(moduleKey)) {
       await safeReply(interaction, "Module invalide.", true, false);
-      return;
-    }
-    if (moduleKey === "oauth") {
-      await safeReply(interaction, "Le module OAuth est toujours actif et ne peut pas etre desactive.", true, false);
       return;
     }
     const current = await isModuleEnabled(guildId, moduleKey);

@@ -4,6 +4,7 @@ import path from "node:path";
 import { MessageFlags, type ChatInputCommandInteraction, type Client } from "discord.js";
 
 import { restoreDatabase } from "@/backup/restoreDatabase.js";
+import { runDataRetention } from "@/privacy/dataRetention.js";
 import { safeReply } from "@/safe/safeReply.js";
 import { sendLog } from "@/safe/sendLog.js";
 
@@ -87,6 +88,12 @@ export async function restoreBackup(
       `Restauration de la base par le compte ${interaction.user.id} (${attachment.name}) : ` +
         `${result.success ? "succès" : "échec"} — ${result.message}`,
     );
+    // Une sauvegarde ramène ce que les durées de conservation avaient effacé
+    // depuis (auteurs de plus de 30 jours, serveurs quittés) : on ne l'attend
+    // pas jusqu'à la nuit. `runDataRetention` ne lève jamais.
+    if (result.success) {
+      await runDataRetention(client);
+    }
   } catch (error) {
     await safeReply(interaction, `❌ Restauration échouée : ${(error as Error).message}`, true, true);
     await sendLog(client, `Restauration de la base échouée : ${(error as Error).message}`);

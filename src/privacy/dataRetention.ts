@@ -1,10 +1,14 @@
 /**
- * Durées de conservation des données personnelles que le bot garde en base,
- * hors messages relayés (voir `messages/manageMsgExpiration.ts`).
+ * Durées de conservation des données personnelles que le bot garde en base
+ * (la purge des messages relayés elle-même vit dans
+ * `messages/manageMsgExpiration.ts` ; ce module ne fait que la rattraper).
  *
- * Deux ménages, tous deux joués au démarrage puis chaque nuit par la tâche
- * `cron` existante — aucun ordonnanceur de plus :
+ * Trois ménages, joués au démarrage, chaque nuit par la tâche `cron`
+ * existante et après une restauration de la base — aucun ordonnanceur de plus :
  *
+ * - **messages relayés** : la purge à 7 jours (`manageMsgExpiration`) n'était
+ *   entraînée que par un nouveau relais ; une semaine sans relais la laissait
+ *   dormir. La nuit la rattrape ;
  * - **auteurs des scrims et des recherches** : effacés au-delà de
  *   `ACTIVITY_AUTHOR_RETENTION_DAYS`, les lignes restant pour les compteurs ;
  * - **serveurs quittés pendant un arrêt** : Discord n'envoie `guildDelete` qu'à
@@ -16,6 +20,7 @@
 import type { Client } from "discord.js";
 
 import { getBddInstance } from "@/bdd/Bdd.js";
+import { manageMsgExpiration } from "@/messages/manageMsgExpiration.js";
 import { reportError } from "@/safe/processGuards.js";
 import { sendLog } from "@/safe/sendLog.js";
 
@@ -43,10 +48,35 @@ export async function anonymizeOldActivity(client: Client): Promise<number | nul
 }
 
 /**
+ * Efface tout ce que la base garde d'un serveur quitté : sa configuration
+ * (`forgetGuild`), puis ses salons relayés et leurs services.
+ *
+ * Unique chemin d'oubli, partagé par `guildDelete` et le rattrapage du
+ * démarrage : deux copies divergeraient à la prochaine table ajoutée. Le
+ * serveur n'est pas relu chez Discord — il n'y est plus joignable, et
+ * `_resetServer`, qui le relit pour journaliser son nom, échouait justement là.
+ * @param guildId Identifiant du serveur quitté.
+ * @throws La première suppression qui échoue ; les précédentes restent faites,
+ *         et le rattrapage suivant reprend là où celle-ci s'est arrêtée.
+ */
+export async function eraseGuild(guildId: string): Promise<void> {
+  const bdd = await getBddInstance();
+  // La configuration d'abord : les filtres de rang se retrouvent par les
+  // salons partenaires, retirés ensuite.
+  await bdd.forgetGuild(guildId);
+  const channels = await bdd.get("ChannelPartner", ["id_channel"], {}, {
+    query: "id_guild = ?",
+    values: [guildId],
+  }) as { id_channel: string }[];
+  for (const { id_channel } of channels) {
+    const ret = await bdd.deleteChannelServices(id_channel);
+    if (!ret.success) { throw new Error(ret.message); }
+  }
+}
+
+/**
  * Oublie les serveurs configurés en base que le bot n'a plus rejoints.
  *
- * Même effacement que `guildDelete` (`forgetGuild` puis retrait des salons
- * relayés), sans relire le serveur chez Discord : il n'y est plus joignable.
  * Refuse d'agir sur un cache vide — un démarrage où Discord n'a encore livré
  * aucun serveur effacerait sinon la configuration de tous. Un serveur
  * momentanément indisponible (panne Discord) reste dans le cache, marqué
@@ -62,17 +92,7 @@ export async function forgetDepartedGuilds(client: Client): Promise<string[]> {
   const forgotten: string[] = [];
   for (const guildId of departed) {
     try {
-      // La configuration d'abord : les filtres de rang se retrouvent par les
-      // salons partenaires, retirés ensuite.
-      await bdd.forgetGuild(guildId);
-      const channels = await bdd.raw<{ id_channel: string }>(
-        "SELECT id_channel FROM ChannelPartner WHERE id_guild = ?",
-        [guildId],
-      );
-      for (const { id_channel } of channels) {
-        const ret = await bdd.deleteChannelServices(id_channel);
-        if (!ret.success) { throw new Error(ret.message); }
-      }
+      await eraseGuild(guildId);
       forgotten.push(guildId);
     } catch (error) {
       await reportError(client, "forgetDepartedGuilds", error);
@@ -85,11 +105,16 @@ export async function forgetDepartedGuilds(client: Client): Promise<string[]> {
 }
 
 /**
- * Les deux ménages, dans l'ordre. Chacun signale son propre échec sans priver
- * l'autre de passer.
+ * Les trois ménages, dans l'ordre. Chacun signale son propre échec sans priver
+ * les autres de passer ; la fonction ne lève jamais.
  * @param client Client Discord connecté.
  */
 export async function runDataRetention(client: Client): Promise<void> {
+  try {
+    await manageMsgExpiration(client);
+  } catch (error) {
+    await reportError(client, "manageMsgExpiration", error);
+  }
   await anonymizeOldActivity(client);
   try {
     await forgetDepartedGuilds(client);

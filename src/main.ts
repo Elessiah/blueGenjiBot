@@ -12,7 +12,6 @@ import { getBddInstance, closeBddInstance } from "./bdd/Bdd.js";
 import { deleteDPMsgs } from "./bdd/deleteDPMsgs.js";
 import { checkBan } from "./check/checkBan.js";
 import { _resetChannel } from "./commandsHandlers/services/resetChannel.js";
-import { _resetServer } from "./commandsHandlers/services/resetServer.js";
 import { commands } from "./config/commands.js";
 import { fillBlueCommands } from "./config/fillBlueCommands.js";
 import { checkIntervalleAdhesion } from "@/adhesion/checkIntervalleAdhesion.js";
@@ -25,7 +24,7 @@ import { safeReply } from "./safe/safeReply.js";
 import { updateCommands } from "./utils/updateCommands.js";
 import { startInternalApi } from "@/internalApi.js";
 import { purgeFeedIdentifiers } from "@/feed/feedBus.js";
-import { runDataRetention } from "@/privacy/dataRetention.js";
+import { eraseGuild, runDataRetention } from "@/privacy/dataRetention.js";
 import { recordDailySnapshot } from "@/snapshots/dailySnapshot.js";
 import { sendDatabaseBackup } from "@/backup/weeklyBackup.js";
 
@@ -193,6 +192,11 @@ client.on("clientReady", async () => {
     // lecteur. La purge n'echoue jamais bruyamment : le bot doit demarrer meme
     // si elle ne passe pas.
     await purgeFeedIdentifiers(client);
+    // Au démarrage puis chaque nuit : c'est au démarrage qu'on rattrape les
+    // serveurs quittés pendant l'arrêt, qu'aucun `guildDelete` n'annoncera.
+    // Placé en tête, et la fonction ne levant jamais : un échec des étapes
+    // suivantes ne peut pas le priver de passer.
+    await runDataRetention(client);
 
     if (!internalApiServer) {
       internalApiServer = startInternalApi(client);
@@ -205,9 +209,6 @@ client.on("clientReady", async () => {
 
     await checkIntervalleAdhesion(client);
     await recordDailySnapshot(client);
-    // Au démarrage puis chaque nuit : c'est au démarrage qu'on rattrape les
-    // serveurs quittés pendant l'arrêt, qu'aucun `guildDelete` n'annoncera.
-    await runDataRetention(client);
     // Une tâche cron s'exécute hors de toute pile applicative : sans garde, son
     // échec devient un rejet non capturé, donc un arrêt du process.
     cron.schedule(
@@ -268,15 +269,13 @@ client.on("guildCreate", async (guild) => {
 
 client.on("guildDelete", async (guild) => {
   try {
-    // La configuration d'abord : les filtres de rang se retrouvent par les
-    // salons partenaires, que `_resetServer` supprime. Son échec est signalé
-    // sans priver le serveur du retrait de ses salons relayés, qui suit.
+    // Même chemin que le rattrapage du démarrage (`eraseGuild`). Un échec est
+    // signalé ; ce qui reste sera repris au prochain démarrage ou à la nuit.
     try {
-      await (await getBddInstance()).forgetGuild(guild.id);
+      await eraseGuild(guild.id);
     } catch (error) {
-      await reportError(client, "guildDelete (forgetGuild)", error);
+      await reportError(client, "guildDelete (eraseGuild)", error);
     }
-    await _resetServer(client, guild.id);
     for (const currentGuild of client.guilds.cache.values()) {
       await updateCommands(client, currentGuild.id);
     }

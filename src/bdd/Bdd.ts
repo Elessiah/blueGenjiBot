@@ -958,13 +958,17 @@ class Bdd {
    * @returns Identifiants distincts, dans un ordre quelconque.
    */
   async listConfiguredGuildIds(): Promise<string[]> {
+    // Filtré après l'union : une clé primaire `TEXT` admet `NULL` en SQLite,
+    // et `String(null)` ferait oublier chaque nuit un serveur nommé "null".
     const rows = await this.raw<{ id: string }>(
-      `SELECT id_guild AS id FROM ChannelPartner WHERE id_guild IS NOT NULL
-       UNION SELECT id_guild FROM ServerInvite
-       UNION SELECT id_guild FROM RefereeRole
-       UNION SELECT guild_id FROM RoleAdmin
-       UNION SELECT id_guild FROM ServerModule
-       UNION SELECT guild_id FROM AdhesionInterval`,
+      `SELECT id FROM (
+         SELECT id_guild AS id FROM ChannelPartner
+         UNION SELECT id_guild FROM ServerInvite
+         UNION SELECT id_guild FROM RefereeRole
+         UNION SELECT guild_id FROM RoleAdmin
+         UNION SELECT id_guild FROM ServerModule
+         UNION SELECT guild_id FROM AdhesionInterval
+       ) WHERE id IS NOT NULL AND id <> ''`,
     );
     return rows.map((row) => String(row.id));
   }
@@ -987,15 +991,15 @@ class Bdd {
     const database = this.Database;
     if (!database) { return { Scrim: 0, Recrute: 0 }; }
     const modifier = `-${days} days`;
-    const removed = { Scrim: 0, Recrute: 0 };
-    for (const table of ["Scrim", "Recrute"] as const) {
-      const result = await database.run(
-        `UPDATE ${table} SET id_author = '' WHERE id_author <> '' AND date < DATETIME('now', ?)`,
-        [modifier],
-      );
-      removed[table] = result.changes ?? 0;
-    }
-    return removed;
+    const scrim = await database.run(
+      "UPDATE Scrim SET id_author = '' WHERE id_author <> '' AND date < DATETIME('now', ?)",
+      [modifier],
+    );
+    const recrute = await database.run(
+      "UPDATE Recrute SET id_author = '' WHERE id_author <> '' AND date < DATETIME('now', ?)",
+      [modifier],
+    );
+    return { Scrim: scrim.changes ?? 0, Recrute: recrute.changes ?? 0 };
   }
 
   /**

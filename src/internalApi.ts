@@ -659,15 +659,11 @@ export function startInternalApi(client: Client) {
         "SELECT COUNT(*) AS total FROM AdhesionInterval WHERE guild_id = ?",
         [guildId]
       );
-      // `oauth` n'a plus de compteur : il comptait les liaisons `/link`, une
-      // commande retirée que rien n'avait jamais menée à son terme. `null`
-      // dit « pas de mesure », là où `0` affirmerait un zéro.
-      const counters: Record<ModuleKey, number | null> = {
+      const counters: Record<ModuleKey, number> = {
         annonces: Number(annonceRows[0]?.total ?? 0),
         scrims: Number(scrimRows[0]?.total ?? 0),
         recrutement: Number(recruteRows[0]?.total ?? 0),
         notifications: Number(relayRows[0]?.total ?? 0),
-        oauth: null,
         stats: Number(relayRows[0]?.total ?? 0),
       };
 
@@ -689,10 +685,6 @@ export function startInternalApi(client: Client) {
       }
       if (!isValidModule(moduleKey)) {
         res.status(400).json({ error: "INVALID_MODULE_KEY", allowed: MODULE_KEYS });
-        return;
-      }
-      if (moduleKey === "oauth") {
-        res.status(403).json({ error: "MODULE_OAUTH_NON_TOGGLEABLE" });
         return;
       }
       const enabled = req.body?.enabled === true || req.body?.enabled === 1 || req.body?.enabled === "true";

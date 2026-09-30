@@ -9,7 +9,7 @@ import type { Client } from "discord.js";
 const TMP_DB = path.join(os.tmpdir(), `bgenji-retention-${randomUUID()}.sqlite`);
 process.env.BDD_PATH = TMP_DB;
 
-import { getBddInstance, closeBddInstance } from "../../bdd/Bdd.js";
+import { getBddInstance, closeBddInstance, resetBddInstance } from "../../bdd/Bdd.js";
 import {
   ACTIVITY_AUTHOR_RETENTION_DAYS,
   anonymizeOldActivity,
@@ -41,7 +41,16 @@ async function seedGuild(guildId: string, channelId: string): Promise<void> {
   await bdd.raw("INSERT INTO RefereeRole (id_guild, id_role, set_by) VALUES (?, 'role-ref', 'admin-1')", [guildId]);
 }
 
-test("la table UserLink n'existe plus", async () => {
+test("une table UserLink existante est supprimée à l'ouverture de la base", async () => {
+  // Base d'avant le retrait de `/link` : la table existe et porte des lignes.
+  const before = await getBddInstance();
+  await before.raw("CREATE TABLE IF NOT EXISTS UserLink (id_user TEXT PRIMARY KEY, code TEXT NOT NULL, expires_at DATETIME NOT NULL, linked_at DATETIME)");
+  await before.raw("INSERT INTO UserLink (id_user, code, expires_at) VALUES ('u1', '123456', DATETIME('now'))");
+  assert.equal(
+    await count("SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table' AND name = 'UserLink'"),
+    1,
+  );
+  await resetBddInstance();
   assert.equal(
     await count("SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table' AND name = 'UserLink'"),
     0,
@@ -92,6 +101,13 @@ test("un serveur quitté pendant l'arrêt est oublié au démarrage, les autres 
   assert.equal(await count("SELECT COUNT(*) AS n FROM ChannelPartner WHERE id_guild = 'g-stay'"), 1);
   assert.equal(await count("SELECT COUNT(*) AS n FROM RefereeRole WHERE id_guild = 'g-stay'"), 1);
   assert.ok(logs.some((line) => line.includes("2 serveur(s)")));
+});
+
+test("un identifiant de serveur NULL n'est jamais compté comme oublié", async () => {
+  const bdd = await getBddInstance();
+  await bdd.raw("INSERT INTO RefereeRole (id_guild, id_role, set_by) VALUES (NULL, 'role-x', 'admin-1')");
+  assert.equal((await bdd.listConfiguredGuildIds()).includes("null"), false);
+  assert.deepEqual(await forgetDepartedGuilds(fakeClient(["g-stay"])), []);
 });
 
 test("un cache de serveurs vide n'efface rien", async () => {
