@@ -112,6 +112,9 @@ export async function forgetDepartedGuilds(client: Client): Promise<string[]> {
   const departed = (await bdd.listConfiguredGuildIds()).filter((id) => !joined.has(id));
   const forgotten: string[] = [];
   for (const guildId of departed) {
+    // Relu avant chaque effacement : entre la liste et ici, des `await` ont
+    // pu laisser le bot être réinvité sur ce serveur (et y être reconfiguré).
+    if (client.guilds.cache.has(guildId)) { continue; }
     try {
       await eraseGuild(guildId);
       forgotten.push(guildId);

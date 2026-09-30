@@ -20,14 +20,15 @@ async function _resetServer(client: Client,
         if (removal.found === 0)
             return ( {success: false, message: "Server already reseted"} );
         if (removal.success) {
+            // Le nom ne sert qu'au journal : un serveur déjà quitté n'est plus
+            // joignable, et la suppression, faite, reste un succès.
+            let label = guild_id;
             try {
                 const guild: Guild = await client.guilds.fetch(guild_id);
-                await sendLog(client, `Server "${guild.name}" has deleted all services.`);
-                return {success: true, message: "Server reseted."};
-            } catch (error) {
-                await sendLog(client, "Erreur lors de la récupération de la guild !" + (error as TypeError).message);
-                return {success: false, message: (error as TypeError).message};
-            }
+                label = guild.name;
+            } catch { /* serveur quitté : on journalise son identifiant */ }
+            await sendLog(client, `Server "${label}" has deleted all services.`);
+            return {success: true, message: "Server reseted."};
         } else {
             return {success: false, message: removal.message};
         }

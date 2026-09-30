@@ -687,6 +687,13 @@ export function startInternalApi(client: Client) {
         res.status(400).json({ error: "INVALID_MODULE_KEY", allowed: MODULE_KEYS });
         return;
       }
+      // Un réglage pour un serveur que le bot n'a pas rejoint serait effacé
+      // au prochain rattrapage des serveurs quittés : on le refuse plutôt que
+      // de répondre 200 pour une écriture vouée à disparaître.
+      if (!client.guilds.cache.has(guildId)) {
+        res.status(404).json({ error: "GUILD_NOT_JOINED" });
+        return;
+      }
       const enabled = req.body?.enabled === true || req.body?.enabled === 1 || req.body?.enabled === "true";
       await setModuleEnabled(guildId, moduleKey as ModuleKey, enabled);
       res.json({ guildId, module: moduleKey, enabled });

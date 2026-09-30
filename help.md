@@ -47,7 +47,6 @@ Everyone:
 - `/list-partner service:<service>`
 - `/display-channel-filter-region channel:<channel>`
 - `/display-channel-filter-rank channel:<channel>`
-- `/ban-list`
 - `/show-bot-admin`
 - `/stats`: shows **your own** recent activity (only you see the reply): partner messages from the last 7 days, scrims and searches from the last 30 days. Nobody can look up another player's activity.
 - `/stats-site`: shows BlueGenji website traffic (total visits, and unique visitors over the last 25 months).
@@ -59,6 +58,7 @@ To link your Discord account to the BlueGenji website, sign in to the website wi
 Retention: relayed messages 7 days; the author of a `/scrim` or `/recrute` 30 days (then the author's ID is erased, only the date and server remain for counters); a server's configuration is erased when the bot leaves it — including when it left while the bot was offline, at the next startup.
 
 Server admins:
+- `/ban-list` (network-wide list, see above)
 - `/assign-channel channel:<channel> service:<service> region-filter:<region> [rank-min] [rank-max]`
 - `/edit-channel-filter-region channel:<channel> region:<region>`
 - `/edit-channel-filter-rank channel:<channel> rank-min:<rank> rank-max:<rank>`

@@ -48,11 +48,11 @@ Pour tout le monde :
 - `/list-partner service:<service>`
 - `/display-channel-filter-region channel:<channel>`
 - `/display-channel-filter-rank channel:<channel>`
-- `/ban-list`
 - `/show-bot-admin`
 - `/show-server-invite`
 
 Admins du serveur :
+- `/ban-list` (liste de tout le réseau, voir plus bas)
 - `/assign-channel channel:<channel> service:<service> region-filter:<region> [rank-min] [rank-max]`
 - `/edit-channel-filter-region channel:<channel> region:<region>`
 - `/edit-channel-filter-rank channel:<channel> rank-min:<rank> rank-max:<rank>`

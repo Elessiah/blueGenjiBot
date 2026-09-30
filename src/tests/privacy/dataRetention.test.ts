@@ -134,6 +134,8 @@ test("le rattrapage n'efface rien pour une autre application Discord que celle d
   for (const id of ["g-a", "g-b", "g-c", "g-d"]) {
     await seedGuild(id, `c-${id}`);
   }
+  // La base appartient à l'application de production, quel que soit l'ordre des tests.
+  assert.equal(await (await getBddInstance()).claimOwnerApplication("app-prod"), true);
   logs.length = 0;
   // Bot de développement lancé sur la base de production : son cache ne la décrit pas.
   assert.deepEqual(await forgetDepartedGuilds(fakeClient(["g-dev"], "app-dev")), []);

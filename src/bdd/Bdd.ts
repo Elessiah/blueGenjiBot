@@ -96,8 +96,8 @@ async function resetBddInstance(): Promise<boolean> {
  * serveur : ce que `forgetGuild` efface et ce que `listConfiguredGuildIds`
  * relit. Une seule liste pour les deux — tenues à la main, elles divergeraient,
  * et un serveur figurant dans l'une seulement serait « oublié » chaque nuit sans
- * rien perdre, ou gardé sans limite. Noms constants : ils sont interpolés dans
- * le SQL, jamais une valeur venue d'un appelant.
+ * rien perdre, ou gardé sans limite. Les noms sont interpolés dans le SQL :
+ * ce sont des constantes, et `assertSqlIdentifier` le vérifie à chaque usage.
  */
 const GUILD_CONFIG_TABLES: readonly (readonly [string, string])[] = [
   ["ServerInvite", "id_guild"],
@@ -106,6 +106,21 @@ const GUILD_CONFIG_TABLES: readonly (readonly [string, string])[] = [
   ["ServerModule", "id_guild"],
   ["AdhesionInterval", "guild_id"],
 ];
+
+/**
+ * Refuse tout nom de table ou de colonne qui ne soit pas un identifiant nu :
+ * garde-fou des rares requêtes qui interpolent un nom (les valeurs, elles,
+ * restent toujours bindées).
+ * @param name Nom à vérifier.
+ * @returns Le nom, inchangé.
+ * @throws Si le nom contient autre chose que lettres, chiffres et `_`.
+ */
+function assertSqlIdentifier(name: string): string {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+    throw new Error(`Identifiant SQL refusé : ${name}`);
+  }
+  return name;
+}
 
 class Bdd {
     private name: string;
@@ -962,7 +977,10 @@ class Bdd {
     if (!database) { return {}; }
     const removed: Record<string, number> = {};
     for (const [table, column] of GUILD_CONFIG_TABLES) {
-      const result = await database.run(`DELETE FROM ${table} WHERE ${column} = ?`, [guildId]);
+      const result = await database.run(
+        `DELETE FROM ${assertSqlIdentifier(table)} WHERE ${assertSqlIdentifier(column)} = ?`,
+        [guildId],
+      );
       removed[table] = result.changes ?? 0;
     }
     return removed;
@@ -1012,7 +1030,7 @@ class Bdd {
    */
   async listConfiguredGuildIds(): Promise<string[]> {
     const sources = [["ChannelPartner", "id_guild"], ...GUILD_CONFIG_TABLES]
-      .map(([table, column]) => `SELECT ${column} AS id FROM ${table}`)
+      .map(([table, column]) => `SELECT ${assertSqlIdentifier(column)} AS id FROM ${assertSqlIdentifier(table)}`)
       .join(" UNION ");
     // Filtré après l'union : une clé primaire `TEXT` admet `NULL` en SQLite,
     // et `String(null)` ferait oublier chaque nuit un serveur nommé "null".
