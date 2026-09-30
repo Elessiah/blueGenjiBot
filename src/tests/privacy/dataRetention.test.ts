@@ -26,7 +26,8 @@ const logs: string[] = [];
 /** Client minimal : `sendLog` écrit au propriétaire et au salon d'administration. */
 function fakeClient(joinedGuildIds: string[], applicationId = "app-prod"): Client {
   return {
-    user: { id: applicationId },
+    application: { id: applicationId },
+    user: { id: `user-of-${applicationId}` },
     guilds: { cache: new Map(joinedGuildIds.map((id) => [id, { id }])) },
     users: { fetch: async () => ({ send: async (msg: string) => { logs.push(msg); return { id: "m1" }; } }) },
     channels: { fetch: async () => ({ send: async (msg: string) => { logs.push(msg); return { id: "m2" }; } }) },

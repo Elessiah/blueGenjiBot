@@ -62,7 +62,7 @@ async function ban(client: Client,
     }
     // Identifiants, jamais de pseudos, au journal : un pseudo se change et se
     // lit par quiconque voit le salon, l'identifiant suffit à retrouver le compte.
-    await sendLog(client, `A player (id ${user.id}) *has been banned by a moderator (id ${interaction.user.id})*`);
+    await sendLog(client, `*Un joueur (id ${user.id}) a été exclu par un modérateur (id ${interaction.user.id}).*`);
     const ids: idSendLogMsg = {admin: "", owner: ""};
     await sendLog(client, "**Reason:** " + reason, ids);
     try {

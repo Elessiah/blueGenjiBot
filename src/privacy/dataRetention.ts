@@ -102,7 +102,9 @@ export async function forgetDepartedGuilds(client: Client): Promise<string[]> {
   // L'application (celle de `CLIENT_ID`), pas l'utilisateur du bot : sur une
   // application ancienne les deux identifiants diffèrent, et c'est celui de
   // l'application que l'exploitant reconnaît dans `BotOwner`.
-  const applicationId = client.application?.id ?? client.user?.id;
+  // Sans elle, rien : revendiquer la base avec l'identifiant de l'utilisateur
+  // la fermerait ensuite à l'application elle-même.
+  const applicationId = client.application?.id;
   if (!applicationId) { return []; }
   const bdd = await getBddInstance();
   const owned = await bdd.claimOwnerApplication(applicationId);

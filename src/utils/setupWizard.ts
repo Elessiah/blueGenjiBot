@@ -20,7 +20,7 @@ export async function runSetupWizard(guild: Guild, client: Client): Promise<void
     const lines = [
       `**Bienvenue sur BlueGenji Bot, ${guild.name} !**`,
       "",
-      "Modules disponibles : Annonces, Scrims, Recrutement, Notifications, Stats. Tous sont actifs par defaut.",
+      "Modules disponibles : Annonces, Scrims, Recrutement. Tous sont actifs par defaut.",
       "",
       "Commandes essentielles :",
       "- `/config <module>` : activer / desactiver un module",

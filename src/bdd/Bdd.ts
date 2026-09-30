@@ -1012,9 +1012,7 @@ class Bdd {
    * serveur (`deleteGuildChannels`) : une table **par salon** ajoutée demain se
    * range ici. Les filtres d'abord, ordre d'origine : tant que la ligne
    * `ChannelPartner` reste, un retrait interrompu se retrouve et se rejoue
-   * (le rattrapage d'un serveur quitté relit cette table). Les filtres d'un
-   * salon **non** relayé ne sont jamais purgés ailleurs : un administrateur
-   * peut les poser avant de relayer le salon.
+   * (le rattrapage d'un serveur quitté relit cette table).
    * @param channelId Identifiant du salon.
    * @returns Le `status` de `deleteChannelServices`.
    * @throws Si la suppression des filtres de rang échoue.
@@ -1083,7 +1081,7 @@ class Bdd {
    * seule celle-là est reconnue. Pour confier la base à une autre application
    * (changement d'application Discord du bot), vider la table à la main :
    * `DELETE FROM BotOwner` — la suivante à démarrer la revendique.
-   * @param applicationId Identifiant de l'application connectée (`client.user.id`).
+   * @param applicationId Identifiant de l'application connectée (`client.application.id`, celui de `CLIENT_ID`).
    * @returns `true` si la base appartient à cette application (ou vient de lui
    *          être attribuée), `false` si elle en a une autre, `null` si la
    *          connexion est fermée (restauration en cours) : rien à conclure.
@@ -1117,7 +1115,9 @@ class Bdd {
    */
   async anonymizeActivityAuthors(days: number): Promise<{ Scrim: number; Recrute: number }> {
     const database = this.Database;
-    if (!database) { return { Scrim: 0, Recrute: 0 }; }
+    // Base fermée (restauration en cours) : lever plutôt que rendre 0, que le
+    // journal lirait comme une nuit sans rien à effacer.
+    if (!database) { throw new Error("Base fermée : anonymisation non jouée."); }
     const modifier = `-${days} days`;
     const scrim = await database.run(
       "UPDATE Scrim SET id_author = '' WHERE id_author <> '' AND (date IS NULL OR date < DATETIME('now', ?))",
