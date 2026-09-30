@@ -48,7 +48,11 @@ Is called when the bot join a server.
 We begin by applying the commands to the new server, then we log the event in owner DM and the admin channel of blueGenji define 
 in the `env` under `INFO_SERV`.
 
+### Data retention (ready, nightly cron, after a backup restore)
+
+`privacy/dataRetention.ts` runs at startup, in the existing 00:05 cron job and after a successful `/restore-backup`. It catches up the 7-day purge of relayed messages (otherwise only triggered by a new relay), folds `/scrim` and `/recrute` rows older than 30 days into anonymous per-day counts (`ActivityDaily`: day, server, level or role — no author, time or order), and forgets every server configured in the database that the bot is no longer in (`eraseGuild`: `forgetGuild`, then its relayed channels) — Discord sends no `guildDelete` for a server left while the bot was offline, and this also finishes a `forgetGuild` that failed halfway. The server catch-up (and only it) does nothing before the client is ready (an empty cache once ready means the bot is in no server any more, and everything is forgotten), and does nothing — with a log line — when the database belongs to another Discord application (`BotOwner`: the first application to start on a database claims it), e.g. a bot started with a development token on the production database. After a restore, the feed identifier purge is re-run too, so a restored backup cannot bring Discord IDs back to the public feed.
+
 ### GuildDelete
 
-Is called when the bot leave a server. We first remove the server's configuration (`Bdd.forgetGuild`: invite link, referee role, bot admin role, modules, membership reminders and the rank filters of its channels), then its relayed channels and their services (`_resetServer`), and we log it in the owner DM and the admin channel of the BlueGenji
+Is called when the bot leave a server. If the database belongs to this Discord application (`BotOwner`, see above), we first remove the server's configuration (`Bdd.forgetGuild`: invite link, referee role, bot admin role, modules and membership reminders), then its relayed channels, their rank filters and their services (`Bdd.deleteGuildChannels`) — both through `eraseGuild`, the same path as the startup catch-up, and we log it in the owner DM and the admin channel of the BlueGenji
 

@@ -91,6 +91,60 @@ async function resetBddInstance(): Promise<boolean> {
   return true;
 }
 
+/**
+ * Tables de **configuration** d'un serveur, avec leur colonne d'identifiant de
+ * serveur : ce que `forgetGuild` efface et ce que `listConfiguredGuildIds`
+ * relit. Une seule liste pour les deux — tenues à la main, elles divergeraient,
+ * et un serveur figurant dans l'une seulement serait « oublié » chaque nuit sans
+ * rien perdre, ou gardé sans limite. Les noms sont interpolés dans le SQL :
+ * ce sont des constantes, vérifiées une fois au chargement du module (une
+ * faute de frappe fait échouer le démarrage et les tests, pas un départ de
+ * serveur).
+ */
+const GUILD_CONFIG_TABLES: readonly (readonly [string, string])[] = [
+  ["ServerInvite", "id_guild"],
+  ["RefereeRole", "id_guild"],
+  ["RoleAdmin", "guild_id"],
+  ["ServerModule", "id_guild"],
+  ["AdhesionInterval", "guild_id"],
+];
+
+/**
+ * Refuse tout nom de table ou de colonne qui ne soit pas un identifiant nu :
+ * garde-fou des rares requêtes qui interpolent un nom (les valeurs, elles,
+ * restent toujours bindées).
+ * @param name Nom à vérifier.
+ * @returns Le nom, inchangé.
+ * @throws Si le nom contient autre chose que lettres, chiffres et `_`.
+ */
+function assertSqlIdentifier(name: string): string {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+    throw new Error(`Identifiant SQL refusé : ${name}`);
+  }
+  return name;
+}
+
+/** Salons relayés : lus par le rattrapage, retirés par `deleteGuildChannels`. */
+const GUILD_CHANNEL_TABLE = ["ChannelPartner", "id_guild"] as const;
+
+for (const [table, column] of [...GUILD_CONFIG_TABLES, GUILD_CHANNEL_TABLE]) {
+  assertSqlIdentifier(table);
+  assertSqlIdentifier(column);
+}
+
+/**
+ * Tous les serveurs dont la base garde une configuration, bâti une fois à côté
+ * de la vérification des noms qu'il interpole. Filtré après l'union : une clé
+ * primaire `TEXT` admet `NULL` en SQLite, et `String(null)` ferait oublier
+ * chaque nuit un serveur nommé "null".
+ */
+const CONFIGURED_GUILDS_SQL =
+  "SELECT id FROM (" +
+  [GUILD_CHANNEL_TABLE, ...GUILD_CONFIG_TABLES]
+    .map(([table, column]) => `SELECT ${column} AS id FROM ${table}`)
+    .join(" UNION ") +
+  ") WHERE id IS NOT NULL AND id <> ''";
+
 class Bdd {
     private name: string;
     private Database: Database | null;
@@ -163,6 +217,26 @@ class Bdd {
    * Crée les tables nécessaires et injecte les données statiques manquantes.
    */
   async initDatabase(): Promise<void> {
+    try {
+      // Une ligne effacée ou réécrite (auteur anonymisé, table `UserLink`
+      // supprimée, serveur oublié) laisserait sinon ses octets dans les pages
+      // libérées du fichier — et la sauvegarde, qui copie les pages telles
+      // quelles, les emporterait. Réglage de connexion, rejoué à chaque ouverture.
+      // `ON` plutôt que `FAST` : `FAST` ne réécrit pas les pages rendues à la
+      // liste libre, justement celles d'une table supprimée. Le coût (quelques
+      // écritures de plus par purge de relais) est négligeable sur cette base.
+      await this.Database?.exec("PRAGMA secure_delete = ON");
+    } catch (e) {
+      console.error("secure_delete error: ", (e as TypeError).message);
+    }
+    try {
+      // Une écriture qui trouve la base verrouillée (sauvegarde en cours)
+      // attend jusqu'à 5 s au lieu d'échouer aussitôt : les reprises des
+      // appelants ne font alors plus dix échecs en rafale.
+      await this.Database?.exec("PRAGMA busy_timeout = 5000");
+    } catch (e) {
+      console.error("busy_timeout error: ", (e as TypeError).message);
+    }
     try {
       await this.Database?.exec(
           `CREATE TABLE IF NOT EXISTS OGMsg
@@ -480,18 +554,21 @@ class Bdd {
       console.error("Recrute error: ", (e as TypeError).message);
     }
     try {
-      await this.Database?.exec(
-        `CREATE TABLE IF NOT EXISTS UserLink
-          (
-            id_user TEXT PRIMARY KEY,
-            code TEXT NOT NULL,
-            expires_at DATETIME NOT NULL,
-            linked_at DATETIME
-          );
-        `
-      );
+      // `/link` a été retirée : elle promettait une liaison que le site n'a
+      // jamais su recevoir, et sa table ne gardait plus que des identifiants
+      // Discord et des codes expirés. La supprimer efface les lignes des
+      // bases qui tournent ; aucune ne sera plus jamais écrite.
+      await this.Database?.exec("DROP TABLE IF EXISTS UserLink");
     } catch (e) {
       console.error("UserLink error: ", (e as TypeError).message);
+    }
+    try {
+      // Modules retirés : `oauth` n'existait que pour `/link`, `notifications`
+      // et `stats` n'étaient relus par aucune commande. Leurs préférences,
+      // qu'aucun code ne relit plus, partent avec eux.
+      await this.Database?.exec("DELETE FROM ServerModule WHERE module_key IN ('oauth', 'notifications', 'stats')");
+    } catch (e) {
+      console.error("ServerModule oauth cleanup error: ", (e as TypeError).message);
     }
     try {
       await this.Database?.exec(
@@ -549,6 +626,40 @@ class Bdd {
       );
     } catch (e) {
       console.error("SiteVisit error: ", (e as TypeError).message);
+    }
+    try {
+      // Scrims et recherches de plus de 30 jours, repliés en nombres : ni
+      // auteur, ni ordre, ni heure (voir `anonymizeActivityAuthors`).
+      await this.Database?.exec(
+        `CREATE TABLE IF NOT EXISTS ActivityDaily
+          (
+            kind TEXT NOT NULL,
+            day TEXT NOT NULL,
+            id_guild TEXT NOT NULL DEFAULT '',
+            detail TEXT NOT NULL DEFAULT '',
+            count INTEGER NOT NULL,
+            PRIMARY KEY (kind, day, id_guild, detail)
+          );
+        `
+      );
+    } catch (e) {
+      console.error("ActivityDaily error: ", (e as TypeError).message);
+    }
+    try {
+      // Application Discord propriétaire de cette base (une ligne). Le
+      // rattrapage des serveurs quittés s'y fie avant tout effacement : un bot
+      // lancé avec un autre jeton sur cette base verrait un cache qui ne la
+      // décrit pas, et oublierait tout le réseau.
+      await this.Database?.exec(
+        `CREATE TABLE IF NOT EXISTS BotOwner
+          (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            application_id TEXT NOT NULL
+          );
+        `
+      );
+    } catch (e) {
+      console.error("BotOwner error: ", (e as TypeError).message);
     }
   }
 
@@ -916,41 +1027,204 @@ class Bdd {
   }
 
   /**
-   * Efface la configuration propre à un serveur que le bot vient de quitter.
-   *
-   * `_resetServer` ne retire que les salons relayés et leurs services : le lien
-   * d'invitation et le rôle arbitre (qui gardent tous deux `set_by`,
+   * Efface la configuration propre à un serveur que le bot vient de quitter :
+   * le lien d'invitation et le rôle arbitre (qui gardent tous deux `set_by`,
    * l'identifiant de l'administrateur qui les a posés), le rôle
-   * d'administration du bot, les modules, les rappels d'adhésion et les filtres
-   * de rang des salons restaient sinon sans limite, alors que plus personne sur
-   * ce serveur ne peut les retirer. Pas de transaction : la connexion est
-   * partagée par tous les gestionnaires, un `BEGIN` y engloberait (et un
-   * `ROLLBACK` y défairait) les écritures qu'ils font entre deux `await`. Chaque
-   * suppression est idempotente ; la première qui échoue interrompt la suite et
-   * remonte à l'appelant, qui la journalise.
-   *
-   * À appeler **avant** `_resetServer` : les filtres de rang sont retrouvés par
-   * les salons partenaires du serveur, que celui-ci supprime.
+   * d'administration du bot, les modules et les rappels d'adhésion — tout ce
+   * que `GUILD_CONFIG_TABLES` énumère. Les salons relayés et leurs filtres de
+   * rang sont l'affaire de `deleteGuildChannels` ; `eraseGuild` enchaîne les
+   * deux. Pas de transaction : la connexion est partagée par tous les
+   * gestionnaires, un `BEGIN` y engloberait (et un `ROLLBACK` y défairait) les
+   * écritures qu'ils font entre deux `await`. Chaque suppression est
+   * idempotente ; la première qui échoue interrompt la suite et remonte à
+   * l'appelant.
    * @param guildId Identifiant du serveur quitté.
    * @returns Nombre de lignes supprimées, par table.
    */
   async forgetGuild(guildId: string): Promise<Record<string, number>> {
     const database = this.Database;
     if (!database) { return {}; }
-    const statements: [string, string][] = [
-      ["ChannelPartnerRank", "DELETE FROM ChannelPartnerRank WHERE id_channel IN (SELECT id_channel FROM ChannelPartner WHERE id_guild = ?)"],
-      ["ServerInvite", "DELETE FROM ServerInvite WHERE id_guild = ?"],
-      ["RefereeRole", "DELETE FROM RefereeRole WHERE id_guild = ?"],
-      ["RoleAdmin", "DELETE FROM RoleAdmin WHERE guild_id = ?"],
-      ["ServerModule", "DELETE FROM ServerModule WHERE id_guild = ?"],
-      ["AdhesionInterval", "DELETE FROM AdhesionInterval WHERE guild_id = ?"],
-    ];
     const removed: Record<string, number> = {};
-    for (const [table, sql] of statements) {
-      const result = await database.run(sql, [guildId]);
+    for (const [table, column] of GUILD_CONFIG_TABLES) {
+      const result = await database.run(
+        `DELETE FROM ${table} WHERE ${column} = ?`,
+        [guildId],
+      );
       removed[table] = result.changes ?? 0;
     }
     return removed;
+  }
+
+  /**
+   * Retire un salon relayé : ses filtres de rang, puis ses services et le
+   * salon partenaire lui-même (`deleteChannelServices`).
+   *
+   * Unique retrait d'un salon, partagé par `/relay`, `/reset-channel` et
+   * `channelDelete` (`_resetChannel`) et par le retrait de tous les salons d'un
+   * serveur (`deleteGuildChannels`) : une table **par salon** ajoutée demain se
+   * range ici. Les filtres d'abord, ordre d'origine : tant que la ligne
+   * `ChannelPartner` reste, un retrait interrompu se retrouve et se rejoue
+   * (le rattrapage d'un serveur quitté relit cette table).
+   * @param channelId Identifiant du salon.
+   * @returns Un `status`, jamais une exception : l'échec des filtres comme
+   *          celui des services se lit sur `success`.
+   */
+  async deleteChannel(channelId: string): Promise<status> {
+    try {
+      await this.rm("ChannelPartnerRank", {}, {query: "id_channel = ?", values: [channelId]});
+    } catch (err) {
+      return {success: false, message: `Échec du retrait des filtres de rang : ${(err as Error).message}`};
+    }
+    return this.deleteChannelServices(channelId);
+  }
+
+  /**
+   * Retire tous les salons relayés d'un serveur, un par un (`deleteChannel`).
+   *
+   * Partagé par `/reset-all` (`_resetServer`) et l'oubli d'un serveur quitté
+   * (`eraseGuild`). Un salon en échec n'arrête pas les suivants, et son
+   * identifiant est nommé dans le message.
+   * @param guildId Identifiant du serveur.
+   * @returns `success` si tous les salons sont retirés (sinon les messages
+   *          d'échec, un par ligne) et `found`, le nombre de salons trouvés —
+   *          zéro dit « rien à retirer ».
+   */
+  async deleteGuildChannels(guildId: string): Promise<status & { found: number }> {
+    const [channelTable, guildColumn] = GUILD_CHANNEL_TABLE;
+    const channels = await this.get(channelTable, ["id_channel"], {}, {query: `${guildColumn} = ?`, values: [guildId]}) as {id_channel: string}[];
+    let message = "";
+    // Une clé `TEXT` admet `NULL` : `id_channel = NULL` ne désigne rien, la
+    // ligne serait déclarée retirée sans l'être. Retirée ici par le serveur.
+    if (channels.some(({id_channel}) => id_channel === null)) {
+      try {
+        await this.rm(channelTable, {}, {query: `${guildColumn} = ? AND id_channel IS NULL`, values: [guildId]});
+      } catch (err) {
+        message += `(salon sans identifiant): ${(err as Error).message}\n`;
+      }
+    }
+    for (const {id_channel} of channels.filter(({id_channel}) => id_channel !== null)) {
+      // `deleteChannel` ne lève pas : son échec se lit sur `success`.
+      const ret: status = await this.deleteChannel(id_channel);
+      if (!ret.success) {
+        message += `${id_channel}: ${ret.message}\n`;
+      }
+    }
+    return message.length === 0
+      ? {success: true, message: "", found: channels.length}
+      : {success: false, message, found: channels.length};
+  }
+
+  /**
+   * Identifiants de tous les serveurs dont la base garde une configuration.
+   *
+   * Sert à rattraper, au démarrage, les serveurs quittés pendant que le bot
+   * était arrêté (Discord n'envoie alors aucun `guildDelete`) et un
+   * `forgetGuild` resté partiel : ce sont les tables mêmes qu'il vide
+   * (`GUILD_CONFIG_TABLES`, une seule liste pour les deux), plus les salons
+   * relayés que `deleteGuildChannels` retire.
+   * @returns Identifiants distincts, dans un ordre quelconque.
+   */
+  async listConfiguredGuildIds(): Promise<string[]> {
+    // Base fermée (restauration en cours) : lever plutôt que rendre une liste
+    // vide, qui passerait pour une passe sans rien à oublier.
+    const database = this.Database;
+    if (!database) { throw new Error("Base fermée : serveurs configurés illisibles."); }
+    const rows = await database.all(
+      CONFIGURED_GUILDS_SQL,
+    ) as { id: string }[];
+    return rows.map((row) => String(row.id));
+  }
+
+  /**
+   * Revendique la base pour une application Discord, ou vérifie qu'elle lui
+   * appartient déjà.
+   *
+   * La première application qui démarre sur une base l'enregistre ; ensuite,
+   * seule celle-là est reconnue. Pour confier la base à une autre application
+   * (changement d'application Discord du bot), vider la table à la main :
+   * `DELETE FROM BotOwner` — la suivante à démarrer la revendique.
+   * @param applicationId Identifiant de l'application connectée (`client.application.id`, celui de `CLIENT_ID`).
+   * @returns `true` si la base appartient à cette application (ou vient de lui
+   *          être attribuée), `false` si elle en a une autre, `null` si la
+   *          connexion est fermée (restauration en cours) : rien à conclure.
+   */
+  async claimOwnerApplication(applicationId: string): Promise<boolean | null> {
+    const database = this.Database;
+    if (!database) { return null; }
+    // Les deux instructions sur la même connexion, capturée à l'entrée : une
+    // restauration qui la remplace entre les deux ferait lever (signalé par
+    // l'appelant), jamais conclure à tort « une autre application ».
+    await database.run("INSERT OR IGNORE INTO BotOwner (id, application_id) VALUES (1, ?)", [applicationId]);
+    const rows = await database.all("SELECT application_id FROM BotOwner WHERE id = 1") as { application_id: string }[];
+    if (rows.length === 0) { return null; }
+    return rows[0].application_id === applicationId;
+  }
+
+  /**
+   * Replie les scrims et les recherches plus vieux que `days` jours en
+   * compteurs journaliers anonymes (`ActivityDaily`), puis supprime les lignes.
+   *
+   * `Scrim.id_author` et `Recrute.id_author` sont des identifiants Discord :
+   * datés et rattachés à un serveur, ils font un historique d'activité par
+   * personne. Seul `/stats` (30 jours, soi-même) a besoin de l'auteur. Effacer
+   * l'auteur en gardant la ligne ne suffisait pas : l'identifiant
+   * auto-incrémenté garde l'ordre des commandes, et la n-ième ligne d'un
+   * serveur un jour donné redonne la n-ième réponse publique « <joueur> a
+   * utilisé /scrim ». Il ne reste donc qu'un **nombre** par jour, serveur et
+   * niveau (ou rôle) — ce que lisent le graphe d'activité et les compteurs.
+   * Une ligne sans date (la colonne l'admet) ne peut prouver son âge : elle
+   * est repliée sous un jour vide.
+   *
+   * Repli et suppression dans une seule transaction, sur un seuil calculé une
+   * fois et sur une connexion à part : sans elle, un arrêt entre les deux
+   * compterait deux fois les lignes.
+   * @param days Âge au-delà duquel les lignes sont repliées.
+   * @returns Nombre de lignes repliées, par table.
+   */
+  async anonymizeActivityAuthors(days: number): Promise<{ Scrim: number; Recrute: number }> {
+    // Base fermée (restauration en cours) : lever plutôt que rendre 0, que le
+    // journal lirait comme une nuit sans rien à effacer.
+    if (!this.Database) { throw new Error("Base fermée : anonymisation non jouée."); }
+    // Connexion dédiée et brève : une transaction sur la connexion partagée
+    // engloberait (et un `ROLLBACK` déferait) les écritures que les autres
+    // gestionnaires y glissent entre deux `await`. Seuil lié, jamais inliné.
+    const fold = await open({ filename: this.name, driver: sqlite3.Database });
+    try {
+      await fold.exec("PRAGMA busy_timeout = 5000");
+      await fold.exec("PRAGMA secure_delete = ON");
+      const [{ cutoff }] = await fold.all("SELECT DATETIME('now', ?) AS cutoff", [`-${days} days`]) as { cutoff: string }[];
+      const old = "(date IS NULL OR date < ?)";
+      await fold.exec("BEGIN IMMEDIATE");
+      try {
+        const [counts] = await fold.all(
+          `SELECT (SELECT COUNT(*) FROM Scrim WHERE ${old}) AS scrim, (SELECT COUNT(*) FROM Recrute WHERE ${old}) AS recrute`,
+          [cutoff, cutoff],
+        ) as { scrim: number; recrute: number }[];
+        await fold.run(
+          `INSERT INTO ActivityDaily (kind, day, id_guild, detail, count)
+             SELECT 'scrim', COALESCE(DATE(date), ''), COALESCE(id_guild, ''), COALESCE(level, ''), COUNT(*)
+             FROM Scrim WHERE ${old} GROUP BY 2, 3, 4
+             ON CONFLICT(kind, day, id_guild, detail) DO UPDATE SET count = count + excluded.count`,
+          [cutoff],
+        );
+        await fold.run(
+          `INSERT INTO ActivityDaily (kind, day, id_guild, detail, count)
+             SELECT 'recrute', COALESCE(DATE(date), ''), COALESCE(id_guild, ''), COALESCE(role, ''), COUNT(*)
+             FROM Recrute WHERE ${old} GROUP BY 2, 3, 4
+             ON CONFLICT(kind, day, id_guild, detail) DO UPDATE SET count = count + excluded.count`,
+          [cutoff],
+        );
+        await fold.run(`DELETE FROM Scrim WHERE ${old}`, [cutoff]);
+        await fold.run(`DELETE FROM Recrute WHERE ${old}`, [cutoff]);
+        await fold.exec("COMMIT");
+        return { Scrim: Number(counts.scrim), Recrute: Number(counts.recrute) };
+      } catch (error) {
+        await fold.exec("ROLLBACK").catch(() => {});
+        throw error;
+      }
+    } finally {
+      await fold.close();
+    }
   }
 
   /**

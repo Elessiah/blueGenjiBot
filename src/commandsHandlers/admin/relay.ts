@@ -39,8 +39,14 @@ export async function relay(client: Client, interaction: ChatInputCommandInterac
     const bdd = await getBddInstance();
     const existing = await bdd.get("ChannelPartner", ["id_channel"], {}, { query: "id_channel = ?", values: [channel.id] }) as { id_channel: string }[];
     if (existing.length > 0) {
-      await bdd.rm("ChannelPartner", {}, { query: "id_channel = ?", values: [channel.id] });
-      await bdd.rm("ChannelPartnerService", {}, { query: "id_channel = ?", values: [channel.id] });
+      // Le retrait commun d'un salon, filtres de rang compris : sans eux, un
+      // salon réajouté retrouverait des filtres que l'administrateur croit partis.
+      const removal = await bdd.deleteChannel(channel.id);
+      if (!removal.success) {
+        await sendLog(client, `/relay: echec du retrait de ${channel.id} : ${removal.message}`);
+        await safeReply(interaction, "Echec du retrait du relais.", true, false);
+        return;
+      }
       await safeReply(interaction, `Salon <#${channel.id}> retire des relais.`, true, false);
       await sendLog(client, `/relay: retire ${channel.id} du serveur ${guildId}`);
     } else {

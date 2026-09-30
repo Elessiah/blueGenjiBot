@@ -26,9 +26,7 @@
 
 import {Bdd, getBddInstance} from "../bdd/Bdd.js";
 import type {Client} from "discord.js";
-
-/** Durée de conservation d'un message de service et de ses copies relayées. */
-const MESSAGE_RETENTION_DAYS = 7;
+import {MESSAGE_RETENTION_DAYS} from "../privacy/retentionPeriods.js";
 
 /** Le même seuil, dans la langue des modificateurs de date de SQLite. */
 const RETENTION_MODIFIER = `-${MESSAGE_RETENTION_DAYS} days`;
@@ -69,4 +67,4 @@ async function manageMsgExpiration(_client: Client): Promise<void> {
     await bdd.rm('OGMsg', {}, olderThanRetention());
 }
 
-export {MESSAGE_RETENTION_DAYS, manageMsgExpiration};
+export {manageMsgExpiration};

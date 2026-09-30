@@ -20,15 +20,13 @@ export async function runSetupWizard(guild: Guild, client: Client): Promise<void
     const lines = [
       `**Bienvenue sur BlueGenji Bot, ${guild.name} !**`,
       "",
-      "Modules disponibles : Annonces, Scrims, Recrutement, Notifications, Stats. Tous sont actifs par defaut.",
+      "Modules disponibles : Annonces, Scrims, Recrutement. Tous sont actifs par defaut.",
       "",
       "Commandes essentielles :",
       "- `/config <module>` : activer / desactiver un module",
       "- `/relay <channel>` : configurer un salon de relais inter-serveurs",
       "- `/assign-channel` : assigner un service partenaire a un salon",
       "- `/help fr` : voir toutes les commandes",
-      "",
-      "Le module OAuth (liaison Discord <-> site BlueGenji) est toujours actif."
     ];
     await owner.send(lines.join("\n"));
     await sendLog(client, `Wizard setup envoye au proprietaire de ${guild.name} (${guild.id}).`);

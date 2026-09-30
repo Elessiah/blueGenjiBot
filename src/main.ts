@@ -12,7 +12,6 @@ import { getBddInstance, closeBddInstance } from "./bdd/Bdd.js";
 import { deleteDPMsgs } from "./bdd/deleteDPMsgs.js";
 import { checkBan } from "./check/checkBan.js";
 import { _resetChannel } from "./commandsHandlers/services/resetChannel.js";
-import { _resetServer } from "./commandsHandlers/services/resetServer.js";
 import { commands } from "./config/commands.js";
 import { fillBlueCommands } from "./config/fillBlueCommands.js";
 import { checkIntervalleAdhesion } from "@/adhesion/checkIntervalleAdhesion.js";
@@ -25,6 +24,7 @@ import { safeReply } from "./safe/safeReply.js";
 import { updateCommands } from "./utils/updateCommands.js";
 import { startInternalApi } from "@/internalApi.js";
 import { purgeFeedIdentifiers } from "@/feed/feedBus.js";
+import { eraseLeftGuild, runDataRetention } from "@/privacy/dataRetention.js";
 import { recordDailySnapshot } from "@/snapshots/dailySnapshot.js";
 import { sendDatabaseBackup } from "@/backup/weeklyBackup.js";
 
@@ -197,18 +197,43 @@ client.on("clientReady", async () => {
       internalApiServer = startInternalApi(client);
     }
 
+    // Au démarrage puis chaque nuit : c'est au démarrage qu'on rattrape les
+    // serveurs quittés pendant l'arrêt, qu'aucun `guildDelete` n'annoncera.
+    // Lancé sans être attendu — il ne lève jamais : il ne retarde ni
+    // l'enregistrement des commandes ni la pose des tâches cron, et leur
+    // échec ne peut pas le priver de passer.
+    void runDataRetention(client);
+
     for (const guild of client.guilds.cache.values()) {
       console.log("Server ready : ", guild.name);
       await updateCommands(client, guild.id);
     }
 
-    await checkIntervalleAdhesion(client);
-    await recordDailySnapshot(client);
+    // Chacun sous sa garde : un échec au démarrage ne doit pas empêcher la
+    // pose des tâches cron qui suivent — le ménage de la nuit en fait partie.
+    try {
+      await checkIntervalleAdhesion(client);
+    } catch (error) {
+      await reportError(client, "clientReady checkIntervalleAdhesion", error);
+    }
+    try {
+      await recordDailySnapshot(client);
+    } catch (error) {
+      await reportError(client, "clientReady recordDailySnapshot", error);
+    }
     // Une tâche cron s'exécute hors de toute pile applicative : sans garde, son
     // échec devient un rejet non capturé, donc un arrêt du process.
     cron.schedule(
       "5 0 * * *",
       async () => {
+        // Le ménage d'abord, pour que l'instantané du jour ne compte pas les
+        // salons d'un serveur quitté. Il signale son propre échec ; la garde
+        // ne sert que si cela cessait d'être vrai.
+        try {
+          await runDataRetention(client);
+        } catch (error) {
+          await reportError(client, "cron runDataRetention", error);
+        }
         try {
           await recordDailySnapshot(client);
         } catch (error) {
@@ -262,15 +287,19 @@ client.on("guildCreate", async (guild) => {
 
 client.on("guildDelete", async (guild) => {
   try {
-    // La configuration d'abord : les filtres de rang se retrouvent par les
-    // salons partenaires, que `_resetServer` supprime. Son échec est signalé
-    // sans priver le serveur du retrait de ses salons relayés, qui suit.
+    // Même chemin que le rattrapage du démarrage (`eraseGuild`). Un échec est
+    // signalé ; ce qui reste sera repris au prochain démarrage ou à la nuit.
     try {
-      await (await getBddInstance()).forgetGuild(guild.id);
+      if (!(await eraseLeftGuild(client, guild.id))) {
+        await sendLog(
+          client,
+          `guildDelete: configuration du serveur ${guild.id} gardée : base d'une autre application Discord ` +
+            "(elle ne sera effacée que par l'application propriétaire), ou base fermée (le rattrapage suivant la reprendra).",
+        );
+      }
     } catch (error) {
-      await reportError(client, "guildDelete (forgetGuild)", error);
+      await reportError(client, "guildDelete (eraseGuild)", error);
     }
-    await _resetServer(client, guild.id);
     for (const currentGuild of client.guilds.cache.values()) {
       await updateCommands(client, currentGuild.id);
     }
@@ -282,7 +311,11 @@ client.on("guildDelete", async (guild) => {
 
 client.on("channelDelete", async (channel) => {
   try {
-    await _resetChannel(client, channel.id);
+    const ret = await _resetChannel(client, channel.id, "guild" in channel ? channel.guild.name : undefined);
+    if (!ret.success) {
+      // Le salon supprimé resterait sinon relayé en base, sans trace.
+      await sendLog(client, `channelDelete: retrait du salon ${channel.id} échoué : ${ret.message}`);
+    }
   } catch (error) {
     await reportError(client, "channelDelete", error);
   }

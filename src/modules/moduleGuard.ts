@@ -10,13 +10,15 @@
 
 import { getBddInstance } from "@/bdd/Bdd.js";
 
+/**
+ * Clés des modules. `oauth`, `notifications` et `stats` sont **réservées** :
+ * modules retirés, leurs préférences sont effacées à chaque ouverture de la
+ * base (`Bdd.initDatabase`) — un module nouveau ne doit pas reprendre ces noms.
+ */
 export const MODULE_KEYS = [
   "annonces",
   "scrims",
   "recrutement",
-  "notifications",
-  "oauth",
-  "stats",
 ] as const;
 export type ModuleKey = typeof MODULE_KEYS[number];
 
@@ -32,8 +34,7 @@ export function isValidModule(key: string): key is ModuleKey {
 /**
  * Indique si un module est actif pour un serveur donne.
  *
- * `oauth` est toujours actif (voir l'en-tete du module) ; une erreur de
- * lecture repond aussi `true` par defaut — un module qui echoue a verifier son
+ * Une erreur de lecture repond `true` par defaut — un module qui echoue a verifier son
  * etat doit continuer a fonctionner plutot que de se couper silencieusement
  * pour tous les serveurs a la moindre panne de base.
  *
@@ -45,9 +46,6 @@ export async function isModuleEnabled(
   guildId: string,
   moduleKey: ModuleKey
 ): Promise<boolean> {
-  if (moduleKey === "oauth") {
-    return true;
-  }
   try {
     const bdd = await getBddInstance();
     const rows = (await bdd.get(
@@ -71,9 +69,6 @@ export async function isModuleEnabled(
 /**
  * Active ou desactive un module pour un serveur.
  *
- * No-op pour `oauth`, qui ne peut pas etre desactive (voir l'en-tete du
- * module).
- *
  * @param guildId Serveur concerne.
  * @param moduleKey Module a basculer.
  * @param enabled Nouvel etat souhaite.
@@ -83,9 +78,6 @@ export async function setModuleEnabled(
   moduleKey: ModuleKey,
   enabled: boolean
 ): Promise<void> {
-  if (moduleKey === "oauth") {
-    return;
-  }
   const bdd = await getBddInstance();
   await bdd.raw(
     "INSERT INTO ServerModule (id_guild, module_key, enabled) VALUES (?, ?, ?) ON CONFLICT(id_guild, module_key) DO UPDATE SET enabled = excluded.enabled",
@@ -96,7 +88,7 @@ export async function setModuleEnabled(
 /**
  * Liste l'etat de tous les modules connus pour un serveur, y compris ceux sans ligne en base.
  * @param guildId Serveur concerne.
- * @returns Un etat pour chaque `ModuleKey`, `oauth` toujours a `true` et les autres a `true` par defaut en l'absence de preference enregistree.
+ * @returns Un etat pour chaque `ModuleKey`, `true` par defaut en l'absence de preference enregistree.
  */
 export async function listModules(
   guildId: string
@@ -114,6 +106,6 @@ export async function listModules(
   const map = new Map(rows.map((r) => [r.module_key, r.enabled === 1]));
   return MODULE_KEYS.map((k) => ({
     key: k,
-    enabled: k === "oauth" ? true : map.get(k) ?? true,
+    enabled: map.get(k) ?? true,
   }));
 }

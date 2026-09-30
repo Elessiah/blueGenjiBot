@@ -15,7 +15,8 @@ process.env.OWNER_ID = "owner-1";
 process.env.INFO_SERV = "admin-channel-1";
 
 import { getBddInstance, closeBddInstance } from "../../bdd/Bdd.js";
-import { MESSAGE_RETENTION_DAYS, manageMsgExpiration } from "../../messages/manageMsgExpiration.js";
+import { manageMsgExpiration } from "../../messages/manageMsgExpiration.js";
+import { MESSAGE_RETENTION_DAYS } from "../../privacy/retentionPeriods.js";
 import type { Client } from "discord.js";
 
 /**

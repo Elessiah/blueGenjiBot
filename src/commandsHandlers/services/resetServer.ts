@@ -16,30 +16,21 @@ async function _resetServer(client: Client,
                             guild_id: string): Promise<status> {
     const bdd: Bdd = await getBddInstance();
     try {
-        const channels_id: {id_channel: string}[] = await bdd.get("channelPartner", ["id_channel"], {}, {query: "id_guild = ?", values: [guild_id]}) as {id_channel: string}[];
-        if (channels_id.length === 0)
+        const removal = await bdd.deleteGuildChannels(guild_id);
+        if (removal.found === 0)
             return ( {success: false, message: "Server already reseted"} );
-        let message: string = "";
-        let success: boolean = true;
-        for (const channel_id of channels_id) {
-            await bdd.rm("ChannelPartnerRank", {}, {query: "id_channel = ?", values: [channel_id.id_channel]});
-            const ret: status = await bdd.deleteChannelServices(channel_id.id_channel);
-            if (!ret.success) {
-                success = false;
-                message += ret.message + "\n";
-            }
-        }
-        if (success) {
+        if (removal.success) {
+            // Le nom ne sert qu'au journal : un serveur déjà quitté n'est plus
+            // joignable, et la suppression, faite, reste un succès.
+            let label = guild_id;
             try {
                 const guild: Guild = await client.guilds.fetch(guild_id);
-                await sendLog(client, `Server "${guild.name}" has deleted all services.`);
-                return {success: true, message: "Server reseted."};
-            } catch (error) {
-                await sendLog(client, "Erreur lors de la récupération de la guild !" + (error as TypeError).message);
-                return {success: false, message: (error as TypeError).message};
-            }
+                label = guild.name;
+            } catch { /* serveur quitté : on journalise son identifiant */ }
+            await sendLog(client, `Server "${label}" has deleted all services.`);
+            return {success: true, message: "Server reseted."};
         } else {
-            return {success: false, message: message};
+            return {success: false, message: removal.message};
         }
     } catch (err) {
         console.error(err);

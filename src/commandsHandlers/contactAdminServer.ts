@@ -95,7 +95,7 @@ async function contactAdminServer(client: Client,
     let errMsg: string = "";
     for (const target of targetsArray) {
         if (!await safeUser(client, target, undefined, [], msg))
-            {errMsg += "Echec de l'envoi pour " + target.globalName + "\n";}
+            {errMsg += "Echec de l'envoi pour le compte " + target.id + "\n";}
     }
     if (errMsg.length > 0) {
         await sendLog(client, "Erreur pour l'envoies au admins : \n" + errMsg);

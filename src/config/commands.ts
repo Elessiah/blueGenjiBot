@@ -28,7 +28,6 @@ import {resetRefereeRole} from "@/commandsHandlers/admin/resetRefereeRole.js";
 import {ping} from "../commandsHandlers/ping.js";
 import {scrim} from "../commandsHandlers/scrim.js";
 import {recrute} from "../commandsHandlers/recrute.js";
-import {link} from "../commandsHandlers/link.js";
 import {statsPlayer} from "../commandsHandlers/statsPlayer.js";
 import {statsSite} from "../commandsHandlers/statsSite.js";
 import {relay} from "../commandsHandlers/admin/relay.js";
@@ -308,7 +307,7 @@ const commands = {
     "ban-list": {
         handler: banlist,
         parameters: {
-            description: "Display the list of banned members from the bot service (EVERYONE)",
+            description: "Affiche la liste des exclusions de tout le reseau (ADMIN)",
         }
     },
     "unban": {
@@ -431,12 +430,6 @@ const commands = {
             ]
         }
     },
-    "link": {
-        handler: link,
-        parameters: {
-            description: "Lie ton compte Discord au site BlueGenji (TOUS)"
-        }
-    },
     "stats-site": {
         handler: statsSite,
         parameters: {
@@ -446,15 +439,7 @@ const commands = {
     "stats": {
         handler: statsPlayer,
         parameters: {
-            description: "Affiche les stats 30j d'un joueur (TOUS)",
-            options: [
-                {
-                    name: "joueur",
-                    description: "Joueur (optionnel, sinon vous-meme)",
-                    type: ApplicationCommandOptionType.User,
-                    required: false
-                }
-            ]
+            description: "Affiche ta propre activite recente sur le bot (TOUS)"
         }
     },
     "relay": {
@@ -484,9 +469,7 @@ const commands = {
                     choices: [
                         { name: "Annonces", value: "annonces" },
                         { name: "Scrims", value: "scrims" },
-                        { name: "Recrutement", value: "recrutement" },
-                        { name: "Notifications", value: "notifications" },
-                        { name: "Stats", value: "stats" }
+                        { name: "Recrutement", value: "recrutement" }
                     ]
                 }
             ]

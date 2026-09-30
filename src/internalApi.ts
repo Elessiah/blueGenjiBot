@@ -109,6 +109,22 @@ async function getCpuPercent(): Promise<number> {
 }
 
 /**
+ * Refuse en `404 GUILD_NOT_JOINED` un serveur que le bot n'a pas rejoint, pour
+ * les routes de modules (lecture et écriture) : un réglage y serait effacé au
+ * prochain rattrapage des serveurs quittés, et un « tout actif » serait
+ * trompeur. Une seule règle pour les deux routes.
+ * @param client Client Discord.
+ * @param res Réponse, envoyée en cas de refus.
+ * @param guildId Serveur visé.
+ * @returns `true` si la réponse est partie (la route s'arrête).
+ */
+function refuseUnjoinedGuild(client: Client, res: Response, guildId: string): boolean {
+  if (client.guilds.cache.has(guildId)) { return false; }
+  res.status(404).json({ error: "GUILD_NOT_JOINED" });
+  return true;
+}
+
+/**
  * Construit, monte et demarre le serveur Express de l'API interne.
  *
  * Le port reste en ecoute sur `INTERNAL_API_HOST` (127.0.0.1 par defaut) et
@@ -319,7 +335,8 @@ export function startInternalApi(client: Client) {
         res.status(504).json({ error: "BOT_RESOLVE_TIMEOUT" });
         return;
       }
-      await sendLog(client, `Failed to resolve discord handle "${handle}": ${(error as Error).message}`);
+      // Le tag cherché est le pseudo d'une personne : il ne part pas au journal.
+      await sendLog(client, `Failed to resolve a discord handle: ${(error as Error).message}`);
       res.status(500).json({ error: "INTERNAL_RESOLVE_ERROR" });
     }
   });
@@ -605,9 +622,15 @@ export function startInternalApi(client: Client) {
         "SELECT date(date) AS day, COUNT(*) AS count FROM DPMsg WHERE date >= datetime('now', ?) GROUP BY day ORDER BY day ASC",
         [`-${days} day`]
       );
+      // Au-delà de 30 jours, les scrims ne sont plus des lignes mais des
+      // compteurs journaliers (`ActivityDaily`) : les deux sources s'ajoutent.
       const scrimRows = await bdd.raw<{ day: string; count: number }>(
-        "SELECT date(date) AS day, COUNT(*) AS count FROM Scrim WHERE date >= datetime('now', ?) GROUP BY day ORDER BY day ASC",
-        [`-${days} day`]
+        `SELECT day, SUM(count) AS count FROM (
+           SELECT date(date) AS day, COUNT(*) AS count FROM Scrim WHERE date >= datetime('now', ?) GROUP BY day
+           UNION ALL
+           SELECT day, SUM(count) AS count FROM ActivityDaily WHERE kind = 'scrim' AND day >= date('now', ?) GROUP BY day
+         ) GROUP BY day ORDER BY day ASC`,
+        [`-${days} day`, `-${days} day`]
       );
 
       const labels: string[] = [];
@@ -640,13 +663,10 @@ export function startInternalApi(client: Client) {
         res.status(400).json({ error: "INVALID_GUILD_ID" });
         return;
       }
+      if (refuseUnjoinedGuild(client, res, guildId)) { return; }
       const bdd = await getBddInstance();
       const modules = await listModules(guildId);
 
-      const relayRows = await bdd.raw<{ total: number }>(
-        "SELECT COUNT(*) AS total FROM DPMsg d JOIN ChannelPartner c ON d.id_channel = c.id_channel WHERE c.id_guild = ? AND d.date >= datetime('now', '-30 day')",
-        [guildId]
-      );
       const scrimRows = await bdd.raw<{ total: number }>(
         "SELECT COUNT(*) AS total FROM Scrim WHERE id_guild = ? AND date >= datetime('now', '-30 day')",
         [guildId]
@@ -659,18 +679,10 @@ export function startInternalApi(client: Client) {
         "SELECT COUNT(*) AS total FROM AdhesionInterval WHERE guild_id = ?",
         [guildId]
       );
-      const linkRows = await bdd.raw<{ total: number }>(
-        "SELECT COUNT(*) AS total FROM UserLink WHERE linked_at IS NOT NULL",
-        []
-      );
-
       const counters: Record<ModuleKey, number> = {
         annonces: Number(annonceRows[0]?.total ?? 0),
         scrims: Number(scrimRows[0]?.total ?? 0),
         recrutement: Number(recruteRows[0]?.total ?? 0),
-        notifications: Number(relayRows[0]?.total ?? 0),
-        oauth: Number(linkRows[0]?.total ?? 0),
-        stats: Number(relayRows[0]?.total ?? 0),
       };
 
       const enriched = modules.map((m) => ({ key: m.key, enabled: m.enabled, count30j: counters[m.key] }));
@@ -693,10 +705,7 @@ export function startInternalApi(client: Client) {
         res.status(400).json({ error: "INVALID_MODULE_KEY", allowed: MODULE_KEYS });
         return;
       }
-      if (moduleKey === "oauth") {
-        res.status(403).json({ error: "MODULE_OAUTH_NON_TOGGLEABLE" });
-        return;
-      }
+      if (refuseUnjoinedGuild(client, res, guildId)) { return; }
       const enabled = req.body?.enabled === true || req.body?.enabled === 1 || req.body?.enabled === "true";
       await setModuleEnabled(guildId, moduleKey as ModuleKey, enabled);
       res.json({ guildId, module: moduleKey, enabled });

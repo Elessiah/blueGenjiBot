@@ -44,21 +44,20 @@ test("forgetGuild efface toute la configuration du serveur quitté", async () =>
   const bdd = await getBddInstance();
   const removed = await bdd.forgetGuild("guild-gone");
   assert.deepEqual(removed, {
-    ChannelPartnerRank: 1,
     ServerInvite: 1,
     RefereeRole: 1,
     RoleAdmin: 1,
     ServerModule: 1,
     AdhesionInterval: 1,
   });
-  assert.equal(await count("ChannelPartnerRank", "id_channel", "chan-gone"), 0);
   assert.equal(await count("ServerInvite", "id_guild", "guild-gone"), 0);
   assert.equal(await count("RefereeRole", "id_guild", "guild-gone"), 0);
   assert.equal(await count("RoleAdmin", "guild_id", "guild-gone"), 0);
   assert.equal(await count("ServerModule", "id_guild", "guild-gone"), 0);
   assert.equal(await count("AdhesionInterval", "guild_id", "guild-gone"), 0);
-  // Les salons relayés restent l'affaire de `_resetServer`.
+  // Les salons relayés et leurs filtres de rang restent l'affaire de `deleteGuildChannels`.
   assert.equal(await count("ChannelPartner", "id_guild", "guild-gone"), 1);
+  assert.equal(await count("ChannelPartnerRank", "id_channel", "chan-gone"), 1);
 });
 
 test("forgetGuild ne touche pas aux autres serveurs", async () => {

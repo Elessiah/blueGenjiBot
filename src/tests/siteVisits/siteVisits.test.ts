@@ -91,8 +91,8 @@ test("formatSiteVisitStats expose les visites totales et uniques", () => {
   const message = formatSiteVisitStats(stored, new Date("2026-08-18T12:00:00.000Z"));
 
   assert.match(message, /Visites totales : 1240/);
-  assert.match(message, /Visiteurs uniques : 310/);
-  assert.match(message, /Dont comptes connectes : 58/);
+  assert.match(message, /Visiteurs uniques \(25 derniers mois\) : 310/);
+  assert.match(message, /Dont comptes connectes \(25 derniers mois\) : 58/);
   assert.match(message, /24 h : 42 visites \/ 20 uniques/);
   assert.match(message, /30 jours : 900 visites \/ 240 uniques/);
   assert.match(message, /il y a 5 minutes/);

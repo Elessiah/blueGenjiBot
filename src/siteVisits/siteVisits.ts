@@ -96,6 +96,14 @@ export function formatSnapshotAge(updatedAt: string | null, now: Date = new Date
 }
 
 /**
+ * Fenêtre des visiteurs uniques : le site n'en garde l'empreinte que
+ * 25 mois après la dernière visite (`SITE_VISITOR_RETENTION_MONTHS` côté site).
+ * Le nombre peut donc baisser pendant que le total des visites grandit — sans
+ * sa fenêtre, il se lirait comme un cumul depuis l'ouverture.
+ */
+export const SITE_VISITOR_WINDOW_MONTHS = 25;
+
+/**
  * Message Discord de la commande `/stats-site`.
  * @param stats Instantané enregistré, ou `null` si l'app n'a encore rien poussé.
  * @param now Instant de référence, injectable pour les tests.
@@ -108,8 +116,8 @@ export function formatSiteVisitStats(stats: StoredSiteVisitStats | null, now: Da
   const lines = [
     "**Frequentation du site BlueGenji**",
     `- Visites totales : ${stats.totalVisits}`,
-    `- Visiteurs uniques : ${stats.uniqueVisitors}`,
-    `- Dont comptes connectes : ${stats.identifiedVisitors}`,
+    `- Visiteurs uniques (${SITE_VISITOR_WINDOW_MONTHS} derniers mois) : ${stats.uniqueVisitors}`,
+    `- Dont comptes connectes (${SITE_VISITOR_WINDOW_MONTHS} derniers mois) : ${stats.identifiedVisitors}`,
     `- 24 h : ${stats.visitsLast24h} visites / ${stats.uniqueVisitorsLast24h} uniques`,
     `- 7 jours : ${stats.visitsLast7Days} visites / ${stats.uniqueVisitorsLast7Days} uniques`,
     `- 30 jours : ${stats.visitsLast30Days} visites / ${stats.uniqueVisitorsLast30Days} uniques`,

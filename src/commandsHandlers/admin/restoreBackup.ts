@@ -4,6 +4,8 @@ import path from "node:path";
 import { MessageFlags, type ChatInputCommandInteraction, type Client } from "discord.js";
 
 import { restoreDatabase } from "@/backup/restoreDatabase.js";
+import { runDataRetention } from "@/privacy/dataRetention.js";
+import { purgeFeedIdentifiers } from "@/feed/feedBus.js";
 import { safeReply } from "@/safe/safeReply.js";
 import { sendLog } from "@/safe/sendLog.js";
 
@@ -79,14 +81,27 @@ export async function restoreBackup(
     await fs.promises.writeFile(tmpPath, Buffer.from(await response.arrayBuffer()));
 
     const result = await restoreDatabase(tmpPath);
+    // Une sauvegarde peut ramener au flux d'activité des identifiants Discord
+    // que l'API interne servirait, tels quels, à la page publique `/bot` : la
+    // purge passe avant la réponse et le journal, la base restaurée étant
+    // déjà ouverte. Elle est locale et ne lève pas.
+    if (result.success) {
+      await purgeFeedIdentifiers(client);
+    }
     const rollback = result.rollbackPath ? `\nSauvegarde de l'ancienne base : \`${result.rollbackPath}\`` : "";
 
     await safeReply(interaction, `${result.success ? "✅" : "❌"} ${result.message}${rollback}`, true, true);
     await sendLog(
       client,
-      `Restauration de la base par ${interaction.user.tag} (${attachment.name}) : ` +
+      `Restauration de la base par le compte ${interaction.user.id} (${attachment.name}) : ` +
         `${result.success ? "succès" : "échec"} — ${result.message}`,
     );
+    // Le reste de ce que la sauvegarde a ramené (auteurs de plus de 30 jours,
+    // serveurs quittés) n'attend pas la nuit — mais pas la réponse non plus :
+    // le rattrapage des serveurs fait des appels réseau. Il ne lève jamais.
+    if (result.success) {
+      void runDataRetention(client);
+    }
   } catch (error) {
     await safeReply(interaction, `❌ Restauration échouée : ${(error as Error).message}`, true, true);
     await sendLog(client, `Restauration de la base échouée : ${(error as Error).message}`);

@@ -60,7 +60,9 @@ async function ban(client: Client,
         await safeReply(interaction, "Ban database unreachable, please try again in a moment.", true, true);
         return false;
     }
-    await sendLog(client, "**" + user.username + "** *has been banned by " + interaction.user.username + "*");
+    // Identifiants, jamais de pseudos, au journal : un pseudo se change et se
+    // lit par quiconque voit le salon, l'identifiant suffit à retrouver le compte.
+    await sendLog(client, `*Un joueur (id ${user.id}) a été exclu par un modérateur (id ${interaction.user.id}).*`);
     const ids: idSendLogMsg = {admin: "", owner: ""};
     await sendLog(client, "**Reason:** " + reason, ids);
     try {

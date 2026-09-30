@@ -9,29 +9,51 @@ import {status} from "@/types.js";
  * Réinitialise en base la configuration d'un salon cible.
  * @param client Client Discord utilisé pour les appels API.
  * @param channel_id Identifiant du salon cible.
+ * @param guildName Nom du serveur, quand l'appelant le tient déjà (`channelDelete`) : évite de relire le salon.
  * @returns Objet `status` avec `success=true` si la suppression des liens du salon réussit, sinon `success=false` et un message d'erreur.
  */
-async function _resetChannel(client: Client, channel_id: string): Promise<status> {
+async function _resetChannel(client: Client, channel_id: string, guildName?: string): Promise<status> {
     const bdd: Bdd = await getBddInstance();
     let err_msg: string = "";
     const success: boolean = false;
     let nTry: number = 0;
     while (nTry < 10 && !success) {
         try {
-            await bdd.rm("ChannelPartnerRank", {}, {query: "id_channel = ?", values: [channel_id]});
-            const ret: status = await bdd.deleteChannelServices(channel_id);
+            // `channelDelete` arrive pour tout salon supprimé de tout serveur :
+            // un salon jamais relayé n'a rien à annoncer au journal. Le retrait
+            // est joué dans les deux cas (restes éventuels : filtres de rang,
+            // services), seul le journal est réservé aux salons relayés.
+            const relayed = await bdd.get("ChannelPartner", ["id_channel"], {}, {query: "id_channel = ?", values: [channel_id]}) as {id_channel: string}[];
+            const ret: status = await bdd.deleteChannel(channel_id);
+            if (relayed.length === 0) {
+                // Rien de relayé : un échec (filtres de rang restants) n'a pas
+                // à être retenté ni journalisé, le salon n'était pas en service.
+                return {success: true, message: "Ce salon n'est pas relayé."};
+            }
             if (ret.success) {
-                const channel: TextChannel | null = await client.channels.fetch(channel_id) as TextChannel | null;
-                if (!channel) {
-                    await sendLog(client, "Failed to retrieve the targeted channel to reset");
-                    return {success: false, message: "Failed, retrieving targeted channel to reset!"};
+                // Le nom du serveur ne sert qu'au journal. Sur `channelDelete`
+                // le salon n'existe plus chez Discord : la relecture échoue, et
+                // la suppression, faite, reste un succès — la retenter dix
+                // fois ne la rendrait pas plus faite.
+                // `channelDelete` passe le nom, qu'il tient déjà : relire un
+                // salon supprimé coûterait un appel REST voué au 404.
+                let where = guildName ?? `channel ${channel_id}`;
+                if (guildName === undefined) {
+                    try {
+                        const channel = await client.channels.fetch(channel_id) as TextChannel | null;
+                        if (channel) {
+                            const guild: Guild = channel.guild;
+                            where = guild.name;
+                        }
+                    } catch { /* salon introuvable : on journalise son identifiant */ }
                 }
-                const guild: Guild = channel.guild;
-                const content: string = 'A service has been unlinked from a channel of ' + guild.name + '.';
-                await sendLog(client, content);
+                await sendLog(client, 'A service has been unlinked from a channel of ' + where + '.');
                 return {success: true, message: `Channel reseted`};
             } else {
-                return {success: false, message: ret.message};
+                // `deleteChannel` rend son échec au lieu de lever (base
+                // occupée, par exemple) : il se retente comme une exception.
+                err_msg = ret.message;
+                nTry++;
             }
         } catch (err) {
             err_msg = (err as TypeError).message;
