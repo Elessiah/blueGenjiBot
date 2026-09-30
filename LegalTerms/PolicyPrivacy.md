@@ -22,15 +22,15 @@ The Bot is intended for people aged 15 or over ([Terms of Service](https://blueg
 
 ### Relayed advertisements
 
-ID of the original message and of its author, date, IDs of the relayed copies and of their channels: they are used to relay the advertisement, to pass on its edits or deletion, and to apply the cooldown between two advertisements. **Message content is not stored in the Bot's database**: it is copied, with its author's name, into the channels of partner servers, where their members read it. These copies are Discord messages: deleting the original advertisement within 7 days also deletes its copies; after that, they remain until the administrators of the server holding them delete them.
+ID of the original message and of its author, date, IDs of the relayed copies and of their channels: they are used to relay the advertisement, to pass on its edits or deletion, to apply the cooldown between two advertisements, for the message count of **/stats**, for the bot's dashboard statistics and, on an exclusion, to find and remove the copies of the excluded user's advertisements. **Message content is not stored in the Bot's database**: it is copied, with its author's name, into the channels of partner servers, where their members read it. These copies are Discord messages: deleting the original advertisement within 7 days also deletes its copies; after that, they remain until the administrators of the server holding them delete them.
 
 ### Scrims and recruitment
 
-For the **/scrim** and **/recrute** commands: author ID, game, level or role sought, server and date, which feed the activity statistics (**/stats** command, which only shows each user their own activity, and the bot's dashboard). After 30 days these rows are folded into plain counts per day, server and level (or role): no author, time or order remains.
+For the **/scrim** and **/recrute** commands: author ID, game, level or role sought, server and date, which feed the activity statistics (**/stats** command, which only shows each user their own activity, and the bot's dashboard). After 30 days these rows are folded into plain counts per day, server and level (or role), without the author's ID; these counts are kept with no time limit, as a history of the Bot's activity. The level and role are free text, kept as the author typed them: do not write someone's username there.
 
 ### Relay exclusions
 
-IDs of the excluded user and of the moderator, date, and a reference to the log message holding the reason. The IDs of the excluded user and of the moderator, and the reason, are posted in the staff's private log channel. An exclusion applies to the **whole network** of partner servers: this is community moderation, decided by the moderators of partner servers under the conditions of the « Relay moderation » section of the Terms of Service. The **/ban-list** command therefore shows the full list of network exclusions (usernames, reason, date, ID) to the administrators of any server where the Bot is installed and to the holders of the Bot administration role, so that they know who can no longer post through the Bot and why.
+IDs of the excluded user and of the moderator, date, and a reference to the log message holding the reason. The IDs of the excluded user and of the moderator, and the reason, are posted in the staff's private log channel; the reason is also sent by direct message to the Bot's owner, where it stays with no time limit. An exclusion applies to the **whole network** of partner servers: this is community moderation, decided and lifted (**/unban**) by the administrators of any server with at least 50 members where the Bot is installed, as well as by the association's staff (« Relay moderation » section of the Terms of Service). The **/ban-list** command therefore shows the full list of network exclusions (usernames, reason, date, ID) to the administrators of any server where the Bot is installed — including a server one creates oneself to invite it — and to the holders of the Bot administration role, so that they know who can no longer post through the Bot and why.
 
 ### Memberships and scheduled reminders
 
@@ -47,7 +47,7 @@ The website sends the Bot a Discord ID or username and the message to deliver (l
 
 ### Logs
 
-The public activity feed on the bot's page contains no personal identifier. The staff's private log channel (each line of which is also sent by direct message to the Bot's owner) and the server logs receive the names of servers that add or remove the Bot, operating errors, which may mention a Discord ID, and the website's activity journal (sign-ups, matches, tournaments), written by the website without any player's username. The Bot writes no username there — only the reason for an exclusion, free text written by the moderator, may quote one.
+The public activity feed on the bot's page contains no Discord ID; it repeats the level or role typed with **/scrim** or **/recrute**. The staff's private log channel and the server logs receive the names of servers that add or remove the Bot, operating errors, which may mention a Discord ID, and the website's activity journal (sign-ups, matches, tournaments), written by the website without any player's username. The Bot no longer writes usernames there on its own (messages older than this rule may quote some): the reason for an exclusion, free text written by the moderator, may quote one, and a failed direct-message delivery may mention the account concerned.
 
 ### Legal basis
 
@@ -58,8 +58,8 @@ This processing is based on the association's **legitimate interest** (Article 6
 ## 03. Retention periods
 
 - **Tracking of relayed advertisements** (IDs, date): 7 days; it is erased at the first relay after that deadline, and at the latest during the night or when the Bot restarts. The copies posted in partner channels remain on Discord (section 02).
-- **Scrims and recruitment**: 30 days with the author's ID; at the clean-up of the following night (or a restart of the Bot), the author's ID is erased and the rows are folded into counts per day, server and level (or role), kept for the activity counters.
-- **Exclusions**: until the exclusion is lifted.
+- **Scrims and recruitment**: 30 days with the author's ID; at the clean-up of the following night (or a restart of the Bot), the author's ID is erased and the rows are folded into counts per day, server and level (or role), kept with no time limit as a history of the Bot's activity.
+- **Exclusions**: the exclusion record, until it is lifted; the notices posted in the staff's private log channel and the reason copied by direct message to the Bot's owner remain after it is lifted, with no automatic deletion at present.
 - **Server configuration** (relayed channels and their rank filters, the invite and the referee role with the ID of whoever set them, the Bot administration role, enabled modules): until the administrators remove it, and at the latest until the Bot leaves the server, which erases it. A departure while the Bot is down, which Discord does not notify, is caught up when it restarts.
 - **Memberships and scheduled reminders**: until the reminder's last sending (for a membership, its expiry date) or its deletion, and at the latest until the Bot leaves the server where they were recorded, which erases them — including a departure while the Bot is down, caught up when it restarts.
 - **Staff private log channel**: no automatic deletion at present.
@@ -71,6 +71,9 @@ This processing is based on the association's **legitimate interest** (Article 6
 ## 04. Recipients
 
 - The association's staff, for moderating and administering the Bot.
+- The Bot's owner (its technical host), who receives exclusion reasons by direct message.
+- The excluded user, to whom the Bot sends the reason for their exclusion by direct message when they post an advertisement (a message naming a service) in a relayed channel.
+- The members of the channel where **/scrim** or **/recrute** is used: the command replies publicly there, and Discord shows who used it.
 - Members of partner servers, who read the relayed advertisements.
 - Members of the referee role of every server that has set one, for the website's referee alerts.
 - The administrators of any server where the Bot is installed, and the holders of the Bot administration role each server designates (**/set-bot-admin**), who can read the list of exclusions (**/ban-list** command, reply visible only to the person who asked).
