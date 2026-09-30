@@ -10,8 +10,8 @@ const TMP_DB = path.join(os.tmpdir(), `bgenji-retention-${randomUUID()}.sqlite`)
 process.env.BDD_PATH = TMP_DB;
 
 import { getBddInstance, closeBddInstance, resetBddInstance } from "../../bdd/Bdd.js";
+import { ACTIVITY_AUTHOR_RETENTION_DAYS } from "../../privacy/retentionPeriods.js";
 import {
-  ACTIVITY_AUTHOR_RETENTION_DAYS,
   anonymizeOldActivity,
   eraseGuild,
   forgetDepartedGuilds,

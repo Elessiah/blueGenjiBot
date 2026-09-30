@@ -5,6 +5,13 @@
  */
 
 /**
+ * Durée de conservation d'un message de service et de ses copies relayées
+ * (`messages/manageMsgExpiration.ts`) : effacé au relais suivant l'échéance,
+ * au plus tard dans la nuit qui suit.
+ */
+export const MESSAGE_RETENTION_DAYS = 7;
+
+/**
  * Âge au-delà duquel l'auteur d'un scrim ou d'une recherche est effacé.
  * C'est la fenêtre de `/stats`, seul lecteur de l'auteur. Le ménage passant
  * chaque nuit, l'effacement a lieu dans la nuit qui suit cette échéance

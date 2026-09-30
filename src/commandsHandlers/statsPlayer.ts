@@ -18,8 +18,7 @@ import type { Client, ChatInputCommandInteraction } from "discord.js";
 import { safeReply } from "@/safe/safeReply.js";
 import { sendLog } from "@/safe/sendLog.js";
 import { getBddInstance } from "@/bdd/Bdd.js";
-import { MESSAGE_RETENTION_DAYS } from "@/messages/manageMsgExpiration.js";
-import { ACTIVITY_AUTHOR_RETENTION_DAYS } from "@/privacy/retentionPeriods.js";
+import { ACTIVITY_AUTHOR_RETENTION_DAYS, MESSAGE_RETENTION_DAYS } from "@/privacy/retentionPeriods.js";
 
 /**
  * Redige la reponse de `/stats`.

@@ -640,6 +640,12 @@ export function startInternalApi(client: Client) {
         res.status(400).json({ error: "INVALID_GUILD_ID" });
         return;
       }
+      // Même refus que l'écriture : un serveur que le bot n'a pas rejoint n'a
+      // pas de modules à montrer, et un « tout actif » y serait trompeur.
+      if (!client.guilds.cache.has(guildId)) {
+        res.status(404).json({ error: "GUILD_NOT_JOINED" });
+        return;
+      }
       const bdd = await getBddInstance();
       const modules = await listModules(guildId);
 

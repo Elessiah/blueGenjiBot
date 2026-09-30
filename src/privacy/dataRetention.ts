@@ -26,8 +26,6 @@ import { sendLog } from "@/safe/sendLog.js";
 
 import { ACTIVITY_AUTHOR_RETENTION_DAYS } from "@/privacy/retentionPeriods.js";
 
-export { ACTIVITY_AUTHOR_RETENTION_DAYS };
-
 /**
  * Efface l'auteur des scrims et recherches plus vieux que la durée de
  * conservation. N'échoue jamais bruyamment : l'erreur est signalée.
