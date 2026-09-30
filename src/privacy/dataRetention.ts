@@ -81,21 +81,16 @@ export async function eraseGuild(guildId: string): Promise<void> {
   if (failure !== null) { throw failure; }
 }
 
-/**
- * Quand les serveurs à oublier sont plus nombreux que ce seuil **et** forment
- * la majorité des serveurs configurés, le rattrapage n'en oublie que ce nombre
- * par passage. Un effacement irréversible ne se fie pas entièrement à un cache
- * qui décrit peut-être un autre bot (jeton de développement lancé sur la base
- * de production) : le dégât est borné à quelques serveurs, signalé, et un
- * vrai arriéré se résorbe tout de même en quelques nuits.
- */
-export const MAX_SILENT_GUILD_FORGETS = 3;
+
 
 /**
  * Oublie les serveurs configurés en base que le bot n'a plus rejoints.
  *
- * Refuse d'agir sur un cache vide — un démarrage où Discord n'a encore livré
- * aucun serveur effacerait sinon la configuration de tous. Un serveur
+ * Deux gardes avant tout effacement, irréversible : le cache ne doit pas être
+ * vide (un démarrage où Discord n'a encore livré aucun serveur effacerait la
+ * configuration de tous), et la base doit appartenir à l'application connectée
+ * (`claimOwnerApplication`) — un bot lancé avec un autre jeton sur cette base,
+ * un bot de développement par exemple, a un cache qui ne la décrit pas. Un serveur
  * momentanément indisponible (panne Discord) reste dans le cache, marqué
  * `available: false` : il n'est donc pas oublié.
  * @param client Client Discord connecté (`client.guilds.cache` rempli).
@@ -104,20 +99,19 @@ export const MAX_SILENT_GUILD_FORGETS = 3;
 export async function forgetDepartedGuilds(client: Client): Promise<string[]> {
   const joined = client.guilds.cache;
   if (joined.size === 0) { return []; }
+  const applicationId = client.user?.id;
+  if (!applicationId) { return []; }
   const bdd = await getBddInstance();
-  const configured = await bdd.listConfiguredGuildIds();
-  const departed = configured.filter((id) => !joined.has(id));
-  const suspicious = departed.length > MAX_SILENT_GUILD_FORGETS && departed.length * 2 > configured.length;
-  if (suspicious) {
+  if (!(await bdd.claimOwnerApplication(applicationId))) {
     await sendLog(
       client,
-      `Rattrapage des serveurs quittés limité à ${MAX_SILENT_GUILD_FORGETS} : ${departed.length} serveur(s) ` +
-        `sur ${configured.length} absents du cache. Vérifier le jeton du bot si ce nombre surprend.`,
+      "Rattrapage des serveurs quittés ignoré : cette base appartient à une autre application Discord.",
     );
+    return [];
   }
-  const batch = suspicious ? departed.slice(0, MAX_SILENT_GUILD_FORGETS) : departed;
+  const departed = (await bdd.listConfiguredGuildIds()).filter((id) => !joined.has(id));
   const forgotten: string[] = [];
-  for (const guildId of batch) {
+  for (const guildId of departed) {
     try {
       await eraseGuild(guildId);
       forgotten.push(guildId);

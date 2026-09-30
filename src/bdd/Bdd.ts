@@ -91,6 +91,22 @@ async function resetBddInstance(): Promise<boolean> {
   return true;
 }
 
+/**
+ * Tables de **configuration** d'un serveur, avec leur colonne d'identifiant de
+ * serveur : ce que `forgetGuild` efface et ce que `listConfiguredGuildIds`
+ * relit. Une seule liste pour les deux — tenues à la main, elles divergeraient,
+ * et un serveur figurant dans l'une seulement serait « oublié » chaque nuit sans
+ * rien perdre, ou gardé sans limite. Noms constants : ils sont interpolés dans
+ * le SQL, jamais une valeur venue d'un appelant.
+ */
+const GUILD_CONFIG_TABLES: readonly (readonly [string, string])[] = [
+  ["ServerInvite", "id_guild"],
+  ["RefereeRole", "id_guild"],
+  ["RoleAdmin", "guild_id"],
+  ["ServerModule", "id_guild"],
+  ["AdhesionInterval", "guild_id"],
+];
+
 class Bdd {
     private name: string;
     private Database: Database | null;
@@ -545,6 +561,22 @@ class Bdd {
     } catch (e) {
       console.error("SiteVisit error: ", (e as TypeError).message);
     }
+    try {
+      // Application Discord propriétaire de cette base (une ligne). Le
+      // rattrapage des serveurs quittés s'y fie avant tout effacement : un bot
+      // lancé avec un autre jeton sur cette base verrait un cache qui ne la
+      // décrit pas, et oublierait tout le réseau.
+      await this.Database?.exec(
+        `CREATE TABLE IF NOT EXISTS BotOwner
+          (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            application_id TEXT NOT NULL
+          );
+        `
+      );
+    } catch (e) {
+      console.error("BotOwner error: ", (e as TypeError).message);
+    }
   }
 
     /**
@@ -911,38 +943,26 @@ class Bdd {
   }
 
   /**
-   * Efface la configuration propre à un serveur que le bot vient de quitter.
-   *
-   * `_resetServer` ne retire que les salons relayés et leurs services : le lien
-   * d'invitation et le rôle arbitre (qui gardent tous deux `set_by`,
+   * Efface la configuration propre à un serveur que le bot vient de quitter :
+   * le lien d'invitation et le rôle arbitre (qui gardent tous deux `set_by`,
    * l'identifiant de l'administrateur qui les a posés), le rôle
-   * d'administration du bot, les modules, les rappels d'adhésion et les filtres
-   * de rang des salons restaient sinon sans limite, alors que plus personne sur
-   * ce serveur ne peut les retirer. Pas de transaction : la connexion est
-   * partagée par tous les gestionnaires, un `BEGIN` y engloberait (et un
-   * `ROLLBACK` y défairait) les écritures qu'ils font entre deux `await`. Chaque
-   * suppression est idempotente ; la première qui échoue interrompt la suite et
-   * remonte à l'appelant, qui la journalise.
-   *
-   * À appeler **avant** `_resetServer` : les filtres de rang sont retrouvés par
-   * les salons partenaires du serveur, que celui-ci supprime.
+   * d'administration du bot, les modules et les rappels d'adhésion — tout ce
+   * que `GUILD_CONFIG_TABLES` énumère. Les salons relayés et leurs filtres de
+   * rang sont l'affaire de `deleteGuildChannels` ; `eraseGuild` enchaîne les
+   * deux. Pas de transaction : la connexion est partagée par tous les
+   * gestionnaires, un `BEGIN` y engloberait (et un `ROLLBACK` y défairait) les
+   * écritures qu'ils font entre deux `await`. Chaque suppression est
+   * idempotente ; la première qui échoue interrompt la suite et remonte à
+   * l'appelant.
    * @param guildId Identifiant du serveur quitté.
    * @returns Nombre de lignes supprimées, par table.
    */
   async forgetGuild(guildId: string): Promise<Record<string, number>> {
     const database = this.Database;
     if (!database) { return {}; }
-    const statements: [string, string][] = [
-      ["ChannelPartnerRank", "DELETE FROM ChannelPartnerRank WHERE id_channel IN (SELECT id_channel FROM ChannelPartner WHERE id_guild = ?)"],
-      ["ServerInvite", "DELETE FROM ServerInvite WHERE id_guild = ?"],
-      ["RefereeRole", "DELETE FROM RefereeRole WHERE id_guild = ?"],
-      ["RoleAdmin", "DELETE FROM RoleAdmin WHERE guild_id = ?"],
-      ["ServerModule", "DELETE FROM ServerModule WHERE id_guild = ?"],
-      ["AdhesionInterval", "DELETE FROM AdhesionInterval WHERE guild_id = ?"],
-    ];
     const removed: Record<string, number> = {};
-    for (const [table, sql] of statements) {
-      const result = await database.run(sql, [guildId]);
+    for (const [table, column] of GUILD_CONFIG_TABLES) {
+      const result = await database.run(`DELETE FROM ${table} WHERE ${column} = ?`, [guildId]);
       removed[table] = result.changes ?? 0;
     }
     return removed;
@@ -985,24 +1005,38 @@ class Bdd {
    *
    * Sert à rattraper, au démarrage, les serveurs quittés pendant que le bot
    * était arrêté (Discord n'envoie alors aucun `guildDelete`) et un
-   * `forgetGuild` resté partiel : ce sont les mêmes tables que celles qu'il
-   * vide, plus les salons relayés que `_resetServer` retire.
+   * `forgetGuild` resté partiel : ce sont les tables mêmes qu'il vide
+   * (`GUILD_CONFIG_TABLES`, une seule liste pour les deux), plus les salons
+   * relayés que `deleteGuildChannels` retire.
    * @returns Identifiants distincts, dans un ordre quelconque.
    */
   async listConfiguredGuildIds(): Promise<string[]> {
+    const sources = [["ChannelPartner", "id_guild"], ...GUILD_CONFIG_TABLES]
+      .map(([table, column]) => `SELECT ${column} AS id FROM ${table}`)
+      .join(" UNION ");
     // Filtré après l'union : une clé primaire `TEXT` admet `NULL` en SQLite,
     // et `String(null)` ferait oublier chaque nuit un serveur nommé "null".
     const rows = await this.raw<{ id: string }>(
-      `SELECT id FROM (
-         SELECT id_guild AS id FROM ChannelPartner
-         UNION SELECT id_guild FROM ServerInvite
-         UNION SELECT id_guild FROM RefereeRole
-         UNION SELECT guild_id FROM RoleAdmin
-         UNION SELECT id_guild FROM ServerModule
-         UNION SELECT guild_id FROM AdhesionInterval
-       ) WHERE id IS NOT NULL AND id <> ''`,
+      `SELECT id FROM (${sources}) WHERE id IS NOT NULL AND id <> ''`,
     );
     return rows.map((row) => String(row.id));
+  }
+
+  /**
+   * Revendique la base pour une application Discord, ou vérifie qu'elle lui
+   * appartient déjà.
+   *
+   * La première application qui démarre sur une base l'enregistre ; ensuite,
+   * seule celle-là est reconnue.
+   * @param applicationId Identifiant de l'application connectée (`client.user.id`).
+   * @returns `true` si la base appartient à cette application (ou vient de lui être attribuée).
+   */
+  async claimOwnerApplication(applicationId: string): Promise<boolean> {
+    const database = this.Database;
+    if (!database) { return false; }
+    await database.run("INSERT OR IGNORE INTO BotOwner (id, application_id) VALUES (1, ?)", [applicationId]);
+    const rows = await this.raw<{ application_id: string }>("SELECT application_id FROM BotOwner WHERE id = 1");
+    return rows[0]?.application_id === applicationId;
   }
 
   /**
@@ -1046,6 +1080,6 @@ class Bdd {
   }
 }
 
-export { Bdd, getBddInstance, closeBddInstance, resetBddInstance };
+export { Bdd, getBddInstance, closeBddInstance, resetBddInstance, GUILD_CONFIG_TABLES };
 
 

@@ -22,8 +22,9 @@ import { formatPlayerStats } from "../../commandsHandlers/statsPlayer.js";
 const logs: string[] = [];
 
 /** Client minimal : `sendLog` écrit au propriétaire et au salon d'administration. */
-function fakeClient(joinedGuildIds: string[]): Client {
+function fakeClient(joinedGuildIds: string[], applicationId = "app-prod"): Client {
   return {
+    user: { id: applicationId },
     guilds: { cache: new Map(joinedGuildIds.map((id) => [id, { id }])) },
     users: { fetch: async () => ({ send: async (msg: string) => { logs.push(msg); return { id: "m1" }; } }) },
     channels: { fetch: async () => ({ send: async (msg: string) => { logs.push(msg); return { id: "m2" }; } }) },
@@ -129,22 +130,18 @@ test("eraseGuild retire les salons relayés même si l'oubli de la configuration
   assert.equal(await count("SELECT COUNT(*) AS n FROM RefereeRole WHERE id_guild = 'g-partial'"), 0);
 });
 
-test("le rattrapage borne l'oubli quand la majorité des serveurs configurés manque", async () => {
+test("le rattrapage n'efface rien pour une autre application Discord que celle de la base", async () => {
   for (const id of ["g-a", "g-b", "g-c", "g-d"]) {
     await seedGuild(id, `c-${id}`);
   }
-  // Le vrai cache : rien ne manque, rien n'est effacé.
-  assert.deepEqual(await forgetDepartedGuilds(fakeClient(["g-stay", "g-a", "g-b", "g-c", "g-d"])), []);
-
   logs.length = 0;
-  // Quatre serveurs sur cinq manquent : trois au plus par passage, signalé.
-  const first = await forgetDepartedGuilds(fakeClient(["g-stay"]));
-  assert.equal(first.length, 3);
-  assert.ok(logs.some((line) => line.includes("limité à 3")));
-  assert.equal(await count("SELECT COUNT(*) AS n FROM ChannelPartner WHERE id_guild IN ('g-a', 'g-b', 'g-c', 'g-d')"), 1);
-  // L'arriéré se résorbe au passage suivant.
-  assert.equal((await forgetDepartedGuilds(fakeClient(["g-stay"]))).length, 1);
-  assert.equal(await count("SELECT COUNT(*) AS n FROM ChannelPartner WHERE id_guild IN ('g-a', 'g-b', 'g-c', 'g-d')"), 0);
+  // Bot de développement lancé sur la base de production : son cache ne la décrit pas.
+  assert.deepEqual(await forgetDepartedGuilds(fakeClient(["g-dev"], "app-dev")), []);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM ChannelPartner WHERE id_guild IN ('g-a', 'g-b', 'g-c', 'g-d', 'g-stay')"), 5);
+  assert.ok(logs.some((line) => line.includes("autre application")));
+  // L'application propriétaire, elle, rattrape tout l'arriéré d'un coup.
+  const forgotten = await forgetDepartedGuilds(fakeClient(["g-stay"]));
+  assert.deepEqual([...forgotten].sort(), ["g-a", "g-b", "g-c", "g-d"]);
 });
 
 test("runDataRetention ne lève pas quand un ménage échoue", async () => {

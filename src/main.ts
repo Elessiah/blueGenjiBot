@@ -199,10 +199,10 @@ client.on("clientReady", async () => {
 
     // Au démarrage puis chaque nuit : c'est au démarrage qu'on rattrape les
     // serveurs quittés pendant l'arrêt, qu'aucun `guildDelete` n'annoncera.
-    // Après l'API interne, pour ne pas retarder la connexion par le site ;
-    // avant les étapes suivantes, et ne levant jamais : leur échec ne peut
-    // pas le priver de passer.
-    await runDataRetention(client);
+    // Lancé sans être attendu — il ne lève jamais : il ne retarde ni
+    // l'enregistrement des commandes ni la pose des tâches cron, et leur
+    // échec ne peut pas le priver de passer.
+    void runDataRetention(client);
 
     for (const guild of client.guilds.cache.values()) {
       console.log("Server ready : ", guild.name);

@@ -81,7 +81,7 @@ Pour lier votre compte Discord au site, connectez-vous au site avec Discord, ou 
 ## Durées de conservation
 - Messages relayés : 7 jours.
 - Auteur d'un `/scrim` ou d'un `/recrute` : 30 jours. Au-delà, l'identifiant de l'auteur est effacé ; seule la date et le serveur restent, pour les compteurs.
-- Configuration d'un serveur : effacée quand le bot le quitte — y compris s'il l'a quitté pendant un arrêt du bot, au démarrage suivant (trois serveurs au plus par passage si la plupart des serveurs configurés semblent partis d'un coup).
+- Configuration d'un serveur : effacée quand le bot le quitte — y compris s'il l'a quitté pendant un arrêt du bot, au démarrage suivant.
 
 ## `/ban-list` et exclusions du réseau
 Une exclusion s'applique à **tout le réseau** : c'est une modération communautaire, prononcée par les administrateurs des serveurs de 50 membres et plus. `/ban-list` montre donc à l'administrateur de tout serveur partenaire la liste complète des exclusions du réseau (joueur exclu, modérateur, motif, date), pour qu'il sache qui ne peut plus publier par le bot et pourquoi.
