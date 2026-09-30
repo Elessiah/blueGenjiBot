@@ -25,6 +25,7 @@ import { safeReply } from "./safe/safeReply.js";
 import { updateCommands } from "./utils/updateCommands.js";
 import { startInternalApi } from "@/internalApi.js";
 import { purgeFeedIdentifiers } from "@/feed/feedBus.js";
+import { runDataRetention } from "@/privacy/dataRetention.js";
 import { recordDailySnapshot } from "@/snapshots/dailySnapshot.js";
 import { sendDatabaseBackup } from "@/backup/weeklyBackup.js";
 
@@ -204,6 +205,9 @@ client.on("clientReady", async () => {
 
     await checkIntervalleAdhesion(client);
     await recordDailySnapshot(client);
+    // Au démarrage puis chaque nuit : c'est au démarrage qu'on rattrape les
+    // serveurs quittés pendant l'arrêt, qu'aucun `guildDelete` n'annoncera.
+    await runDataRetention(client);
     // Une tâche cron s'exécute hors de toute pile applicative : sans garde, son
     // échec devient un rejet non capturé, donc un arrêt du process.
     cron.schedule(
@@ -214,6 +218,8 @@ client.on("clientReady", async () => {
         } catch (error) {
           await reportError(client, "cron recordDailySnapshot", error);
         }
+        // Chaque ménage signale son propre échec (voir `privacy/dataRetention.ts`).
+        await runDataRetention(client);
       },
       { timezone: "Europe/Paris" },
     );

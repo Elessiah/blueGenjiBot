@@ -480,16 +480,11 @@ class Bdd {
       console.error("Recrute error: ", (e as TypeError).message);
     }
     try {
-      await this.Database?.exec(
-        `CREATE TABLE IF NOT EXISTS UserLink
-          (
-            id_user TEXT PRIMARY KEY,
-            code TEXT NOT NULL,
-            expires_at DATETIME NOT NULL,
-            linked_at DATETIME
-          );
-        `
-      );
+      // `/link` a été retirée : elle promettait une liaison que le site n'a
+      // jamais su recevoir, et sa table ne gardait plus que des identifiants
+      // Discord et des codes expirés. La supprimer efface les lignes des
+      // bases qui tournent ; aucune ne sera plus jamais écrite.
+      await this.Database?.exec("DROP TABLE IF EXISTS UserLink");
     } catch (e) {
       console.error("UserLink error: ", (e as TypeError).message);
     }
@@ -948,6 +943,56 @@ class Bdd {
     const removed: Record<string, number> = {};
     for (const [table, sql] of statements) {
       const result = await database.run(sql, [guildId]);
+      removed[table] = result.changes ?? 0;
+    }
+    return removed;
+  }
+
+  /**
+   * Identifiants de tous les serveurs dont la base garde une configuration.
+   *
+   * Sert à rattraper, au démarrage, les serveurs quittés pendant que le bot
+   * était arrêté (Discord n'envoie alors aucun `guildDelete`) et un
+   * `forgetGuild` resté partiel : ce sont les mêmes tables que celles qu'il
+   * vide, plus les salons relayés que `_resetServer` retire.
+   * @returns Identifiants distincts, dans un ordre quelconque.
+   */
+  async listConfiguredGuildIds(): Promise<string[]> {
+    const rows = await this.raw<{ id: string }>(
+      `SELECT id_guild AS id FROM ChannelPartner WHERE id_guild IS NOT NULL
+       UNION SELECT id_guild FROM ServerInvite
+       UNION SELECT id_guild FROM RefereeRole
+       UNION SELECT guild_id FROM RoleAdmin
+       UNION SELECT id_guild FROM ServerModule
+       UNION SELECT guild_id FROM AdhesionInterval`,
+    );
+    return rows.map((row) => String(row.id));
+  }
+
+  /**
+   * Efface l'auteur des scrims et des recherches plus vieux que `days` jours.
+   *
+   * `Scrim.id_author` et `Recrute.id_author` sont des identifiants Discord :
+   * datés et rattachés à un serveur, ils font un historique d'activité par
+   * personne. Seul `/stats` (30 jours, soi-même) a besoin de l'auteur ; les
+   * compteurs par serveur et le graphe d'activité ne lisent que la date et le
+   * serveur. La ligne reste donc, sans auteur — une anonymisation réelle, là
+   * où un hachage de l'identifiant n'en serait qu'une pseudonymisation. La
+   * colonne est `NOT NULL` sur les bases existantes : l'auteur effacé s'écrit
+   * chaîne vide, qu'aucun identifiant Discord ne peut valoir.
+   * @param days Âge au-delà duquel l'auteur est effacé.
+   * @returns Nombre de lignes anonymisées, par table.
+   */
+  async anonymizeActivityAuthors(days: number): Promise<{ Scrim: number; Recrute: number }> {
+    const database = this.Database;
+    if (!database) { return { Scrim: 0, Recrute: 0 }; }
+    const modifier = `-${days} days`;
+    const removed = { Scrim: 0, Recrute: 0 };
+    for (const table of ["Scrim", "Recrute"] as const) {
+      const result = await database.run(
+        `UPDATE ${table} SET id_author = '' WHERE id_author <> '' AND date < DATETIME('now', ?)`,
+        [modifier],
+      );
       removed[table] = result.changes ?? 0;
     }
     return removed;

@@ -108,7 +108,7 @@ async function loadAdhesionFiles(client: Client,
 
     if (interaction.user.id != process.env.OWNER_ID && interaction.user.id != process.env.PRESIDENT) {
         await safeReply(interaction, "You are not allowed to load adhesion files.");
-        await sendLog(client, interaction.user.username + " a essayé de changer les fichiers d'adhésion.");
+        await sendLog(client, "Le compte " + interaction.user.id + " a essayé de changer les fichiers d'adhésion.");
         return;
     }
 

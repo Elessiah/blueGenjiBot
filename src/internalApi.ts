@@ -659,17 +659,15 @@ export function startInternalApi(client: Client) {
         "SELECT COUNT(*) AS total FROM AdhesionInterval WHERE guild_id = ?",
         [guildId]
       );
-      const linkRows = await bdd.raw<{ total: number }>(
-        "SELECT COUNT(*) AS total FROM UserLink WHERE linked_at IS NOT NULL",
-        []
-      );
-
-      const counters: Record<ModuleKey, number> = {
+      // `oauth` n'a plus de compteur : il comptait les liaisons `/link`, une
+      // commande retirée que rien n'avait jamais menée à son terme. `null`
+      // dit « pas de mesure », là où `0` affirmerait un zéro.
+      const counters: Record<ModuleKey, number | null> = {
         annonces: Number(annonceRows[0]?.total ?? 0),
         scrims: Number(scrimRows[0]?.total ?? 0),
         recrutement: Number(recruteRows[0]?.total ?? 0),
         notifications: Number(relayRows[0]?.total ?? 0),
-        oauth: Number(linkRows[0]?.total ?? 0),
+        oauth: null,
         stats: Number(relayRows[0]?.total ?? 0),
       };
 

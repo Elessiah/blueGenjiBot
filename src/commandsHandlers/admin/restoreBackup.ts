@@ -84,7 +84,7 @@ export async function restoreBackup(
     await safeReply(interaction, `${result.success ? "✅" : "❌"} ${result.message}${rollback}`, true, true);
     await sendLog(
       client,
-      `Restauration de la base par ${interaction.user.tag} (${attachment.name}) : ` +
+      `Restauration de la base par le compte ${interaction.user.id} (${attachment.name}) : ` +
         `${result.success ? "succès" : "échec"} — ${result.message}`,
     );
   } catch (error) {

@@ -28,7 +28,6 @@ import {resetRefereeRole} from "@/commandsHandlers/admin/resetRefereeRole.js";
 import {ping} from "../commandsHandlers/ping.js";
 import {scrim} from "../commandsHandlers/scrim.js";
 import {recrute} from "../commandsHandlers/recrute.js";
-import {link} from "../commandsHandlers/link.js";
 import {statsPlayer} from "../commandsHandlers/statsPlayer.js";
 import {statsSite} from "../commandsHandlers/statsSite.js";
 import {relay} from "../commandsHandlers/admin/relay.js";
@@ -431,12 +430,6 @@ const commands = {
             ]
         }
     },
-    "link": {
-        handler: link,
-        parameters: {
-            description: "Lie ton compte Discord au site BlueGenji (TOUS)"
-        }
-    },
     "stats-site": {
         handler: statsSite,
         parameters: {
@@ -446,15 +439,7 @@ const commands = {
     "stats": {
         handler: statsPlayer,
         parameters: {
-            description: "Affiche les stats 30j d'un joueur (TOUS)",
-            options: [
-                {
-                    name: "joueur",
-                    description: "Joueur (optionnel, sinon vous-meme)",
-                    type: ApplicationCommandOptionType.User,
-                    required: false
-                }
-            ]
+            description: "Affiche ta propre activite recente sur le bot (TOUS)"
         }
     },
     "relay": {
