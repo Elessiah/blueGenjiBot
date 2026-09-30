@@ -78,7 +78,46 @@ export async function eraseGuild(guildId: string): Promise<void> {
 }
 
 /**
+ * La base appartient-elle à l'application connectée (`BotOwner`) ?
+ *
+ * L'application (celle de `CLIENT_ID`), pas l'utilisateur du bot : sur une
+ * application ancienne les deux identifiants diffèrent, et c'est celui de
+ * l'application que l'exploitant reconnaît dans `BotOwner`. Sans elle, rien :
+ * revendiquer la base avec l'identifiant de l'utilisateur la fermerait ensuite
+ * à l'application elle-même.
+ * @param client Client Discord.
+ * @returns `true`/`false`, ou `null` quand rien ne peut être conclu.
+ */
+async function ownsDatabase(client: Client): Promise<boolean | null> {
+  const applicationId = client.application?.id;
+  if (!applicationId) { return null; }
+  return (await getBddInstance()).claimOwnerApplication(applicationId);
+}
+
+/**
+ * `guildDelete` : efface un serveur quitté, **si** la base appartient à
+ * l'application connectée. Un bot lancé avec un autre jeton sur cette base
+ * (développement) et retiré d'un serveur où le bot de production reste
+ * effacerait sinon la configuration de ce dernier : les tables sont indexées
+ * par serveur, pas par application.
+ * @param client Client Discord.
+ * @param guildId Serveur quitté.
+ * @returns `true` si le serveur a été effacé, `false` si la garde l'a empêché.
+ * @throws Comme `eraseGuild`.
+ */
+export async function eraseLeftGuild(client: Client, guildId: string): Promise<boolean> {
+  if ((await ownsDatabase(client)) !== true) { return false; }
+  await eraseGuild(guildId);
+  return true;
+}
+
+/**
  * Oublie les serveurs configurés en base que le bot n'a plus rejoints.
+ *
+ * Le cache ne perd un serveur que sur `guildDelete` : un retrait survenu
+ * pendant une coupure du gateway qui n'a pas pu reprendre sa session reste
+ * au cache jusqu'au redémarrage — d'où la promesse « au redémarrage suivant »
+ * des textes, la passe de nuit n'étant qu'un rattrapage de plus.
  *
  * Deux gardes avant tout effacement, irréversible : le client doit être prêt
  * (avant `clientReady`, Discord n'a encore livré aucun serveur et le cache
@@ -97,15 +136,8 @@ export async function eraseGuild(guildId: string): Promise<void> {
 export async function forgetDepartedGuilds(client: Client): Promise<string[] | null> {
   const joined = client.guilds.cache;
   if (!client.isReady()) { return null; }
-  // L'application (celle de `CLIENT_ID`), pas l'utilisateur du bot : sur une
-  // application ancienne les deux identifiants diffèrent, et c'est celui de
-  // l'application que l'exploitant reconnaît dans `BotOwner`.
-  // Sans elle, rien : revendiquer la base avec l'identifiant de l'utilisateur
-  // la fermerait ensuite à l'application elle-même.
-  const applicationId = client.application?.id;
-  if (!applicationId) { return null; }
   const bdd = await getBddInstance();
-  const owned = await bdd.claimOwnerApplication(applicationId);
+  const owned = await ownsDatabase(client);
   if (owned === null) { return null; }
   if (!owned) {
     await sendLog(

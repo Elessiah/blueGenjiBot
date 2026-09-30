@@ -48,6 +48,6 @@ test("le démarrage et la tâche de nuit lancent les durées de conservation", (
 test("guildDelete passe par eraseGuild, le chemin du rattrapage", () => {
   const source = read("main.ts");
   const handler = source.slice(source.indexOf('client.on("guildDelete"'), source.indexOf('client.on("channelDelete"'));
-  assert.ok(handler.includes("eraseGuild(guild.id)"));
+  assert.ok(handler.includes("eraseLeftGuild(client, guild.id)"));
   assert.ok(!handler.includes("_resetServer"));
 });

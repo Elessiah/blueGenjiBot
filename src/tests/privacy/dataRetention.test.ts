@@ -14,6 +14,7 @@ import { ACTIVITY_AUTHOR_RETENTION_DAYS } from "../../privacy/retentionPeriods.j
 import {
   anonymizeOldActivity,
   eraseGuild,
+  eraseLeftGuild,
   forgetDepartedGuilds,
   runDataRetention,
 } from "../../privacy/dataRetention.js";
@@ -235,6 +236,14 @@ test("deux passes simultanées n'en font qu'une, puis une relance", async () => 
   const third = runDataRetention(client);
   assert.notEqual(third, first);
   await third;
+});
+
+test("guildDelete d'une autre application n'efface pas le serveur", async () => {
+  await seedGuild("g-shared", "c-shared");
+  assert.equal(await eraseLeftGuild(fakeClient(["g-stay"], "app-dev"), "g-shared"), false);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM ChannelPartner WHERE id_guild = 'g-shared'"), 1);
+  assert.equal(await eraseLeftGuild(fakeClient(["g-stay"]), "g-shared"), true);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM ChannelPartner WHERE id_guild = 'g-shared'"), 0);
 });
 
 test("un client pas encore prêt n'efface rien", async () => {

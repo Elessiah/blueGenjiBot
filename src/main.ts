@@ -24,7 +24,7 @@ import { safeReply } from "./safe/safeReply.js";
 import { updateCommands } from "./utils/updateCommands.js";
 import { startInternalApi } from "@/internalApi.js";
 import { purgeFeedIdentifiers } from "@/feed/feedBus.js";
-import { eraseGuild, runDataRetention } from "@/privacy/dataRetention.js";
+import { eraseLeftGuild, runDataRetention } from "@/privacy/dataRetention.js";
 import { recordDailySnapshot } from "@/snapshots/dailySnapshot.js";
 import { sendDatabaseBackup } from "@/backup/weeklyBackup.js";
 
@@ -280,7 +280,7 @@ client.on("guildDelete", async (guild) => {
     // Même chemin que le rattrapage du démarrage (`eraseGuild`). Un échec est
     // signalé ; ce qui reste sera repris au prochain démarrage ou à la nuit.
     try {
-      await eraseGuild(guild.id);
+      await eraseLeftGuild(client, guild.id);
     } catch (error) {
       await reportError(client, "guildDelete (eraseGuild)", error);
     }
