@@ -49,6 +49,12 @@ Everyone:
 - `/display-channel-filter-rank channel:<channel>`
 - `/ban-list`
 - `/show-bot-admin`
+- `/stats`: shows **your own** recent activity (only you see the reply): partner messages from the last 7 days, scrims and searches from the last 30 days. Nobody can look up another player's activity.
+- `/stats-site`: shows BlueGenji website traffic (total visits, and unique visitors over the last 25 months).
+
+Bans are **network-wide**: this is community moderation, decided by the admins of servers with 50+ members. `/ban-list` therefore shows the admin of any partner server the full list of network bans (banned player, moderator, reason, date), so they know who can no longer post through the bot and why.
+
+Retention: relayed messages 7 days; the author of a `/scrim` or `/recrute` 30 days (then the author's ID is erased, only the date and server remain for counters); a server's configuration is erased when the bot leaves it — including when it left while the bot was offline, at the next startup.
 
 Server admins:
 - `/assign-channel channel:<channel> service:<service> region-filter:<region> [rank-min] [rank-max]`

@@ -73,9 +73,18 @@ Publiques :
 - `/ping` : vérifie la latence du bot.
 - `/scrim <niveau>` : publie une recherche de scrim, **Marvel Rivals uniquement**.
 - `/recrute <role>` : publie une recherche de joueurs ou staff, **Marvel Rivals uniquement**.
-- `/link` : reçoit en DM un code pour lier votre compte Discord au site BlueGenji.
-- `/stats [joueur]` : affiche les stats 30j d'un joueur (vous par défaut).
-- `/stats-site` : affiche la fréquentation du site BlueGenji (visites totales et visiteurs uniques).
+- `/stats` : affiche **votre propre** activité récente (réponse visible de vous seul) : messages partenaires des 7 derniers jours, scrims et recherches des 30 derniers jours. On ne consulte pas l'activité d'un autre joueur.
+- `/stats-site` : affiche la fréquentation du site BlueGenji (visites totales, et visiteurs uniques des 25 derniers mois).
+
+Pour lier votre compte Discord au site, connectez-vous au site avec Discord, ou utilisez « Applications connectées » sur votre profil.
+
+## Durées de conservation
+- Messages relayés : 7 jours.
+- Auteur d'un `/scrim` ou d'un `/recrute` : 30 jours. Au-delà, l'identifiant de l'auteur est effacé ; seule la date et le serveur restent, pour les compteurs.
+- Configuration d'un serveur : effacée quand le bot le quitte — y compris s'il l'a quitté pendant un arrêt du bot, au démarrage suivant.
+
+## `/ban-list` et exclusions du réseau
+Une exclusion s'applique à **tout le réseau** : c'est une modération communautaire, prononcée par les administrateurs des serveurs de 50 membres et plus. `/ban-list` montre donc à l'administrateur de tout serveur partenaire la liste complète des exclusions du réseau (joueur exclu, modérateur, motif, date), pour qu'il sache qui ne peut plus publier par le bot et pourquoi.
 
 Admin :
 - `/relay <channel>` : ajoute ou retire un salon de relais inter-serveurs.
