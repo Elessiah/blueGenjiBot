@@ -137,7 +137,7 @@ Cinq choses à savoir avant de lancer la génération :
 
 ## Textes légaux et licence
 
-- **`LegalTerms/` n'est qu'une copie.** Conditions d'utilisation et politique de confidentialité du bot (Markdown + PDF, FR / EN) font foi sur le site, `/terms-of-service-bot` et `/privacy-policy-bot`, dont la source unique est `lib/shared/bot-legal-content.ts` d'AppBlueGenji. Ne jamais corriger ces fichiers à la main : corriger le site, puis régénérer par `scripts/generate-legal-terms.py` (mode d'emploi en tête du script). Aucune adresse électronique ni invitation Discord écrite en dur : le contact passe par `/mentions-legales`.
+- **`LegalTerms/` n'est qu'une copie.** Conditions d'utilisation et politique de confidentialité du bot (Markdown + PDF, FR / EN) font foi sur le site, `/terms-of-service-bot` et `/privacy-policy-bot`, dont la source unique est `lib/shared/bot-legal-content.ts` d'AppBlueGenji. Ne jamais corriger ces fichiers à la main : corriger le site, puis régénérer par `scripts/generate-legal-terms.py` (mode d'emploi en tête du script). Aucune adresse électronique : le contact passe par `/mentions-legales` ; l'invitation Discord citée est celle du site (`DISCORD_INVITE_URL`), recopiée à la génération. Un comportement du bot qui change (durée, purge) se corrige donc **d'abord** dans le texte du site : `LegalTerms/` ne le suit qu'à la régénération suivante.
 - **Licence `AGPL-3.0-only`**, titulaire Keryan Houssin : texte officiel dans `LICENSE`, portée dans `NOTICE`, champ `license` de `package.json` — même régime que le site.
 - **Quitter un serveur efface sa configuration** (`guildDelete` → `Bdd.forgetGuild`, puis `_resetServer` pour les salons relayés). Une table ajoutée demain qui porte un `id_guild` se range dans `forgetGuild`.
 
