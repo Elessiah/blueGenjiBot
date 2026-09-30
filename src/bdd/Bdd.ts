@@ -990,17 +990,18 @@ class Bdd {
   }
 
   /**
-   * Retire un salon relayé : ses filtres de rang, ses services, puis le salon
-   * partenaire lui-même.
+   * Retire un salon relayé : ses services et le salon partenaire lui-même,
+   * puis ses filtres de rang.
    *
    * Unique retrait d'un salon, partagé par `/reset-channel` et `channelDelete`
    * (`_resetChannel`) et par le retrait de tous les salons d'un serveur
    * (`deleteGuildChannels`) : une table **par salon** ajoutée demain se range ici.
+   *
+   * Le salon d'abord, ses filtres ensuite : un salon encore relayé mais privé
+   * de ses filtres ne recevrait plus aucune annonce classée, alors que des
+   * filtres orphelins d'un salon retiré ne servent à rien — et
+   * `purgeOrphanRankFilters`, joué chaque nuit, les retire.
    * @param channelId Identifiant du salon.
-   * Le salon d'abord, ses filtres de rang ensuite : un salon encore relayé
-   * mais privé de ses filtres ne recevrait plus aucune annonce classée,
-   * alors que des filtres orphelins d'un salon retiré ne servent à rien et
-   * partent au passage suivant.
    * @returns Le `status` de `deleteChannelServices` ; les filtres ne sont
    *          retirés que si le salon l'a été.
    * @throws Si la suppression des filtres de rang échoue.
@@ -1011,6 +1012,20 @@ class Bdd {
       await this.rm("ChannelPartnerRank", {}, {query: "id_channel = ?", values: [channelId]});
     }
     return ret;
+  }
+
+  /**
+   * Retire les filtres de rang dont le salon n'est plus relayé : restes d'un
+   * retrait interrompu entre le salon et ses filtres (`deleteChannel`).
+   * @returns Nombre de lignes supprimées.
+   */
+  async purgeOrphanRankFilters(): Promise<number> {
+    const database = this.Database;
+    if (!database) { return 0; }
+    const result = await database.run(
+      "DELETE FROM ChannelPartnerRank WHERE id_channel NOT IN (SELECT id_channel FROM ChannelPartner)",
+    );
+    return result.changes ?? 0;
   }
 
   /**

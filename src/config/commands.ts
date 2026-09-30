@@ -307,7 +307,7 @@ const commands = {
     "ban-list": {
         handler: banlist,
         parameters: {
-            description: "Display the network-wide list of banned members (ADMIN)",
+            description: "Affiche la liste des exclusions de tout le reseau (ADMIN)",
         }
     },
     "unban": {

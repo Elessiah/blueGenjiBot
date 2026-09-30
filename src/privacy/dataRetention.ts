@@ -148,4 +148,10 @@ export async function runDataRetention(client: Client): Promise<void> {
   } catch (error) {
     await reportError(client, "forgetDepartedGuilds", error);
   }
+  // Après le rattrapage, qui peut en laisser : filtres de rang orphelins.
+  try {
+    await (await getBddInstance()).purgeOrphanRankFilters();
+  } catch (error) {
+    await reportError(client, "purgeOrphanRankFilters", error);
+  }
 }

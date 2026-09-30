@@ -198,6 +198,15 @@ test("runDataRetention ne lève pas quand un ménage échoue, et les suivants pa
   assert.equal(await count("SELECT COUNT(*) AS n FROM RefereeRole WHERE id_guild = 'g-after-failure'"), 0);
 });
 
+test("les filtres de rang d'un salon déjà retiré sont purgés", async () => {
+  const bdd = await getBddInstance();
+  await bdd.raw("INSERT INTO ChannelPartnerRank (id_channel, id_rank) VALUES ('c-orphan', 1)");
+  assert.ok((await bdd.purgeOrphanRankFilters()) >= 1);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM ChannelPartnerRank WHERE id_channel = 'c-orphan'"), 0);
+  // Un salon encore relayé garde les siens.
+  assert.equal(await count("SELECT COUNT(*) AS n FROM ChannelPartnerRank WHERE id_channel = 'c-stay'"), 1);
+});
+
 test("un cache de serveurs vide n'efface rien", async () => {
   assert.deepEqual(await forgetDepartedGuilds(fakeClient([])), []);
   assert.equal(await count("SELECT COUNT(*) AS n FROM ChannelPartner WHERE id_guild = 'g-stay'"), 1);

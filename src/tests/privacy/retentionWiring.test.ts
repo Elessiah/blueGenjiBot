@@ -37,8 +37,10 @@ test("le démarrage et la tâche de nuit lancent les durées de conservation", (
   const source = read("main.ts");
   const ready = source.slice(source.indexOf('client.on("clientReady"'), source.indexOf('client.on("guildCreate"'));
   assert.ok(ready.includes("void runDataRetention(client)"), "démarrage");
-  const nightly = ready.slice(ready.indexOf('"5 0 * * *"'));
-  assert.ok(nightly.slice(0, 600).includes("runDataRetention(client)"), "tâche de 00:05");
+  const start = ready.indexOf('"5 0 * * *"');
+  const nightly = ready.slice(start, ready.indexOf("cron.schedule(", start));
+  // Un appel, pas une mention : la ligne commence par `await`.
+  assert.match(nightly, /^\s*await runDataRetention\(client\);/m, "tâche de 00:05");
 });
 
 test("guildDelete passe par eraseGuild, le chemin du rattrapage", () => {
