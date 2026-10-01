@@ -3,7 +3,7 @@ import 'dotenv/config';
 import {commands} from '../config/commands.js';
 import {fillBlueCommands} from '../config/fillBlueCommands.js';
 import {sendLog} from "../safe/sendLog.js";
-import {describeError} from "../safe/errorGuards.js";
+import {describeError, isTransientNetworkError} from "../safe/errorGuards.js";
 
 /**
  * Synchronise les commandes slash de l'application auprès de Discord.
@@ -37,9 +37,19 @@ async function updateCommands(client: Client,
             }
         );
     } catch (error) {
-        // Comme avant, au journal (un 50001 dit une invitation sans le droit
-        // `applications.commands`, à corriger) ; `sendLog` ne lève pas.
-        await sendLog(client, `Update Commands (serveur ${guildId}) : \n ${describeError(error)}`);
+        const description = `Update Commands (serveur ${guildId}) : \n ${describeError(error)}`;
+        // Une panne réseau passagère reste sur la console : `sendLog` passerait
+        // par le réseau même qui est tombé. Le reste va au journal, comme avant
+        // (un 50001 dit une invitation sans le droit `applications.commands`).
+        let transient = false;
+        try {
+            transient = isTransientNetworkError(error);
+        } catch { /* valeur illisible : traitée comme une vraie faute */ }
+        if (transient) {
+            console.warn(description);
+        } else {
+            await sendLog(client, description);
+        }
     }
 }
 
