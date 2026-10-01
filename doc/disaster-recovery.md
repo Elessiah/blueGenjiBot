@@ -16,8 +16,8 @@ Ce que la reprise rend, et ce qu'elle perd :
 - **les deux bases** reviennent à l'état de la **dernière archive** (le lundi précédent au plus tard) — tout ce qui a été écrit depuis est perdu ;
 - **les images**, les **logos en quarantaine** et le **journal des suppressions** reviennent à leur état d'**une heure au plus** avant la perte ;
 - une suppression de compte faite dans l'heure qui a précédé la perte n'a pas encore été copiée : elle ne sera pas rejouée.
-- **les deux ne coïncident pas** : une image remplacée ou supprimée après l'archive n'existe plus sur le stockage (le miroir horaire l'a effacée), si bien que la base restaurée peut désigner un fichier absent — le site affiche alors l'initiale ; de même, un logo masqué après l'archive est rendu dans `data/quarantine` alors que la base restaurée l'attend dans `public/uploads`, et s'affiche absent. Rien ne se répare automatiquement : l'équipe ou le joueur concerné renvoie son image. Un tel logo, que la base restaurée ne connaît pas comme masqué, ne serait jamais purgé au bout des six mois et resterait copié chaque heure : à l'étape 5, le **supprimer** de `data/quarantine` (à vérifier : le repérer en confrontant les fichiers du dossier aux logos masqués que la base restaurée connaît).
-- **les fichiers d'adhésion du bot sont perdus** : `paths.json` et les fichiers chargés par les commandes d'adhésion vivent sur disque, dans le dossier `ADHESIONS_PATH`, hors de la base SQLite — aucune sauvegarde ne les couvre. Ils sont à recharger par les commandes d'adhésion (`doc/adhesions-commands-user.md`) une fois le bot restauré ; à vérifier : la liste exacte des commandes à relancer.
+- **les deux ne coïncident pas** : une image remplacée ou supprimée après l'archive n'existe plus sur le stockage (le miroir horaire l'a effacée), si bien que la base restaurée peut désigner un fichier absent — le site affiche alors l'initiale, et l'équipe ou le joueur concerné renvoie son image. Même décalage pour la **quarantaine** (logos d'équipe et avatars) : tout masquage, rétablissement ou suppression survenu entre l'archive et la perte laisse la base restaurée et les fichiers en désaccord — un fichier masqué que la base ignore (jamais purgé au bout des six mois, et recopié chaque heure), ou un masquage que la base croit en cours alors que le fichier est déjà revenu dans `public/uploads` (« Rétablir » échoue, le logo reste caché). À l'étape 5, confronter `data/quarantine` aux masquages que la base restaurée connaît et régler chaque écart à la main — à vérifier : la requête et le geste exacts, propres au site (`docs/features/LOGO_QUARANTINE.md`).
+- **les fichiers d'adhésion du bot sont perdus** : `paths.json` et les fichiers chargés par les commandes d'adhésion vivent sur disque, dans le dossier `ADHESIONS_PATH`, hors de la base SQLite — aucune sauvegarde ne les couvre. Ils sont à recharger par les commandes d'adhésion (`doc/adhesions-commands-user.md`) **sitôt la base restaurée**, avant le contrôle quotidien des rappels d'adhésion (10 h, et à chaque démarrage du bot) : ce contrôle repart du calendrier de l'archive, et sans les fichiers les rappels dus ne partiraient pas correctement. À vérifier : la liste exacte des commandes à relancer, et les rappels déjà envoyés entre l'archive et la perte, que ce calendrier ancien peut renvoyer.
 
 ## 0. À garder hors de la machine — avant la panne
 
@@ -67,9 +67,11 @@ sauvegarde ne sert à rien : c'est maintenant qu'il faut le découvrir.
 - **`age`**, **`sqlite3`** et **`mariadb-client`** depuis APT, **`rclone` depuis le binaire officiel** (pas d'APT, trop ancien) : section « 1. Outils » de `backup-onedrive.md`, commandes comprises.
 
 ```bash
-sudo apt update && sudo apt install -y age sqlite3 mariadb-client mariadb-server nginx
+sudo apt update && sudo apt install -y age sqlite3 mariadb-client nginx
 command -v mysqldump    # le script de sauvegarde appelle ce nom
 ```
+
+MariaDB 11.8 : `sudo apt install -y mariadb-server` **seulement si la distribution la livre** (Debian 13) — vérifier avec `apt-cache policy mariadb-server` avant d'installer, puis `mariadb --version`. Sinon, l'installer depuis le dépôt officiel de MariaDB (série 11.8). À faire **ici**, pas à l'étape 4 : une version trop ancienne ne se découvre sinon qu'à l'import.
 
 Si `mysqldump` est introuvable, installer le paquet de compatibilité qui fournit les anciens noms `mysql*` (`mariadb-client-compat` sur les versions récentes de Debian — à vérifier selon la distribution) : sans lui, la sauvegarde du lundi échoue sur un `mysqldump: command not found`.
 
