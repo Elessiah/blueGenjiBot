@@ -1,174 +1,68 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code when working with code in this repository.
+Chargé à chaque session : règles transverses seulement. Le détail et le pourquoi vivent dans **`dev-notes/`** (jamais dans `doc/`, public, ni `docs/`, généré) — le lire avant de toucher la zone concernée.
 
 ## Project Overview
 
-**BlueGenjiBot** est le bot Discord de la plateforme BlueGenji Arena (esports amateur Marvel Rivals / Overwatch 2, FR). Il gère :
-- Les commandes slash Discord (adhésion, services partenaires, ban, broadcast, admin)
-- Une API HTTP interne (`internalApi.ts`) consommée par l'app web sœur `appbluegenji` (auth DM codes, stats, logs de conflits)
-- La distribution de messages, les vérifications cron (intervalles d'adhésion), les channels partenaires
-
-Projet sœur : `C:\work\BlueGenji\appbluegenji` (Next.js 15, MySQL). Le bot reçoit du token interne via `INTERNAL_API_TOKEN`, qui doit correspondre à `BOT_INTERNAL_TOKEN` côté web.
+**BlueGenjiBot**, bot Discord de BlueGenji (esport amateur Marvel Rivals / Overwatch 2, FR) : commandes slash (adhésion, services partenaires, ban, broadcast, admin), API HTTP interne (`internalApi.ts`) consommée par l'app sœur `C:\work\BlueGenji\appbluegenji` (codes de connexion en MP, stats, logs), distribution de messages, tâches cron. `INTERNAL_API_TOKEN` doit égaler `BOT_INTERNAL_TOKEN` côté web.
 
 ## Commands
 
 ```bash
 npm run dev          # nodemon + ts-node ESM loader
-npm run build        # TypeScript 7 puis tsc-alias (résout les @/* en chemins relatifs)
-npm run typecheck:ts5 # même contrôle des types avec TypeScript 5, celui que lisent ESLint et ts-node
+npm run build        # TypeScript 7 puis tsc-alias (résout les @/*)
+npm run typecheck:ts5 # même contrôle avec TypeScript 5 (ESLint, ts-node)
 npm start            # node dist/main.js
-npm run lint         # ESLint
-npm test             # build puis node --test sur dist/tests/**/*.test.js
+npm run lint         # ESLint (src/ seul)
+npm test             # build puis node --test dans dist/
 npm run docs         # build + jsdoc
+node --test "dist/tests/path/to/file.test.js"  # un seul fichier, après build
 ```
 
-Test ciblé après build : `node --test "dist/tests/path/to/file.test.js"`.
+## Stack → `dev-notes/STACK.md`
 
-`npm test` **se place dans `dist/` et laisse Node découvrir** les fichiers, plutôt que de lui passer un motif `dist/tests/**/*.test.js` : ce motif n'est développé ni par bash sans `globstar`, ni par `--test` avant Node 22 — la commande passait donc en local (Node 24) et échouait en CI (Node 20).
+- **Node.js + TypeScript ESM** strict ; imports **toujours suffixés `.js`**. Alias `@/*` → `src/*` (`tsc-alias`).
+- **Deux TypeScript** : `typescript-native` (7) produit `dist/`, `typescript` (5) sert ESLint et ts-node — les scripts désignent leur `tsc` **par chemin**, jamais `tsc` ni `npx tsc`.
+- discord.js 14, Express 4 (`/internal`, en-tête `x-internal-token`), SQLite via le singleton `Bdd` (`getBddInstance()` / `closeBddInstance()`), node-cron. pm2 est global sur le serveur, **pas** une dépendance.
+- **`allowScripts`** (npm 12) : `sqlite3` approuvé (sans lui le bot meurt au démarrage), `unrs-resolver` refusé ; tout nouveau paquet à script annoncé par `npm ci` se relit puis s'approuve ou se refuse.
+- Arborescence de `src/` : `dev-notes/STACK.md`.
 
-## Stack
+## Conventions (à appliquer partout)
 
-- **Node.js + TypeScript ESM** (strict). Imports avec extension `.js` obligatoire.
-- **Deux TypeScript cohabitent.** `typescript-native` (alias npm de `typescript@^7`, le compilateur réécrit en Go) produit `dist/` — environ 3 s au lieu de 9. `typescript` (5.x) reste installé pour **typescript-eslint** (qui exige `<6.1`) et **ts-node** (`npm run dev`) : TypeScript 7 n'expose plus l'API JavaScript qu'ils appellent. Les deux paquets fournissent un binaire `tsc`, et celui que retient `node_modules/.bin` dépend de l'ordre d'installation : les scripts désignent donc leur compilateur **par chemin** (`node node_modules/<paquet>/bin/tsc`), jamais par `tsc` ni `npx tsc`. `baseUrl` a quitté `tsconfig.json` (retiré en TypeScript 7) : `paths` s'écrit `"@/*": ["./src/*"]`, lu pareil par les deux versions. Le lockfile porte les binaires natifs de toutes les plateformes, dont `@typescript/typescript-linux-arm64` pour le serveur. Même schéma que l'app sœur ; le passage complet attendra que typescript-eslint accepte la version 7. Câblage gardé par `tests/utils/typescriptWiring.test.ts`.
-- **discord.js 14** — slash commands, intents : Guilds, GuildMembers, GuildMessages, MessageContent
-- **Express 4** — API interne montée sur `/internal`, auth via header `x-internal-token`
-- **SQLite** (`sqlite` + `sqlite3`) — base locale `database.sqlite`, accès via singleton `Bdd` (`src/bdd/Bdd.ts`)
-- **`allowScripts` (package.json) — requis par npm 12**, qui tourne sur le serveur depuis le 24/09/2026 et bloque par défaut les scripts d'installation des dépendances. `sqlite3` **en a besoin** : son script `install` (`prebuild-install -r napi || node-gyp rebuild`) est ce qui pose `build/Release/node_sqlite3.node` — bloqué, `npm ci` réussit, le build aussi, et le bot meurt au démarrage sur `Could not locate the bindings file` (c'est ainsi que `updateBlueGenji.sh` a laissé le bot à terre ce jour-là). Il est donc **approuvé**, sans épingler la version : épinglé, la prochaine montée de `sqlite3` recasserait le déploiement de la même façon muette. `unrs-resolver` est **refusé** (`postinstall` de simple vérification, la liaison native arrive par sa dépendance optionnelle — même choix que le site). Un nouveau paquet à script s'annonce à la fin de `npm ci` (`npm warn install-scripts`) : le relire (`npm install-scripts ls`), puis l'approuver ou le refuser ici.
-- **node-cron** — tâches périodiques (vérif adhésion, etc.)
-- **pm2** — process manager pour la prod, **installé globalement sur le serveur**. Il n'est *pas* une dépendance du projet : rien ne l'importe, il n'apparaissait que dans des commentaires, et la copie que `npm ci` posait dans `node_modules` ne servait qu'à traîner l'avis `js-yaml`. `mongoose` et `gridfs-stream` sont partis pour la raison voisine — reliquats de l'ère MongoDB, plus référencés nulle part depuis le passage à SQLite.
-
-## Path Alias
-
-`@/*` → `src/*` (configuré dans `tsconfig.json`, résolu au build par `tsc-alias`).
-
-## Architecture (`src/`)
-
-```
-src/
-├── main.ts                 # entrypoint : client Discord + API interne + cron
-├── internalApi.ts          # serveur Express pour l'app web
-├── types.ts                # types partagés
-├── bdd/                    # singleton SQLite Bdd, types, helpers (deleteDPMsgs)
-├── commandsHandlers/       # handlers de commandes slash
-│   ├── adhesions/          # parcours d'adhésion partenaire
-│   ├── admin/              # commandes admin
-│   ├── services/           # gestion des services (resetChannel, resetServer)
-│   ├── ban/, broadcast.ts, contactAdminServer.ts, printHelp.ts
-├── adhesion/               # logique d'adhésion (checkIntervalleAdhesion…)
-├── check/                  # checks runtime (checkBan…)
-├── messages/               # buildServiceMessage, manageDistribution
-├── safe/                   # wrappers défensifs : safeReply, sendLog
-├── config/                 # commandes statiques + fillBlueCommands (dynamiques)
-├── utils/                  # updateCommands, helpers divers
-└── tests/                  # node:test
-```
-
-**Singleton DB** : `getBddInstance()` / `closeBddInstance()` depuis `bdd/Bdd.js`. Les méthodes `set()` et `partnerHasRanks()` ont été sécurisées récemment contre l'injection SQL — toute nouvelle méthode d'accès BDD **doit** utiliser des requêtes paramétrées.
-
-**Logging** : `sendLog(client, message)` poste dans le channel de logs Discord. Toujours wrapper les opérations BDD dans try/catch + sendLog.
-
-**Réponses Discord** : utiliser `safeReply()` plutôt que `interaction.reply()` directement (gère déjà les erreurs et les interactions expirées).
-
-## Environment Variables
-
-Les noms ci-dessous sont ceux que le code lit réellement (`.env.example` en fait
-foi). Cette liste en portait trois qui n'existent pas — `DISCORD_TOKEN`,
-`GUILD_ID` « pour register cmds », `LOG_CHANNEL_ID` — et la distribution des
-messages privés a été écrite d'après elle : elle lisait `GUILD_ID`, jamais posé,
-et n'a donc rien envoyé depuis sa création.
-
-```env
-TOKEN=                          # jeton du bot
-CLIENT_ID=
-OWNER_ID=                       # reçoit les logs en message privé
-INFO_SERV=                      # salon Discord des logs (sendLog)
-PRESIDENT=
-SERV_GENJI=                     # serveur BlueGenji (commandes réservées, MP du site)
-SERV_RIVALS=                    # serveur BlueGenji Marvel Rivals (idem)
-PASSWORD=
-INTERNAL_API_HOST=
-INTERNAL_API_PORT=4400          # défaut
-INTERNAL_API_TOKEN=             # doit matcher BOT_INTERNAL_TOKEN côté appbluegenji
-GUILD_ID=                       # facultatif — surcharge les serveurs démarchés par /internal/notify/dm
-BACKUP_STATUS_PATH=             # statut de la sauvegarde distante (défaut /var/lib/bluegenji/backup-status.json)
-BACKUP_ARCHIVE_DIR=             # /restore-backup : dossier local d'archives .tar.age (facultatif)
-BACKUP_RCLONE_REMOTE=           # /restore-backup : remote:dossier des archives (facultatif)
-BACKUP_AGE_IDENTITY=            # /restore-backup : clé privée age (défaut ~/.bluegenji-backup.key)
-```
-
-## Conventions
-
-- **Tout en français** côté UI/messages utilisateur.
-- **Imports ESM** : toujours suffixer `.js` (même pour les fichiers `.ts`), TypeScript ESM l'exige.
-- **Requêtes SQL** : exclusivement paramétrées via `Bdd.get/set/...`. Jamais de concat de strings. Seule exception : un **nom** de table ou de colonne tiré d'une constante du code (`GUILD_CONFIG_TABLES`, `GUILD_CHANNEL_TABLE`), vérifié par `assertSqlIdentifier` au chargement du module — les valeurs, elles, restent toujours bindées.
-- **Flux d'activité** : rien de ce qui entre dans `recordEvent()` ne doit nommer une personne. L'app web republie ce flux sur `/bot`, page de vitrine lue **sans compte**, et la table `FeedEvent` conserve ses lignes 30 jours (`FEED_EVENT_RETENTION_DAYS`, purge de `runDataRetention`) — un identifiant écrit ici repart à chaque rattrapage d'historique jusque-là. `feed/feedPrivacy.ts` remplace mention et identifiant nu par « un joueur » ; la règle est posée dans `recordEvent`, **unique écrivain**, jamais chez l'appelant. Un évènement dit *ce qui se passe*, jamais *à qui*.
-- **Erreurs runtime** : try/catch + `sendLog()` ; ne jamais laisser une exception planter le bot.
-  `installProcessGuards()` (`safe/processGuards.ts`) capte `unhandledRejection`,
-  `uncaughtException` et les événements `error`/`shardError` du client — sans quoi une
-  coupure DNS suffit à tuer le process. `reportError()` trie les erreurs via
-  `safe/errorGuards.ts` : les pannes réseau et les cibles Discord disparues (10008,
-  10062, 50013…) restent en console, le reste part au canal de supervision.
-  **Tout listener `client.on(...)` et tout callback `cron`/`setTimeout` doit avoir sa
-  propre garde** : ils s'exécutent hors de toute pile applicative.
-- **Réactions Discord** : `safeReact()` plutôt que `message.react()` — un message
-  supprimé entre-temps lève un `10008` qui interromprait la diffusion en cours.
-- **Commandes Discord** : enregistrer via `updateCommands()`, déclarer dans `config/commands.ts` (statiques) ou `fillBlueCommands()` (dynamiques).
-- **Tests** : runner natif `node:test` sur le build (`dist/`), pas de transpil à la volée.
-- **Lint** : ESLint 10, configuration « flat » dans `eslint.config.js` (`@eslint/js` + `typescript-eslint`, recommandés). Le périmètre est **`src/` seul** (`ignores` de la configuration) : sans lui, `eslint .` partait analyser `dist/`. `src/main.js` est ignoré — ancien point d’entrée, ni compilé (`allowJs: false`) ni référencé. Aucun plugin `import` : il n’était chargé que pour que quatre `eslint-disable` résolvent des règles jamais activées, et ESLint 10 signale un tel commentaire comme inutile. Le seul avis `deprecated` restant à l’installation, `prebuild-install`, vient de `sqlite3` et ne se corrige pas de notre côté.
+- **Tout en français** côté messages utilisateur.
+- **SQL exclusivement paramétré** (`Bdd.get/set/...`), jamais de concaténation ; seule exception, un nom de table/colonne tiré d'une constante et vérifié par `assertSqlIdentifier`.
+- **Erreurs** : try/catch + `sendLog()`, jamais une exception qui plante le bot ; **tout listener `client.on(...)` et tout callback `cron`/`setTimeout` a sa propre garde**. Réponses par `safeReply()`, réactions par `safeReact()`.
+- **Flux d'activité** : rien de ce qui entre dans `recordEvent()` ne nomme une personne (règle posée dans `recordEvent`, unique écrivain).
+- **Journal Discord** : un identifiant, **jamais un pseudo**.
+- **Commandes** : enregistrées par `updateCommands()`, déclarées dans `config/commands.ts` ou `fillBlueCommands()`.
+- **Tests** : `node:test` sur `dist/`. **Lint** : ESLint 10 flat, `src/` seul.
+- **Variables d'environnement** : `.env.example` fait foi → `dev-notes/ENVIRONMENT.md`.
+- **Données d'un serveur** : une table de configuration se range dans `GUILD_CONFIG_TABLES`, une table par salon dans `Bdd.deleteChannel` ; l'oubli d'un serveur passe par `eraseGuild` seul → `dev-notes/LEGAL_AND_DATA.md`.
 
 ## CI
 
-`.github/workflows/ci.yml` vérifie chaque PR vers `main` : **lint → build → test**, enchaînés par `needs:`. Un lint rouge rend le reste sans objet, et le build est un prérequis réel des tests (`node --test` lit `dist/`). Ne pas merger sur un CI rouge.
+`.github/workflows/ci.yml` : **lint → build → test** sur chaque PR vers `main`. Ne pas merger sur un CI rouge.
 
-## Versionnage
+## Versionnage → `dev-notes/VERSIONING.md`
 
-La version vit dans `package.json` (et `package-lock.json`), en SemVer. **2.0.0** = migration TypeScript, **3.0.0** = connexion avec le site BlueGenji. Elle monte toute seule à la **fusion** d'une PR dans `main` : `.github/workflows/version-bump.yml` lit le niveau sur les étiquettes de la PR, lance `npm version <niveau>` sur `main` à jour, commite `release vX.Y.Z (#N) [skip ci]`, pousse commit et tag `vX.Y.Z` d'un seul push atomique (cinq essais si une autre fusion passe entre-temps), puis publie la release GitHub avec des notes générées depuis les titres de PR. Relancer le job est sûr : si `main` porte déjà le commit `(#N)`, il reprend cette version au lieu d'en monter une seconde. Même mécanique que le site (`docs/features/VERSIONING.md` de l'app).
+Bump, tag et release automatiques à la fusion. **Chaque PR porte la bonne étiquette** : `release:major` (changement cassant, contrat `/internal/*` changé), `release:minor` (fonctionnalité), aucune (correctif, refonte, dépendances, tests, doc), `release:skip` (outillage pur).
 
-**Chaque PR porte la bonne étiquette** — c'est le seul geste demandé :
+## Documentation → `dev-notes/DOCUMENTATION.md`
 
-| Étiquette | Effet à la fusion | Quand |
-|---|---|---|
-| `release:major` | `X+1.0.0` | changement cassant : commande retirée ou au contrat changé, contrat de l'API interne `/internal/*` changé côté site, migration de base irréversible |
-| `release:minor` | `X.Y+1.0` | nouvelle fonctionnalité : commande, module, route interne, réglage |
-| *(aucune)* | `X.Y.Z+1` | correctif, refonte interne, dépendances, tests, documentation |
-| `release:skip` | rien | outillage de dépôt pur, ou PR qui fixe elle-même la version |
+- `doc/`, `help.md`, `helpfr.md` sont **lus à chaud et publiés par le site** sur `/bot/docs` : les corriger avec toute commande touchée, n'y mettre rien d'interne.
+- **Une PR qui touche `src/` régénère `docs/`** (JSDoc) : `rm -rf dist docs && npm run docs`, commité **à part** ; vérifier que la page du module existe (un module sans bloc JSDoc n'en a pas).
 
-`release:skip` l'emporte sur les autres, `release:major` sur `release:minor`. Le job pousse avec `secrets.RELEASE_TOKEN` s'il existe, sinon avec le `GITHUB_TOKEN` : si une protection est posée un jour sur `main`, autoriser GitHub Actions en contournement ou créer ce secret — ne jamais affaiblir la protection. Cette section n'a **pas** sa place dans `doc/`, publié tel quel sur `/bot/docs`.
+## Textes légaux et licence → `dev-notes/LEGAL_AND_DATA.md`
 
-## Documentation
+`LegalTerms/` n'est qu'une copie : corriger le site (`lib/shared/bot-legal-content.ts` d'AppBlueGenji) puis régénérer par `scripts/generate-legal-terms.py`, jamais à la main ; aucune adresse électronique. Licence `AGPL-3.0-only`.
 
-Deux dossiers aux noms voisins, et ils ne servent pas le même public :
+## Revue des PR → `dev-notes/REVIEW_CYCLES.md`
 
-- **`doc/` + `help.md` + `helpfr.md` — Markdown, lus à chaud par le site.** L'app sœur ne les copie pas : `lib/server/bot-docs.ts` les lit sur disque à chaque revalidation et les publie sur `/bot/docs`, d'après le registre `BOT_DOC_SECTIONS`. Une correction y est donc en ligne sans rebuild ni déploiement — une erreur aussi.
-- **`docs/` — HTML JSDoc, généré puis commité.** C'est la référence des modules, produite par `npm run docs` (build, puis `jsdoc -c jsdoc.json`). La source est **`dist/`** et non `src/` : JSDoc ne lit pas le TypeScript, d'où le build préalable. `dist/tests` en est exclu — un runner de tests n'est pas une API.
-
-**Règle : une PR qui touche `src/` régénère `docs/`.** Ajout, renommage ou suppression d'un module, réécriture d'un bloc JSDoc : la référence part avec le code, dans la même PR. Faute de cette règle elle avait dérivé de **vingt-deux modules** — `docs/` n'avait plus été regénéré depuis son commit d'origine, et publiait encore la page d'une commande retirée.
-
-Cinq choses à savoir avant de lancer la génération :
-
-1. **Vider `docs/` d'abord** (`rm -rf docs`). JSDoc écrit ses pages, il n'efface jamais celles qui n'ont plus de source : sans ce ménage, un module supprimé garde la sienne indéfiniment — et c'est exactement ce qui est arrivé à `/restart-bot`.
-2. **Vider `dist/` aussi**, et pour la même raison une marche plus bas : la source de JSDoc est `dist/`, et `tsc` n'efface pas davantage un `.js` dont le `.ts` a disparu. Nettoyer `docs/` seul ne suffit donc pas — la page revient à la génération suivante, produite depuis un artefact périmé. `/restart-bot` est revenu ainsi, avec `updateOldPartner` et l'ancienne orthographe de `checkIntervalleAdhesion` : trois modules qui n'existent plus dans `src/` et que la référence publiait encore. Le ménage complet est donc `rm -rf dist docs && npm run docs`.
-3. **Chaque page porte l'horodatage de sa génération** en pied. L'arbre entier ressort donc modifié à chaque passage, même sans changement de fond : mettre la régénération dans **son propre commit**, sinon le vrai diff s'y noie.
-4. `jsdoc` est en `devDependencies`. Il n'y était pas, et `npm run docs:gen` échouait sur un binaire introuvable : une commande qui ne s'exécute pas est la meilleure explication d'une doc qui ne se met pas à jour.
-5. **Un module sans le moindre bloc JSDoc ne produit aucune page.** JSDoc ne signale pas ce qu’il ne sait pas documenter, il l’omet : trente fichiers de `dist/` sont ainsi absents de la référence, dont `main.ts` et `internalApi.ts`. Une régénération réussie ne prouve donc pas que le module est couvert — vérifier que sa page existe.
-
-## Textes légaux et licence
-
-- **`LegalTerms/` n'est qu'une copie.** Conditions d'utilisation et politique de confidentialité du bot (Markdown + PDF, FR / EN) font foi sur le site, `/terms-of-service-bot` et `/privacy-policy-bot`, dont la source unique est `lib/shared/bot-legal-content.ts` d'AppBlueGenji. Ne jamais corriger ces fichiers à la main : corriger le site, puis régénérer par `scripts/generate-legal-terms.py` (mode d'emploi en tête du script). Aucune adresse électronique : le contact passe par `/mentions-legales` ; l'invitation Discord citée est celle du site (`DISCORD_INVITE_URL`), recopiée à la génération. Un comportement du bot qui change (durée, purge) se corrige donc **d'abord** dans le texte du site : `LegalTerms/` ne le suit qu'à la régénération suivante.
-- **Licence `AGPL-3.0-only`**, titulaire Keryan Houssin : texte officiel dans `LICENSE`, portée dans `NOTICE`, champ `license` de `package.json` — même régime que le site.
-- **Quitter un serveur efface sa configuration** (`guildDelete` → `eraseGuild` : `Bdd.forgetGuild`, puis `Bdd.deleteGuildChannels` pour les salons relayés — la boucle que `/reset-all` partage). Une table **par salon** se range dans `Bdd.deleteChannel`, retrait d'un salon que partagent `/relay`, `/reset-channel`, `channelDelete` et `deleteGuildChannels`. Une table de **configuration** ajoutée demain (réglage d'un serveur, sans objet une fois le bot parti) se range dans `GUILD_CONFIG_TABLES` (`Bdd.ts`), que lisent à la fois `forgetGuild` et `listConfiguredGuildIds` — c'est cette seconde lecture qui, au démarrage puis chaque nuit (`privacy/dataRetention.ts`), rattrape les serveurs quittés pendant un arrêt (Discord n'envoie alors aucun `guildDelete`) et les `forgetGuild` restés partiels. Les tables d'activité (`Scrim`, `Recrute`) sont repliées dans la nuit qui suit leurs 30 jours (`ACTIVITY_AUTHOR_RETENTION_DAYS`, fenêtre de `/stats`) en nombres par jour, serveur et niveau ou rôle (`ActivityDaily`) : effacer le seul auteur laissait l'ordre des identifiants, qui le redonnait. Le bot n'écrit **aucun pseudo** au salon de journal : un identifiant, jamais un nom (le motif d'une exclusion, lui, reste le texte libre du modérateur). L'oubli d'un serveur passe par un seul chemin, `eraseGuild`, que `guildDelete` et le rattrapage partagent.
+`/code-review --comment` **en boucle** jusqu'à un cycle sans finding (deux consécutifs pour un changement critique : légal, auth, RGPD, sauvegardes), puis, pour une PR qui ajoute ou modifie une fonctionnalité, trois cycles **thématiques** relancés chacun jusqu'à revenir propres : UI/UX (messages, embeds, commandes), sécurité, performance. Doc ou texte légal seul : un cycle juridique à la place ; renommage seul : aucun.
 
 ## Communication Style
 
-- **Exécute sans détailler** : ne décris pas ce que tu vas faire avant d'agir, fais le travail.
-- **Court résumé final** : une fois terminé, résume brièvement les changements et problèmes éventuels.
-- **Arrête les processus** : à la fin de chaque prompt, arrête les serveurs lancés (`npm run dev`, tests serveurs) pour éviter l'accumulation.
-
-## Skills Disponibles
-
-Voir `.agents/skills/` :
-- `nodejs-best-practices` — décisions d'architecture, frameworks, async, sécurité
-- `nodejs-backend-patterns` — Express/Fastify, middleware, error handling, repos
-- `typescript-advanced-types` — generics, conditional/mapped types, utility types
-- `opus-haiku-pipeline` — pipeline 2 phases (plan Opus → exécution Haiku) via `scripts/run_pipeline.py`. Modes `prose` (rédaction) et `code` (modifs filesystem via CLI `claude`). Ce skill **doit** être déclenché dès que l'utilisateur demande d'« enchaîner des prompts », « planifier puis exécuter », ou de « faire planifier par un modèle et exécuter par un autre ».
+- **Exécute sans détailler** : ne décris pas ce que tu vas faire, fais-le.
+- **Court résumé final** des changements et problèmes éventuels.
+- **Arrête les processus** lancés (`npm run dev`, tests serveurs) à la fin de chaque prompt.
+- Skills du dépôt (`.agents/skills/`) → `dev-notes/SKILLS.md` ; `opus-haiku-pipeline` **doit** être déclenché quand on demande d'« enchaîner des prompts » ou de « planifier puis exécuter ».
