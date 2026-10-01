@@ -143,7 +143,9 @@ Puis démarrer le bot **sur une base vide** — c'est attendu, il l'annonce dans
 ses journaux (`Aucun fichier à … — création d'une base vide.`) :
 
 ```bash
-mkdir -p data          # dossier de la base par défaut (BDD_PATH, sinon ./data/database.sqlite)
+# Le bot ne crée ni le dossier de sa base ni celui de ses fichiers d'adhésion :
+mkdir -p <dossier de BDD_PATH>      # ./data si BDD_PATH n'est pas défini dans .env
+mkdir -p <ADHESIONS_PATH>          # inutile si la variable n'est pas définie (dossier courant)
 pm2 start dist/main.js --name <nom du processus du bot>
 pm2 save
 ```
