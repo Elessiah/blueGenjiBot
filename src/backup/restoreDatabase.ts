@@ -3,7 +3,7 @@ import path from "node:path";
 import sqlite3 from "sqlite3";
 import { open } from "sqlite";
 
-import { getBddInstance, resetBddInstance } from "@/bdd/Bdd.js";
+import { getBddInstance, resetBddInstance, resolveBddPath } from "@/bdd/Bdd.js";
 import { ROLLBACK_RETENTION_DAYS } from "@/privacy/retentionPeriods.js";
 
 /** En-tête que tout fichier SQLite valide porte sur ses seize premiers octets. */
@@ -103,8 +103,11 @@ export function rollbackTimestamp(name: string, prefix: string): number | null {
  *
  * - au-delà de `ROLLBACK_RETENTION_DAYS`, une copie part, quoi qu'il arrive ;
  * - après une restauration réussie (`keep` renseigné), toutes les copies
- *   précédentes partent : la nouvelle restauration les a rendues sans objet,
- *   et la base d'origine reste dans les sauvegardes chiffrées.
+ *   précédentes partent. **Décision assumée** (minimisation, RGPD art. 5.1.e) :
+ *   deux restaurations de suite perdent localement l'état d'avant la première,
+ *   y compris ce qui a été écrit depuis la dernière sauvegarde chiffrée. Pour
+ *   chercher la bonne archive sans ce risque, restaurer d'abord à la main sur
+ *   une autre machine (`doc/backup-onedrive.md`, « À la main »).
  *
  * Un nom illisible n'est jamais retenu par la règle d'âge (on ne supprime pas
  * ce qu'on ne sait pas dater) — mais il l'est après une restauration réussie.
@@ -146,7 +149,7 @@ export function selectExpiredRollbacks(
  * @returns Le nombre de copies supprimées.
  */
 export async function purgeOldRollbacks(
-  dbPath: string = process.env.BDD_PATH || "./database.sqlite",
+  dbPath: string = resolveBddPath(),
   keepPath?: string,
   now: number = Date.now(),
 ): Promise<number> {
@@ -185,7 +188,7 @@ export async function purgeOldRollbacks(
  */
 export async function restoreDatabase(
   candidatePath: string,
-  dbPath: string = process.env.BDD_PATH || "./database.sqlite",
+  dbPath: string = resolveBddPath(),
 ): Promise<RestoreResult> {
   const invalid = await validateSqliteFile(candidatePath);
   if (invalid) {

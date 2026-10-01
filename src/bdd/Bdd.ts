@@ -45,11 +45,21 @@ const DEFAULT_BDD_PATH = './data/database.sqlite';
  *
  * @returns Instance Bdd prête à être utilisée.
  */
+/**
+ * Chemin absolu de la base que le bot ouvre : `BDD_PATH`, sinon le repli.
+ * Partagé avec la restauration et sa purge des copies de secours, qui
+ * viseraient sinon un autre fichier que la base réelle.
+ * @returns Le chemin absolu de la base.
+ */
+function resolveBddPath(): string {
+  const configured = process.env.BDD_PATH?.trim();
+  return path.resolve(configured && configured.length > 0 ? configured : DEFAULT_BDD_PATH);
+}
+
 async function getBddInstance(): Promise<Bdd> {
   if (!bdd) {
     const configured = process.env.BDD_PATH?.trim();
-    const target = configured && configured.length > 0 ? configured : DEFAULT_BDD_PATH;
-    const absolute = path.resolve(target);
+    const absolute = resolveBddPath();
     if (!fs.existsSync(absolute)) {
       // Pas un refus : une première installation doit pouvoir démarrer. Mais on
       // le **dit**, parce que c'est indiscernable d'une base perdue.
@@ -1256,6 +1266,6 @@ class Bdd {
   }
 }
 
-export { Bdd, getBddInstance, closeBddInstance, resetBddInstance };
+export { Bdd, getBddInstance, closeBddInstance, resetBddInstance, resolveBddPath };
 
 

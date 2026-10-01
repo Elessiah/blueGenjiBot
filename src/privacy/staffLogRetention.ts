@@ -178,22 +178,36 @@ export async function purgeStaffLogs(client: Client, now: number = Date.now()): 
   const cutoff = now - STAFF_LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000;
   let deleted = 0;
 
+  // Deux salons indépendants : l'un injoignable (salon effacé, accès retiré)
+  // ne prive pas l'autre de sa purge. La première erreur remonte ensuite.
+  let failure: unknown = null;
   if (process.env.INFO_SERV) {
-    const channel = (await client.channels.fetch(process.env.INFO_SERV)) as TextChannel | null;
-    if (channel && "messages" in channel) {
-      deleted += await purgeLogChannel(asLogChannel(channel), cutoff, botId, protectedIds);
+    try {
+      const channel = (await client.channels.fetch(process.env.INFO_SERV)) as TextChannel | null;
+      if (channel && "messages" in channel) {
+        deleted += await purgeLogChannel(asLogChannel(channel), cutoff, botId, protectedIds);
+      }
+    } catch (error) {
+      failure = error;
     }
   }
   if (process.env.OWNER_ID) {
-    const owner = await client.users.fetch(process.env.OWNER_ID);
-    const dm = await owner.createDM();
-    deleted += await purgeLogChannel(
-      asLogChannel(dm),
-      cutoff,
-      botId,
-      protectedIds,
-      Math.max(0, MAX_LOG_DELETIONS_PER_RUN - deleted),
-    );
+    try {
+      const owner = await client.users.fetch(process.env.OWNER_ID);
+      const dm = await owner.createDM();
+      deleted += await purgeLogChannel(
+        asLogChannel(dm),
+        cutoff,
+        botId,
+        protectedIds,
+        Math.max(0, MAX_LOG_DELETIONS_PER_RUN - deleted),
+      );
+    } catch (error) {
+      failure ??= error;
+    }
+  }
+  if (failure !== null) {
+    throw failure;
   }
   return deleted;
 }
