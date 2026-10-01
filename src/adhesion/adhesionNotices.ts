@@ -20,6 +20,12 @@ const MISSING_FILES_NOTICE = "Echec de l'envoie des adhésions, impossible de r�
 /** Avis à l'auteur quand le salon n'a pas reçu les papiers. */
 const CHANNEL_FAILED_NOTICE = "Echec de l'envoie des adhésions, vérifiez les permissions, avant de réessayer !";
 
+/**
+ * Avis à l'auteur quand aucun membre n'est à servir : rôle sans membre (et
+ * aucun membre désigné), ou membres du rôle illisibles.
+ */
+const NO_RECIPIENT_NOTICE = "Echec de l'envoi des adhésions : personne n'a pu être joint (rôle visé sans membre ou illisible). Vérifiez la cible avant de réessayer !";
+
 /** Avis à l'auteur quand plusieurs membres ont tous reçu les papiers. */
 const MEMBERS_DELIVERED_NOTICE = "Adhésions envoyés avec succès à plusieurs membres !";
 
@@ -55,6 +61,7 @@ export {
     PERMISSION_WARNING,
     MISSING_FILES_NOTICE,
     CHANNEL_FAILED_NOTICE,
+    NO_RECIPIENT_NOTICE,
     MEMBERS_DELIVERED_NOTICE,
     channelDeliveredNotice,
     memberDeliveredNotice,
