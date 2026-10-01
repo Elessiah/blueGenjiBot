@@ -124,9 +124,10 @@ async function manageDistribution(message: Message,
     } catch (err) {
         // Le message seul : l'objet d'erreur d'une requête Discord porte
         // l'annonce (pseudo de l'auteur, texte), que les journaux ne gardent pas.
-        const description = describeError(err);
+        const cause = err instanceof Error && err.cause !== undefined ? ` (cause : ${describeError(err.cause)})` : "";
+        const description = describeError(err) + cause;
         // La pile pour pm2 (elle ne porte pas l'annonce), jamais l'objet entier.
-        console.error("manageDistribution error:", err instanceof Error ? err.stack : description);
+        console.error("manageDistribution error:", (err instanceof Error && err.stack ? err.stack : description) + cause);
         await sendLog(client, "manageDistribution error : \n" + description);
         return false;
     }

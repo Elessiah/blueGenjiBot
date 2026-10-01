@@ -119,7 +119,13 @@ function describeError(error: unknown): string {
         return code === null ? error.message : `${error.message} [${code}]`;
     }
     if (typeof error === "string") return error;
-    return `valeur levée non standard (${error === null ? "null" : typeof error})`;
+    // Un scalaire ne porte rien d'autre que lui-même : il est rendu tel quel.
+    if (error === null || error === undefined || typeof error === "number" || typeof error === "boolean") {
+        return `valeur levée non standard (${String(error)})`;
+    }
+    // Un objet : son seul code, s'il en a un, jamais ses champs.
+    const code = errorCode(error);
+    return `valeur levée non standard (${typeof error}${code === null ? "" : `, code ${code}`})`;
 }
 
 /** Gravité retenue pour une erreur, qui décide de sa destination. */

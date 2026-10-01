@@ -40,7 +40,7 @@ async function getInviteFromMessage(client: Client,
     } catch (e) {
         // L'identifiant du message, jamais son texte : une annonce cite des
         // pseudos, que le journal ne reçoit pas.
-        await sendLog(client, "(getInviteFromMessage)Erreur pour le message " + message.id + "\nMessage d'erreur : \n" + describeError(e));
+        await sendLog(client, "(getInviteFromMessage)Erreur pour le message " + message.id + " (salon " + message.channelId + ", serveur " + message.guildId + ")" + "\nMessage d'erreur : \n" + describeError(e));
         return ("");
     }
 }
