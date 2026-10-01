@@ -67,3 +67,44 @@ export function deterministicColor(id: string): string {
   const hue = Math.abs(hash[0]) % 360;
   return `hsl(${hue}, 65%, 50%)`;
 }
+
+/** Etat de relais d'un serveur, pour `/internal/servers`. */
+export type RelayStatus = "ok" | "lag" | "off";
+
+/**
+ * Etat de relais d'un serveur d'apres l'age de son dernier relais : `ok` sous
+ * 24 h, `lag` sous 7 jours, `off` au-dela ou sans aucun relais.
+ *
+ * @param hoursAgo Heures ecoulees depuis le dernier relais, `null`/absent sans relais.
+ * @returns L'etat du serveur.
+ */
+export function relayStatus(hoursAgo: number | null | undefined): RelayStatus {
+  if (hoursAgo === null || hoursAgo === undefined) {
+    return "off";
+  }
+  if (hoursAgo < 24) {
+    return "ok";
+  }
+  return hoursAgo < 24 * 7 ? "lag" : "off";
+}
+
+/** Nombre de points d'une courbe de relais. */
+export const SPARKLINE_POINTS = 10;
+
+/**
+ * Courbe de relais d'un serveur, de la plus ancienne tranche a la plus
+ * recente : la tranche `0` (la plus recente) va au dernier point. Une tranche
+ * hors de la courbe est ignoree.
+ *
+ * @param rows Comptes par tranche, tranche `0` = la plus recente.
+ * @returns `SPARKLINE_POINTS` comptes, zero pour une tranche sans relais.
+ */
+export function sparklineFromBuckets(rows: ReadonlyArray<{ bucket: number; count: number }>): number[] {
+  const sparkline = new Array(SPARKLINE_POINTS).fill(0);
+  for (const r of rows) {
+    if (r.bucket >= 0 && r.bucket < SPARKLINE_POINTS) {
+      sparkline[SPARKLINE_POINTS - 1 - r.bucket] = Number(r.count);
+    }
+  }
+  return sparkline;
+}

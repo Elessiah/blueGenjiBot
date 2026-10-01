@@ -1,4 +1,4 @@
-import type {User} from "discord.js";
+import {escapeMarkdown, type User} from "discord.js";
 
 /**
  * Textes de l'envoi des adhésions : le message joint aux papiers et les avis
@@ -42,6 +42,22 @@ function memberDeliveredNotice(recipient: User): string {
 }
 
 /**
+ * Avis à l'auteur quand personne n'est à servir en MP : aucun membre du rôle
+ * trouvé (si les membres du rôle sont illisibles, un membre désigné en même
+ * temps n'est pas servi non plus). Le texte dit ce que le bot a
+ * constaté, pas que le rôle est vide : les membres d'un rôle se lisent dans le
+ * cache du bot, qui peut être incomplet. Il ne parle que des MP : un salon visé
+ * en même temps a son propre avis. Le rôle est nommé pour que l'auteur de
+ * plusieurs rappels sache lequel vérifier.
+ * @param roleName Nom du rôle visé, ou `null` s'il est inconnu.
+ * @returns Le texte de l'avis.
+ */
+function noRecipientNotice(roleName: string | null): string {
+    const role = roleName === null ? "du rôle visé" : "du rôle « " + escapeMarkdown(roleName) + " »";
+    return "Echec de l'envoi des adhésions en message privé : aucun membre " + role + " n'a été trouvé, personne ne les a reçus. Vérifiez la cible !";
+}
+
+/**
  * Ligne de l'avis d'échec pour un membre qui n'a pas reçu les papiers.
  * @param recipient Membre non servi.
  * @returns La ligne, saut de ligne final compris.
@@ -58,5 +74,6 @@ export {
     MEMBERS_DELIVERED_NOTICE,
     channelDeliveredNotice,
     memberDeliveredNotice,
+    noRecipientNotice,
     memberFailedLine,
 };

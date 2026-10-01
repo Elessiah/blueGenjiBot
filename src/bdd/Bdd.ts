@@ -230,10 +230,32 @@ class Bdd {
   }
 
   /**
+   * Joue une étape du schéma. Un échec est écrit sur la console sous `label`
+   * et n'empêche pas les étapes suivantes : une table en défaut ne doit pas
+   * priver le bot de toutes les autres.
+   * @param label Préfixe de la ligne d'erreur.
+   * @param step Étape à jouer.
+   * @param options Réglages de la ligne d'erreur.
+   * @param options.withFullError Ajoute l'erreur entière à la ligne, après son message.
+   */
+  private async schemaStep(label: string, step: () => Promise<void>, options: {withFullError?: boolean} = {}): Promise<void> {
+    try {
+      await step();
+    } catch (e) {
+      if (options.withFullError) {
+        console.error(label, (e as TypeError).message, e);
+      } else {
+        console.error(label, (e as TypeError).message);
+      }
+    }
+  }
+
+  /**
    * Crée les tables nécessaires et injecte les données statiques manquantes.
+   * Chaque étape est indépendante (voir `schemaStep`).
    */
   async initDatabase(): Promise<void> {
-    try {
+    await this.schemaStep("secure_delete error: ", async () => {
       // Une ligne effacée ou réécrite (auteur anonymisé, table `UserLink`
       // supprimée, serveur oublié) laisserait sinon ses octets dans les pages
       // libérées du fichier — et la sauvegarde, qui copie les pages telles
@@ -242,18 +264,14 @@ class Bdd {
       // liste libre, justement celles d'une table supprimée. Le coût (quelques
       // écritures de plus par purge de relais) est négligeable sur cette base.
       await this.Database?.exec("PRAGMA secure_delete = ON");
-    } catch (e) {
-      console.error("secure_delete error: ", (e as TypeError).message);
-    }
-    try {
+    });
+    await this.schemaStep("busy_timeout error: ", async () => {
       // Une écriture qui trouve la base verrouillée (sauvegarde en cours)
       // attend jusqu'à 5 s au lieu d'échouer aussitôt : les reprises des
       // appelants ne font alors plus dix échecs en rafale.
       await this.Database?.exec("PRAGMA busy_timeout = 5000");
-    } catch (e) {
-      console.error("busy_timeout error: ", (e as TypeError).message);
-    }
-    try {
+    });
+    await this.schemaStep("OGMsg :", async () => {
       await this.Database?.exec(
           `CREATE TABLE IF NOT EXISTS OGMsg
            (
@@ -272,10 +290,8 @@ class Bdd {
                  )
            );`
       );
-    } catch (err) {
-      console.error("OGMsg :", (err as TypeError).message);
-    }
-    try {
+    });
+    await this.schemaStep("MessageService : ", async () => {
       await this.Database?.exec(
           `CREATE TABLE IF NOT EXISTS MessageService
            (
@@ -291,10 +307,8 @@ class Bdd {
                  )
            );`
       );
-    } catch (err) {
-      console.error("MessageService : ", (err as TypeError).message);
-    }
-    try {
+    });
+    await this.schemaStep("DPMsg : ", async () => {
       await this.Database?.exec(
           `CREATE TABLE IF NOT EXISTS DPMsg
            (
@@ -315,10 +329,8 @@ class Bdd {
                  )
            );`
       );
-    } catch (err) {
-      console.error("DPMsg : ", (err as TypeError).message);
-    }
-    try {
+    });
+    await this.schemaStep("ChannelPartner : ", async () => {
       await this.Database?.exec(
           `CREATE TABLE IF NOT EXISTS ChannelPartner
            (
@@ -346,10 +358,8 @@ class Bdd {
             ADD COLUMN region INTEGER DEFAULT 0 CHECK (region BETWEEN 0 AND 5);
         `);
       }
-    } catch (err) {
-      console.error("ChannelPartner : ", (err as TypeError).message);
-    }
-    try {
+    });
+    await this.schemaStep("Service&Co", async () => {
       await this.Database?.exec(
           `CREATE TABLE IF NOT EXISTS Service
            (
@@ -381,10 +391,8 @@ class Bdd {
           }
         });
       }
-    } catch (err) {
-      console.error("Service&Co", (err as TypeError).message, err);
-    }
-    try {
+    }, {withFullError: true});
+    await this.schemaStep("ChannelPartnerService : ", async () => {
       await this.Database?.exec(
           `CREATE TABLE IF NOT EXISTS ChannelPartnerService
            (
@@ -404,10 +412,8 @@ class Bdd {
                  )
            );`
       );
-    } catch (e) {
-      console.error("ChannelPartnerService : ", (e as TypeError).message);
-    }
-    try {
+    });
+    await this.schemaStep("Ban : ", async () => {
       await this.Database?.exec(
           `CREATE TABLE IF NOT EXISTS Ban
            (
@@ -445,10 +451,8 @@ class Bdd {
           await this.Database?.exec(`ALTER TABLE Ban ADD COLUMN ${column} TEXT`);
         }
       }
-    } catch (e) {
-      console.error("Ban : ", (e as TypeError).message);
-    }
-    try {
+    });
+    await this.schemaStep("Error rank filter : ", async () => {
       await this.Database?.exec(
           `CREATE TABLE IF NOT EXISTS Ranks
            (
@@ -463,10 +467,8 @@ class Bdd {
         console.log(`Adding "${rank}" to the database...`);
         await this.Database?.run("INSERT INTO Ranks (name) VALUES (?)", [rank]);
       }
-    } catch (e) {
-      console.error("Error rank filter : ", (e as TypeError).message);
-    }
-    try {
+    });
+    await this.schemaStep('ChannelPartnerRank: ', async () => {
       await this.Database?.exec(
           `CREATE TABLE IF NOT EXISTS ChannelPartnerRank
            (
@@ -475,10 +477,8 @@ class Bdd {
                PRIMARY KEY (id_channel, id_rank)
            );`
       );
-    } catch (e) {
-      console.error('ChannelPartnerRank: ', (e as TypeError).message);
-    }
-    try {
+    });
+    await this.schemaStep("AdhesionInterval error: ", async () => {
       await this.Database?.exec(
           `CREATE TABLE IF NOT EXISTS AdhesionInterval
             (
@@ -494,10 +494,8 @@ class Bdd {
                 nextTransmission DATETIME DEFAULT CURRENT_TIMESTAMP
            );`
       );
-    } catch (e) {
-      console.error("AdhesionInterval error: ", (e as TypeError).message);
-    }
-    try {
+    });
+    await this.schemaStep("RoleAdmin error: ", async () => {
       await this.Database?.exec(
         `CREATE TABLE IF NOT EXISTS RoleAdmin
           (
@@ -506,10 +504,8 @@ class Bdd {
           );
         `
       );
-    } catch (e) {
-      console.error("RoleAdmin error: ", (e as TypeError).message);
-    }
-    try {
+    });
+    await this.schemaStep("ServerModule error: ", async () => {
       await this.Database?.exec(
         `CREATE TABLE IF NOT EXISTS ServerModule
           (
@@ -520,10 +516,8 @@ class Bdd {
           );
         `
       );
-    } catch (e) {
-      console.error("ServerModule error: ", (e as TypeError).message);
-    }
-    try {
+    });
+    await this.schemaStep("FeedEvent error: ", async () => {
       await this.Database?.exec(
         `CREATE TABLE IF NOT EXISTS FeedEvent
           (
@@ -536,10 +530,8 @@ class Bdd {
           );
         `
       );
-    } catch (e) {
-      console.error("FeedEvent error: ", (e as TypeError).message);
-    }
-    try {
+    });
+    await this.schemaStep("DailySnapshot error: ", async () => {
       await this.Database?.exec(
         `CREATE TABLE IF NOT EXISTS DailySnapshot
           (
@@ -551,10 +543,8 @@ class Bdd {
           );
         `
       );
-    } catch (e) {
-      console.error("DailySnapshot error: ", (e as TypeError).message);
-    }
-    try {
+    });
+    await this.schemaStep("Scrim error: ", async () => {
       await this.Database?.exec(
         `CREATE TABLE IF NOT EXISTS Scrim
           (
@@ -567,10 +557,8 @@ class Bdd {
           );
         `
       );
-    } catch (e) {
-      console.error("Scrim error: ", (e as TypeError).message);
-    }
-    try {
+    });
+    await this.schemaStep("Recrute error: ", async () => {
       await this.Database?.exec(
         `CREATE TABLE IF NOT EXISTS Recrute
           (
@@ -582,27 +570,21 @@ class Bdd {
           );
         `
       );
-    } catch (e) {
-      console.error("Recrute error: ", (e as TypeError).message);
-    }
-    try {
+    });
+    await this.schemaStep("UserLink error: ", async () => {
       // `/link` a été retirée : elle promettait une liaison que le site n'a
       // jamais su recevoir, et sa table ne gardait plus que des identifiants
       // Discord et des codes expirés. La supprimer efface les lignes des
       // bases qui tournent ; aucune ne sera plus jamais écrite.
       await this.Database?.exec("DROP TABLE IF EXISTS UserLink");
-    } catch (e) {
-      console.error("UserLink error: ", (e as TypeError).message);
-    }
-    try {
+    });
+    await this.schemaStep("ServerModule oauth cleanup error: ", async () => {
       // Modules retirés : `oauth` n'existait que pour `/link`, `notifications`
       // et `stats` n'étaient relus par aucune commande. Leurs préférences,
       // qu'aucun code ne relit plus, partent avec eux.
       await this.Database?.exec("DELETE FROM ServerModule WHERE module_key IN ('oauth', 'notifications', 'stats')");
-    } catch (e) {
-      console.error("ServerModule oauth cleanup error: ", (e as TypeError).message);
-    }
-    try {
+    });
+    await this.schemaStep("ServerInvite error: ", async () => {
       await this.Database?.exec(
         `CREATE TABLE IF NOT EXISTS ServerInvite
           (
@@ -613,10 +595,8 @@ class Bdd {
           );
         `
       );
-    } catch (e) {
-      console.error("ServerInvite error: ", (e as TypeError).message);
-    }
-    try {
+    });
+    await this.schemaStep("RefereeRole error: ", async () => {
       // Role arbitre d'un serveur : destinataires des signalements de probleme
       // pousses par l'app web sur /internal/notify/referees. Une ligne par
       // serveur, definie par la commande /set-referee-role.
@@ -630,10 +610,8 @@ class Bdd {
           );
         `
       );
-    } catch (e) {
-      console.error("RefereeRole error: ", (e as TypeError).message);
-    }
-    try {
+    });
+    await this.schemaStep("SiteVisit error: ", async () => {
       // Instantane de frequentation du site, pousse par l'app web sur
       // /internal/site-visits. Une seule ligne (id = 1) : le bot ne conserve
       // que la derniere mesure, l'historique restant du cote du site.
@@ -656,10 +634,8 @@ class Bdd {
           );
         `
       );
-    } catch (e) {
-      console.error("SiteVisit error: ", (e as TypeError).message);
-    }
-    try {
+    });
+    await this.schemaStep("ActivityDaily error: ", async () => {
       // Scrims et recherches de plus de 30 jours, repliés en nombres : ni
       // auteur, ni ordre, ni heure (voir `anonymizeActivityAuthors`).
       await this.Database?.exec(
@@ -674,10 +650,8 @@ class Bdd {
           );
         `
       );
-    } catch (e) {
-      console.error("ActivityDaily error: ", (e as TypeError).message);
-    }
-    try {
+    });
+    await this.schemaStep("BotOwner error: ", async () => {
       // Application Discord propriétaire de cette base (une ligne). Le
       // rattrapage des serveurs quittés s'y fie avant tout effacement : un bot
       // lancé avec un autre jeton sur cette base verrait un cache qui ne la
@@ -690,9 +664,7 @@ class Bdd {
           );
         `
       );
-    } catch (e) {
-      console.error("BotOwner error: ", (e as TypeError).message);
-    }
+    });
   }
 
     /**

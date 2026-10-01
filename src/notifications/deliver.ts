@@ -184,49 +184,85 @@ export async function alertReferees(client: Client, message: string): Promise<De
     const roleId = await bdd.getRefereeRole(guild.id);
     if (!roleId) { continue; }
 
-    let members: GuildMember[];
-    try {
-      const role: Role | null = await guild.roles.fetch(roleId);
-      if (!role) {
-        report.unresolved.push(`${guild.name}: rôle ${roleId} introuvable`);
-        continue;
-      }
-      // Le cache des membres d'un rôle n'est peuplé que si la guilde entière a
-      // été récupérée : on force la récupération plutôt que d'alerter un sous-
-      // ensemble arbitraire des arbitres.
-      await guild.members.fetch();
-      members = [...role.members.values()];
-    } catch {
-      report.unresolved.push(`${guild.name}: membres du rôle illisibles`);
-      continue;
-    }
+    const members = await readRefereeMembers(guild, roleId, report);
+    if (members === null) { continue; }
 
-    // Borne dure, indépendante de ce qu'a choisi l'administrateur du serveur :
-    // un rôle large transformerait chaque signalement en envoi de masse, que
-    // Discord traite comme du spam.
-    const humans = members.filter((member) => !member.user.bot);
-    const { kept, skipped } = capRefereeTargets(humans);
-    if (skipped > 0) {
-      report.unresolved.push(`${guild.name}: ${skipped} membre(s) au-delà du plafond de ${MAX_REFEREE_DMS}`);
-      await sendLog(
-        client,
-        `notify/referees: role arbitre de ${guild.name} trop large (${humans.length} membres), ${skipped} non prevenu(s).`,
-      );
-    }
-
+    const kept = await capReferees(client, guild, members, report);
     for (const member of kept) {
       if (alreadyNotified.has(member.id)) { continue; }
       alreadyNotified.add(member.id);
-      try {
-        await member.send(message);
-        report.sent += 1;
-      } catch {
-        report.failed.push(member.user.username);
-      }
+      await sendToReferee(member, message, report);
     }
   }
 
   return report;
+}
+
+/**
+ * Membres du rôle arbitre d'un serveur. Un rôle introuvable ou illisible est
+ * noté dans le bilan.
+ * @param guild Serveur dont le rôle arbitre est configuré.
+ * @param roleId Rôle arbitre configuré.
+ * @param report Bilan à compléter.
+ * @returns Les membres du rôle, ou `null` s'ils sont illisibles.
+ */
+async function readRefereeMembers(guild: Guild, roleId: string, report: DeliveryReport): Promise<GuildMember[] | null> {
+  try {
+    const role: Role | null = await guild.roles.fetch(roleId);
+    if (!role) {
+      report.unresolved.push(`${guild.name}: rôle ${roleId} introuvable`);
+      return null;
+    }
+    // Le cache des membres d'un rôle n'est peuplé que si la guilde entière a
+    // été récupérée : on force la récupération plutôt que d'alerter un sous-
+    // ensemble arbitraire des arbitres.
+    await guild.members.fetch();
+    return [...role.members.values()];
+  } catch {
+    report.unresolved.push(`${guild.name}: membres du rôle illisibles`);
+    return null;
+  }
+}
+
+/**
+ * Arbitres humains à prévenir, bornés. Les écartés sont notés dans le bilan et
+ * journalisés.
+ *
+ * Borne dure, indépendante de ce qu'a choisi l'administrateur du serveur : un
+ * rôle large transformerait chaque signalement en envoi de masse, que Discord
+ * traite comme du spam.
+ * @param client Client Discord.
+ * @param guild Serveur du rôle.
+ * @param members Membres du rôle arbitre.
+ * @param report Bilan à compléter.
+ * @returns Les arbitres retenus, dans l'ordre du rôle.
+ */
+async function capReferees(client: Client, guild: Guild, members: GuildMember[], report: DeliveryReport): Promise<GuildMember[]> {
+  const humans = members.filter((member) => !member.user.bot);
+  const { kept, skipped } = capRefereeTargets(humans);
+  if (skipped > 0) {
+    report.unresolved.push(`${guild.name}: ${skipped} membre(s) au-delà du plafond de ${MAX_REFEREE_DMS}`);
+    await sendLog(
+      client,
+      `notify/referees: role arbitre de ${guild.name} trop large (${humans.length} membres), ${skipped} non prevenu(s).`,
+    );
+  }
+  return kept;
+}
+
+/**
+ * Écrit à un arbitre ; un refus est compté en échec dans le bilan.
+ * @param member Arbitre.
+ * @param message Texte de l'alerte.
+ * @param report Bilan à compléter.
+ */
+async function sendToReferee(member: GuildMember, message: string, report: DeliveryReport): Promise<void> {
+  try {
+    await member.send(message);
+    report.sent += 1;
+  } catch {
+    report.failed.push(member.user.username);
+  }
 }
 
 /**

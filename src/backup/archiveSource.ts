@@ -337,10 +337,7 @@ export async function listArchives(sources: ArchiveSources, run: CommandRunner =
 
   if (sources.remote) {
     try {
-      const out = await run("rclone", ["lsf", sources.remote, "--files-only", "--include", "bluegenji-*.tar.age"]);
-      for (const name of filterArchiveNames(out.split("\n"))) {
-        found.set(name, { name, location: "remote" });
-      }
+      addArchives(found, await remoteArchiveNames(sources.remote, run), "remote");
     } catch (error) {
       if (error instanceof MissingCommandError) {
         missing = error;
@@ -350,9 +347,7 @@ export async function listArchives(sources: ArchiveSources, run: CommandRunner =
   }
   if (sources.localDir) {
     try {
-      for (const name of filterArchiveNames(await fs.promises.readdir(sources.localDir))) {
-        found.set(name, { name, location: "local" });
-      }
+      addArchives(found, filterArchiveNames(await fs.promises.readdir(sources.localDir)), "local");
     } catch (error) {
       failures.push(`dossier local : ${(error as Error).message}`);
     }
@@ -367,6 +362,29 @@ export async function listArchives(sources: ArchiveSources, run: CommandRunner =
     failures,
     missingCommand: missing?.command ?? null,
   };
+}
+
+/**
+ * Noms des archives du stockage distant.
+ * @param remote Remote rclone (`BACKUP_RCLONE_REMOTE`).
+ * @param run Exécuteur de commandes.
+ * @returns Les archives chiffrées, de la plus récente à la plus ancienne.
+ */
+async function remoteArchiveNames(remote: string, run: CommandRunner): Promise<string[]> {
+  const out = await run("rclone", ["lsf", remote, "--files-only", "--include", "bluegenji-*.tar.age"]);
+  return filterArchiveNames(out.split("\n"));
+}
+
+/**
+ * Range des archives sous leur nom ; une archive déjà rangée prend la nouvelle source.
+ * @param found Archives déjà trouvées, par nom.
+ * @param names Noms à ajouter.
+ * @param location Source de ces archives.
+ */
+function addArchives(found: Map<string, ArchiveRef>, names: string[], location: ArchiveRef["location"]): void {
+  for (const name of names) {
+    found.set(name, { name, location });
+  }
 }
 
 /**

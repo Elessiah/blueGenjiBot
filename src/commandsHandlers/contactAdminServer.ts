@@ -28,21 +28,48 @@ async function contactAdminServer(client: Client,
             "Please contact 'Elessiah' or your server administrators to take appropriate action if needed.\n");
         return false;
     }
-    let serverId: string | null = null;
-    if (interaction) {
-        await interaction.deferReply({flags: MessageFlags.Ephemeral});
-        serverId = interaction.options.getString("server");
-    } else if (guildID) {
-        serverId = guildID;
-    }
+    const serverId = await resolveServerId(interaction, guildID);
     if (!serverId) {
         if (interaction)
             await safeReply(interaction, "Failed to retrieve the parameter 'server'. Please try again !");
         return false;
     }
-    let server: Guild;
+    const server = await fetchServer(client, serverId, interaction);
+    if (!server) {
+        return false;
+    }
+    const targets = await collectAdmins(client, server);
+    const content = interaction ? interaction.options.getString("message") ?? undefined : msg;
+    if (!content) {
+        await refuse(client, interaction, "Parameter 'message' not found. Please try again.");
+        return false;
+    }
+    await sendToAdmins(client, targets, content);
+    if (interaction)
+        await safeReply(interaction, `Message successfully sent to ${targets.length} admin(s) !`, true, true);
+    return true;
+}
+
+/**
+ * Serveur visé : l'option `server` de la commande (la réponse est alors
+ * différée), sinon l'identifiant passé en appel interne.
+ * @returns L'identifiant, ou `null` s'il manque.
+ */
+async function resolveServerId(interaction: ChatInputCommandInteraction | undefined, guildID: string | undefined): Promise<string | null> {
+    if (interaction) {
+        await interaction.deferReply({flags: MessageFlags.Ephemeral});
+        return interaction.options.getString("server");
+    }
+    return guildID || null;
+}
+
+/**
+ * Lit le serveur visé ; un échec est répondu à l'interaction et journalisé.
+ * @returns Le serveur, ou `null` s'il est illisible.
+ */
+async function fetchServer(client: Client, serverId: string, interaction?: ChatInputCommandInteraction): Promise<Guild | null> {
     try {
-        server = await client.guilds.fetch(serverId);
+        return await client.guilds.fetch(serverId);
     } catch (err) {
         if (interaction)
             await safeReply(
@@ -50,59 +77,79 @@ async function contactAdminServer(client: Client,
                 "Internal error : Failed to fetch the targeted server ! Please try again."
             );
         await sendLog(client, "Failed to fetch the targeted server : " + (err as TypeError).message);
-        return false;
+        return null;
     }
+}
+
+/**
+ * Destinataires : les membres des rôles qui portent la permission
+ * Administrateur, puis ceux du rôle admin configuré, chacun une seule fois ;
+ * à défaut, le propriétaire du serveur.
+ * @returns Les destinataires, dans l'ordre d'envoi.
+ */
+async function collectAdmins(client: Client, server: Guild): Promise<User[]> {
+    const targets: Map<string, User> = new Map();
     const adminRoles: Collection<string, Role> = server.roles.cache.filter(r =>
         r.permissions.has(PermissionsBitField.Flags.Administrator)
     );
-    const targets: Map<string, User> = new Map();
     for (const role of adminRoles.values()) {
-        for (const member of role.members.values()) {
-            targets.set(member.user.id, member.user);
-        }
+        addMembers(targets, role);
     }
-
-    const adminRoleId = await getAdminRole(server);
-    if (adminRoleId) {
-        try {
-            const configuredRole = await server.roles.fetch(adminRoleId);
-            if (configuredRole) {
-                for (const member of configuredRole.members.values()) {
-                    targets.set(member.user.id, member.user);
-                }
-            } else {
-                await sendLog(client, `Configured admin role with id '${adminRoleId}' not found on guild '${server.id}'.`);
-            }
-        } catch (err) {
-            await sendLog(client, "Failed to fetch configured admin role : " + (err as TypeError).message);
-        }
-    }
+    await addConfiguredAdmins(client, server, targets);
 
     const targetsArray: User[] = Array.from(targets.values());
     if (targetsArray.length === 0) {
         targetsArray.push(await client.users.fetch(server.ownerId));
     }
-    if (interaction) {
-        msg = interaction.options.getString("message") ?? undefined;
+    return targetsArray;
+}
+
+/**
+ * Ajoute les membres du rôle admin configuré par `/set-admin-role`, s'il y en
+ * a un ; un rôle introuvable ou illisible est journalisé.
+ */
+async function addConfiguredAdmins(client: Client, server: Guild, targets: Map<string, User>): Promise<void> {
+    const adminRoleId = await getAdminRole(server);
+    if (!adminRoleId) {
+        return;
     }
-    if (!msg) {
-        if (interaction)
-            await safeReply(interaction, "Parameter 'message' not found. Please try again.");
-        else
-            await sendLog(client, "Parameter 'message' not found. Please try again.");
-        return false;
+    try {
+        const configuredRole = await server.roles.fetch(adminRoleId);
+        if (configuredRole) {
+            addMembers(targets, configuredRole);
+        } else {
+            await sendLog(client, `Configured admin role with id '${adminRoleId}' not found on guild '${server.id}'.`);
+        }
+    } catch (err) {
+        await sendLog(client, "Failed to fetch configured admin role : " + (err as TypeError).message);
     }
+}
+
+/** Ajoute les membres d'un rôle aux destinataires, par identifiant. */
+function addMembers(targets: Map<string, User>, role: Role): void {
+    for (const member of role.members.values()) {
+        targets.set(member.user.id, member.user);
+    }
+}
+
+/** Refus : répondu à l'interaction, ou journalisé en appel interne. */
+async function refuse(client: Client, interaction: ChatInputCommandInteraction | undefined, text: string): Promise<void> {
+    if (interaction)
+        await safeReply(interaction, text);
+    else
+        await sendLog(client, text);
+}
+
+/** Envoie le message à chaque destinataire ; les échecs sont journalisés par identifiant. */
+async function sendToAdmins(client: Client, targets: User[], content: string): Promise<void> {
     let errMsg: string = "";
-    for (const target of targetsArray) {
-        if (!await safeUser(client, target, undefined, [], msg))
+    for (const target of targets) {
+        if (!await safeUser(client, target, undefined, [], content))
             {errMsg += "Echec de l'envoi pour le compte " + target.id + "\n";}
     }
     if (errMsg.length > 0) {
         await sendLog(client, "Erreur pour l'envoies au admins : \n" + errMsg);
     }
-    if (interaction)
-        await safeReply(interaction, `Message successfully sent to ${targetsArray.length} admin(s) !`, true, true);
-    return true;
 }
 
 export {contactAdminServer};

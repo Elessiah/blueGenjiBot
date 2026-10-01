@@ -1,13 +1,14 @@
 import type {AttachmentBuilder, Client, TextChannel, User} from "discord.js";
 import {safeChannel} from "@/safe/safeChannel.js";
 import {safeUser} from "@/safe/safeUser.js";
-import {logAdhesionError} from "@/adhesion/adhesionLog.js";
+import {logAdhesion, logAdhesionError} from "@/adhesion/adhesionLog.js";
 import {
     CHANNEL_FAILED_NOTICE,
     MEMBERS_DELIVERED_NOTICE,
     channelDeliveredNotice,
     memberDeliveredNotice,
     memberFailedLine,
+    noRecipientNotice,
 } from "@/adhesion/adhesionNotices.js";
 
 /**
@@ -72,18 +73,30 @@ async function deliverToChannel(client: Client,
 /**
  * Envoie les papiers en MP à chaque destinataire, puis avise l'auteur : la
  * liste des échecs s'il y en a, une confirmation sinon.
+ *
+ * Sans destinataire (aucun membre du rôle trouvé, ou membres illisibles), rien
+ * n'est envoyé en MP : l'auteur en est avisé, le journal le note, et l'envoi
+ * échoue.
  * @param client Client Discord utilisé pour les envois et le journal.
  * @param recipients Destinataires, dans l'ordre d'envoi.
  * @param files Pièces jointes.
  * @param content Message joint.
  * @param author Auteur de l'envoi.
+ * @param roleName Nom du rôle visé, repris dans l'avis sans destinataire.
  * @returns `true` si tous les destinataires ont reçu les papiers.
  */
 async function deliverToMembers(client: Client,
                                 recipients: User[],
                                 files: AttachmentBuilder[],
                                 content: string,
-                                author: User): Promise<boolean> {
+                                author: User,
+                                roleName: string | null): Promise<boolean> {
+    if (recipients.length === 0) {
+        // Ni pseudo ni identifiant : la ligne dit seulement que rien n'est parti.
+        await logAdhesion(client, "sendAdhesion: aucun destinataire trouvé pour le rôle visé, envoi annulé.");
+        await sendPrivately(client, author, [], noRecipientNotice(roleName), "sendAdhesion safeUser (no recipient)");
+        return false;
+    }
     let failures = "";
     for (const recipient of recipients) {
         if (!(await sendPrivately(client, recipient, files, content, "sendAdhesion safeUser target"))) {
@@ -100,12 +113,8 @@ async function deliverToMembers(client: Client,
 
 /**
  * Confirme à l'auteur que tous les destinataires ont été servis.
- *
- * Le texte est composé **dans** la garde : une liste vide (rôle sans membre,
- * aucun membre désigné) n'a pas de destinataire à nommer, et l'erreur qui en
- * résulte est journalisée comme un échec de l'avis.
  * @param client Client Discord utilisé pour l'envoi et le journal.
- * @param recipients Destinataires servis.
+ * @param recipients Destinataires servis (au moins un).
  * @param author Auteur de l'envoi.
  * @returns Une promesse résolue une fois l'avis tenté.
  */

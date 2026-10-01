@@ -70,7 +70,7 @@ async function deliverToTargets(client: Client,
     }
     if (targets.role !== null || targets.member !== null) {
         const recipients = await collectRecipients(client, targets.role, targets.member);
-        delivered = (await deliverToMembers(client, recipients, files, content, author)) && delivered;
+        delivered = (await deliverToMembers(client, recipients, files, content, author, targets.role?.name ?? null)) && delivered;
     }
     return delivered;
 }
