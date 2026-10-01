@@ -26,7 +26,7 @@ test("la route d'écriture d'un module refuse un serveur que le bot n'a pas rejo
 
 test("une restauration réussie rejoue la purge du flux et les durées de conservation", () => {
   const source = read("commandsHandlers", "admin", "restoreBackup.ts");
-  const reply = source.indexOf("await safeReply(interaction, `${result.success");
+  const reply = source.indexOf("await safeReply(interaction, `✅ ${result.message}");
   // La purge du flux avant la réponse : la base restaurée est déjà servie par l'API interne.
   const purge = source.indexOf("await purgeFeedIdentifiers(client)");
   assert.ok(purge > 0 && purge < reply);
