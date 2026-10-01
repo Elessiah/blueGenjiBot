@@ -86,7 +86,7 @@ Admin :
 - Suivi des messages relayés (identifiants, date) : 7 jours, effacé au plus tard dans la nuit qui suit. Les copies publiées dans les salons partenaires restent ensuite sur Discord (voir « Effacer un message retransmis »).
 - Scrims et recherches (`/scrim`, `/recrute`) : 30 jours avec leur auteur. Dans la nuit qui suit, ils sont repliés en simples nombres par jour, serveur et niveau (ou rôle) : ni auteur, ni heure, ni ordre ne restent.
 - Exclusions du réseau : jusqu'à leur levée (les avis d'exclusion du salon de journal privé du staff ne sont pas supprimés automatiquement).
-- Configuration d'un serveur : effacée quand le bot le quitte — y compris s'il l'a quitté pendant un arrêt du bot, au démarrage suivant.
+- Configuration d'un serveur : effacée quand le bot le quitte — y compris s'il l'a quitté pendant un arrêt du bot, au démarrage suivant. De même pour un salon relayé supprimé : il est retiré de la base, au démarrage suivant s'il a été supprimé pendant un arrêt.
 
 ## `/ban-list` et exclusions du réseau
 Une exclusion s'applique à **tout le réseau** : c'est une modération communautaire, prononcée par les administrateurs des serveurs de 50 membres et plus. `/ban-list` montre donc à l'administrateur de tout serveur partenaire la liste complète des exclusions du réseau (joueur exclu, modérateur, motif, date), pour qu'il sache qui ne peut plus publier par le bot et pourquoi.
