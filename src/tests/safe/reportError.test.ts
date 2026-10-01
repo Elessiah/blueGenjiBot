@@ -32,25 +32,24 @@ function setup(dedupeWindowMs = 60_000) {
 
 test("une erreur applicative part en console et vers la supervision", async () => {
   const { report, consoleLines, remoteLines } = setup();
-  const severity = await report("commande /ping", new TypeError("boum"));
-  assert.equal(severity, "fatal");
+  await report("commande /ping", new TypeError("boum"));
   assert.deepEqual(consoleLines, ["[fatal] commande /ping : boum"]);
   assert.deepEqual(remoteLines, ["[fatal] commande /ping : boum"]);
 });
 
 test("une coupure reseau reste en console : le canal de log passe par le reseau tombe", async () => {
   const { report, consoleLines, remoteLines } = setup();
-  const severity = await report("unhandledRejection", withCode("getaddrinfo EAI_AGAIN discord.com", "EAI_AGAIN"));
-  assert.equal(severity, "transient");
+  await report("unhandledRejection", withCode("getaddrinfo EAI_AGAIN discord.com", "EAI_AGAIN"));
   assert.equal(consoleLines.length, 1);
+  assert.match(consoleLines[0], /^\[transient\] unhandledRejection : /);
   assert.deepEqual(remoteLines, []);
 });
 
 test("un message Discord disparu ne reveille pas la supervision", async () => {
   const { report, remoteLines, consoleLines } = setup();
-  const severity = await report("safeReact", withCode("Unknown Message", 10008));
-  assert.equal(severity, "ignorable");
+  await report("safeReact", withCode("Unknown Message", 10008));
   assert.equal(consoleLines.length, 1);
+  assert.match(consoleLines[0], /^\[ignorable\] safeReact : /);
   assert.deepEqual(remoteLines, []);
 });
 
@@ -115,8 +114,7 @@ test("le rapporteur ne leve jamais, meme si ses sorties echouent", async () => {
     toConsole: () => { throw new Error("console cassee"); },
     toRemote: () => Promise.reject(new Error("supervision injoignable")),
   });
-  const severity = await report("clientReady", new TypeError("boum"));
-  assert.equal(severity, "fatal");
+  await assert.doesNotReject(report("clientReady", new TypeError("boum")));
 });
 
 test("la table de dedoublonnage reste bornee sous un flux d'erreurs toutes distinctes", async () => {
@@ -140,7 +138,6 @@ test("la table de dedoublonnage reste bornee sous un flux d'erreurs toutes disti
 
 test("une valeur non-Error rejetee est acceptee telle quelle", async () => {
   const { report, consoleLines } = setup();
-  const severity = await report("unhandledRejection", "rejet sans Error");
-  assert.equal(severity, "fatal");
+  await report("unhandledRejection", "rejet sans Error");
   assert.equal(consoleLines[0], "[fatal] unhandledRejection : rejet sans Error");
 });

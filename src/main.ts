@@ -323,19 +323,34 @@ client.on("channelDelete", async (channel) => {
   }
 });
 
-process.on('SIGINT', async () => {
+/**
+ * Arrêt propre : déconnexion de Discord, puis fermeture **attendue** de la base
+ * (WAL checkpointé) avant `process.exit`. Un échec de l'une ou l'autre étape
+ * n'empêche jamais la sortie — le process ne doit pas rester pendu jusqu'au
+ * `kill` forcé de pm2.
+ */
+async function shutdown(): Promise<void> {
     console.log('Arrêt du bot...');
-    await client.destroy();
-    await closeBddInstance();
+    try {
+        await client.destroy();
+    } catch (error) {
+        console.error('[shutdown] déconnexion Discord', error);
+    }
+    try {
+        await closeBddInstance();
+    } catch (error) {
+        console.error('[shutdown] fermeture de la base', error);
+    }
     process.exit(0);
-});
+}
 
-process.on('SIGTERM', async () => {
-    console.log('Arrêt du bot...');
-    await client.destroy();
-    await closeBddInstance();
-    process.exit(0);
-});
+/** Arrêt en cours : un second signal (Ctrl+C répété, SIGINT puis SIGTERM) attend le premier. */
+let shuttingDown: Promise<void> | null = null;
+const onSignal = (): void => {
+    shuttingDown ??= shutdown();
+};
+process.on('SIGINT', onSignal);
+process.on('SIGTERM', onSignal);
 
 // Contrairement aux erreurs de runtime, un échec de connexion laisse un process
 // vivant mais inutile : on journalise puis on sort en erreur pour que pm2

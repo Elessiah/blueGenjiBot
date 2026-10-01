@@ -154,6 +154,8 @@ function refuseUnjoinedGuild(client: Client, res: Response, guildId: string): bo
  */
 export function startInternalApi(client: Client) {
   const app = express();
+  // Pas d'en-tête `X-Powered-By` : la version du framework n'a pas à être annoncée.
+  app.disable("x-powered-by");
   app.use(express.json());
   app.use("/internal", authorize);
 

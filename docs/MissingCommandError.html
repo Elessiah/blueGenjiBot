@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>JSDoc: Source: commandsHandlers/adhesions/loadAdhesionFiles.js</title>
+    <title>JSDoc: Class: MissingCommandError</title>
 
     <script src="scripts/prettify/prettify.js"> </script>
     <script src="scripts/prettify/lang-css.js"> </script>
@@ -17,139 +17,256 @@
 
 <div id="main">
 
-    <h1 class="page-title">Source: commandsHandlers/adhesions/loadAdhesionFiles.js</h1>
+    <h1 class="page-title">Class: MissingCommandError</h1>
 
     
 
 
 
+
+<section>
+
+<header>
     
-    <section>
-        <article>
-            <pre class="prettyprint source linenums"><code>import { MessageFlags } from "discord.js";
-import { unlink, writeFile } from "fs/promises";
-import { adhesionFilePath } from "../../adhesion/adhesionPath.js";
-import { safeFollowUp } from "../../safe/safeFollowUp.js";
-import { loadAdhesionPaths } from "../../adhesion/loadAdhesionPaths.js";
-import { saveAdhesionPaths } from "../../adhesion/saveAdhesionPaths.js";
-import { safeReply } from "../../safe/safeReply.js";
-import { sendLog } from "../../safe/sendLog.js";
-const ADHESION_FILES = Object.freeze({
-    ADHESION: 0,
-    STATUS: 1,
-});
-/**
- * Supprime un ancien fichier d'adhésion stocké localement.
- * @param interaction Interaction utilisateur en cours.
- * @param path Chemin(s) de fichier utilisé(s).
- * @returns `true` si le fichier local ciblé est supprimé; `false` si la suppression échoue.
- */
-async function deleteOldAttachment(interaction, path) {
-    try {
-        await unlink(path);
-        return true;
-    }
-    catch (e) {
-        await safeFollowUp(interaction, "Impossible de supprimer " + path + ". Erreur : " + e.message, false, []);
-        return false;
-    }
-}
-/**
- * Nettoie les anciens fichiers avant enregistrement des nouveaux.
- * @param interaction Interaction utilisateur en cours.
- * @param adhesion_file Type de fichier ciblé (`ADHESION` ou `STATUS`).
- * @returns Chemins d'adhésion mis à jour si tout se passe bien; `null` si lecture/suppression/sauvegarde échoue.
- */
-async function manageOldFiles(interaction, adhesion_file) {
-    const paths = await loadAdhesionPaths(interaction);
-    if (!paths)
-        return null;
-    const path = adhesion_file == ADHESION_FILES.ADHESION ? paths.adhesion : paths.status;
-    if (!path || path.length == 0)
-        return paths;
-    await deleteOldAttachment(interaction, path);
-    if (adhesion_file == ADHESION_FILES.ADHESION) {
-        paths.adhesion = "";
-        paths.adhesionName = "";
-    }
-    else {
-        paths.status = "";
-        paths.statusName = "";
-    }
-    return await saveAdhesionPaths(paths, interaction) ? paths : null;
-}
-/**
- * Télécharge et sauvegarde une pièce jointe d'adhésion.
- * @param interaction Interaction utilisateur en cours.
- * @param attachment Pièce jointe Discord à télécharger et stocker.
- * @param adhesion_file Type de fichier ciblé (`ADHESION` ou `STATUS`).
- * @returns `true` si téléchargement, écriture disque et sauvegarde de la configuration réussissent; sinon `false`.
- */
-async function downloadAttachment(interaction, attachment, adhesion_file) {
-    const res = await fetch(attachment.url);
-    if (!res.ok) {
-        await safeFollowUp(interaction, "Echec du chargement de " + attachment.name, false, []);
-        return false;
-    }
-    const paths = await manageOldFiles(interaction, adhesion_file);
-    if (!paths)
-        return false;
-    // Le nom vient de celui qui televerse : `path.basename` le ramene au dossier
-    // de stockage, un `../` ne peut plus en sortir.
-    const newPath = adhesionFilePath(attachment.name);
-    if (adhesion_file == ADHESION_FILES.ADHESION) {
-        paths.adhesion = newPath;
-        paths.adhesionName = attachment.name;
-    }
-    else {
-        paths.status = newPath;
-        paths.statusName = attachment.name;
-    }
-    const buf = Buffer.from(await res.arrayBuffer());
-    await writeFile(newPath, buf);
-    await saveAdhesionPaths(paths, interaction);
-    return true;
-}
-/**
- * Charge les nouvelles pièces jointes et met à jour la configuration.
- * @param client Client Discord utilisé pour les appels API.
- * @param interaction Interaction utilisateur en cours.
- */
-async function loadAdhesionFiles(client, interaction) {
-    const adhesionFile = interaction.options.getAttachment("adhesion");
-    const statusFile = interaction.options.getAttachment("status");
-    let hasLoad = false;
-    let hasError = false;
-    if (interaction.user.id != process.env.OWNER_ID &amp;&amp; interaction.user.id != process.env.PRESIDENT) {
-        await safeReply(interaction, "You are not allowed to load adhesion files.");
-        await sendLog(client, "Le compte " + interaction.user.id + " a essayé de changer les fichiers d'adhésion.");
-        return;
-    }
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    if (adhesionFile) {
-        if (await downloadAttachment(interaction, adhesionFile, ADHESION_FILES.ADHESION))
-            hasLoad = true;
-        else
-            hasError = true;
-    }
-    if (statusFile) {
-        if (await downloadAttachment(interaction, statusFile, ADHESION_FILES.STATUS))
-            hasLoad = true;
-        else
-            hasError = true;
-    }
-    if (!hasLoad &amp;&amp; !hasError) {
-        await safeFollowUp(interaction, "Pas de fichier à charger", true, []);
-    }
-    else if (!hasError) {
-        await safeFollowUp(interaction, "Fichier(s) chargé(s) !", true, []);
-        await sendLog(client, "Les fichiers d'adhésions ont été modifié");
-    }
-}
-export { loadAdhesionFiles };
-//# sourceMappingURL=loadAdhesionFiles.js.map</code></pre>
-        </article>
-    </section>
+        <h2><span class="attribs"><span class="type-signature"></span></span>MissingCommandError<span class="signature">(command)</span><span class="type-signature"></span></h2>
+        
+            <div class="class-description">Commande introuvable dans `COMMAND_DIRS`. Distincte d'un échec ordinaire :
+le message doit mener l'exploitant vers les dossiers fouillés plutôt que
+vers le stockage ou la clé.</div>
+        
+    
+</header>
+
+<article>
+    <div class="container-overview">
+    
+        
+
+    
+    <h2>Constructor</h2>
+    
+
+    
+    <h4 class="name" id="MissingCommandError"><span class="type-signature"></span>new MissingCommandError<span class="signature">(command)</span><span class="type-signature"></span></h4>
+    
+
+    
+
+
+
+
+
+
+
+
+
+
+
+    <h5>Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>command</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Nom nu de la commande.</td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="backup_archiveSource.js.html">backup/archiveSource.js</a>, <a href="backup_archiveSource.js.html#line106">line 106</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+    </div>
+
+    
+
+    
+
+    
+        <h3 class="subsection-title">Classes</h3>
+
+        <dl>
+            <dt><a href="MissingCommandError.html">MissingCommandError</a></dt>
+            <dd></dd>
+        </dl>
+    
+
+    
+
+    
+
+    
+
+    
+        <h3 class="subsection-title">Members</h3>
+
+        
+            
+<h4 class="name" id="command"><span class="type-signature"></span>command<span class="type-signature"></span></h4>
+
+
+
+
+<div class="description">
+    Nom nu de la commande.
+</div>
+
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="backup_archiveSource.js.html">backup/archiveSource.js</a>, <a href="backup_archiveSource.js.html#line108">line 108</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+        
+    
+
+    
+
+    
+
+    
+</article>
+
+</section>
 
 
 
@@ -163,7 +280,7 @@ export { loadAdhesionFiles };
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Thu Oct 01 2026 22:05:00 GMT+0200 (heure d’été d’Europe centrale)
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Thu Oct 01 2026 22:05:01 GMT+0200 (heure d’été d’Europe centrale)
 </footer>
 
 <script> prettyPrint(); </script>

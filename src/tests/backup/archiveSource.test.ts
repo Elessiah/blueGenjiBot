@@ -6,10 +6,18 @@ import path from "node:path";
 
 import {
   archiveSourcesFromEnv,
+  COMMAND_DIRS,
+  COMMAND_PATH,
+  commandEnv,
+  compareNewestFirst,
+  execCommand,
   fetchArchive,
+  findMissingCommand,
+  MissingCommandError,
   filterArchiveNames,
   listArchives,
   pickArchive,
+  resolveCommand,
   type ArchiveRef,
   type CommandRunner,
 } from "../../backup/archiveSource.js";
@@ -121,4 +129,113 @@ test("fetchArchive copie une archive locale et télécharge une archive distante
   assert.deepEqual(calls, [["rclone", "copyto", "hetzner:backups/bluegenji-2026-09-03.tar.age", remote]]);
   fs.rmSync(src, { recursive: true, force: true });
   fs.rmSync(work, { recursive: true, force: true });
+});
+
+test("compareNewestFirst range les archives de la plus récente à la plus ancienne, années et mois compris", () => {
+  const names = [
+    "bluegenji-2025-12-31.tar.age",
+    "bluegenji-2026-10-01.tar.age",
+    "bluegenji-2026-09-30.tar.age",
+    "bluegenji-2026-01-02.tar.age",
+  ];
+  assert.deepEqual([...names].sort(compareNewestFirst), [
+    "bluegenji-2026-10-01.tar.age",
+    "bluegenji-2026-09-30.tar.age",
+    "bluegenji-2026-01-02.tar.age",
+    "bluegenji-2025-12-31.tar.age",
+  ]);
+  assert.equal(compareNewestFirst("bluegenji-2026-10-01.tar.age", "bluegenji-2026-10-01.tar.age"), 0);
+});
+
+test("filterArchiveNames met la dernière archive en tête quel que soit l'ordre du listage", () => {
+  const listed = ["bluegenji-2026-09-09.tar.age", "bluegenji-2026-10-01.tar.age", "bluegenji-2026-09-10.tar.age"];
+  assert.equal(filterArchiveNames(listed)[0], "bluegenji-2026-10-01.tar.age");
+  assert.equal(filterArchiveNames([...listed].reverse())[0], "bluegenji-2026-10-01.tar.age");
+});
+
+test("listArchives rend l'archive la plus récente en premier, toutes sources confondues", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bg-archives-order-"));
+  try {
+    fs.writeFileSync(path.join(dir, "bluegenji-2026-09-30.tar.age"), "");
+    const run: CommandRunner = async () => "bluegenji-2026-10-01.tar.age\nbluegenji-2026-09-29.tar.age\n";
+    const { archives } = await listArchives({ localDir: dir, remote: "r:b", identity: "/k" }, run);
+    assert.deepEqual(
+      archives.map((archive) => archive.name),
+      ["bluegenji-2026-10-01.tar.age", "bluegenji-2026-09-30.tar.age", "bluegenji-2026-09-29.tar.age"],
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("resolveCommand ne cherche une commande que dans les dossiers figés, dans leur ordre", () => {
+  const present = new Set(["/usr/bin/age", "/usr/local/bin/rclone", "/usr/bin/rclone"]);
+  const canRun = (file: string): boolean => present.has(file);
+  assert.equal(resolveCommand("age", COMMAND_DIRS, canRun), "/usr/bin/age");
+  assert.equal(resolveCommand("rclone", COMMAND_DIRS, canRun), "/usr/local/bin/rclone");
+});
+
+test("resolveCommand rend un chemin absolu même pour une commande absente, jamais un nom nu", () => {
+  assert.equal(resolveCommand("tar", COMMAND_DIRS, () => false), "/usr/local/bin/tar");
+});
+
+test("resolveCommand refuse tout ce qui n'est pas un nom nu", () => {
+  for (const name of ["../age", "/tmp/age", "./age", "age;rm", "-age", ""]) {
+    assert.throws(() => resolveCommand(name, COMMAND_DIRS, () => true), /nom de commande invalide/, name);
+  }
+});
+
+test("commandEnv fige le PATH et garde le reste de l'environnement", () => {
+  const env = commandEnv({ PATH: "/home/bot/.local/bin:.:/usr/bin", HOME: "/home/bot" });
+  assert.equal(env.PATH, COMMAND_PATH);
+  assert.equal(env.PATH, "/usr/local/bin:/usr/bin:/bin");
+  assert.equal(env.HOME, "/home/bot");
+});
+
+test("execCommand traduit un binaire absent en MissingCommandError, sans chemin dans le message", async () => {
+  await assert.rejects(execCommand("bluegenji-binaire-inexistant", []), (error: unknown) => {
+    assert.ok(error instanceof MissingCommandError);
+    assert.equal(error.command, "bluegenji-binaire-inexistant");
+    // Le message part sur Discord (`/restore-backup`, salon de logs) : aucun chemin.
+    assert.equal(
+      error.message,
+      "`bluegenji-binaire-inexistant` introuvable dans les dossiers système où le bot le cherche",
+    );
+    assert.doesNotMatch(error.message, /\//);
+    return true;
+  });
+});
+
+test("listArchives garde la commande manquante en cause et dans son message", async () => {
+  const run: CommandRunner = async () => {
+    throw new MissingCommandError("rclone");
+  };
+  await assert.rejects(listArchives({ localDir: null, remote: "r:b", identity: "/k" }, run), (error: unknown) => {
+    assert.ok(error instanceof Error);
+    assert.match(error.message, /^stockage distant : `rclone` introuvable dans les dossiers système/);
+    assert.equal(findMissingCommand(error), "rclone");
+    return true;
+  });
+});
+
+test("findMissingCommand ne voit rien dans un échec ordinaire", () => {
+  assert.equal(findMissingCommand(new Error("dial tcp", { cause: new Error("ECONNREFUSED") })), null);
+  assert.equal(findMissingCommand("pas une erreur"), null);
+  assert.equal(findMissingCommand(new MissingCommandError("age")), "age");
+});
+
+test("listArchives signale la commande manquante même quand l'autre source répond", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bg-archives-missing-"));
+  try {
+    fs.writeFileSync(path.join(dir, "bluegenji-2026-09-30.tar.age"), "");
+    const run: CommandRunner = async () => {
+      throw new MissingCommandError("rclone");
+    };
+    const listing = await listArchives({ localDir: dir, remote: "r:b", identity: "/k" }, run);
+    assert.equal(listing.missingCommand, "rclone");
+    assert.equal(listing.archives.length, 1);
+    assert.equal(listing.failures.length, 1);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });

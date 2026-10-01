@@ -41,20 +41,21 @@
  * (`MYSQL_DEFAULTS_FILE` et `DB_DATABASE`), comme le script lui-même.
  */
 
-import { execFile, spawn, type ChildProcess, type SpawnOptions } from "node:child_process";
+import type { ChildProcess, SpawnOptions } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { promisify } from "node:util";
 
 import {
   archiveSourcesFromEnv,
+  execCommand,
+  findMissingCommand,
   listArchives,
+  missingCommandText,
+  spawnCommand,
   type ArchiveSources,
   type CommandRunner,
 } from "@/backup/archiveSource.js";
-
-const execFileAsync = promisify(execFile);
 
 /** Fichiers qu'une archive complète doit contenir. */
 export const EXPECTED_ARCHIVE_ENTRIES = ["database.sqlite", "appbluegenji.sql"] as const;
@@ -110,11 +111,8 @@ export interface BackupCheckConfig {
   expectedEntries: string[];
 }
 
-/** Exécuteur par défaut : `execFile`, sans shell. */
-const defaultRunner: CommandRunner = async (command, args) => {
-  const { stdout } = await execFileAsync(command, args, { timeout: CHECK_TIMEOUT_MS, maxBuffer: 1024 * 1024 });
-  return stdout;
-};
+/** Exécuteur par défaut : `execCommand` (chemin absolu, `PATH` figé), sans shell. */
+const defaultRunner: CommandRunner = (command, args) => execCommand(command, args, CHECK_TIMEOUT_MS);
 
 /**
  * Lit un fichier `KEY=VALUE` (celui de `scripts/backup-onedrive.sh`), sans
@@ -252,7 +250,7 @@ function readOptionalFile(file: string): string | null {
  */
 export function runPipeline(
   stages: PipelineStage[],
-  spawnFn: SpawnFn = spawn as SpawnFn,
+  spawnFn: SpawnFn = spawnCommand,
   timeoutMs: number = CHECK_TIMEOUT_MS,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -412,15 +410,28 @@ export async function checkLatestArchive(config: BackupCheckConfig, deps: Backup
   const log = deps.log ?? console.error;
   let archives;
   let failures: string[];
+  let missingCommand: string | null;
   try {
-    ({ archives, failures } = await listArchives(config.sources, deps.run ?? defaultRunner));
+    ({ archives, failures, missingCommand } = await listArchives(config.sources, deps.run ?? defaultRunner));
   } catch (error) {
     logFailure(log, label, error);
-    return { label, ok: false, detail: "stockage des archives illisible" };
+    // Seul le stockage distant lance une commande : si elle manque alors que
+    // tout a échoué, le dossier local configuré a échoué lui aussi — le taire
+    // ne laisserait voir sa panne qu'une fois la commande remise en place.
+    const local = config.sources.localDir && findMissingCommand(error) ? ", et le dossier local d'archives est illisible" : "";
+    return { label, ok: false, detail: `${failureDetail(error, "stockage des archives illisible")}${local}` };
   }
+  // Une source muette (stockage distant injoignable, commande introuvable,
+  // dossier local illisible) : ce que l'autre a rendu n'est peut-être pas le
+  // plus récent — le contrôle ne peut pas s'annoncer réussi sur ce qu'il n'a
+  // pas vu, ni dire « aucune archive » quand une source n'a pas été lue.
+  for (const failure of failures) {
+    log(`[backup-check] ${label} : ${failure}`);
+  }
+  const silent = missingCommand ? missingCommandText(missingCommand) : "une source d'archives n'a pas répondu";
   const latest = archives[0];
   if (!latest) {
-    return { label, ok: false, detail: "aucune archive trouvée" };
+    return { label, ok: false, detail: failures.length > 0 ? `${silent} — aucune archive dans l'autre source` : "aucune archive trouvée" };
   }
   const decrypt: PipelineStage = { command: "age", args: ["--decrypt", "-i", config.sources.identity] };
   const stages: PipelineStage[] =
@@ -442,14 +453,8 @@ export async function checkLatestArchive(config: BackupCheckConfig, deps: Backup
   }
   const site = config.expectedEntries.includes("appbluegenji.sql") ? "" : " (dump du site non configuré)";
   const verified = `\`${latest.name}\` déchiffrée, ${config.expectedEntries.join(" et ")} présents${site}`;
-  // Une source muette (stockage distant injoignable, dossier local illisible) :
-  // l'archive lue n'est peut-être pas la plus récente — le contrôle ne peut
-  // pas s'annoncer réussi sur ce qu'il n'a pas vu.
   if (failures.length > 0) {
-    for (const failure of failures) {
-      log(`[backup-check] ${label} : ${failure}`);
-    }
-    return { label, ok: false, detail: `une source d'archives n'a pas répondu — seule ${verified}, peut-être pas la plus récente` };
+    return { label, ok: false, detail: `${silent} — seule ${verified}, peut-être pas la plus récente` };
   }
   return { label, ok: true, detail: verified };
 }
@@ -473,10 +478,21 @@ export function pipelineFailureText(stage: string | undefined): string {
     case "rclone absent":
     case "age absent":
     case "tar absent":
-      return `\`${stage.replace(/ absent$/, "")}\` introuvable sur le serveur`;
+      return missingCommandText(stage.replace(/ absent$/, ""));
     default:
       return "lecture interrompue";
   }
+}
+
+/**
+ * Détail d'un échec : la commande manquante si c'en est une, sinon le repli.
+ * @param error Erreur reçue.
+ * @param fallback Phrase par défaut.
+ * @returns La phrase montrable.
+ */
+function failureDetail(error: unknown, fallback: string): string {
+  const missing = findMissingCommand(error);
+  return missing ? missingCommandText(missing) : fallback;
 }
 
 /**
@@ -515,7 +531,7 @@ export async function checkUploadsMirror(config: BackupCheckConfig, deps: Backup
     }
   } catch (error) {
     logFailure(log, label, error);
-    return { label, ok: false, detail: "remote chiffré illisible" };
+    return { label, ok: false, detail: failureDetail(error, "remote chiffré illisible") };
   }
   return { label, ok: true, detail: "remote chiffré lisible" };
 }
@@ -551,6 +567,10 @@ export async function checkRecipientKey(
     derived = parseRecipients(await (deps.run ?? defaultRunner)("age-keygen", ["-y", config.sources.identity]));
   } catch (error) {
     logFailure(log, label, error);
+    const missing = findMissingCommand(error);
+    if (missing) {
+      return { result: { label, ok: false, detail: missingCommandText(missing) }, publicKey: null };
+    }
     derived = [];
   }
   let publicKey: string | null = derived[0] ?? null;

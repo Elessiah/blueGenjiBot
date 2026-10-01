@@ -27,7 +27,7 @@ process.env.ADHESIONS_PATH = TMP_DIR;
 process.env.OWNER_ID = "owner-1";
 process.env.INFO_SERV = "admin-channel-1";
 
-import { getBddInstance, closeBddInstance } from "../../bdd/Bdd.js";
+import { getBddInstance, resetBddInstance } from "../../bdd/Bdd.js";
 import { checkIntervalleAdhesion } from "../../adhesion/checkIntervalleAdhesion.js";
 import { ITERATION_UNLIMITED } from "../../adhesion/iteration.js";
 import { nextTransmissionAfter } from "../../adhesion/nextTransmission.js";
@@ -261,6 +261,9 @@ test("une panne passagere reporte le rappel au lieu de l'effacer", async () => {
 });
 
 test("ferme la base a la fin de la suite", async () => {
-  await closeBddInstance();
+  // `resetBddInstance` attend que SQLite relâche le fichier : le dossier
+  // temporaire peut alors être effacé, y compris sous Windows.
+  assert.equal(await resetBddInstance(), true);
   fs.rmSync(TMP_DIR, { recursive: true, force: true });
+  assert.equal(fs.existsSync(TMP_DIR), false);
 });

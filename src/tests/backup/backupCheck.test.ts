@@ -24,7 +24,7 @@ import {
   type SpawnFn,
 } from "../../backup/backupCheck.js";
 import { answerBackupCheck } from "../../commandsHandlers/admin/backupCheck.js";
-import type { CommandRunner } from "../../backup/archiveSource.js";
+import { MissingCommandError, type CommandRunner } from "../../backup/archiveSource.js";
 
 const KEY = "age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqs3290gq";
 
@@ -120,6 +120,8 @@ test("runPipeline échoue quand un binaire manque", async () => {
     /étape tar absent/,
   );
   assert.match(pipelineFailureText("tar absent"), /`tar` introuvable/);
+  // Pointe vers les dossiers fouillés, pas vers une absence pure et simple.
+  assert.match(pipelineFailureText("age absent"), /`age` introuvable dans les dossiers système/);
 });
 
 test("runPipeline ne met pas en cause une étape arrêtée, même sortie avec un code (rclone : 143)", async () => {
@@ -402,6 +404,30 @@ test("checkLatestArchive ne s'annonce pas réussie quand une source n'a pas rép
   }
 });
 
+test("checkLatestArchive nomme la commande manquante quand seule la source locale a répondu", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bg-check-"));
+  try {
+    fs.writeFileSync(path.join(dir, "bluegenji-2026-09-21.tar.age"), "");
+    const local: SpawnFn = (command, _args, options) =>
+      spawn(
+        process.execPath,
+        ["-e", command === "age" ? `process.stdout.write("TAR")` : `process.stdin.resume(); process.stdin.on("end", () => process.stdout.write("database.sqlite\\nappbluegenji.sql\\n"))`],
+        options,
+      );
+    const run: CommandRunner = async () => {
+      throw new MissingCommandError("rclone");
+    };
+    const result = await checkLatestArchive(
+      config({ sources: { localDir: dir, remote: "store:b", identity: "/k/id.key" } }),
+      { run, spawnFn: local, log: () => {} },
+    );
+    assert.equal(result.ok, false);
+    assert.match(result.detail, /^`rclone` introuvable dans les dossiers système où le bot le cherche — seule .*bluegenji-2026-09-21/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("resolveScriptPath suit le script pour $SCRIPT_DIR, ~ et les chemins relatifs, sans rien deviner d'autre", () => {
   const dir = path.resolve("/opt/bot/scripts");
   assert.equal(resolveScriptPath("${SCRIPT_DIR}/k.txt", dir), path.join(dir, "k.txt"));
@@ -534,4 +560,78 @@ test("/backup-check diffère sa réponse puis rend le rapport, et tait une erreu
     if (previous === undefined) delete process.env.OWNER_ID;
     else process.env.OWNER_ID = previous;
   }
+});
+
+test("une commande hors des dossiers système est nommée comme telle, pas comme une panne du stockage ou de la clé", async () => {
+  const missing = (command: string): CommandRunner => async () => {
+    throw new MissingCommandError(command);
+  };
+  const expected = /^`rclone` introuvable dans les dossiers système où le bot le cherche$/;
+
+  const archive = await checkLatestArchive(config(), { run: missing("rclone"), log: () => {} });
+  assert.equal(archive.ok, false);
+  assert.match(archive.detail, expected);
+
+  const mirror = await checkUploadsMirror(config(), { run: missing("rclone"), log: () => {} });
+  assert.equal(mirror.ok, false);
+  assert.match(mirror.detail, expected);
+
+  const key = await checkRecipientKey(config(), { run: missing("age-keygen"), readFile: () => "", log: () => {} });
+  assert.equal(key.result.ok, false);
+  assert.equal(key.result.detail, "`age-keygen` introuvable dans les dossiers système où le bot le cherche");
+  assert.equal(key.publicKey, null);
+  // Aucun chemin dans ce qui part sur Discord.
+  assert.doesNotMatch(`${archive.detail} ${mirror.detail} ${key.result.detail}`, /\//);
+});
+
+test("checkLatestArchive ne tait pas le dossier local quand la commande manque et que tout a échoué", async () => {
+  const run: CommandRunner = async () => {
+    throw new MissingCommandError("rclone");
+  };
+  const unreadable = path.join(os.tmpdir(), "bg-check-absent-" + process.pid);
+  const result = await checkLatestArchive(
+    config({ sources: { localDir: unreadable, remote: "store:b", identity: "/k/id.key" } }),
+    { run, log: () => {} },
+  );
+  assert.equal(result.ok, false);
+  assert.equal(
+    result.detail,
+    "`rclone` introuvable dans les dossiers système où le bot le cherche, et le dossier local d'archives est illisible",
+  );
+});
+
+test("checkLatestArchive ne dit pas « aucune archive » quand une source n'a pas été lue", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bg-check-empty-"));
+  try {
+    const sources = { localDir: dir, remote: "store:b", identity: "/k/id.key" };
+    const missing: CommandRunner = async () => {
+      throw new MissingCommandError("rclone");
+    };
+    const logged: string[] = [];
+    const result = await checkLatestArchive(config({ sources }), { run: missing, log: (l) => logged.push(l) });
+    assert.equal(result.ok, false);
+    assert.equal(
+      result.detail,
+      "`rclone` introuvable dans les dossiers système où le bot le cherche — aucune archive dans l'autre source",
+    );
+    assert.match(logged.join("\n"), /stockage distant/);
+
+    const down = await checkLatestArchive(config({ sources }), {
+      run: fakeRun({ "rclone lsf": new Error("dial tcp") }),
+      log: () => {},
+    });
+    assert.equal(down.detail, "une source d'archives n'a pas répondu — aucune archive dans l'autre source");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("un autre échec garde la phrase d'origine", async () => {
+  const failing: CommandRunner = async () => {
+    throw new Error("dial tcp");
+  };
+  const mirror = await checkUploadsMirror(config(), { run: failing, log: () => {} });
+  assert.equal(mirror.detail, "remote chiffré illisible");
+  const key = await checkRecipientKey(config(), { run: failing, readFile: () => "", log: () => {} });
+  assert.equal(key.result.detail, "clé privée du bot illisible");
 });

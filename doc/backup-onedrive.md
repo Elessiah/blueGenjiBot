@@ -464,8 +464,13 @@ ta copie hors ligne : `age-keygen -y <copie>` doit afficher exactement la même
 ni chemin, ni nom de remote, ni nom d'hôte, ni sortie d'erreur d'une commande :
 le détail d'un échec va au journal du bot (`pm2 logs`, préfixe `[backup-check]`).
 
-`age`, `age-keygen`, `rclone` et `tar` doivent être dans le `PATH` du processus
-du bot, et la clé privée lisible par son compte (c'est déjà le cas pour
+`age`, `age-keygen`, `rclone` et `tar` doivent être installés dans
+`/usr/local/bin`, `/usr/bin` ou `/bin` : le bot ne cherche ces commandes que
+là, jamais dans le `PATH` de son processus (`/restore-backup` aussi). Un
+binaire installé ailleurs (snap, `~/.local/bin`) répond à `which` mais pas au
+bot : le rapport le dit « introuvable dans les dossiers système où le bot le
+cherche », `/restore-backup` aussi. La clé
+privée doit être lisible par son compte (c'est déjà le cas pour
 `/restore-backup`).
 
 ## Variables côté bot

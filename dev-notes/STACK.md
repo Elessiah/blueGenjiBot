@@ -63,7 +63,7 @@ src/
   supprimé entre-temps lève un `10008` qui interromprait la diffusion en cours.
 - **Commandes Discord** : enregistrer via `updateCommands()`, déclarer dans `config/commands.ts` (statiques) ou `fillBlueCommands()` (dynamiques).
 - **Tests** : runner natif `node:test` sur le build (`dist/`), pas de transpil à la volée.
-- **Lint** : ESLint 10, configuration « flat » dans `eslint.config.js` (`@eslint/js` + `typescript-eslint`, recommandés). Le périmètre est **`src/` seul** (`ignores` de la configuration) : sans lui, `eslint .` partait analyser `dist/`. `src/main.js` est ignoré — ancien point d’entrée, ni compilé (`allowJs: false`) ni référencé. Aucun plugin `import` : il n’était chargé que pour que quatre `eslint-disable` résolvent des règles jamais activées, et ESLint 10 signale un tel commentaire comme inutile. Le seul avis `deprecated` restant à l’installation, `prebuild-install`, vient de `sqlite3` et ne se corrige pas de notre côté.
+- **Lint** : ESLint 10, configuration « flat » dans `eslint.config.js` (`@eslint/js` + `typescript-eslint`, recommandés). Le périmètre est **`src/` seul** (`ignores` de la configuration) : sans lui, `eslint .` partait analyser `dist/`. L’ancien point d’entrée compilé `src/main.js`, ni compilé (`allowJs: false`) ni référencé, a été retiré du dépôt : le seul point d’entrée est `src/main.ts` → `dist/main.js`. Aucun plugin `import` : il n’était chargé que pour que quatre `eslint-disable` résolvent des règles jamais activées, et ESLint 10 signale un tel commentaire comme inutile. Le seul avis `deprecated` restant à l’installation, `prebuild-install`, vient de `sqlite3` et ne se corrige pas de notre côté.
 
 ## Project Overview
 
