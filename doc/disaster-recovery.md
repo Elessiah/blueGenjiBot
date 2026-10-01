@@ -144,9 +144,9 @@ La commande télécharge l'archive dans un dossier temporaire privé, la déchif
 sur place, vérifie l'intégrité de la base puis la met en service sans
 redémarrage. Elle recopie au passage la base vide courante en
 `database.sqlite.avant-<date>` : sans valeur ici, elle sera effacée au plus tard
-au bout de 30 jours par le ménage de nuit. Un redémarrage
-(`pm2 restart <nom du processus du bot>`) n'est pas nécessaire, mais reste
-sans danger pour repartir proprement.
+au bout de 30 jours par le ménage de nuit.
+
+**Aussitôt après, recharger les fichiers d'adhésion** (`ADHESIONS_PATH`, perdus avec la machine) par les commandes d'adhésion (`doc/adhesions-commands-user.md`). La base restaurée porte le calendrier des rappels d'adhésion tel qu'il était à la date de l'archive, et le bot envoie les rappels dus **à chaque démarrage** et chaque jour à 10 h : partis sans leurs fichiers, ils seraient consommés pour rien. **Ne pas redémarrer le bot** (`pm2 restart`) avant d'avoir rechargé ces fichiers — la restauration ne le demande pas, la base est rouverte à chaud. À vérifier : la liste exacte des commandes à relancer.
 
 ## 4. Le site : base de données
 
