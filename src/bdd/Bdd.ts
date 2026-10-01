@@ -73,23 +73,28 @@ async function getBddInstance(): Promise<Bdd> {
 }
 
 /**
- * Ferme l'instance singleton courante si elle existe.
+ * Ferme l'instance singleton courante si elle existe, et attend que SQLite
+ * relâche le fichier.
+ *
+ * La référence reste en place : un appel tardif (arrêt du bot en cours) reçoit
+ * l'instance fermée et échoue, au lieu de rouvrir une connexion que
+ * `process.exit` couperait.
  * @returns `true` si une instance était ouverte, sinon `false`.
  */
-function closeBddInstance(): boolean {
-  if (!bdd)
-    {return false;}
-  bdd.delete();
+async function closeBddInstance(): Promise<boolean> {
+  if (!bdd) {
+    return false;
+  }
+  await bdd.close();
   return true;
 }
 
 /**
  * Ferme la connexion courante et oublie le singleton.
  *
- * `closeBddInstance()` laisse la référence en place et n'attend pas la
- * fermeture : le prochain `getBddInstance()` rendrait une instance fermée, et
- * le fichier resterait écrit après le retour. La restauration d'une sauvegarde
- * a besoin des deux garanties, d'où ce variant.
+ * `closeBddInstance()` laisse la référence en place : le prochain
+ * `getBddInstance()` rendrait une instance fermée. La restauration d'une
+ * sauvegarde a besoin d'en rouvrir une, d'où ce variant.
  * @returns `true` si une instance était ouverte, sinon `false`.
  */
 async function resetBddInstance(): Promise<boolean> {

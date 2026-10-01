@@ -8,7 +8,7 @@ import {
   TextChannel,
 } from "discord.js";
 import cron from "node-cron";
-import { getBddInstance, resetBddInstance } from "./bdd/Bdd.js";
+import { getBddInstance, closeBddInstance } from "./bdd/Bdd.js";
 import { deleteDPMsgs } from "./bdd/deleteDPMsgs.js";
 import { checkBan } from "./check/checkBan.js";
 import { _resetChannel } from "./commandsHandlers/services/resetChannel.js";
@@ -323,21 +323,26 @@ client.on("channelDelete", async (channel) => {
   }
 });
 
-process.on('SIGINT', async () => {
+/**
+ * Arrêt propre : déconnexion de Discord, puis fermeture **attendue** de la base
+ * (WAL checkpointé) avant `process.exit`. Un échec de l'une ou l'autre étape
+ * n'empêche jamais la sortie — le process ne doit pas rester pendu jusqu'au
+ * `kill` forcé de pm2.
+ */
+async function shutdown(): Promise<void> {
     console.log('Arrêt du bot...');
-    await client.destroy();
-    // Attend la fermeture réelle (WAL checkpointé) avant `process.exit`.
-    await resetBddInstance();
-    process.exit(0);
-});
+    try {
+        await client.destroy();
+        await closeBddInstance();
+    } catch (error) {
+        console.error('[shutdown]', error);
+    } finally {
+        process.exit(0);
+    }
+}
 
-process.on('SIGTERM', async () => {
-    console.log('Arrêt du bot...');
-    await client.destroy();
-    // Attend la fermeture réelle (WAL checkpointé) avant `process.exit`.
-    await resetBddInstance();
-    process.exit(0);
-});
+process.on('SIGINT', () => void shutdown());
+process.on('SIGTERM', () => void shutdown());
 
 // Contrairement aux erreurs de runtime, un échec de connexion laisse un process
 // vivant mais inutile : on journalise puis on sort en erreur pour que pm2
