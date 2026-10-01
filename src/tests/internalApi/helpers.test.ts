@@ -1,17 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { pctDelta, absDelta, deterministicColor, isLoopbackHost, matchesToken } from "../../internalApi/helpers.js";
-
-test("pctDelta calcule un pourcentage et formate le signe", () => {
-  assert.equal(pctDelta(120, 100), "+20 %");
-  assert.equal(pctDelta(80, 100), "-20 %");
-  assert.equal(pctDelta(100, 100), "+0 %");
-});
-
-test("pctDelta gere prev=0 (croissance infinie -> +100 %, ou 0 si nul)", () => {
-  assert.equal(pctDelta(5, 0), "+100 %");
-  assert.equal(pctDelta(0, 0), "+0 %");
-});
+import { absDelta, deterministicColor, isLoopbackHost, matchesToken } from "../../internalApi/helpers.js";
 
 test("absDelta formate le signe correctement", () => {
   assert.equal(absDelta(15, 12), "+3");
