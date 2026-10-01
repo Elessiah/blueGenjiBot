@@ -50,7 +50,7 @@ export const MAX_LOG_PAGES_PER_RUN = 200;
  * @returns Les identifiants renseignés (salon et messages privés confondus).
  */
 export function banMessageIds(ban: Ban): string[] {
-  return [ban.id_reason, ban.id_reason_owner, ban.id_notice_admin, ban.id_notice_owner].filter(
+  return [ban.id_reason, ban.id_reason_owner, ban.id_notice_admin].filter(
     (id): id is string => typeof id === "string" && id.length > 0,
   );
 }
@@ -234,14 +234,14 @@ export async function deleteBanMessages(client: Client, ban: Ban): Promise<numbe
       attempts.push(...channelIds.map((id) => settle(text.messages.delete(id))));
     }
   }
-  const dmIds = [ban.id_reason_owner, ban.id_notice_owner].filter((id): id is string => !!id);
-  if (process.env.OWNER_ID && dmIds.length > 0) {
+  if (process.env.OWNER_ID && ban.id_reason_owner) {
+    const dmId = ban.id_reason_owner;
     const dm = await client.users
       .fetch(process.env.OWNER_ID)
       .then((owner) => owner.createDM())
       .catch(() => null);
     if (dm) {
-      attempts.push(...dmIds.map((id) => settle(dm.messages.delete(id))));
+      attempts.push(settle(dm.messages.delete(dmId)));
     }
   }
   return (await Promise.all(attempts)).filter(Boolean).length;

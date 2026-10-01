@@ -36,16 +36,6 @@ let bdd: Bdd;
 const DEFAULT_BDD_PATH = './data/database.sqlite';
 
 /**
- * Retourne l'instance singleton de la base de données.
- * Crée et initialise la connexion SQLite si nécessaire.
- *
- * Le chemin **absolu** est journalisé à l'ouverture. Une ligne, et la question
- * « quelle base le bot lit-il au juste ? » cesse de se poser : elle a demandé un
- * `lsof` sur la production pour être tranchée.
- *
- * @returns Instance Bdd prête à être utilisée.
- */
-/**
  * Chemin absolu de la base que le bot ouvre : `BDD_PATH`, sinon le repli.
  * Partagé avec la restauration et sa purge des copies de secours, qui
  * viseraient sinon un autre fichier que la base réelle.
@@ -56,6 +46,16 @@ function resolveBddPath(): string {
   return path.resolve(configured && configured.length > 0 ? configured : DEFAULT_BDD_PATH);
 }
 
+/**
+ * Retourne l'instance singleton de la base de données.
+ * Crée et initialise la connexion SQLite si nécessaire.
+ *
+ * Le chemin **absolu** est journalisé à l'ouverture. Une ligne, et la question
+ * « quelle base le bot lit-il au juste ? » cesse de se poser : elle a demandé un
+ * `lsof` sur la production pour être tranchée.
+ *
+ * @returns Instance Bdd prête à être utilisée.
+ */
 async function getBddInstance(): Promise<Bdd> {
   if (!bdd) {
     const configured = process.env.BDD_PATH?.trim();
@@ -422,16 +422,15 @@ class Bdd {
                DEFAULT
                  CURRENT_TIMESTAMP,
              id_reason_owner TEXT,
-             id_notice_admin TEXT,
-             id_notice_owner TEXT
+             id_notice_admin TEXT
            );`
       );
       // Messages du journal qui décrivent l'exclusion, effacés à sa levée
       // (`/unban`) : le motif en message privé au propriétaire, et l'avis
-      // « un joueur a été exclu » des deux côtés. `NULL` pour une exclusion
+      // « un joueur a été exclu » au salon. `NULL` pour une exclusion
       // antérieure à ces colonnes — seul son motif au salon (`id_reason`)
       // peut alors être effacé.
-      for (const column of ["id_reason_owner", "id_notice_admin", "id_notice_owner"]) {
+      for (const column of ["id_reason_owner", "id_notice_admin"]) {
         const exists = await this.Database?.get(
           "SELECT 1 FROM pragma_table_info('Ban') WHERE name = ?",
           [column],

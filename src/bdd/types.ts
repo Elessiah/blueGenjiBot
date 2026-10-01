@@ -7,8 +7,6 @@ export type Ban = {
     id_reason_owner?: string | null,
     /** Avis « un joueur a été exclu » au salon du staff ; `null` avant la colonne. */
     id_notice_admin?: string | null,
-    /** Même avis, en message privé au propriétaire ; `null` avant la colonne. */
-    id_notice_owner?: string | null,
 };
 
 export type ChannelPartner = {
