@@ -101,7 +101,10 @@ export function resolveCommand(
  * Variables reprises telles quelles de l'environnement du bot : de quoi
  * trouver la configuration rclone (`HOME`, `XDG_CONFIG_HOME`), un dossier
  * temporaire, la langue et le fuseau des sorties lues (`tar -tv`), et la
- * sortie réseau de rclone (mandataire, certificats d'autorité).
+ * sortie réseau de rclone (mandataire, certificats d'autorité). Les
+ * identifiants d'un fournisseur lus dans l'environnement (`env_auth`, `AWS_*`,
+ * `GOOGLE_APPLICATION_CREDENTIALS`…) n'en sont pas : le remote se règle dans
+ * `rclone.conf` ou par `RCLONE_CONFIG_<REMOTE>_*`.
  */
 const INHERITED_ENV_KEYS: readonly string[] = [
   "HOME", "USER", "LOGNAME", "TMPDIR", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "LANG", "LANGUAGE", "TZ",
