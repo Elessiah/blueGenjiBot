@@ -53,8 +53,25 @@ rclone --config /chemin/vers/copie/rclone.conf lsf distant-crypt:
 # -> uploads/ quarantine/ deletions/ — des noms lisibles, donc le chiffrement est le bon
 ```
 
-Puis effacer l'archive téléchargée. Si l'une de ces commandes échoue, la
-sauvegarde ne sert à rien : c'est maintenant qu'il faut le découvrir.
+**Une liste vide est un échec**, même si la commande rend la main sans erreur :
+avec une mauvaise clé, `rclone` écarte les noms qu'il ne sait pas déchiffrer
+et ne montre rien.
+
+Tester aussi les **mots de passe en clair** du remote chiffré, seuls, sans la
+copie de `rclone.conf` pour ce remote — c'est le jour où elle manque qu'ils
+servent, et une faute de frappe ne se découvrirait qu'alors. Ils sont saisis
+sans écho, jamais sur la ligne de commande :
+
+```bash
+read -rs CRYPT_PASS && read -rs CRYPT_SALT
+rclone --config /chemin/vers/copie/rclone.conf lsf ":crypt,remote='distant:BlueGenji/chiffre',password='$(rclone obscure "$CRYPT_PASS")',password2='$(rclone obscure "$CRYPT_SALT")':"
+unset CRYPT_PASS CRYPT_SALT
+# -> la même liste lisible qu'au-dessus
+```
+
+Puis effacer l'archive téléchargée. Si l'une de ces commandes échoue — ou ne
+liste rien —, la sauvegarde ne sert à rien : c'est maintenant qu'il faut le
+découvrir.
 
 ## 1. Préparer la machine neuve
 
@@ -91,7 +108,7 @@ install -m 600 /chemin/vers/copie/.bluegenji-backup.key ~/.bluegenji-backup.key
 mkdir -p ~/.config/rclone
 install -m 600 /chemin/vers/copie/rclone.conf ~/.config/rclone/rclone.conf
 rclone lsd distant:            # le stockage répond
-rclone lsf distant-crypt:      # noms lisibles : la clé du remote chiffré est la bonne
+rclone lsf distant-crypt:      # uploads/ quarantine/ deletions/ — une liste vide = mauvaise clé
 ```
 
 Les deux `.env` sont posés à l'étape suivante, une fois les dépôts clonés.
@@ -232,9 +249,19 @@ heure, les rejoue :
 ```bash
 cd <app>
 rclone copy distant-crypt:deletions/account-deletions.jsonl data/
-NODE_ENV=production npm run replay:deletions -- --dry-run   # ce qui va être supprimé
-NODE_ENV=production npm run replay:deletions
+NODE_ENV=production npm run replay:deletions -- --dry-run data/account-deletions.jsonl   # ce qui va être supprimé
+NODE_ENV=production npm run replay:deletions -- data/account-deletions.jsonl
 ```
+
+Le chemin est passé **explicitement** : sans lui, le script lit
+`ACCOUNT_DELETION_JOURNAL_PATH` quand `.env.production` le définit, et un
+fichier absent y vaut un journal vide — le rejeu annoncerait `0 suppression(s)`
+et rendrait la main sans erreur. Si cette variable est définie, recopier aussi
+le journal **à ce chemin-là** (et vérifier que `DELETION_JOURNAL_PATH` de
+`backup-onedrive.env` le suit) : c'est là que le site écrira les suppressions
+suivantes, et là que la synchronisation horaire le cherche — absent, elle
+**supprimerait** sa copie distante. Un `0 suppression(s) consignée(s)` à la
+simulation est suspect : vérifier que le fichier a bien été copié.
 
 `NODE_ENV=production` n'est pas décoratif : sans lui, le script lit `.env` au
 lieu de `.env.production` et meurt sur `DB_HOST`. Le rejeu est sans danger à
