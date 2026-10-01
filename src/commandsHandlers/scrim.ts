@@ -17,6 +17,7 @@ import { sendLog } from "@/safe/sendLog.js";
 import { getBddInstance } from "@/bdd/Bdd.js";
 import { recordEvent } from "@/feed/feedBus.js";
 import { isModuleEnabled } from "@/modules/moduleGuard.js";
+import { choiceLabel, SCRIM_LEVEL_CHOICES } from "@/config/searchChoices.js";
 
 /** Seul jeu accepte par `/scrim`, tel que stocke dans `Scrim.game`. */
 export const SCRIM_GAME = "marvel_rivals";
@@ -31,6 +32,12 @@ export const SCRIM_GAME_LABEL = "Marvel Rivals";
 export async function scrim(client: Client, interaction: ChatInputCommandInteraction, guildId: string | null): Promise<void> {
   try {
     const niveau = interaction.options.getString("niveau", true);
+    const label = choiceLabel(SCRIM_LEVEL_CHOICES, niveau);
+    if (label === null) {
+      // Client resté sur l'ancienne définition (texte libre) : rien n'est écrit.
+      await safeReply(interaction, "Niveau inconnu : choisis-le dans la liste proposee par la commande.", true, false);
+      return;
+    }
     if (guildId && !(await isModuleEnabled(guildId, "scrims"))) {
       await safeReply(interaction, "Le module Scrims est desactive sur ce serveur.", true, false);
       return;
@@ -41,8 +48,8 @@ export async function scrim(client: Client, interaction: ChatInputCommandInterac
       await safeReply(interaction, "Erreur lors de l'enregistrement du scrim.", true, false);
       return;
     }
-    await recordEvent(client, "scrim", `Scrim ${SCRIM_GAME_LABEL} niveau ${niveau}`, interaction.guild?.name ?? null, null);
-    await safeReply(interaction, `Recherche de scrim publiee : **${SCRIM_GAME_LABEL}** (${niveau}).`, false, false);
+    await recordEvent(client, "scrim", `Scrim ${SCRIM_GAME_LABEL} niveau ${label}`, interaction.guild?.name ?? null, null);
+    await safeReply(interaction, `Recherche de scrim publiee : **${SCRIM_GAME_LABEL}** (${label}).`, false, false);
   } catch (err) {
     await sendLog(client, `scrim handler error: ${(err as Error).message}`);
   }

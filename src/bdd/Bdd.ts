@@ -410,9 +410,26 @@ class Bdd {
              date
                DATETIME
                DEFAULT
-                 CURRENT_TIMESTAMP
+                 CURRENT_TIMESTAMP,
+             id_reason_owner TEXT,
+             id_notice_admin TEXT,
+             id_notice_owner TEXT
            );`
       );
+      // Messages du journal qui décrivent l'exclusion, effacés à sa levée
+      // (`/unban`) : le motif en message privé au propriétaire, et l'avis
+      // « un joueur a été exclu » des deux côtés. `NULL` pour une exclusion
+      // antérieure à ces colonnes — seul son motif au salon (`id_reason`)
+      // peut alors être effacé.
+      for (const column of ["id_reason_owner", "id_notice_admin", "id_notice_owner"]) {
+        const exists = await this.Database?.get(
+          "SELECT 1 FROM pragma_table_info('Ban') WHERE name = ?",
+          [column],
+        );
+        if (!exists) {
+          await this.Database?.exec(`ALTER TABLE Ban ADD COLUMN ${column} TEXT`);
+        }
+      }
     } catch (e) {
       console.error("Ban : ", (e as TypeError).message);
     }

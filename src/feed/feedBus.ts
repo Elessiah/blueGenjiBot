@@ -171,6 +171,39 @@ export async function purgeFeedIdentifiers(client: Client | null): Promise<numbe
 }
 
 /**
+ * Supprime les evenements plus vieux que `days` jours.
+ *
+ * Une ligne de `/scrim` ou `/recrute` (heure exacte, serveur, niveau ou role),
+ * croisee avec la reponse publique de la commande, date et situe l'action
+ * d'une personne : au-dela de `FEED_EVENT_RETENTION_DAYS`, l'activite ne doit
+ * plus survivre qu'en nombres par jour (`ActivityDaily`). Jouee par
+ * `runDataRetention`, au demarrage, chaque nuit et apres une restauration.
+ *
+ * Leve en cas d'echec : le menage l'attrape et le signale, comme les autres.
+ *
+ * @param days Age maximal, en jours, d'un evenement conserve.
+ * @returns Le nombre d'evenements supprimes.
+ */
+export async function purgeOldFeedEvents(days: number): Promise<number> {
+  const bdd = await getBddInstance();
+  const age = [`-${days} days`];
+  const rows = await bdd.raw<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM FeedEvent WHERE ts < DATETIME('now', ?)",
+    age
+  );
+  // Base fermee (restauration en cours) : `raw` rend une liste vide. Lever
+  // plutot que rendre 0, que le journal lirait comme une nuit sans rien a purger.
+  const n = rows[0]?.n;
+  if (n === undefined) {
+    throw new Error("Base fermee : purge du fil d'activite non jouee.");
+  }
+  if (n > 0) {
+    await bdd.raw("DELETE FROM FeedEvent WHERE ts < DATETIME('now', ?)", age);
+  }
+  return n;
+}
+
+/**
  * S'abonne au flux d'evenements en direct.
  *
  * @param handler Rappele pour chaque evenement enregistre via `recordEvent`.

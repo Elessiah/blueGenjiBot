@@ -3,7 +3,7 @@
  * (la purge des messages relayés elle-même vit dans
  * `messages/manageMsgExpiration.ts` ; ce module ne fait que la rattraper).
  *
- * Trois ménages, joués au démarrage, chaque nuit par la tâche `cron`
+ * Six ménages, joués au démarrage, chaque nuit par la tâche `cron`
  * existante et après une restauration de la base — aucun ordonnanceur de plus :
  *
  * - **messages relayés** : la purge à 7 jours (`manageMsgExpiration`) n'était
@@ -14,7 +14,12 @@
  * - **serveurs quittés pendant un arrêt** : Discord n'envoie `guildDelete` qu'à
  *   un bot connecté. Un serveur quitté pendant que le bot était arrêté — ou
  *   dont l'oubli a échoué à mi-chemin — garderait sinon sa configuration sans
- *   limite, alors que plus personne sur ce serveur ne peut la retirer.
+ *   limite, alors que plus personne sur ce serveur ne peut la retirer ;
+ * - **fil d'activité** (`FeedEvent`) : au-delà de `FEED_EVENT_RETENTION_DAYS` ;
+ * - **journal privé du staff** : au-delà de `STAFF_LOG_RETENTION_DAYS`, sauf
+ *   les messages d'une exclusion en cours (`privacy/staffLogRetention.ts`) ;
+ * - **copies de secours d'une restauration** : au-delà de
+ *   `ROLLBACK_RETENTION_DAYS` (`backup/restoreDatabase.ts`).
  */
 
 import type { Client } from "discord.js";
@@ -24,7 +29,10 @@ import { manageMsgExpiration } from "@/messages/manageMsgExpiration.js";
 import { reportError } from "@/safe/processGuards.js";
 import { sendLog } from "@/safe/sendLog.js";
 
-import { ACTIVITY_AUTHOR_RETENTION_DAYS } from "@/privacy/retentionPeriods.js";
+import { purgeOldRollbacks } from "@/backup/restoreDatabase.js";
+import { purgeOldFeedEvents } from "@/feed/feedBus.js";
+import { purgeStaffLogs } from "@/privacy/staffLogRetention.js";
+import { ACTIVITY_AUTHOR_RETENTION_DAYS, FEED_EVENT_RETENTION_DAYS } from "@/privacy/retentionPeriods.js";
 
 /**
  * Efface l'auteur des scrims et recherches plus vieux que la durée de
@@ -174,7 +182,7 @@ export async function forgetDepartedGuilds(client: Client): Promise<string[] | n
 }
 
 /**
- * Les trois ménages, dans l'ordre. Chacun signale son propre échec sans priver
+ * Les six ménages, dans l'ordre. Chacun signale son propre échec sans priver
  * les autres de passer ; la fonction ne lève jamais.
  * @param client Client Discord connecté.
  */
@@ -203,7 +211,7 @@ let running: Promise<void> | null = null;
 let rerunRequested = false;
 
 /**
- * Une passe des trois ménages (voir `runDataRetention`).
+ * Une passe des six ménages (voir `runDataRetention`).
  * @param client Client Discord connecté.
  */
 async function runDataRetentionOnce(client: Client): Promise<void> {
@@ -222,10 +230,26 @@ async function runDataRetentionOnce(client: Client): Promise<void> {
   } catch (error) {
     await reportError(client, "forgetDepartedGuilds", error);
   }
+  let feed: string = "échec";
+  try {
+    feed = String(await purgeOldFeedEvents(FEED_EVENT_RETENTION_DAYS));
+  } catch (error) {
+    await reportError(client, "purgeOldFeedEvents", error);
+  }
+  let staffLogs: string = "échec";
+  try {
+    const result = await purgeStaffLogs(client);
+    staffLogs = result === null ? "non joué" : String(result);
+  } catch (error) {
+    await reportError(client, "purgeStaffLogs", error);
+  }
+  // Ne lève jamais.
+  const rollbacks = await purgeOldRollbacks();
   // Une ligne par passage dans les journaux du serveur (pm2) : une nuit à
   // zéro se distingue ainsi d'un ménage qui n'a pas tourné. Aucun identifiant.
   console.log(
     `[data-retention] purge des relais : ${relays}, auteurs anonymisés : ${anonymized ?? "échec"}, ` +
-      `serveurs oubliés : ${forgotten}`,
+      `serveurs oubliés : ${forgotten}, évènements du fil purgés : ${feed}, ` +
+      `messages du journal du staff purgés : ${staffLogs}, copies de restauration purgées : ${rollbacks}`,
   );
 }

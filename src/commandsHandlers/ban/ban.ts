@@ -62,11 +62,17 @@ async function ban(client: Client,
     }
     // Identifiants, jamais de pseudos, au journal : un pseudo se change et se
     // lit par quiconque voit le salon, l'identifiant suffit à retrouver le compte.
-    await sendLog(client, `*Un joueur (id ${user.id}) a été exclu par un modérateur (id ${interaction.user.id}).*`);
+    // Les identifiants des quatre messages (avis et motif, au salon et en
+    // message privé au propriétaire) sont gardés avec l'exclusion : `/unban`
+    // les efface, et la purge d'un an du journal les épargne tant qu'elle dure.
+    const notice: idSendLogMsg = {admin: "", owner: ""};
+    await sendLog(client, `*Un joueur (id ${user.id}) a été exclu par un modérateur (id ${interaction.user.id}).*`, notice);
     const ids: idSendLogMsg = {admin: "", owner: ""};
     await sendLog(client, "**Reason:** " + reason, ids);
     try {
-        await bdd.set('Ban', ['id_user', 'id_moderator', 'id_reason'], [user.id, interaction.user.id, ids.admin]);
+        await bdd.set('Ban',
+            ['id_user', 'id_moderator', 'id_reason', 'id_reason_owner', 'id_notice_admin', 'id_notice_owner'],
+            [user.id, interaction.user.id, ids.admin, ids.owner || null, notice.admin || null, notice.owner || null]);
     } catch (e) {
         await sendLog(client, 'Error while register ban : ' + (e as TypeError).message);
         return false;
