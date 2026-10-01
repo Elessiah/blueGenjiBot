@@ -45,9 +45,19 @@ rclone_backend() {
 # (corbeille et historique de versions évités par option) ; ailleurs rien n'est
 # passé. Sur Nextcloud/WebDAV, corbeille et versions se coupent côté serveur
 # (applications « Deleted files » et « Versions ») : voir doc/backup-onedrive.md.
+#
+# Fournisseur non identifié (configuration chiffrée sans mot de passe sous
+# cron, remote défini par variables d'environnement, remote inconnu) : aucune
+# option n'est passée, mais un avertissement part sur la sortie d'erreur — les
+# appelants lisent la sortie par `mapfile < <(…)`, qui masque le code de sortie,
+# et un OneDrive non reconnu enverrait sinon ses suppressions à la corbeille
+# sans que rien ne le dise.
 provider_delete_flags() {
   local backend
-  backend="$(rclone_backend "$1")" || return 0
+  if ! backend="$(rclone_backend "$1")"; then
+    echo "[backup] AVERTISSEMENT : fournisseur du remote $1 non identifié — aucune option de suppression définitive passée ; vérifier que corbeille et versions sont coupées côté stockage." >&2
+    return 0
+  fi
   if [[ "$backend" == "onedrive" ]]; then
     printf '%s\n' --onedrive-hard-delete --onedrive-no-versions
   fi

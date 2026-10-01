@@ -27,6 +27,14 @@ esac
 `;
 
 function flagsFor(remote: string, remotes: string, shows: Record<string, string> = {}): string[] {
+  return run(remote, remotes, shows).flags;
+}
+
+function run(
+  remote: string,
+  remotes: string,
+  shows: Record<string, string> = {},
+): { flags: string[]; stderr: string } {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rclone-backend-"));
   try {
     fs.writeFileSync(path.join(dir, "rclone"), FAKE_RCLONE, { mode: 0o755 });
@@ -39,7 +47,7 @@ function flagsFor(remote: string, remotes: string, shows: Record<string, string>
       encoding: "utf8",
     });
     assert.equal(result.status, 0, result.stderr);
-    return result.stdout.split("\n").filter(Boolean);
+    return { flags: result.stdout.split("\n").filter(Boolean), stderr: result.stderr };
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -75,6 +83,15 @@ test("un crypt sur dossier local ou un remote inconnu ne reçoit rien", { skip }
     [],
   );
   assert.deepEqual(flagsFor("absent", "onedrive: onedrive\n"), []);
+});
+
+test("un fournisseur non identifié est signalé, jamais passé sous silence", { skip }, () => {
+  // Un OneDrive que la détection ne reconnaît pas enverrait ses suppressions à
+  // la corbeille : l'avertissement est la seule trace dans le journal du cron.
+  const unknown = run("absent", "onedrive: onedrive\n");
+  assert.deepEqual(unknown.flags, []);
+  assert.match(unknown.stderr, /AVERTISSEMENT : fournisseur du remote absent non identifié/);
+  assert.equal(run("storage", "storage: webdav\n").stderr, "");
 });
 
 test("les deux scripts passent par la détection, sans option OneDrive écrite en dur", () => {

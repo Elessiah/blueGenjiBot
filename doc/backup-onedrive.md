@@ -300,6 +300,25 @@ seulement** effacer définitivement les copies laissées chez l'ancien fournisse
 (corbeille et versions comprises), et retirer ses remotes de `rclone.conf`.
 Le cron n'a pas à changer : les noms des scripts sont restés les mêmes.
 
+**Délai : avant que la plus ancienne archive de l'ancien stockage n'atteigne
+`RETENTION_DAYS` (30 jours).** Les purges horaire et hebdomadaire ne visent que
+le remote configuré : une fois `RCLONE_REMOTE` passé au nouveau stockage, plus
+rien n'efface les copies de l'ancien, qui survivraient alors à la durée
+annoncée par le site. Pour un ancien OneDrive (remotes `onedrive` et
+`onedrive-crypt`, dossiers par défaut — à adapter) :
+
+```bash
+rclone purge onedrive:BlueGenji --onedrive-hard-delete   # archives et copie chiffrée
+rclone purge onedrive:uploads --onedrive-hard-delete     # anciennes copies en clair,
+rclone purge onedrive:quarantine --onedrive-hard-delete  # si elles existent encore
+rclone purge onedrive:deletions --onedrive-hard-delete
+rclone cleanup onedrive:                                 # vide la corbeille
+rclone config delete onedrive-crypt && rclone config delete onedrive
+```
+
+Vérifier ensuite dans l'interface du fournisseur que corbeille et historique de
+versions sont vides.
+
 ## Restauration
 
 Récupère et déchiffre l'archive, depuis n'importe quelle machine ayant la clé :
