@@ -10,6 +10,7 @@ import {
   COMMAND_PATH,
   commandEnv,
   compareNewestFirst,
+  decryptDatabase,
   execCommand,
   fetchArchive,
   findMissingCommand,
@@ -18,6 +19,7 @@ import {
   listArchives,
   pickArchive,
   resolveCommand,
+  stopProcess,
   type ArchiveRef,
   type CommandRunner,
 } from "../../backup/archiveSource.js";
@@ -283,4 +285,30 @@ test("listArchives signale la commande manquante même quand l'autre source rép
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("decryptDatabase garde la commande introuvable en cause de son échec", { skip: fs.existsSync(resolveCommand("age")) && "age est installé ici" }, async () => {
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "bg-decrypt-"));
+  try {
+    await assert.rejects(decryptDatabase(path.join(workDir, "absente.tar.age"), path.join(workDir, "cle"), workDir), (error: unknown) => {
+      assert.equal(findMissingCommand(error), "age");
+      assert.match((error as Error).message, /`age` introuvable/);
+      return true;
+    });
+  } finally {
+    fs.rmSync(workDir, { recursive: true, force: true });
+  }
+});
+
+test("commandEnv laisse passer le mandataire et les certificats dont rclone a besoin", () => {
+  const keys = ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "NO_PROXY", "no_proxy", "SSL_CERT_FILE", "SSL_CERT_DIR"];
+  const env = commandEnv(Object.fromEntries(keys.map((key) => [key, `v-${key}`])));
+  for (const key of keys) {
+    assert.equal(env[key], `v-${key}`, key);
+  }
+});
+
+test("stopProcess avale l'erreur d'un kill impossible", () => {
+  const child = { kill: () => { throw Object.assign(new Error("kill EINVAL"), { code: "EINVAL" }); } };
+  assert.doesNotThrow(() => stopProcess(child as unknown as Parameters<typeof stopProcess>[0]));
 });
