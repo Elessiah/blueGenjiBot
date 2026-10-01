@@ -68,7 +68,7 @@ export async function restoreBackup(
   // Une source muette se dit : sans elle, « aucune archive » se lirait
   // « aucune sauvegarde ». « Non lue » plutôt qu'« injoignable » : la cause
   // peut être une commande introuvable, que le détail nomme.
-  const partial = failures.length > 0 ? `\n⚠️ Source non lue :${failures.join(" ; ")}` : "";
+  const partial = failures.length > 0 ? `\n⚠️ Source non lue : ${failures.join(" ; ")}` : "";
 
   if (!query) {
     const lines = archives
