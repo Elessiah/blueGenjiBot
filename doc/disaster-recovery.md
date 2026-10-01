@@ -98,7 +98,7 @@ command -v mysqldump    # le script de sauvegarde appelle ce nom
 
 MariaDB 11.8 : `sudo apt install -y mariadb-server` **seulement si la distribution la livre** (Debian 13) — vérifier avec `apt-cache policy mariadb-server` avant d'installer, puis `mariadb --version`. Sinon, l'installer depuis le dépôt officiel de MariaDB (série 11.8). À faire **ici**, pas à l'étape 4 : une version trop ancienne ne se découvre sinon qu'à l'import.
 
-Sur Debian 13, `mysqldump` est fourni par **`mariadb-client` lui-même** (lien vers `mariadb-dump` ; `dpkg -S /usr/bin/mysqldump` répondait `mariadb-client` sur l'ancienne machine) : aucun paquet de plus. Sur une autre distribution, si `command -v mysqldump` ne rend rien, chercher le paquet qui fournit `/usr/bin/mysqldump` (`apt-file search /usr/bin/mysqldump`) : sans lui, la sauvegarde du lundi échoue sur un `mysqldump: command not found`.
+Sur Debian 13, `mysqldump` est fourni par **`mariadb-client` lui-même** (lien vers `mariadb-dump` ; `dpkg -S /usr/bin/mysqldump` répondait `mariadb-client` sur l'ancienne machine) : aucun paquet de plus. Sur une autre distribution, si `command -v mysqldump` ne rend rien, chercher le paquet qui fournit `/usr/bin/mysqldump` (`sudo apt install -y apt-file && sudo apt-file update && apt-file search /usr/bin/mysqldump`) : sans lui, la sauvegarde du lundi échoue sur un `mysqldump: command not found`.
 
 Créer aussi le **dossier des journaux** que nomment l'entrée pm2 du site (`--output`, `--error`) et les lignes de cron (`>> …/bluegenji-backup.log`) — même emplacement que sur l'ancienne machine. Absent, `pm2 start` échoue en `ENOENT`, et le shell du cron refuse la redirection **sans lancer le script** : aucune sauvegarde, et aucune trace de l'échec.
 
@@ -284,7 +284,7 @@ pour un logo, `data/quarantine/players/user-<user_id>-<nom>` pour un avatar, où
 `<nom>` est le dernier segment de `logo_url`. Les écarts se règlent dans cet ordre :
 
 - **Logo partagé** — d'abord vérifier, pour chaque ligne d'équipe sans fichier, qu'aucune autre équipe ne désigne le même logo (`SELECT id FROM bg_teams WHERE logo_url = '<logo_url>'`). S'il y en a une, le fichier en ligne est resté présent quoi qu'il soit arrivé (le masquage d'un logo partagé copie au lieu de déplacer) : on ne peut plus savoir s'il avait été rétabli. Clore la ligne comme supprimée (geste de « Ligne sans fichier nulle part », plus bas) — l'équipe signalée pourra renvoyer son logo —, **jamais** la rétablir sur la seule présence du fichier.
-- **Ligne sans fichier, logo non partagé, et `<nom>` présent dans `public/uploads/teams` (ou `avatars`)** : l'image a été rétablie après l'archive. Rejouer le rétablissement :
+- **Ligne sans fichier, logo non partagé, et `<nom>` présent dans `public/uploads/teams` (ou `avatars`)** : l'image a probablement été rétablie après l'archive — probablement seulement, le partage se jugeant au moment du masquage et non sur la base restaurée (une autre équipe a pu quitter ce logo entre-temps, et le fichier en ligne survivre à une suppression de la copie). **Le confirmer dans le salon de logs Discord** : chaque geste du staff y laisse une ligne (« Logo de l'équipe … rétabli par le staff » ou « … rétabli » pour un avatar, contre une suppression). Sans ligne de rétablissement, traiter comme supprimée (geste de « Ligne sans fichier nulle part », juste après). Confirmé, rejouer le rétablissement :
 
   ```sql
   UPDATE bg_teams SET logo_url = '<logo_url>' WHERE id = <team_id> AND logo_url IS NULL;
