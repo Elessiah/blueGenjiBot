@@ -210,8 +210,8 @@ test("un membre injoignable : les autres reçoivent, l'auteur reçoit la liste d
 });
 
 const NO_RECIPIENT_LOG = "sendAdhesion: aucun destinataire trouvé pour le rôle visé, envoi annulé.";
-const NO_RECIPIENT_NOTICE = "Echec de l'envoi des adhésions en message privé : aucun membre du rôle visé n'a été trouvé. " +
-  "Vérifiez la cible !";
+const NO_RECIPIENT_NOTICE = "Echec de l'envoi des adhésions en message privé : aucun membre du rôle visé n'a été trouvé, " +
+  "personne ne les a reçus. Vérifiez la cible !";
 
 test("rôle vide sans membre : l'auteur est avisé, le journal sans nom, échec", async () => {
   validPaths();
@@ -242,7 +242,7 @@ test("rôle vide nommé : l'avis nomme le rôle, sans mise en forme Discord", as
   assert.equal(ok, false);
   assert.deepEqual(rec.trace, [
     log(NO_RECIPIENT_LOG),
-    dm("author", String.raw`Echec de l'envoi des adhésions en message privé : aucun membre du rôle « \*\*Bureau\*\* \_2026\_ » n'a été trouvé. Vérifiez la cible !`),
+    dm("author", String.raw`Echec de l'envoi des adhésions en message privé : aucun membre du rôle « \*\*Bureau\*\* \_2026\_ » n'a été trouvé, personne ne les a reçus. Vérifiez la cible !`),
   ]);
 });
 
