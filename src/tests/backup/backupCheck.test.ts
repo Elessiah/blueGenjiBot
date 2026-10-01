@@ -600,6 +600,32 @@ test("checkLatestArchive ne tait pas le dossier local quand la commande manque e
   );
 });
 
+test("checkLatestArchive ne dit pas « aucune archive » quand une source n'a pas été lue", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bg-check-empty-"));
+  try {
+    const sources = { localDir: dir, remote: "store:b", identity: "/k/id.key" };
+    const missing: CommandRunner = async () => {
+      throw new MissingCommandError("rclone");
+    };
+    const logged: string[] = [];
+    const result = await checkLatestArchive(config({ sources }), { run: missing, log: (l) => logged.push(l) });
+    assert.equal(result.ok, false);
+    assert.equal(
+      result.detail,
+      "`rclone` introuvable dans les dossiers système où le bot le cherche — aucune archive dans l'autre source",
+    );
+    assert.match(logged.join("\n"), /stockage distant/);
+
+    const down = await checkLatestArchive(config({ sources }), {
+      run: fakeRun({ "rclone lsf": new Error("dial tcp") }),
+      log: () => {},
+    });
+    assert.equal(down.detail, "une source d'archives n'a pas répondu — aucune archive dans l'autre source");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("un autre échec garde la phrase d'origine", async () => {
   const failing: CommandRunner = async () => {
     throw new Error("dial tcp");
