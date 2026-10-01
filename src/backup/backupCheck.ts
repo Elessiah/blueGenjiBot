@@ -409,8 +409,9 @@ export async function checkLatestArchive(config: BackupCheckConfig, deps: Backup
   const log = deps.log ?? console.error;
   let archives;
   let failures: string[];
+  let missingCommand: string | null;
   try {
-    ({ archives, failures } = await listArchives(config.sources, deps.run ?? defaultRunner));
+    ({ archives, failures, missingCommand } = await listArchives(config.sources, deps.run ?? defaultRunner));
   } catch (error) {
     logFailure(log, label, error);
     return { label, ok: false, detail: failureDetail(error, "stockage des archives illisible") };
@@ -446,7 +447,8 @@ export async function checkLatestArchive(config: BackupCheckConfig, deps: Backup
     for (const failure of failures) {
       log(`[backup-check] ${label} : ${failure}`);
     }
-    return { label, ok: false, detail: `une source d'archives n'a pas répondu — seule ${verified}, peut-être pas la plus récente` };
+    const silent = missingCommand ? missingCommandText(missingCommand) : "une source d'archives n'a pas répondu";
+    return { label, ok: false, detail: `${silent} — seule ${verified}, peut-être pas la plus récente` };
   }
   return { label, ok: true, detail: verified };
 }

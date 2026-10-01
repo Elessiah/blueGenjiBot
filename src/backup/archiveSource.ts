@@ -266,6 +266,12 @@ export interface ArchiveListing {
    * stockage distant est simplement injoignable.
    */
   failures: string[];
+  /**
+   * Commande introuvable qui a fait taire une source, ou `null` : même quand
+   * l'autre source a répondu, l'exploitant doit lire « binaire à déplacer »,
+   * pas « stockage en panne ».
+   */
+  missingCommand: string | null;
 }
 
 /**
@@ -314,6 +320,7 @@ export async function listArchives(sources: ArchiveSources, run: CommandRunner =
   return {
     archives: [...found.values()].sort((a, b) => compareNewestFirst(a.name, b.name)),
     failures,
+    missingCommand: missing?.command ?? null,
   };
 }
 
