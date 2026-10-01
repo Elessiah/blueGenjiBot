@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>JSDoc: Source: notifications/deliver.js</title>
+    <title>JSDoc: Source: backup/archiveSource.js</title>
 
     <script src="scripts/prettify/prettify.js"> </script>
     <script src="scripts/prettify/lang-css.js"> </script>
@@ -17,7 +17,7 @@
 
 <div id="main">
 
-    <h1 class="page-title">Source: notifications/deliver.js</h1>
+    <h1 class="page-title">Source: backup/archiveSource.js</h1>
 
     
 
@@ -26,224 +26,202 @@
     
     <section>
         <article>
-            <pre class="prettyprint source linenums"><code>import { getBddInstance } from "../bdd/Bdd.js";
-import { sendLog } from "../safe/sendLog.js";
-import { findGuildMemberByHandle, parseDiscordHandle } from "../notifications/resolveHandle.js";
-import { capRefereeTargets, homeGuildIds, leadershipIds, MAX_REFEREE_DMS } from "../notifications/notifications.js";
-/**
- * Aucun serveur BlueGenji n'est joignable : l'envoi n'a pas eu lieu.
+            <pre class="prettyprint source linenums"><code>/**
+ * Archives chiffrées que `/restore-backup` sait restaurer, lues **sur la
+ * machine du bot** — jamais via Discord.
  *
- * Levée plutôt que rendue en bilan. Le bot répondait `200` en déclarant tous
- * les destinataires « introuvables » — donc absents du serveur, ce qui est un
- * **résultat** que le site garde pour définitif (il ne réécrit pas à qui n'est
- * pas membre). Une configuration absente n'est pas un résultat : la route en
- * fait un `503`, et le site rend sa réservation pour réessayer.
+ * La commande prenait la base **déchiffrée** en pièce jointe : toute la base
+ * partait en clair sur le CDN de Discord, sans durée connue, alors que les
+ * textes annoncent des sauvegardes « chiffrées, 30 jours au plus ». Elle lit
+ * désormais une archive `bluegenji-AAAA-MM-JJ.tar.age` (celles de
+ * `scripts/backup-onedrive.sh`) dans un dossier local, ou à défaut sur le
+ * stockage distant (remote rclone), la déchiffre sur place avec la clé age
+ * de l'exploitant, et n'en extrait que `database.sqlite`.
+ *
+ * Configuration (`.env` du bot) :
+ * - `BACKUP_ARCHIVE_DIR` : dossier local d'archives (facultatif) ;
+ * - `BACKUP_RCLONE_REMOTE` : remote et dossier distants, par exemple
+ *   `onedrive:BlueGenji/backups` (facultatif) ;
+ * - `BACKUP_AGE_IDENTITY` : clé privée age (défaut `~/.bluegenji-backup.key`).
  */
-export class HomeGuildUnavailableError extends Error {
-    constructor() {
-        super("HOME_GUILD_UNAVAILABLE");
-        this.name = "HomeGuildUnavailableError";
-    }
+import { execFile, spawn } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { promisify } from "node:util";
+const execFileAsync = promisify(execFile);
+/** Nom d'une archive écrite par `scripts/backup-onedrive.sh`. */
+export const ARCHIVE_NAME = /^bluegenji-(\d{4}-\d{2}-\d{2})\.tar\.age$/;
+/** Délai maximal d'une commande externe (listage, téléchargement, déchiffrement). */
+const COMMAND_TIMEOUT_MS = 5 * 60 * 1000;
+/** Exécuteur par défaut : `execFile`, sans shell (aucun argument n'est interprété). */
+const defaultRunner = async (command, args) => {
+    const { stdout } = await execFileAsync(command, args, { timeout: COMMAND_TIMEOUT_MS, maxBuffer: 1024 * 1024 });
+    return stdout;
+};
+/**
+ * Lit la configuration des sources dans l'environnement.
+ * @param env Environnement (par défaut `process.env`).
+ * @returns Les sources configurées.
+ */
+export function archiveSourcesFromEnv(env = process.env) {
+    return {
+        localDir: env.BACKUP_ARCHIVE_DIR?.trim() || null,
+        remote: env.BACKUP_RCLONE_REMOTE?.trim() || null,
+        identity: env.BACKUP_AGE_IDENTITY?.trim() || path.join(os.homedir(), ".bluegenji-backup.key"),
+    };
 }
 /**
- * Serveurs BlueGenji, seule population que le bot démarche.
- *
- * Un rappel de match ne s'envoie qu'à un joueur de BlueGenji : c'est la règle
- * posée côté site (« ils devront être sur le serveur Discord »), et elle borne
- * aussi le risque — sans elle, un tag mal saisi pourrait faire écrire le bot à
- * un inconnu croisé sur un serveur partenaire. Les identifiants viennent de
- * {@link homeGuildIds}.
- *
- * @param client Client Discord.
- * @returns Les serveurs joignables, vide si aucun n'est configuré ou atteint.
+ * Garde les seuls noms d'archive valides, du plus récent au plus ancien.
+ * @param names Noms bruts (listage d'un dossier ou d'un remote).
+ * @returns Les noms d'archive, triés par date décroissante, sans doublon.
  */
-async function fetchHomeGuilds(client) {
-    const guilds = [];
-    for (const guildId of homeGuildIds(process.env)) {
-        try {
-            guilds.push(await client.guilds.fetch(guildId));
-        }
-        catch {
-            // Serveur quitté ou identifiant faux : les autres suffisent peut-être.
-        }
-    }
-    return guilds;
+export function filterArchiveNames(names) {
+    const valid = names.map((name) => name.trim()).filter((name) => ARCHIVE_NAME.test(name));
+    return [...new Set(valid)].sort().reverse();
 }
 /**
- * Retrouve un destinataire **parmi les membres du serveur BlueGenji**.
+ * Désigne l'archive demandée parmi celles qui existent.
  *
- * L'ID prime quand l'app le connaît (compte lié par code Discord) : il évite la
- * recherche par tag. Dans les deux cas, la réponse vaut appartenance — un
- * `null` signifie « pas sur le serveur », donc pas d'envoi.
+ * Seul un nom **déjà listé** peut sortir : la saisie ne compose jamais un
+ * chemin, ce qui écarte toute traversée (`../`) et toute option déguisée.
+ * @param available Archives disponibles.
+ * @param query Date `AAAA-MM-JJ` ou nom exact d'archive.
+ * @returns L'archive retenue, ou `null`.
  */
-async function findMemberIn(guild, recipient) {
-    if (recipient.discordId) {
-        try {
-            return await guild.members.fetch(recipient.discordId);
-        }
-        catch {
-            // Membre inconnu de la guilde : on ne retombe pas sur le tag, l'ID est
-            // l'identité la plus sûre et son absence tranche déjà la question.
-            return null;
-        }
-    }
-    const parsed = recipient.handle ? parseDiscordHandle(recipient.handle) : null;
-    if (!parsed) {
-        return null;
-    }
-    if (parsed.kind === "id") {
-        try {
-            return await guild.members.fetch(parsed.discordId);
-        }
-        catch {
-            return null;
-        }
-    }
-    return findGuildMemberByHandle(guild, parsed);
+export function pickArchive(available, query) {
+    const wanted = query.trim();
+    const name = /^\d{4}-\d{2}-\d{2}$/.test(wanted) ? `bluegenji-${wanted}.tar.age` : wanted;
+    return available.find((archive) => archive.name === name) ?? null;
 }
 /**
- * Retrouve un destinataire sur **l'un** des serveurs BlueGenji — le premier qui
- * le connaît. Être membre de l'un suffit à être joignable.
+ * Liste les archives des deux sources. Une archive présente aux deux endroits
+ * est lue en local (pas de téléchargement).
+ * @param sources Sources configurées.
+ * @param run Exécuteur de commandes.
+ * @returns Les archives, de la plus récente à la plus ancienne.
+ * @throws Si aucune source n'est configurée, ou si toutes ont échoué.
  */
-async function findHomeMember(guilds, recipient) {
-    for (const guild of guilds) {
-        const member = await findMemberIn(guild, recipient);
-        if (member) {
-            return member;
-        }
+export async function listArchives(sources, run = defaultRunner) {
+    if (!sources.localDir &amp;&amp; !sources.remote) {
+        throw new Error("aucune source d'archives configurée (BACKUP_ARCHIVE_DIR ou BACKUP_RCLONE_REMOTE)");
     }
-    return null;
-}
-/**
- * Envoie un message privé à chaque destinataire présent sur l'un des serveurs
- * BlueGenji.
- *
- * @param client Client Discord.
- * @param message Texte déjà rédigé et borné par l'app.
- * @param recipients Destinataires normalisés et dédoublonnés.
- * @returns Le bilan de la distribution.
- * @throws {HomeGuildUnavailableError} Aucun serveur BlueGenji joignable : rien n'est parti.
- */
-export async function deliverDirectMessages(client, message, recipients) {
-    const report = { sent: 0, unresolved: [], failed: [] };
-    const guilds = await fetchHomeGuilds(client);
-    if (guilds.length === 0) {
-        // Sans serveur de référence, l'appartenance est invérifiable : on n'écrit à
-        // personne plutôt que d'écrire à n'importe qui — et on le **dit**, au lieu
-        // de déclarer tout le monde absent du serveur.
-        await sendLog(client, "notify/dm: aucun serveur BlueGenji joignable (GUILD_ID, sinon SERV_GENJI / SERV_RIVALS), aucun message envoyé.");
-        throw new HomeGuildUnavailableError();
-    }
-    for (const recipient of recipients) {
-        const member = await findHomeMember(guilds, recipient);
-        if (!member) {
-            report.unresolved.push(recipient.label);
-            continue;
-        }
+    const found = new Map();
+    const failures = [];
+    if (sources.remote) {
         try {
-            await member.send(message);
-            report.sent += 1;
-        }
-        catch {
-            report.failed.push(recipient.label);
-        }
-    }
-    return report;
-}
-/**
- * Alerte les arbitres : log de supervision **et** message privé à chaque membre
- * du rôle arbitre configuré, sur chaque serveur qui en a défini un.
- *
- * Les deux canaux, pas l'un ou l'autre : le log garde la trace consultable même
- * si aucun arbitre n'est joignable, et le DM sort le signalement du salon que
- * personne ne regarde en pleine soirée de tournoi.
- *
- * @param client Client Discord.
- * @param message Texte déjà rédigé et borné par l'app.
- * @returns Le bilan de la distribution aux arbitres.
- */
-export async function alertReferees(client, message) {
-    const report = { sent: 0, unresolved: [], failed: [] };
-    await sendLog(client, message);
-    const bdd = await getBddInstance();
-    const alreadyNotified = new Set();
-    for (const guild of client.guilds.cache.values()) {
-        const roleId = await bdd.getRefereeRole(guild.id);
-        if (!roleId) {
-            continue;
-        }
-        let members;
-        try {
-            const role = await guild.roles.fetch(roleId);
-            if (!role) {
-                report.unresolved.push(`${guild.name}: rôle ${roleId} introuvable`);
-                continue;
-            }
-            // Le cache des membres d'un rôle n'est peuplé que si la guilde entière a
-            // été récupérée : on force la récupération plutôt que d'alerter un sous-
-            // ensemble arbitraire des arbitres.
-            await guild.members.fetch();
-            members = [...role.members.values()];
-        }
-        catch {
-            report.unresolved.push(`${guild.name}: membres du rôle illisibles`);
-            continue;
-        }
-        // Borne dure, indépendante de ce qu'a choisi l'administrateur du serveur :
-        // un rôle large transformerait chaque signalement en envoi de masse, que
-        // Discord traite comme du spam.
-        const humans = members.filter((member) => !member.user.bot);
-        const { kept, skipped } = capRefereeTargets(humans);
-        if (skipped > 0) {
-            report.unresolved.push(`${guild.name}: ${skipped} membre(s) au-delà du plafond de ${MAX_REFEREE_DMS}`);
-            await sendLog(client, `notify/referees: role arbitre de ${guild.name} trop large (${humans.length} membres), ${skipped} non prevenu(s).`);
-        }
-        for (const member of kept) {
-            if (alreadyNotified.has(member.id)) {
-                continue;
-            }
-            alreadyNotified.add(member.id);
-            try {
-                await member.send(message);
-                report.sent += 1;
-            }
-            catch {
-                report.failed.push(member.user.username);
+            const out = await run("rclone", ["lsf", sources.remote, "--files-only", "--include", "bluegenji-*.tar.age"]);
+            for (const name of filterArchiveNames(out.split("\n"))) {
+                found.set(name, { name, location: "remote" });
             }
         }
+        catch (error) {
+            failures.push(`stockage distant : ${error.message}`);
+        }
     }
-    return report;
+    if (sources.localDir) {
+        try {
+            for (const name of filterArchiveNames(await fs.promises.readdir(sources.localDir))) {
+                found.set(name, { name, location: "local" });
+            }
+        }
+        catch (error) {
+            failures.push(`dossier local : ${error.message}`);
+        }
+    }
+    const configured = Number(Boolean(sources.localDir)) + Number(Boolean(sources.remote));
+    if (failures.length === configured) {
+        throw new Error(failures.join(" ; "));
+    }
+    return [...found.values()].sort((a, b) => (a.name &lt; b.name ? 1 : a.name > b.name ? -1 : 0));
 }
 /**
- * Alerte la direction de l'association : log de supervision **et** message
- * privé au propriétaire (`OWNER_ID`) et au président (`PRESIDENT`).
- *
- * Sert aux signalements du site (contenu illicite, contestation) : le salon de
- * logs garde la trace, le message privé sort l'alerte du salon. Les deux
- * destinataires sont joints **directement** par leur identifiant, sans passer
- * par les serveurs BlueGenji : ce sont eux qui administrent le bot, le bot les
- * connaît déjà.
- *
- * @param client Client Discord.
- * @param message Texte déjà rédigé et borné par l'app.
- * @returns Le bilan de la distribution.
+ * Met l'archive dans `workDir` (copie locale ou téléchargement).
+ * @param sources Sources configurées.
+ * @param archive Archive retenue par `pickArchive`.
+ * @param workDir Dossier de travail privé (créé par `mkdtemp`).
+ * @param run Exécuteur de commandes.
+ * @returns Le chemin de l'archive chiffrée dans `workDir`.
  */
-export async function alertLeadership(client, message) {
-    const report = { sent: 0, unresolved: [], failed: [] };
-    await sendLog(client, message);
-    for (const id of leadershipIds(process.env)) {
-        try {
-            const user = await client.users.fetch(id);
-            await user.send(message);
-            report.sent += 1;
-        }
-        catch {
-            report.failed.push(id);
-        }
+export async function fetchArchive(sources, archive, workDir, run = defaultRunner) {
+    const target = path.join(workDir, archive.name);
+    if (archive.location === "local" &amp;&amp; sources.localDir) {
+        await fs.promises.copyFile(path.join(sources.localDir, archive.name), target);
     }
-    return report;
+    else if (sources.remote) {
+        const remote = sources.remote.endsWith("/") || sources.remote.endsWith(":") ? sources.remote : `${sources.remote}/`;
+        await run("rclone", ["copyto", `${remote}${archive.name}`, target]);
+    }
+    else {
+        throw new Error("source de l'archive non configurée");
+    }
+    return target;
 }
-//# sourceMappingURL=deliver.js.map</code></pre>
+/**
+ * Déchiffre l'archive et n'en extrait que `database.sqlite`.
+ *
+ * `age` écrit dans un tube que `tar` lit : l'archive en clair — qui porte
+ * aussi le dump de la base du site — n'est jamais écrite sur disque.
+ * @param archivePath Archive chiffrée.
+ * @param identity Clé privée age.
+ * @param workDir Dossier de travail privé.
+ * @returns Le chemin de la base extraite.
+ */
+export function decryptDatabase(archivePath, identity, workDir) {
+    return new Promise((resolve, reject) => {
+        const age = spawn("age", ["--decrypt", "-i", identity, archivePath], { stdio: ["ignore", "pipe", "pipe"] });
+        const tar = spawn("tar", ["-x", "-f", "-", "-C", workDir, "database.sqlite"], { stdio: ["pipe", "ignore", "pipe"] });
+        const errors = [];
+        let pending = 2;
+        let failed = false;
+        const timer = setTimeout(() => {
+            age.kill();
+            tar.kill();
+        }, COMMAND_TIMEOUT_MS);
+        age.stdout.pipe(tar.stdin);
+        age.stderr.on("data", (chunk) => errors.push(`age: ${chunk.toString().trim()}`));
+        tar.stderr.on("data", (chunk) => errors.push(`tar: ${chunk.toString().trim()}`));
+        // Un tube rompu côté tar ne doit pas faire lever le processus du bot.
+        tar.stdin.on("error", () => { });
+        // Chaque processus se conclut une fois : `error` (binaire absent) peut être
+        // suivi ou non de `close` selon la version de Node.
+        const settled = new Set();
+        const done = (which, code) => {
+            if (settled.has(which)) {
+                return;
+            }
+            settled.add(which);
+            if (code !== 0) {
+                failed = true;
+                // L'autre extrémité du tube n'attendra rien de plus.
+                age.kill();
+                tar.kill();
+            }
+            pending--;
+            if (pending > 0) {
+                return;
+            }
+            clearTimeout(timer);
+            if (failed) {
+                reject(new Error(errors.join(" ; ") || "déchiffrement ou extraction impossible"));
+            }
+            else {
+                resolve(path.join(workDir, "database.sqlite"));
+            }
+        };
+        age.on("error", (error) => {
+            errors.push(`age: ${error.message}`);
+            done("age", 1);
+        });
+        tar.on("error", (error) => {
+            errors.push(`tar: ${error.message}`);
+            done("tar", 1);
+        });
+        age.on("close", (code) => done("age", code));
+        tar.on("close", (code) => done("tar", code));
+    });
+}
+//# sourceMappingURL=archiveSource.js.map</code></pre>
         </article>
     </section>
 

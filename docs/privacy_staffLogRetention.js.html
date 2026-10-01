@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>JSDoc: Source: notifications/deliver.js</title>
+    <title>JSDoc: Source: privacy/staffLogRetention.js</title>
 
     <script src="scripts/prettify/prettify.js"> </script>
     <script src="scripts/prettify/lang-css.js"> </script>
@@ -17,7 +17,7 @@
 
 <div id="main">
 
-    <h1 class="page-title">Source: notifications/deliver.js</h1>
+    <h1 class="page-title">Source: privacy/staffLogRetention.js</h1>
 
     
 
@@ -26,224 +26,184 @@
     
     <section>
         <article>
-            <pre class="prettyprint source linenums"><code>import { getBddInstance } from "../bdd/Bdd.js";
-import { sendLog } from "../safe/sendLog.js";
-import { findGuildMemberByHandle, parseDiscordHandle } from "../notifications/resolveHandle.js";
-import { capRefereeTargets, homeGuildIds, leadershipIds, MAX_REFEREE_DMS } from "../notifications/notifications.js";
-/**
- * Aucun serveur BlueGenji n'est joignable : l'envoi n'a pas eu lieu.
+            <pre class="prettyprint source linenums"><code>/**
+ * Conservation du journal privé du staff : le salon `INFO_SERV` et les
+ * messages privés que `sendLog` envoie au propriétaire (`OWNER_ID`).
  *
- * Levée plutôt que rendue en bilan. Le bot répondait `200` en déclarant tous
- * les destinataires « introuvables » — donc absents du serveur, ce qui est un
- * **résultat** que le site garde pour définitif (il ne réécrit pas à qui n'est
- * pas membre). Une configuration absente n'est pas un résultat : la route en
- * fait un `503`, et le site rend sa réservation pour réessayer.
+ * Avis d'exclusion, motifs libres (qui peuvent citer un pseudo), erreurs et
+ * journal du site s'y accumulaient sans limite. Deux règles :
+ *
+ * - **chaque nuit**, les messages **du bot** de plus de
+ *   `STAFF_LOG_RETENTION_DAYS` sont supprimés (`purgeStaffLogs`) — sauf ceux
+ *   qui décrivent une exclusion **en cours** : son motif est relu pour
+ *   prévenir l'exclu (`checkBan`), il vit autant qu'elle ;
+ * - **à la levée d'une exclusion** (`/unban`), ses messages sont supprimés
+ *   sur-le-champ (`deleteBanMessages`), quel que soit leur âge.
+ *
+ * Seuls les messages écrits par le bot sont touchés : ce que le staff écrit
+ * lui-même dans le salon n'est pas un journal du bot.
  */
-export class HomeGuildUnavailableError extends Error {
-    constructor() {
-        super("HOME_GUILD_UNAVAILABLE");
-        this.name = "HomeGuildUnavailableError";
-    }
+import { getBddInstance } from "../bdd/Bdd.js";
+import { STAFF_LOG_RETENTION_DAYS } from "../privacy/retentionPeriods.js";
+/** Plafond de suppressions par passe : Discord limite le débit, la nuit suivante reprend. */
+export const MAX_LOG_DELETIONS_PER_RUN = 500;
+/** Plafond de pages lues par salon et par passe (100 messages par page). */
+export const MAX_LOG_PAGES_PER_RUN = 200;
+/**
+ * Identifiants de messages du journal qu'une exclusion désigne.
+ * @param ban Ligne `Ban`.
+ * @returns Les identifiants renseignés (salon et messages privés confondus).
+ */
+export function banMessageIds(ban) {
+    return [ban.id_reason, ban.id_reason_owner, ban.id_notice_admin, ban.id_notice_owner].filter((id) => typeof id === "string" &amp;&amp; id.length > 0);
 }
 /**
- * Serveurs BlueGenji, seule population que le bot démarche.
- *
- * Un rappel de match ne s'envoie qu'à un joueur de BlueGenji : c'est la règle
- * posée côté site (« ils devront être sur le serveur Discord »), et elle borne
- * aussi le risque — sans elle, un tag mal saisi pourrait faire écrire le bot à
- * un inconnu croisé sur un serveur partenaire. Les identifiants viennent de
- * {@link homeGuildIds}.
- *
- * @param client Client Discord.
- * @returns Les serveurs joignables, vide si aucun n'est configuré ou atteint.
+ * Choisit, dans une page, les messages à supprimer.
+ * @param messages Page de messages.
+ * @param cutoff Instant (ms) avant lequel un message est périmé.
+ * @param botId Identifiant du bot : seuls ses messages sont visés.
+ * @param protectedIds Messages d'une exclusion en cours, jamais supprimés.
+ * @returns Les messages périmés à supprimer.
  */
-async function fetchHomeGuilds(client) {
-    const guilds = [];
-    for (const guildId of homeGuildIds(process.env)) {
-        try {
-            guilds.push(await client.guilds.fetch(guildId));
-        }
-        catch {
-            // Serveur quitté ou identifiant faux : les autres suffisent peut-être.
-        }
-    }
-    return guilds;
+export function selectExpiredLogMessages(messages, cutoff, botId, protectedIds) {
+    return messages.filter((message) => message.authorId === botId &amp;&amp; message.createdTimestamp &lt; cutoff &amp;&amp; !protectedIds.has(message.id));
+}
+/** Le plus grand de deux identifiants Discord (nombres sur 64 bits écrits en décimal). */
+function maxSnowflake(a, b) {
+    return BigInt(a) >= BigInt(b) ? a : b;
 }
 /**
- * Retrouve un destinataire **parmi les membres du serveur BlueGenji**.
+ * Parcourt un salon depuis son début et supprime les messages périmés.
  *
- * L'ID prime quand l'app le connaît (compte lié par code Discord) : il évite la
- * recherche par tag. Dans les deux cas, la réponse vaut appartenance — un
- * `null` signifie « pas sur le serveur », donc pas d'envoi.
+ * S'arrête au premier message récent (la suite l'est aussi), à une page vide,
+ * ou à l'un des plafonds. Une suppression qui échoue (message déjà effacé)
+ * n'interrompt pas la passe.
+ * @param channel Salon à parcourir.
+ * @param cutoff Instant (ms) avant lequel un message est périmé.
+ * @param botId Identifiant du bot.
+ * @param protectedIds Messages à ne jamais supprimer.
+ * @param budget Suppressions encore permises pendant cette passe.
+ * @returns Le nombre de messages supprimés.
  */
-async function findMemberIn(guild, recipient) {
-    if (recipient.discordId) {
-        try {
-            return await guild.members.fetch(recipient.discordId);
+export async function purgeLogChannel(channel, cutoff, botId, protectedIds, budget = MAX_LOG_DELETIONS_PER_RUN) {
+    let cursor = "0";
+    let deleted = 0;
+    for (let page = 0; page &lt; MAX_LOG_PAGES_PER_RUN &amp;&amp; deleted &lt; budget; page++) {
+        const messages = await channel.fetchAfter(cursor);
+        if (messages.length === 0) {
+            break;
         }
-        catch {
-            // Membre inconnu de la guilde : on ne retombe pas sur le tag, l'ID est
-            // l'identité la plus sûre et son absence tranche déjà la question.
-            return null;
+        for (const message of selectExpiredLogMessages(messages, cutoff, botId, protectedIds)) {
+            if (deleted >= budget) {
+                break;
+            }
+            const ok = await message.delete().then(() => true, () => false);
+            if (ok) {
+                deleted++;
+            }
         }
+        if (messages.some((message) => message.createdTimestamp >= cutoff)) {
+            break;
+        }
+        cursor = messages.reduce((max, message) => maxSnowflake(max, message.id), cursor);
     }
-    const parsed = recipient.handle ? parseDiscordHandle(recipient.handle) : null;
-    if (!parsed) {
+    return deleted;
+}
+/**
+ * Adapte un salon discord.js (texte ou message privé) à `LogChannelLike`.
+ * @param channel Salon discord.js.
+ * @returns L'adaptateur.
+ */
+function asLogChannel(channel) {
+    return {
+        fetchAfter: async (after) => {
+            const page = await channel.messages.fetch({ after, limit: 100 });
+            return [...page.values()].map((message) => ({
+                id: message.id,
+                authorId: message.author.id,
+                createdTimestamp: message.createdTimestamp,
+                delete: () => message.delete(),
+            }));
+        },
+    };
+}
+/**
+ * Identifiants des messages qu'une exclusion en cours protège.
+ *
+ * Lève si la table ne peut pas être lue : purger sans savoir quelles
+ * exclusions sont en cours effacerait leurs motifs.
+ * @returns L'ensemble des identifiants protégés.
+ */
+async function activeBanMessageIds() {
+    const bdd = await getBddInstance();
+    // `get` lève sur une base fermée (restauration en cours) : la purge n'est
+    // alors pas jouée, jamais jouée sans protection.
+    const bans = (await bdd.get("Ban", ["*"]));
+    return new Set(bans.flatMap(banMessageIds));
+}
+/**
+ * Supprime les messages du bot de plus de `STAFF_LOG_RETENTION_DAYS` dans le
+ * salon du staff et dans les messages privés au propriétaire.
+ * @param client Client Discord connecté.
+ * @param now Instant de référence, en millisecondes.
+ * @returns Le nombre de messages supprimés, ou `null` si la purge n'a pas été jouée (client pas prêt).
+ * @throws Si la liste des exclusions en cours ne peut pas être lue.
+ */
+export async function purgeStaffLogs(client, now = Date.now()) {
+    if (!client.isReady()) {
         return null;
     }
-    if (parsed.kind === "id") {
-        try {
-            return await guild.members.fetch(parsed.discordId);
-        }
-        catch {
-            return null;
-        }
-    }
-    return findGuildMemberByHandle(guild, parsed);
-}
-/**
- * Retrouve un destinataire sur **l'un** des serveurs BlueGenji — le premier qui
- * le connaît. Être membre de l'un suffit à être joignable.
- */
-async function findHomeMember(guilds, recipient) {
-    for (const guild of guilds) {
-        const member = await findMemberIn(guild, recipient);
-        if (member) {
-            return member;
+    const botId = client.user.id;
+    const protectedIds = await activeBanMessageIds();
+    const cutoff = now - STAFF_LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+    let deleted = 0;
+    if (process.env.INFO_SERV) {
+        const channel = (await client.channels.fetch(process.env.INFO_SERV));
+        if (channel &amp;&amp; "messages" in channel) {
+            deleted += await purgeLogChannel(asLogChannel(channel), cutoff, botId, protectedIds);
         }
     }
-    return null;
+    if (process.env.OWNER_ID) {
+        const owner = await client.users.fetch(process.env.OWNER_ID);
+        const dm = await owner.createDM();
+        deleted += await purgeLogChannel(asLogChannel(dm), cutoff, botId, protectedIds, Math.max(0, MAX_LOG_DELETIONS_PER_RUN - deleted));
+    }
+    return deleted;
 }
 /**
- * Envoie un message privé à chaque destinataire présent sur l'un des serveurs
- * BlueGenji.
+ * Supprime les messages du journal qui décrivent une exclusion levée.
  *
+ * Au mieux : un message déjà effacé (ménage du staff, purge d'un an) ou un
+ * salon injoignable n'empêche pas les autres de partir. Ce qui resterait est
+ * repris par la purge de nuit, la ligne `Ban` ne le protégeant plus.
  * @param client Client Discord.
- * @param message Texte déjà rédigé et borné par l'app.
- * @param recipients Destinataires normalisés et dédoublonnés.
- * @returns Le bilan de la distribution.
- * @throws {HomeGuildUnavailableError} Aucun serveur BlueGenji joignable : rien n'est parti.
+ * @param ban Ligne `Ban` de l'exclusion levée (relue avant sa suppression).
+ * @returns Le nombre de messages supprimés.
  */
-export async function deliverDirectMessages(client, message, recipients) {
-    const report = { sent: 0, unresolved: [], failed: [] };
-    const guilds = await fetchHomeGuilds(client);
-    if (guilds.length === 0) {
-        // Sans serveur de référence, l'appartenance est invérifiable : on n'écrit à
-        // personne plutôt que d'écrire à n'importe qui — et on le **dit**, au lieu
-        // de déclarer tout le monde absent du serveur.
-        await sendLog(client, "notify/dm: aucun serveur BlueGenji joignable (GUILD_ID, sinon SERV_GENJI / SERV_RIVALS), aucun message envoyé.");
-        throw new HomeGuildUnavailableError();
-    }
-    for (const recipient of recipients) {
-        const member = await findHomeMember(guilds, recipient);
-        if (!member) {
-            report.unresolved.push(recipient.label);
-            continue;
-        }
-        try {
-            await member.send(message);
-            report.sent += 1;
-        }
-        catch {
-            report.failed.push(recipient.label);
+export async function deleteBanMessages(client, ban) {
+    const attempts = [];
+    const settle = (task) => task.then(() => true, () => false);
+    const channelIds = [ban.id_reason, ban.id_notice_admin].filter((id) => !!id);
+    if (process.env.INFO_SERV &amp;&amp; channelIds.length > 0) {
+        const channel = await client.channels.fetch(process.env.INFO_SERV).catch(() => null);
+        if (channel &amp;&amp; "messages" in channel) {
+            const text = channel;
+            attempts.push(...channelIds.map((id) => settle(text.messages.delete(id))));
         }
     }
-    return report;
+    const dmIds = [ban.id_reason_owner, ban.id_notice_owner].filter((id) => !!id);
+    if (process.env.OWNER_ID &amp;&amp; dmIds.length > 0) {
+        const dm = await client.users
+            .fetch(process.env.OWNER_ID)
+            .then((owner) => owner.createDM())
+            .catch(() => null);
+        if (dm) {
+            attempts.push(...dmIds.map((id) => settle(dm.messages.delete(id))));
+        }
+    }
+    return (await Promise.all(attempts)).filter(Boolean).length;
 }
-/**
- * Alerte les arbitres : log de supervision **et** message privé à chaque membre
- * du rôle arbitre configuré, sur chaque serveur qui en a défini un.
- *
- * Les deux canaux, pas l'un ou l'autre : le log garde la trace consultable même
- * si aucun arbitre n'est joignable, et le DM sort le signalement du salon que
- * personne ne regarde en pleine soirée de tournoi.
- *
- * @param client Client Discord.
- * @param message Texte déjà rédigé et borné par l'app.
- * @returns Le bilan de la distribution aux arbitres.
- */
-export async function alertReferees(client, message) {
-    const report = { sent: 0, unresolved: [], failed: [] };
-    await sendLog(client, message);
-    const bdd = await getBddInstance();
-    const alreadyNotified = new Set();
-    for (const guild of client.guilds.cache.values()) {
-        const roleId = await bdd.getRefereeRole(guild.id);
-        if (!roleId) {
-            continue;
-        }
-        let members;
-        try {
-            const role = await guild.roles.fetch(roleId);
-            if (!role) {
-                report.unresolved.push(`${guild.name}: rôle ${roleId} introuvable`);
-                continue;
-            }
-            // Le cache des membres d'un rôle n'est peuplé que si la guilde entière a
-            // été récupérée : on force la récupération plutôt que d'alerter un sous-
-            // ensemble arbitraire des arbitres.
-            await guild.members.fetch();
-            members = [...role.members.values()];
-        }
-        catch {
-            report.unresolved.push(`${guild.name}: membres du rôle illisibles`);
-            continue;
-        }
-        // Borne dure, indépendante de ce qu'a choisi l'administrateur du serveur :
-        // un rôle large transformerait chaque signalement en envoi de masse, que
-        // Discord traite comme du spam.
-        const humans = members.filter((member) => !member.user.bot);
-        const { kept, skipped } = capRefereeTargets(humans);
-        if (skipped > 0) {
-            report.unresolved.push(`${guild.name}: ${skipped} membre(s) au-delà du plafond de ${MAX_REFEREE_DMS}`);
-            await sendLog(client, `notify/referees: role arbitre de ${guild.name} trop large (${humans.length} membres), ${skipped} non prevenu(s).`);
-        }
-        for (const member of kept) {
-            if (alreadyNotified.has(member.id)) {
-                continue;
-            }
-            alreadyNotified.add(member.id);
-            try {
-                await member.send(message);
-                report.sent += 1;
-            }
-            catch {
-                report.failed.push(member.user.username);
-            }
-        }
-    }
-    return report;
-}
-/**
- * Alerte la direction de l'association : log de supervision **et** message
- * privé au propriétaire (`OWNER_ID`) et au président (`PRESIDENT`).
- *
- * Sert aux signalements du site (contenu illicite, contestation) : le salon de
- * logs garde la trace, le message privé sort l'alerte du salon. Les deux
- * destinataires sont joints **directement** par leur identifiant, sans passer
- * par les serveurs BlueGenji : ce sont eux qui administrent le bot, le bot les
- * connaît déjà.
- *
- * @param client Client Discord.
- * @param message Texte déjà rédigé et borné par l'app.
- * @returns Le bilan de la distribution.
- */
-export async function alertLeadership(client, message) {
-    const report = { sent: 0, unresolved: [], failed: [] };
-    await sendLog(client, message);
-    for (const id of leadershipIds(process.env)) {
-        try {
-            const user = await client.users.fetch(id);
-            await user.send(message);
-            report.sent += 1;
-        }
-        catch {
-            report.failed.push(id);
-        }
-    }
-    return report;
-}
-//# sourceMappingURL=deliver.js.map</code></pre>
+//# sourceMappingURL=staffLogRetention.js.map</code></pre>
         </article>
     </section>
 

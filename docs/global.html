@@ -225,6 +225,130 @@ chaque nuit, l'effacement a lieu dans la nuit qui suit cette échéance
 
         
             
+<h4 class="name" id="ARCHIVE_NAME"><span class="type-signature">(constant) </span>ARCHIVE_NAME<span class="type-signature"></span></h4>
+
+
+
+
+<div class="description">
+    Nom d'une archive écrite par `scripts/backup-onedrive.sh`.
+</div>
+
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="backup_archiveSource.js.html">backup/archiveSource.js</a>, <a href="backup_archiveSource.js.html#line26">line 26</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+        
+            
+<h4 class="name" id="COMMAND_TIMEOUT_MS"><span class="type-signature">(constant) </span>COMMAND_TIMEOUT_MS<span class="type-signature"></span></h4>
+
+
+
+
+<div class="description">
+    Délai maximal d'une commande externe (listage, téléchargement, déchiffrement).
+</div>
+
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="backup_archiveSource.js.html">backup/archiveSource.js</a>, <a href="backup_archiveSource.js.html#line28">line 28</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+        
+            
 <h4 class="name" id="CONFIGURED_GUILDS_SQL"><span class="type-signature">(constant) </span>CONFIGURED_GUILDS_SQL<span class="type-signature"></span></h4>
 
 
@@ -529,6 +653,73 @@ que la sauvegarde emporte.
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
         <a href="feed_feedPrivacy.js.html">feed/feedPrivacy.js</a>, <a href="feed_feedPrivacy.js.html#line23">line 23</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+        
+            
+<h4 class="name" id="FEED_EVENT_RETENTION_DAYS"><span class="type-signature">(constant) </span>FEED_EVENT_RETENTION_DAYS<span class="type-signature"></span></h4>
+
+
+
+
+<div class="description">
+    Durée de conservation du fil d'activité (`FeedEvent`) : une ligne par relais,
+`/scrim` ou `/recrute` (heure exacte, serveur, niveau ou rôle). Alignée sur
+`ACTIVITY_AUTHOR_RETENTION_DAYS` : au-delà, l'activité ne survit qu'en
+nombres par jour (`ActivityDaily`), et une ligne datée à la seconde
+permettrait encore de la rattacher à une personne. Purgée dans la nuit qui
+suit l'échéance.
+</div>
+
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="privacy_retentionPeriods.js.html">privacy/retentionPeriods.js</a>, <a href="privacy_retentionPeriods.js.html#line27">line 27</a>
     </li></ul></dd>
     
 
@@ -940,13 +1131,13 @@ serveur).
 
         
             
-<h4 class="name" id="KEPT_ROLLBACKS"><span class="type-signature">(constant) </span>KEPT_ROLLBACKS<span class="type-signature"></span></h4>
+<h4 class="name" id="LISTED_ARCHIVES"><span class="type-signature">(constant) </span>LISTED_ARCHIVES<span class="type-signature"></span></h4>
 
 
 
 
 <div class="description">
-    Nombre de copies de secours conservées après une restauration réussie.
+    Nombre d'archives montrées quand la commande est lancée sans `archive`.
 </div>
 
 
@@ -984,7 +1175,7 @@ serveur).
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="backup_restoreDatabase.js.html">backup/restoreDatabase.js</a>, <a href="backup_restoreDatabase.js.html#line9">line 9</a>
+        <a href="commandsHandlers_admin_restoreBackup.js.html">commandsHandlers/admin/restoreBackup.js</a>, <a href="commandsHandlers_admin_restoreBackup.js.html#line12">line 12</a>
     </li></ul></dd>
     
 
@@ -1171,6 +1362,130 @@ serveur).
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
         <a href="safe_errorGuards.js.html">safe/errorGuards.js</a>, <a href="safe_errorGuards.js.html#line71">line 71</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+        
+            
+<h4 class="name" id="MAX_LOG_DELETIONS_PER_RUN"><span class="type-signature">(constant) </span>MAX_LOG_DELETIONS_PER_RUN<span class="type-signature"></span></h4>
+
+
+
+
+<div class="description">
+    Plafond de suppressions par passe : Discord limite le débit, la nuit suivante reprend.
+</div>
+
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="privacy_staffLogRetention.js.html">privacy/staffLogRetention.js</a>, <a href="privacy_staffLogRetention.js.html#line21">line 21</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+        
+            
+<h4 class="name" id="MAX_LOG_PAGES_PER_RUN"><span class="type-signature">(constant) </span>MAX_LOG_PAGES_PER_RUN<span class="type-signature"></span></h4>
+
+
+
+
+<div class="description">
+    Plafond de pages lues par salon et par passe (100 messages par page).
+</div>
+
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="privacy_staffLogRetention.js.html">privacy/staffLogRetention.js</a>, <a href="privacy_staffLogRetention.js.html#line23">line 23</a>
     </li></ul></dd>
     
 
@@ -1700,6 +2015,68 @@ base (`Bdd.initDatabase`) — un module nouveau ne doit pas reprendre ces noms.
 
         
             
+<h4 class="name" id="RECRUIT_ROLE_CHOICES"><span class="type-signature">(constant) </span>RECRUIT_ROLE_CHOICES<span class="type-signature"></span></h4>
+
+
+
+
+<div class="description">
+    Rôles recherchés par `/recrute` : les rôles d'équipe du site BlueGenji.
+</div>
+
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="config_searchChoices.js.html">config/searchChoices.js</a>, <a href="config_searchChoices.js.html#line20">line 20</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+        
+            
 <h4 class="name" id="RESOLVE_BUDGET_MS"><span class="type-signature">(constant) </span>RESOLVE_BUDGET_MS<span class="type-signature"></span></h4>
 
 
@@ -1963,6 +2340,133 @@ précédente reste écoutée : sa réponse tardive compte toujours.
 
         
             
+<h4 class="name" id="ROLLBACK_RETENTION_DAYS"><span class="type-signature">(constant) </span>ROLLBACK_RETENTION_DAYS<span class="type-signature"></span></h4>
+
+
+
+
+<div class="description">
+    Durée de conservation d'une copie de secours écrite par `/restore-backup`
+(`database.sqlite.avant-<date>`). Alignée sur la conservation des
+sauvegardes chiffrées (`RETENTION_DAYS` de `scripts/backup-onedrive.sh`,
+`BACKUP_RETENTION_DAYS` côté site) : la copie est la base d'avant, en clair.
+</div>
+
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="privacy_retentionPeriods.js.html">privacy/retentionPeriods.js</a>, <a href="privacy_retentionPeriods.js.html#line42">line 42</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+        
+            
+<h4 class="name" id="ROLLBACK_STAMP"><span class="type-signature">(constant) </span>ROLLBACK_STAMP<span class="type-signature"></span></h4>
+
+
+
+
+<div class="description">
+    Suffixe horodaté d'une copie de secours : `toISOString()` dont `:` et `.` sont devenus `-`.
+</div>
+
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="backup_restoreDatabase.js.html">backup/restoreDatabase.js</a>, <a href="backup_restoreDatabase.js.html#line62">line 62</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+        
+            
 <h4 class="name" id="SCRIM_GAME"><span class="type-signature">(constant) </span>SCRIM_GAME<span class="type-signature"></span></h4>
 
 
@@ -2007,7 +2511,7 @@ précédente reste écoutée : sa réponse tardive compte toujours.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="commandsHandlers_scrim.js.html">commandsHandlers/scrim.js</a>, <a href="commandsHandlers_scrim.js.html#line19">line 19</a>
+        <a href="commandsHandlers_scrim.js.html">commandsHandlers/scrim.js</a>, <a href="commandsHandlers_scrim.js.html#line20">line 20</a>
     </li></ul></dd>
     
 
@@ -2069,7 +2573,69 @@ précédente reste écoutée : sa réponse tardive compte toujours.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="commandsHandlers_scrim.js.html">commandsHandlers/scrim.js</a>, <a href="commandsHandlers_scrim.js.html#line21">line 21</a>
+        <a href="commandsHandlers_scrim.js.html">commandsHandlers/scrim.js</a>, <a href="commandsHandlers_scrim.js.html#line22">line 22</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+        
+            
+<h4 class="name" id="SCRIM_LEVEL_CHOICES"><span class="type-signature">(constant) </span>SCRIM_LEVEL_CHOICES<span class="type-signature"></span></h4>
+
+
+
+
+<div class="description">
+    Niveaux d'un scrim — ceux que la description de la commande citait déjà.
+</div>
+
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="config_searchChoices.js.html">config/searchChoices.js</a>, <a href="config_searchChoices.js.html#line14">line 14</a>
     </li></ul></dd>
     
 
@@ -2261,7 +2827,73 @@ horodatage, un compteur de salons, un niveau.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="backup_restoreDatabase.js.html">backup/restoreDatabase.js</a>, <a href="backup_restoreDatabase.js.html#line7">line 7</a>
+        <a href="backup_restoreDatabase.js.html">backup/restoreDatabase.js</a>, <a href="backup_restoreDatabase.js.html#line8">line 8</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+        
+            
+<h4 class="name" id="STAFF_LOG_RETENTION_DAYS"><span class="type-signature">(constant) </span>STAFF_LOG_RETENTION_DAYS<span class="type-signature"></span></h4>
+
+
+
+
+<div class="description">
+    Durée de conservation des messages du journal privé du staff (salon
+`INFO_SERV` et messages privés envoyés à `OWNER_ID` par `sendLog`) :
+avis d'exclusion, motifs, erreurs. Un an, comme les journaux d'exclusion
+du site. Le motif d'une exclusion **en cours** est gardé tant qu'elle dure
+(il est relu pour prévenir l'exclu), puis effacé à sa levée (`/unban`).
+</div>
+
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="privacy_retentionPeriods.js.html">privacy/retentionPeriods.js</a>, <a href="privacy_retentionPeriods.js.html#line35">line 35</a>
     </li></ul></dd>
     
 
@@ -2591,7 +3223,7 @@ partenaires ajoutes dynamiquement) sont completees a part par
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="config_commands.js.html">config/commands.js</a>, <a href="config_commands.js.html#line43">line 43</a>
+        <a href="config_commands.js.html">config/commands.js</a>, <a href="config_commands.js.html#line44">line 44</a>
     </li></ul></dd>
     
 
@@ -3393,6 +4025,107 @@ nominal de cet échec est justement que le message a déjà été supprimé.
 
 
 
+
+
+
+
+
+        
+            
+
+    
+
+    
+    <h4 class="name" id="activeBanMessageIds"><span class="type-signature">(async) </span>activeBanMessageIds<span class="signature">()</span><span class="type-signature"></span></h4>
+    
+
+    
+
+
+
+<div class="description">
+    Identifiants des messages qu'une exclusion en cours protège.
+
+Lève si la table ne peut pas être lue : purger sans savoir quelles
+exclusions sont en cours effacerait leurs motifs.
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="privacy_staffLogRetention.js.html">privacy/staffLogRetention.js</a>, <a href="privacy_staffLogRetention.js.html#line109">line 109</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5>Returns:</h5>
+
+        
+<div class="param-desc">
+    L'ensemble des identifiants protégés.
+</div>
+
+
+
+    
 
 
 
@@ -4375,7 +5108,7 @@ conservation. N'échoue jamais bruyamment : l'erreur est signalée.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="privacy_dataRetention.js.html">privacy/dataRetention.js</a>, <a href="privacy_dataRetention.js.html#line30">line 30</a>
+        <a href="privacy_dataRetention.js.html">privacy/dataRetention.js</a>, <a href="privacy_dataRetention.js.html#line38">line 38</a>
     </li></ul></dd>
     
 
@@ -4597,6 +5330,290 @@ Le message est envoyé via `safeMsgReply`, puis supprime avec `setTimeout`.
 
 
 
+
+
+
+
+
+        
+            
+
+    
+
+    
+    <h4 class="name" id="archiveSourcesFromEnv"><span class="type-signature"></span>archiveSourcesFromEnv<span class="signature">(env)</span><span class="type-signature"></span></h4>
+    
+
+    
+
+
+
+<div class="description">
+    Lit la configuration des sources dans l'environnement.
+</div>
+
+
+
+
+
+
+
+
+
+    <h5>Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>env</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Environnement (par défaut `process.env`).</td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="backup_archiveSource.js.html">backup/archiveSource.js</a>, <a href="backup_archiveSource.js.html#line39">line 39</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5>Returns:</h5>
+
+        
+<div class="param-desc">
+    Les sources configurées.
+</div>
+
+
+
+    
+
+
+
+
+
+        
+            
+
+    
+
+    
+    <h4 class="name" id="asLogChannel"><span class="type-signature"></span>asLogChannel<span class="signature">(channel)</span><span class="type-signature"></span></h4>
+    
+
+    
+
+
+
+<div class="description">
+    Adapte un salon discord.js (texte ou message privé) à `LogChannelLike`.
+</div>
+
+
+
+
+
+
+
+
+
+    <h5>Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>channel</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Salon discord.js.</td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="privacy_staffLogRetention.js.html">privacy/staffLogRetention.js</a>, <a href="privacy_staffLogRetention.js.html#line89">line 89</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5>Returns:</h5>
+
+        
+<div class="param-desc">
+    L'adaptateur.
+</div>
+
+
+
+    
 
 
 
@@ -5119,6 +6136,148 @@ doit pas suffire a la publier, donc tout est refuse.
         
 <div class="param-desc">
     `true` si l'utilisateur est déjà banni ou banni avec succès; `false` si préconditions/permissions échouent ou erreur base/log.
+</div>
+
+
+
+    
+
+
+
+
+
+        
+            
+
+    
+
+    
+    <h4 class="name" id="banMessageIds"><span class="type-signature"></span>banMessageIds<span class="signature">(ban)</span><span class="type-signature"></span></h4>
+    
+
+    
+
+
+
+<div class="description">
+    Identifiants de messages du journal qu'une exclusion désigne.
+</div>
+
+
+
+
+
+
+
+
+
+    <h5>Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>ban</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Ligne `Ban`.</td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="privacy_staffLogRetention.js.html">privacy/staffLogRetention.js</a>, <a href="privacy_staffLogRetention.js.html#line29">line 29</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5>Returns:</h5>
+
+        
+<div class="param-desc">
+    Les identifiants renseignés (salon et messages privés confondus).
 </div>
 
 
@@ -7212,7 +8371,7 @@ Met ensuite à jour la date du prochain envoi pour chaque intervalle traite.
     
 
     
-    <h4 class="name" id="checkMessageValidity"><span class="type-signature">(async) </span>checkMessageValidity<span class="signature">(client, service, messageContentLower, message, hasValidService)</span><span class="type-signature"></span></h4>
+    <h4 class="name" id="checkMessageValidity"><span class="type-signature">(async) </span>checkMessageValidity<span class="signature">(client, service, messageContentLower, message, hasValidService, banCheck)</span><span class="type-signature"></span></h4>
     
 
     
@@ -7343,6 +8502,24 @@ Met ensuite à jour la date du prochain envoi pour chaque intervalle traite.
         </tr>
 
     
+
+        <tr>
+            
+                <td class="name"><code>banCheck</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Verdict d'exclusion partagé par tous les services d'un même message (voir `BanCheckMemo`).</td>
+        </tr>
+
+    
     </tbody>
 </table>
 
@@ -7380,7 +8557,7 @@ Met ensuite à jour la date du prochain envoi pour chaque intervalle traite.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="messages_checkMessageValidity.js.html">messages/checkMessageValidity.js</a>, <a href="messages_checkMessageValidity.js.html#line15">line 15</a>
+        <a href="messages_checkMessageValidity.js.html">messages/checkMessageValidity.js</a>, <a href="messages_checkMessageValidity.js.html#line16">line 16</a>
     </li></ul></dd>
     
 
@@ -7762,6 +8939,170 @@ Supprime l'intervalle de la base si toutes les cibles sont absentes.
 
 
 
+
+
+
+
+
+        
+            
+
+    
+
+    
+    <h4 class="name" id="choiceLabel"><span class="type-signature"></span>choiceLabel<span class="signature">(choices, value)</span><span class="type-signature"></span></h4>
+    
+
+    
+
+
+
+<div class="description">
+    Libellé d'une valeur reçue, ou `null` si elle n'est pas dans la liste.
+
+Discord impose déjà les choix ; la vérification sert au client resté sur
+l'ancienne définition (texte libre) tant que ses commandes ne sont pas
+rafraîchies.
+</div>
+
+
+
+
+
+
+
+
+
+    <h5>Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>choices</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Liste fermée.</td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>value</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Valeur reçue de l'interaction.</td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="config_searchChoices.js.html">config/searchChoices.js</a>, <a href="config_searchChoices.js.html#line37">line 37</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5>Returns:</h5>
+
+        
+<div class="param-desc">
+    Le libellé, ou `null` pour une valeur hors liste.
+</div>
+
+
+
+    
 
 
 
@@ -8521,6 +9862,187 @@ combien d'occurrences ont été étouffées.
     
 
     
+    <h4 class="name" id="decryptDatabase"><span class="type-signature"></span>decryptDatabase<span class="signature">(archivePath, identity, workDir)</span><span class="type-signature"></span></h4>
+    
+
+    
+
+
+
+<div class="description">
+    Déchiffre l'archive et n'en extrait que `database.sqlite`.
+
+`age` écrit dans un tube que `tar` lit : l'archive en clair — qui porte
+aussi le dump de la base du site — n'est jamais écrite sur disque.
+</div>
+
+
+
+
+
+
+
+
+
+    <h5>Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>archivePath</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Archive chiffrée.</td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>identity</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Clé privée age.</td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>workDir</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Dossier de travail privé.</td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="backup_archiveSource.js.html">backup/archiveSource.js</a>, <a href="backup_archiveSource.js.html#line142">line 142</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5>Returns:</h5>
+
+        
+<div class="param-desc">
+    Le chemin de la base extraite.
+</div>
+
+
+
+    
+
+
+
+
+
+        
+            
+
+    
+
+    
     <h4 class="name" id="dedupeRecipients"><span class="type-signature"></span>dedupeRecipients<span class="signature">(recipients)</span><span class="type-signature"></span></h4>
     
 
@@ -8657,6 +10179,94 @@ minuscules — les usernames Discord ne sont pas sensibles à la casse.
 
 
     
+
+
+
+
+
+        
+            
+
+    
+
+    
+    <h4 class="name" id="defaultRunner"><span class="type-signature">(async) </span>defaultRunner<span class="signature">()</span><span class="type-signature"></span></h4>
+    
+
+    
+
+
+
+<div class="description">
+    Exécuteur par défaut : `execFile`, sans shell (aucun argument n'est interprété).
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="backup_archiveSource.js.html">backup/archiveSource.js</a>, <a href="backup_archiveSource.js.html#line30">line 30</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -8949,6 +10559,170 @@ minuscules — les usernames Discord ne sont pas sensibles à la casse.
 
 
 
+
+
+
+
+
+        
+            
+
+    
+
+    
+    <h4 class="name" id="deleteBanMessages"><span class="type-signature"></span>deleteBanMessages<span class="signature">(client, ban)</span><span class="type-signature"></span></h4>
+    
+
+    
+
+
+
+<div class="description">
+    Supprime les messages du journal qui décrivent une exclusion levée.
+
+Au mieux : un message déjà effacé (ménage du staff, purge d'un an) ou un
+salon injoignable n'empêche pas les autres de partir. Ce qui resterait est
+repris par la purge de nuit, la ligne `Ban` ne le protégeant plus.
+</div>
+
+
+
+
+
+
+
+
+
+    <h5>Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>client</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Client Discord.</td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>ban</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Ligne `Ban` de l'exclusion levée (relue avant sa suppression).</td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="privacy_staffLogRetention.js.html">privacy/staffLogRetention.js</a>, <a href="privacy_staffLogRetention.js.html#line155">line 155</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5>Returns:</h5>
+
+        
+<div class="param-desc">
+    Le nombre de messages supprimés.
+</div>
+
+
+
+    
 
 
 
@@ -10608,7 +12382,7 @@ Ce qui reste est repris par le rattrapage suivant.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="privacy_dataRetention.js.html">privacy/dataRetention.js</a>, <a href="privacy_dataRetention.js.html#line56">line 56</a>
+        <a href="privacy_dataRetention.js.html">privacy/dataRetention.js</a>, <a href="privacy_dataRetention.js.html#line64">line 64</a>
     </li></ul></dd>
     
 
@@ -10774,7 +12548,7 @@ par serveur, pas par application.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="privacy_dataRetention.js.html">privacy/dataRetention.js</a>, <a href="privacy_dataRetention.js.html#line109">line 109</a>
+        <a href="privacy_dataRetention.js.html">privacy/dataRetention.js</a>, <a href="privacy_dataRetention.js.html#line117">line 117</a>
     </li></ul></dd>
     
 
@@ -11306,6 +13080,202 @@ par serveur, pas par application.
     
 
     
+    <h4 class="name" id="fetchArchive"><span class="type-signature"></span>fetchArchive<span class="signature">(sources, archive, workDir, run)</span><span class="type-signature"></span></h4>
+    
+
+    
+
+
+
+<div class="description">
+    Met l'archive dans `workDir` (copie locale ou téléchargement).
+</div>
+
+
+
+
+
+
+
+
+
+    <h5>Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>sources</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Sources configurées.</td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>archive</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Archive retenue par `pickArchive`.</td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>workDir</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Dossier de travail privé (créé par `mkdtemp`).</td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>run</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Exécuteur de commandes.</td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="backup_archiveSource.js.html">backup/archiveSource.js</a>, <a href="backup_archiveSource.js.html#line118">line 118</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5>Returns:</h5>
+
+        
+<div class="param-desc">
+    Le chemin de l'archive chiffrée dans `workDir`.
+</div>
+
+
+
+    
+
+
+
+
+
+        
+            
+
+    
+
+    
     <h4 class="name" id="fetchHomeGuilds"><span class="type-signature">(async) </span>fetchHomeGuilds<span class="signature">(client)</span><span class="type-signature"></span></h4>
     
 
@@ -11759,6 +13729,148 @@ Nettoie les cibles invalides et supprime l'intervalle si aucune cible valable ne
         
 <div class="param-desc">
     Objet dictionnaire des commandes Blue (nom -> handler + paramètres) fusionnable avec les commandes globales.
+</div>
+
+
+
+    
+
+
+
+
+
+        
+            
+
+    
+
+    
+    <h4 class="name" id="filterArchiveNames"><span class="type-signature"></span>filterArchiveNames<span class="signature">(names)</span><span class="type-signature"></span></h4>
+    
+
+    
+
+
+
+<div class="description">
+    Garde les seuls noms d'archive valides, du plus récent au plus ancien.
+</div>
+
+
+
+
+
+
+
+
+
+    <h5>Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>names</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Noms bruts (listage d'un dossier ou d'un remote).</td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="backup_archiveSource.js.html">backup/archiveSource.js</a>, <a href="backup_archiveSource.js.html#line51">line 51</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5>Returns:</h5>
+
+        
+<div class="param-desc">
+    Les noms d'archive, triés par date décroissante, sans doublon.
 </div>
 
 
@@ -12245,7 +14357,7 @@ momentanément indisponible (panne Discord) reste dans le cache, marqué
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="privacy_dataRetention.js.html">privacy/dataRetention.js</a>, <a href="privacy_dataRetention.js.html#line138">line 138</a>
+        <a href="privacy_dataRetention.js.html">privacy/dataRetention.js</a>, <a href="privacy_dataRetention.js.html#line146">line 146</a>
     </li></ul></dd>
     
 
@@ -17269,6 +19381,179 @@ Pur : l'environnement est passé en argument.
     
 
     
+    <h4 class="name" id="listArchives"><span class="type-signature"></span>listArchives<span class="signature">(sources, run)</span><span class="type-signature"></span></h4>
+    
+
+    
+
+
+
+<div class="description">
+    Liste les archives des deux sources. Une archive présente aux deux endroits
+est lue en local (pas de téléchargement).
+</div>
+
+
+
+
+
+
+
+
+
+    <h5>Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>sources</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Sources configurées.</td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>run</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Exécuteur de commandes.</td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="backup_archiveSource.js.html">backup/archiveSource.js</a>, <a href="backup_archiveSource.js.html#line77">line 77</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5>Throws:</h5>
+
+        
+
+    <div class="param-desc">
+    
+        Si aucune source n'est configurée, ou si toutes ont échoué.
+    
+    </div>
+
+
+    
+
+
+<h5>Returns:</h5>
+
+        
+<div class="param-desc">
+    Les archives, de la plus récente à la plus ancienne.
+</div>
+
+
+
+    
+
+
+
+
+
+        
+            
+
+    
+
+    
     <h4 class="name" id="listModules"><span class="type-signature"></span>listModules<span class="signature">(guildId)</span><span class="type-signature"></span></h4>
     
 
@@ -18768,6 +21053,94 @@ tailles differentes, et cette levee serait elle-meme un canal.
     
 
     
+    <h4 class="name" id="maxSnowflake"><span class="type-signature"></span>maxSnowflake<span class="signature">()</span><span class="type-signature"></span></h4>
+    
+
+    
+
+
+
+<div class="description">
+    Le plus grand de deux identifiants Discord (nombres sur 64 bits écrits en décimal).
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="privacy_staffLogRetention.js.html">privacy/staffLogRetention.js</a>, <a href="privacy_staffLogRetention.js.html#line44">line 44</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        
+            
+
+    
+
+    
     <h4 class="name" id="memberMatchesHandle"><span class="type-signature"></span>memberMatchesHandle<span class="signature">()</span><span class="type-signature"></span></h4>
     
 
@@ -19927,7 +22300,7 @@ revendiquer la base avec l'identifiant de l'utilisateur la fermerait ensuite
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="privacy_dataRetention.js.html">privacy/dataRetention.js</a>, <a href="privacy_dataRetention.js.html#line91">line 91</a>
+        <a href="privacy_dataRetention.js.html">privacy/dataRetention.js</a>, <a href="privacy_dataRetention.js.html#line99">line 99</a>
     </li></ul></dd>
     
 
@@ -21114,6 +23487,169 @@ Si prev=0 et curr>0 renvoie '+100 %' ; si prev=0 et curr=0 renvoie '+0 %'.
     
 
     
+    <h4 class="name" id="pickArchive"><span class="type-signature"></span>pickArchive<span class="signature">(available, query)</span><span class="type-signature"></span></h4>
+    
+
+    
+
+
+
+<div class="description">
+    Désigne l'archive demandée parmi celles qui existent.
+
+Seul un nom **déjà listé** peut sortir : la saisie ne compose jamais un
+chemin, ce qui écarte toute traversée (`../`) et toute option déguisée.
+</div>
+
+
+
+
+
+
+
+
+
+    <h5>Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>available</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Archives disponibles.</td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>query</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Date `AAAA-MM-JJ` ou nom exact d'archive.</td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="backup_archiveSource.js.html">backup/archiveSource.js</a>, <a href="backup_archiveSource.js.html#line64">line 64</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5>Returns:</h5>
+
+        
+<div class="param-desc">
+    L'archive retenue, ou `null`.
+</div>
+
+
+
+    
+
+
+
+
+
+        
+            
+
+    
+
+    
     <h4 class="name" id="ping"><span class="type-signature"></span>ping<span class="signature">(client, interaction)</span><span class="type-signature"></span></h4>
     
 
@@ -21565,7 +24101,7 @@ connexion du site.
     
 
     
-    <h4 class="name" id="purgeOldRollbacks"><span class="type-signature"></span>purgeOldRollbacks<span class="signature">(dbPath)</span><span class="type-signature"></span></h4>
+    <h4 class="name" id="purgeLogChannel"><span class="type-signature"></span>purgeLogChannel<span class="signature">(channel, cutoff, botId, protectedIds, budget)</span><span class="type-signature"></span></h4>
     
 
     
@@ -21573,11 +24109,380 @@ connexion du site.
 
 
 <div class="description">
-    Supprime les copies de secours les plus anciennes, au-delà de `KEPT_ROLLBACKS`.
+    Parcourt un salon depuis son début et supprime les messages périmés.
 
-Chaque restauration recopie intégralement la base : sans purge, chercher la
-bonne sauvegarde parmi plusieurs remplit le disque du Raspberry — celui-là
-même que le rapport hebdomadaire surveille.
+S'arrête au premier message récent (la suite l'est aussi), à une page vide,
+ou à l'un des plafonds. Une suppression qui échoue (message déjà effacé)
+n'interrompt pas la passe.
+</div>
+
+
+
+
+
+
+
+
+
+    <h5>Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>channel</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Salon à parcourir.</td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>cutoff</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Instant (ms) avant lequel un message est périmé.</td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>botId</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Identifiant du bot.</td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>protectedIds</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Messages à ne jamais supprimer.</td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>budget</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Suppressions encore permises pendant cette passe.</td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="privacy_staffLogRetention.js.html">privacy/staffLogRetention.js</a>, <a href="privacy_staffLogRetention.js.html#line60">line 60</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5>Returns:</h5>
+
+        
+<div class="param-desc">
+    Le nombre de messages supprimés.
+</div>
+
+
+
+    
+
+
+
+
+
+        
+            
+
+    
+
+    
+    <h4 class="name" id="purgeOldFeedEvents"><span class="type-signature"></span>purgeOldFeedEvents<span class="signature">(days)</span><span class="type-signature"></span></h4>
+    
+
+    
+
+
+
+<div class="description">
+    Supprime les evenements plus vieux que `days` jours.
+
+Une ligne de `/scrim` ou `/recrute` (heure exacte, serveur, niveau ou role),
+croisee avec la reponse publique de la commande, date et situe l'action
+d'une personne : au-dela de `FEED_EVENT_RETENTION_DAYS`, l'activite ne doit
+plus survivre qu'en nombres par jour (`ActivityDaily`). Jouee par
+`runDataRetention`, au demarrage, chaque nuit et apres une restauration.
+
+Leve en cas d'echec : le menage l'attrape et le signale, comme les autres.
+</div>
+
+
+
+
+
+
+
+
+
+    <h5>Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>days</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Age maximal, en jours, d'un evenement conserve.</td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="feed_feedBus.js.html">feed/feedBus.js</a>, <a href="feed_feedBus.js.html#line138">line 138</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5>Returns:</h5>
+
+        
+<div class="param-desc">
+    Le nombre d'evenements supprimes.
+</div>
+
+
+
+    
+
+
+
+
+
+        
+            
+
+    
+
+    
+    <h4 class="name" id="purgeOldRollbacks"><span class="type-signature"></span>purgeOldRollbacks<span class="signature">(dbPath, keepPath, now)</span><span class="type-signature"></span></h4>
+    
+
+    
+
+
+
+<div class="description">
+    Supprime les copies de secours périmées (voir `selectExpiredRollbacks`).
+
+Jouée après chaque restauration réussie (toutes les copies précédentes
+partent) et chaque nuit par `runDataRetention` (seules les copies de plus de
+`ROLLBACK_RETENTION_DAYS` partent). Ne lève jamais : une purge partielle
+vaut mieux qu'un échec.
 </div>
 
 
@@ -21628,6 +24533,42 @@ même que le rapport hebdomadaire surveille.
         </tr>
 
     
+
+        <tr>
+            
+                <td class="name"><code>keepPath</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Copie à garder (restauration qui vient de réussir) ; absente pour le seul ménage d'âge.</td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>now</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Instant de référence, en millisecondes.</td>
+        </tr>
+
+    
     </tbody>
 </table>
 
@@ -21665,7 +24606,7 @@ même que le rapport hebdomadaire surveille.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="backup_restoreDatabase.js.html">backup/restoreDatabase.js</a>, <a href="backup_restoreDatabase.js.html#line71">line 71</a>
+        <a href="backup_restoreDatabase.js.html">backup/restoreDatabase.js</a>, <a href="backup_restoreDatabase.js.html#line127">line 127</a>
     </li></ul></dd>
     
 
@@ -21695,6 +24636,179 @@ même que le rapport hebdomadaire surveille.
         
 <div class="param-desc">
     Le nombre de copies supprimées.
+</div>
+
+
+
+    
+
+
+
+
+
+        
+            
+
+    
+
+    
+    <h4 class="name" id="purgeStaffLogs"><span class="type-signature"></span>purgeStaffLogs<span class="signature">(client, now)</span><span class="type-signature"></span></h4>
+    
+
+    
+
+
+
+<div class="description">
+    Supprime les messages du bot de plus de `STAFF_LOG_RETENTION_DAYS` dans le
+salon du staff et dans les messages privés au propriétaire.
+</div>
+
+
+
+
+
+
+
+
+
+    <h5>Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>client</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Client Discord connecté.</td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>now</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Instant de référence, en millisecondes.</td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="privacy_staffLogRetention.js.html">privacy/staffLogRetention.js</a>, <a href="privacy_staffLogRetention.js.html#line124">line 124</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5>Throws:</h5>
+
+        
+
+    <div class="param-desc">
+    
+        Si la liste des exclusions en cours ne peut pas être lue.
+    
+    </div>
+
+
+    
+
+
+<h5>Returns:</h5>
+
+        
+<div class="param-desc">
+    Le nombre de messages supprimés, ou `null` si la purge n'a pas été jouée (client pas prêt).
 </div>
 
 
@@ -22536,7 +25650,7 @@ sur le resume. Voir `feed/feedPrivacy.ts`.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="commandsHandlers_recrute.js.html">commandsHandlers/recrute.js</a>, <a href="commandsHandlers_recrute.js.html#line20">line 20</a>
+        <a href="commandsHandlers_recrute.js.html">commandsHandlers/recrute.js</a>, <a href="commandsHandlers_recrute.js.html#line21">line 21</a>
     </li></ul></dd>
     
 
@@ -24724,7 +27838,12 @@ Un identifiant numérique est rendu tel quel, sans aucune requête.
 
 
 <div class="description">
-    Restaure la base SQLite du bot à partir d'un fichier joint à la commande.
+    Restaure la base SQLite du bot depuis une archive chiffrée **présente sur la
+machine du bot** (dossier local ou stockage distant), déchiffrée sur place.
+
+Aucune base ne transite plus par Discord : la commande ne prend qu'une date
+ou un nom d'archive (voir `backup/archiveSource.ts`). Sans `archive`, elle
+liste les archives disponibles et ne restaure rien.
 
 Réservée au propriétaire déclaré dans `OWNER_ID` : la commande écrase la base
 de production, aucun rôle Discord ne suffit à l'autoriser.
@@ -24833,7 +27952,7 @@ de production, aucun rôle Discord ne suffit à l'autoriser.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="commandsHandlers_admin_restoreBackup.js.html">commandsHandlers/admin/restoreBackup.js</a>, <a href="commandsHandlers_admin_restoreBackup.js.html#line22">line 22</a>
+        <a href="commandsHandlers_admin_restoreBackup.js.html">commandsHandlers/admin/restoreBackup.js</a>, <a href="commandsHandlers_admin_restoreBackup.js.html#line27">line 27</a>
     </li></ul></dd>
     
 
@@ -24890,7 +28009,8 @@ de production, aucun rôle Discord ne suffit à l'autoriser.
     Remplace la base SQLite du bot par une sauvegarde téléversée.
 
 La base courante est d'abord recopiée à côté : une restauration ratée reste
-réversible, et le fichier de secours n'est jamais supprimé automatiquement.
+réversible. Cette copie est supprimée à la restauration réussie suivante, ou
+au plus tard après `ROLLBACK_RETENTION_DAYS` (voir `purgeOldRollbacks`).
 </div>
 
 
@@ -24996,7 +28116,7 @@ réversible, et le fichier de secours n'est jamais supprimé automatiquement.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="backup_restoreDatabase.js.html">backup/restoreDatabase.js</a>, <a href="backup_restoreDatabase.js.html#line104">line 104</a>
+        <a href="backup_restoreDatabase.js.html">backup/restoreDatabase.js</a>, <a href="backup_restoreDatabase.js.html#line159">line 159</a>
     </li></ul></dd>
     
 
@@ -25042,6 +28162,166 @@ réversible, et le fichier de secours n'est jamais supprimé automatiquement.
     
 
     
+    <h4 class="name" id="rollbackTimestamp"><span class="type-signature"></span>rollbackTimestamp<span class="signature">(name, prefix)</span><span class="type-signature"></span></h4>
+    
+
+    
+
+
+
+<div class="description">
+    Relit la date d'écriture d'une copie de secours dans son nom.
+</div>
+
+
+
+
+
+
+
+
+
+    <h5>Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>name</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Nom de fichier (`database.sqlite.avant-<horodatage>`).</td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>prefix</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Préfixe attendu (`database.sqlite.avant-`).</td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="backup_restoreDatabase.js.html">backup/restoreDatabase.js</a>, <a href="backup_restoreDatabase.js.html#line69">line 69</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5>Returns:</h5>
+
+        
+<div class="param-desc">
+    L'instant en millisecondes, ou `null` si le nom ne porte pas d'horodatage lisible.
+</div>
+
+
+
+    
+
+
+
+
+
+        
+            
+
+    
+
+    
     <h4 class="name" id="runDataRetention"><span class="type-signature"></span>runDataRetention<span class="signature">(client)</span><span class="type-signature"></span></h4>
     
 
@@ -25050,7 +28330,7 @@ réversible, et le fichier de secours n'est jamais supprimé automatiquement.
 
 
 <div class="description">
-    Les trois ménages, dans l'ordre. Chacun signale son propre échec sans priver
+    Les six ménages, dans l'ordre. Chacun signale son propre échec sans priver
 les autres de passer ; la fonction ne lève jamais.
 </div>
 
@@ -25139,7 +28419,7 @@ les autres de passer ; la fonction ne lève jamais.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="privacy_dataRetention.js.html">privacy/dataRetention.js</a>, <a href="privacy_dataRetention.js.html#line188">line 188</a>
+        <a href="privacy_dataRetention.js.html">privacy/dataRetention.js</a>, <a href="privacy_dataRetention.js.html#line196">line 196</a>
     </li></ul></dd>
     
 
@@ -25183,7 +28463,7 @@ les autres de passer ; la fonction ne lève jamais.
 
 
 <div class="description">
-    Une passe des trois ménages (voir `runDataRetention`).
+    Une passe des six ménages (voir `runDataRetention`).
 </div>
 
 
@@ -25271,7 +28551,7 @@ les autres de passer ; la fonction ne lève jamais.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="privacy_dataRetention.js.html">privacy/dataRetention.js</a>, <a href="privacy_dataRetention.js.html#line215">line 215</a>
+        <a href="privacy_dataRetention.js.html">privacy/dataRetention.js</a>, <a href="privacy_dataRetention.js.html#line223">line 223</a>
     </li></ul></dd>
     
 
@@ -27118,7 +30398,7 @@ réveiller le canal de supervision.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="commandsHandlers_scrim.js.html">commandsHandlers/scrim.js</a>, <a href="commandsHandlers_scrim.js.html#line27">line 27</a>
+        <a href="commandsHandlers_scrim.js.html">commandsHandlers/scrim.js</a>, <a href="commandsHandlers_scrim.js.html#line28">line 28</a>
     </li></ul></dd>
     
 
@@ -27785,6 +31065,411 @@ serveur qui n'a pas répondu ne l'est pas.
         
 <div class="param-desc">
     `true` si `word` est trouvé au moins une fois comme mot complet dans `string`, sinon `false`.
+</div>
+
+
+
+    
+
+
+
+
+
+        
+            
+
+    
+
+    
+    <h4 class="name" id="selectExpiredLogMessages"><span class="type-signature"></span>selectExpiredLogMessages<span class="signature">(messages, cutoff, botId, protectedIds)</span><span class="type-signature"></span></h4>
+    
+
+    
+
+
+
+<div class="description">
+    Choisit, dans une page, les messages à supprimer.
+</div>
+
+
+
+
+
+
+
+
+
+    <h5>Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>messages</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Page de messages.</td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>cutoff</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Instant (ms) avant lequel un message est périmé.</td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>botId</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Identifiant du bot : seuls ses messages sont visés.</td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>protectedIds</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Messages d'une exclusion en cours, jamais supprimés.</td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="privacy_staffLogRetention.js.html">privacy/staffLogRetention.js</a>, <a href="privacy_staffLogRetention.js.html#line40">line 40</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5>Returns:</h5>
+
+        
+<div class="param-desc">
+    Les messages périmés à supprimer.
+</div>
+
+
+
+    
+
+
+
+
+
+        
+            
+
+    
+
+    
+    <h4 class="name" id="selectExpiredRollbacks"><span class="type-signature"></span>selectExpiredRollbacks<span class="signature">(names, prefix, now, keep)</span><span class="type-signature"></span></h4>
+    
+
+    
+
+
+
+<div class="description">
+    Choisit les copies de secours à supprimer.
+
+Une copie est la base d'avant restauration, **en clair** : auteurs de scrims
+non anonymisés, `UserLink`, configuration de serveurs quittés — tout ce que
+les durées de conservation du bot n'atteignent pas dans ce fichier. Deux
+règles, cumulées :
+
+- au-delà de `ROLLBACK_RETENTION_DAYS`, une copie part, quoi qu'il arrive ;
+- après une restauration réussie (`keep` renseigné), toutes les copies
+  précédentes partent : la nouvelle restauration les a rendues sans objet,
+  et la base d'origine reste dans les sauvegardes chiffrées.
+
+Un nom illisible n'est jamais retenu par la règle d'âge (on ne supprime pas
+ce qu'on ne sait pas dater) — mais il l'est après une restauration réussie.
+</div>
+
+
+
+
+
+
+
+
+
+    <h5>Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>names</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Noms des fichiers du dossier de la base.</td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>prefix</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Préfixe des copies (`database.sqlite.avant-`).</td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>now</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Instant de référence, en millisecondes.</td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>keep</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Nom de la copie à garder (celle de la restauration qui vient de réussir), ou `null` pour le seul ménage d'âge.</td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="backup_restoreDatabase.js.html">backup/restoreDatabase.js</a>, <a href="backup_restoreDatabase.js.html#line102">line 102</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5>Returns:</h5>
+
+        
+<div class="param-desc">
+    Les noms à supprimer.
 </div>
 
 
@@ -31411,7 +35096,7 @@ indiquant l'anciennete de la derniere mesure.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="feed_feedBus.js.html">feed/feedBus.js</a>, <a href="feed_feedBus.js.html#line130">line 130</a>
+        <a href="feed_feedBus.js.html">feed/feedBus.js</a>, <a href="feed_feedBus.js.html#line159">line 159</a>
     </li></ul></dd>
     
 
@@ -31997,7 +35682,7 @@ l'intégralité de la description du tournoi.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="commandsHandlers_ban_unban.js.html">commandsHandlers/ban/unban.js</a>, <a href="commandsHandlers_ban_unban.js.html#line10">line 10</a>
+        <a href="commandsHandlers_ban_unban.js.html">commandsHandlers/ban/unban.js</a>, <a href="commandsHandlers_ban_unban.js.html#line11">line 11</a>
     </li></ul></dd>
     
 
@@ -32294,7 +35979,7 @@ production avec un fichier corrompu serait pire que l'absence de restauration.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="backup_restoreDatabase.js.html">backup/restoreDatabase.js</a>, <a href="backup_restoreDatabase.js.html#line20">line 20</a>
+        <a href="backup_restoreDatabase.js.html">backup/restoreDatabase.js</a>, <a href="backup_restoreDatabase.js.html#line19">line 19</a>
     </li></ul></dd>
     
 
@@ -32350,13 +36035,13 @@ production avec un fichier corrompu serait pire que l'absence de restauration.
 </div>
 
 <nav>
-    <h2><a href="index.html">Home</a></h2><h3>Classes</h3><ul><li><a href="Bdd.html">Bdd</a></li><li><a href="HandleResolutionTimeoutError.html">HandleResolutionTimeoutError</a></li><li><a href="HomeGuildUnavailableError.html">HomeGuildUnavailableError</a></li><li><a href="Tips.html">Tips</a></li></ul><h3>Global</h3><ul><li><a href="global.html#ACTIVITY_AUTHOR_RETENTION_DAYS">ACTIVITY_AUTHOR_RETENTION_DAYS</a></li><li><a href="global.html#ADHESION_REMINDER_HOUR">ADHESION_REMINDER_HOUR</a></li><li><a href="global.html#CONFIGURED_GUILDS_SQL">CONFIGURED_GUILDS_SQL</a></li><li><a href="global.html#DEFAULT_BDD_PATH">DEFAULT_BDD_PATH</a></li><li><a href="global.html#DEFAULT_DEDUPE_WINDOW_MS">DEFAULT_DEDUPE_WINDOW_MS</a></li><li><a href="global.html#DISCORD_ID_RE">DISCORD_ID_RE</a></li><li><a href="global.html#FEED_ANONYMOUS_ACTOR">FEED_ANONYMOUS_ACTOR</a></li><li><a href="global.html#FETCH_GRACE_MS">FETCH_GRACE_MS</a></li><li><a href="global.html#GONE_CODES">GONE_CODES</a></li><li><a href="global.html#GUILD_CHANNEL_TABLE">GUILD_CHANNEL_TABLE</a></li><li><a href="global.html#GUILD_CONFIG_TABLES">GUILD_CONFIG_TABLES</a></li><li><a href="global.html#IGNORABLE_DISCORD_CODES">IGNORABLE_DISCORD_CODES</a></li><li><a href="global.html#ITERATION_UNLIMITED">ITERATION_UNLIMITED</a></li><li><a href="global.html#KEPT_ROLLBACKS">KEPT_ROLLBACKS</a></li><li><a href="global.html#LOOPBACK_HOSTS">LOOPBACK_HOSTS</a></li><li><a href="global.html#MARKDOWN_LINK_SPECIALS">MARKDOWN_LINK_SPECIALS</a></li><li><a href="global.html#MAX_CAUSE_DEPTH">MAX_CAUSE_DEPTH</a></li><li><a href="global.html#MAX_MESSAGE_LENGTH">MAX_MESSAGE_LENGTH</a></li><li><a href="global.html#MAX_RECIPIENTS">MAX_RECIPIENTS</a></li><li><a href="global.html#MAX_REFEREE_DMS">MAX_REFEREE_DMS</a></li><li><a href="global.html#MAX_TRACKED_KEYS">MAX_TRACKED_KEYS</a></li><li><a href="global.html#MENTION_PATTERN">MENTION_PATTERN</a></li><li><a href="global.html#MESSAGE_RETENTION_DAYS">MESSAGE_RETENTION_DAYS</a></li><li><a href="global.html#MODULE_KEYS">MODULE_KEYS</a></li><li><a href="global.html#PARIS_TIME_ZONE">PARIS_TIME_ZONE</a></li><li><a href="global.html#RESOLVE_BUDGET_MS">RESOLVE_BUDGET_MS</a></li><li><a href="global.html#RESOLVE_CONCURRENCY">RESOLVE_CONCURRENCY</a></li><li><a href="global.html#RESOLVE_WAVE_BUDGET_MS">RESOLVE_WAVE_BUDGET_MS</a></li><li><a href="global.html#RETENTION_MODIFIER">RETENTION_MODIFIER</a></li><li><a href="global.html#SCRIM_GAME">SCRIM_GAME</a></li><li><a href="global.html#SCRIM_GAME_LABEL">SCRIM_GAME_LABEL</a></li><li><a href="global.html#SITE_VISITOR_WINDOW_MONTHS">SITE_VISITOR_WINDOW_MONTHS</a></li><li><a href="global.html#SNOWFLAKE_PATTERN">SNOWFLAKE_PATTERN</a></li><li><a href="global.html#SQLITE_MAGIC">SQLITE_MAGIC</a></li><li><a href="global.html#STALE_AFTER_MS">STALE_AFTER_MS</a></li><li><a href="global.html#TRANSIENT_NETWORK_CODES">TRANSIENT_NETWORK_CODES</a></li><li><a href="global.html#_deleteTempMsg">_deleteTempMsg</a></li><li><a href="global.html#_resetChannel">_resetChannel</a></li><li><a href="global.html#_resetProcessGuards">_resetProcessGuards</a></li><li><a href="global.html#_resetServer">_resetServer</a></li><li><a href="global.html#absDelta">absDelta</a></li><li><a href="global.html#adhesionDir">adhesionDir</a></li><li><a href="global.html#adhesionFilePath">adhesionFilePath</a></li><li><a href="global.html#adhesionPerimee">adhesionPerimee</a></li><li><a href="global.html#adhesionValide">adhesionValide</a></li><li><a href="global.html#alertLeadership">alertLeadership</a></li><li><a href="global.html#alertReferees">alertReferees</a></li><li><a href="global.html#anonymizeOldActivity">anonymizeOldActivity</a></li><li><a href="global.html#answerTmp">answerTmp</a></li><li><a href="global.html#areaFilter">areaFilter</a></li><li><a href="global.html#assertSqlIdentifier">assertSqlIdentifier</a></li><li><a href="global.html#authorize">authorize</a></li><li><a href="global.html#ban">ban</a></li><li><a href="global.html#ban_id">ban_id</a></li><li><a href="global.html#ban_username">ban_username</a></li><li><a href="global.html#banlist">banlist</a></li><li><a href="global.html#broadcast">broadcast</a></li><li><a href="global.html#buildEmbedPage">buildEmbedPage</a></li><li><a href="global.html#buildServerChoices">buildServerChoices</a></li><li><a href="global.html#buildServiceMessage">buildServiceMessage</a></li><li><a href="global.html#capRefereeTargets">capRefereeTargets</a></li><li><a href="global.html#checkAdminRole">checkAdminRole</a></li><li><a href="global.html#checkBan">checkBan</a></li><li><a href="global.html#checkChannelMinPermissions">checkChannelMinPermissions</a></li><li><a href="global.html#checkCooldown">checkCooldown</a></li><li><a href="global.html#checkIntervalleAdhesion">checkIntervalleAdhesion</a></li><li><a href="global.html#checkMessageValidity">checkMessageValidity</a></li><li><a href="global.html#checkPermissions">checkPermissions</a></li><li><a href="global.html#checkTargets">checkTargets</a></li><li><a href="global.html#classifyError">classifyError</a></li><li><a href="global.html#client">client</a></li><li><a href="global.html#closeBddInstance">closeBddInstance</a></li><li><a href="global.html#commands">commands</a></li><li><a href="global.html#configModule">configModule</a></li><li><a href="global.html#contactAdminServer">contactAdminServer</a></li><li><a href="global.html#createErrorReporter">createErrorReporter</a></li><li><a href="global.html#dedupeRecipients">dedupeRecipients</a></li><li><a href="global.html#defineRankRange">defineRankRange</a></li><li><a href="global.html#delay">delay</a></li><li><a href="global.html#deleteDPMsgs">deleteDPMsgs</a></li><li><a href="global.html#deleteOldAttachment">deleteOldAttachment</a></li><li><a href="global.html#deleteSetupAdhesion">deleteSetupAdhesion</a></li><li><a href="global.html#deliverDirectMessages">deliverDirectMessages</a></li><li><a href="global.html#describeError">describeError</a></li><li><a href="global.html#deterministicColor">deterministicColor</a></li><li><a href="global.html#displayChannelFilter">displayChannelFilter</a></li><li><a href="global.html#displayChannelRankFilter">displayChannelRankFilter</a></li><li><a href="global.html#displaySetupAdhesion">displaySetupAdhesion</a></li><li><a href="global.html#downloadAttachment">downloadAttachment</a></li><li><a href="global.html#eraseGuild">eraseGuild</a></li><li><a href="global.html#eraseLeftGuild">eraseLeftGuild</a></li><li><a href="global.html#errorCode">errorCode</a></li><li><a href="global.html#escapeLinkLabel">escapeLinkLabel</a></li><li><a href="global.html#extractRanks">extractRanks</a></li><li><a href="global.html#fetchHomeGuilds">fetchHomeGuilds</a></li><li><a href="global.html#fetchTargets">fetchTargets</a></li><li><a href="global.html#fillBlueCommands">fillBlueCommands</a></li><li><a href="global.html#findGuildMemberByHandle">findGuildMemberByHandle</a></li><li><a href="global.html#findHomeMember">findHomeMember</a></li><li><a href="global.html#findMemberIn">findMemberIn</a></li><li><a href="global.html#forgetDepartedGuilds">forgetDepartedGuilds</a></li><li><a href="global.html#formatBackupStatus">formatBackupStatus</a></li><li><a href="global.html#formatBytes">formatBytes</a></li><li><a href="global.html#formatCadence">formatCadence</a></li><li><a href="global.html#formatDiskUsage">formatDiskUsage</a></li><li><a href="global.html#formatPlayerStats">formatPlayerStats</a></li><li><a href="global.html#formatRawRanks">formatRawRanks</a></li><li><a href="global.html#formatSiteVisitStats">formatSiteVisitStats</a></li><li><a href="global.html#formatSnapshotAge">formatSnapshotAge</a></li><li><a href="global.html#formatTarget">formatTarget</a></li><li><a href="global.html#getAdhesion">getAdhesion</a></li><li><a href="global.html#getAdminRole">getAdminRole</a></li><li><a href="global.html#getBacklog">getBacklog</a></li><li><a href="global.html#getBddInstance">getBddInstance</a></li><li><a href="global.html#getCpuPercent">getCpuPercent</a></li><li><a href="global.html#getDiskUsage">getDiskUsage</a></li><li><a href="global.html#getInviteFromChannel">getInviteFromChannel</a></li><li><a href="global.html#getInviteFromMessage">getInviteFromMessage</a></li><li><a href="global.html#getReporter">getReporter</a></li><li><a href="global.html#getServicesAndID">getServicesAndID</a></li><li><a href="global.html#getSnapshotsBetween">getSnapshotsBetween</a></li><li><a href="global.html#getTargetRegions">getTargetRegions</a></li><li><a href="global.html#getTips">getTips</a></li><li><a href="global.html#homeGuildIds">homeGuildIds</a></li><li><a href="global.html#initialIteration">initialIteration</a></li><li><a href="global.html#installProcessGuards">installProcessGuards</a></li><li><a href="global.html#isBackupFresh">isBackupFresh</a></li><li><a href="global.html#isDiscordInvite">isDiscordInvite</a></li><li><a href="global.html#isGone">isGone</a></li><li><a href="global.html#isIgnorableDiscordError">isIgnorableDiscordError</a></li><li><a href="global.html#isLoopbackHost">isLoopbackHost</a></li><li><a href="global.html#isModuleEnabled">isModuleEnabled</a></li><li><a href="global.html#isSnowflake">isSnowflake</a></li><li><a href="global.html#isTransientNetworkError">isTransientNetworkError</a></li><li><a href="global.html#isValidModule">isValidModule</a></li><li><a href="global.html#leadershipIds">leadershipIds</a></li><li><a href="global.html#listModules">listModules</a></li><li><a href="global.html#listPartner">listPartner</a></li><li><a href="global.html#loadAdhesionFiles">loadAdhesionFiles</a></li><li><a href="global.html#loadAdhesionPaths">loadAdhesionPaths</a></li><li><a href="global.html#manageDistribution">manageDistribution</a></li><li><a href="global.html#manageMsgExpiration">manageMsgExpiration</a></li><li><a href="global.html#manageOldFiles">manageOldFiles</a></li><li><a href="global.html#manageServiceSuccess">manageServiceSuccess</a></li><li><a href="global.html#matchesToken">matchesToken</a></li><li><a href="global.html#memberMatchesHandle">memberMatchesHandle</a></li><li><a href="global.html#newChannelPartner">newChannelPartner</a></li><li><a href="global.html#nextTips">nextTips</a></li><li><a href="global.html#nextTransmissionAfter">nextTransmissionAfter</a></li><li><a href="global.html#normalizeInvite">normalizeInvite</a></li><li><a href="global.html#normalizeText">normalizeText</a></li><li><a href="global.html#notifyBannedUser">notifyBannedUser</a></li><li><a href="global.html#olderThanRetention">olderThanRetention</a></li><li><a href="global.html#ownsDatabase">ownsDatabase</a></li><li><a href="global.html#parisDaysLater">parisDaysLater</a></li><li><a href="global.html#parisOffsetMs">parisOffsetMs</a></li><li><a href="global.html#parisWallClock">parisWallClock</a></li><li><a href="global.html#parseDirectMessageRequest">parseDirectMessageRequest</a></li><li><a href="global.html#parseDiscordHandle">parseDiscordHandle</a></li><li><a href="global.html#parseRefereeAlert">parseRefereeAlert</a></li><li><a href="global.html#parseSiteVisitStats">parseSiteVisitStats</a></li><li><a href="global.html#pctDelta">pctDelta</a></li><li><a href="global.html#ping">ping</a></li><li><a href="global.html#printHelp">printHelp</a></li><li><a href="global.html#purgeFeedIdentifiers">purgeFeedIdentifiers</a></li><li><a href="global.html#purgeOldRollbacks">purgeOldRollbacks</a></li><li><a href="global.html#rankChoices">rankChoices</a></li><li><a href="global.html#readBackupStatus">readBackupStatus</a></li><li><a href="global.html#readPackageInfo">readPackageInfo</a></li><li><a href="global.html#readSiteVisitStats">readSiteVisitStats</a></li><li><a href="global.html#recordDailySnapshot">recordDailySnapshot</a></li><li><a href="global.html#recordEvent">recordEvent</a></li><li><a href="global.html#recrute">recrute</a></li><li><a href="global.html#refuseUnjoinedGuild">refuseUnjoinedGuild</a></li><li><a href="global.html#relay">relay</a></li><li><a href="global.html#remainingIteration">remainingIteration</a></li><li><a href="global.html#remoteServerReset">remoteServerReset</a></li><li><a href="global.html#removeIntervalle">removeIntervalle</a></li><li><a href="global.html#reportError">reportError</a></li><li><a href="global.html#resetBddInstance">resetBddInstance</a></li><li><a href="global.html#resetChannel">resetChannel</a></li><li><a href="global.html#resetRefereeRole">resetRefereeRole</a></li><li><a href="global.html#resetServer">resetServer</a></li><li><a href="global.html#resetServerInvite">resetServerInvite</a></li><li><a href="global.html#resolutionWaves">resolutionWaves</a></li><li><a href="global.html#resolveDiscordHandle">resolveDiscordHandle</a></li><li><a href="global.html#restoreBackup">restoreBackup</a></li><li><a href="global.html#restoreDatabase">restoreDatabase</a></li><li><a href="global.html#runDataRetention">runDataRetention</a></li><li><a href="global.html#runDataRetentionOnce">runDataRetentionOnce</a></li><li><a href="global.html#runSetupWizard">runSetupWizard</a></li><li><a href="global.html#safeChannel">safeChannel</a></li><li><a href="global.html#safeFollowUp">safeFollowUp</a></li><li><a href="global.html#safeMsgReply">safeMsgReply</a></li><li><a href="global.html#safeReact">safeReact</a></li><li><a href="global.html#safeReply">safeReply</a></li><li><a href="global.html#safeUser">safeUser</a></li><li><a href="global.html#saveAdhesionPaths">saveAdhesionPaths</a></li><li><a href="global.html#saveSiteVisitStats">saveSiteVisitStats</a></li><li><a href="global.html#scrim">scrim</a></li><li><a href="global.html#scrubFeedField">scrubFeedField</a></li><li><a href="global.html#scrubFeedText">scrubFeedText</a></li><li><a href="global.html#searchInWaves">searchInWaves</a></li><li><a href="global.html#searchString">searchString</a></li><li><a href="global.html#sendAdhesion">sendAdhesion</a></li><li><a href="global.html#sendDatabaseBackup">sendDatabaseBackup</a></li><li><a href="global.html#sendInteractiveMsg">sendInteractiveMsg</a></li><li><a href="global.html#sendLog">sendLog</a></li><li><a href="global.html#sendServiceMessage">sendServiceMessage</a></li><li><a href="global.html#servicesChoices">servicesChoices</a></li><li><a href="global.html#servicesWithNoRanks">servicesWithNoRanks</a></li><li><a href="global.html#setBotAdminRole">setBotAdminRole</a></li><li><a href="global.html#setChannelFilter">setChannelFilter</a></li><li><a href="global.html#setChannelRankFilter">setChannelRankFilter</a></li><li><a href="global.html#setModuleEnabled">setModuleEnabled</a></li><li><a href="global.html#setRankFilter">setRankFilter</a></li><li><a href="global.html#setRefereeRole">setRefereeRole</a></li><li><a href="global.html#setServerInvite">setServerInvite</a></li><li><a href="global.html#setupIntervalAdhesion">setupIntervalAdhesion</a></li><li><a href="global.html#showBotAdminRole">showBotAdminRole</a></li><li><a href="global.html#showRefereeRole">showRefereeRole</a></li><li><a href="global.html#showServerInvite">showServerInvite</a></li><li><a href="global.html#splitForDiscord">splitForDiscord</a></li><li><a href="global.html#startInternalApi">startInternalApi</a></li><li><a href="global.html#statsPlayer">statsPlayer</a></li><li><a href="global.html#statsSite">statsSite</a></li><li><a href="global.html#subscribe">subscribe</a></li><li><a href="global.html#toSQLiteDate">toSQLiteDate</a></li><li><a href="global.html#truncateMessage">truncateMessage</a></li><li><a href="global.html#ts">ts</a></li><li><a href="global.html#unban">unban</a></li><li><a href="global.html#updateCommands">updateCommands</a></li><li><a href="global.html#validateSqliteFile">validateSqliteFile</a></li></ul>
+    <h2><a href="index.html">Home</a></h2><h3>Classes</h3><ul><li><a href="Bdd.html">Bdd</a></li><li><a href="HandleResolutionTimeoutError.html">HandleResolutionTimeoutError</a></li><li><a href="HomeGuildUnavailableError.html">HomeGuildUnavailableError</a></li><li><a href="Tips.html">Tips</a></li></ul><h3>Global</h3><ul><li><a href="global.html#ACTIVITY_AUTHOR_RETENTION_DAYS">ACTIVITY_AUTHOR_RETENTION_DAYS</a></li><li><a href="global.html#ADHESION_REMINDER_HOUR">ADHESION_REMINDER_HOUR</a></li><li><a href="global.html#ARCHIVE_NAME">ARCHIVE_NAME</a></li><li><a href="global.html#COMMAND_TIMEOUT_MS">COMMAND_TIMEOUT_MS</a></li><li><a href="global.html#CONFIGURED_GUILDS_SQL">CONFIGURED_GUILDS_SQL</a></li><li><a href="global.html#DEFAULT_BDD_PATH">DEFAULT_BDD_PATH</a></li><li><a href="global.html#DEFAULT_DEDUPE_WINDOW_MS">DEFAULT_DEDUPE_WINDOW_MS</a></li><li><a href="global.html#DISCORD_ID_RE">DISCORD_ID_RE</a></li><li><a href="global.html#FEED_ANONYMOUS_ACTOR">FEED_ANONYMOUS_ACTOR</a></li><li><a href="global.html#FEED_EVENT_RETENTION_DAYS">FEED_EVENT_RETENTION_DAYS</a></li><li><a href="global.html#FETCH_GRACE_MS">FETCH_GRACE_MS</a></li><li><a href="global.html#GONE_CODES">GONE_CODES</a></li><li><a href="global.html#GUILD_CHANNEL_TABLE">GUILD_CHANNEL_TABLE</a></li><li><a href="global.html#GUILD_CONFIG_TABLES">GUILD_CONFIG_TABLES</a></li><li><a href="global.html#IGNORABLE_DISCORD_CODES">IGNORABLE_DISCORD_CODES</a></li><li><a href="global.html#ITERATION_UNLIMITED">ITERATION_UNLIMITED</a></li><li><a href="global.html#LISTED_ARCHIVES">LISTED_ARCHIVES</a></li><li><a href="global.html#LOOPBACK_HOSTS">LOOPBACK_HOSTS</a></li><li><a href="global.html#MARKDOWN_LINK_SPECIALS">MARKDOWN_LINK_SPECIALS</a></li><li><a href="global.html#MAX_CAUSE_DEPTH">MAX_CAUSE_DEPTH</a></li><li><a href="global.html#MAX_LOG_DELETIONS_PER_RUN">MAX_LOG_DELETIONS_PER_RUN</a></li><li><a href="global.html#MAX_LOG_PAGES_PER_RUN">MAX_LOG_PAGES_PER_RUN</a></li><li><a href="global.html#MAX_MESSAGE_LENGTH">MAX_MESSAGE_LENGTH</a></li><li><a href="global.html#MAX_RECIPIENTS">MAX_RECIPIENTS</a></li><li><a href="global.html#MAX_REFEREE_DMS">MAX_REFEREE_DMS</a></li><li><a href="global.html#MAX_TRACKED_KEYS">MAX_TRACKED_KEYS</a></li><li><a href="global.html#MENTION_PATTERN">MENTION_PATTERN</a></li><li><a href="global.html#MESSAGE_RETENTION_DAYS">MESSAGE_RETENTION_DAYS</a></li><li><a href="global.html#MODULE_KEYS">MODULE_KEYS</a></li><li><a href="global.html#PARIS_TIME_ZONE">PARIS_TIME_ZONE</a></li><li><a href="global.html#RECRUIT_ROLE_CHOICES">RECRUIT_ROLE_CHOICES</a></li><li><a href="global.html#RESOLVE_BUDGET_MS">RESOLVE_BUDGET_MS</a></li><li><a href="global.html#RESOLVE_CONCURRENCY">RESOLVE_CONCURRENCY</a></li><li><a href="global.html#RESOLVE_WAVE_BUDGET_MS">RESOLVE_WAVE_BUDGET_MS</a></li><li><a href="global.html#RETENTION_MODIFIER">RETENTION_MODIFIER</a></li><li><a href="global.html#ROLLBACK_RETENTION_DAYS">ROLLBACK_RETENTION_DAYS</a></li><li><a href="global.html#ROLLBACK_STAMP">ROLLBACK_STAMP</a></li><li><a href="global.html#SCRIM_GAME">SCRIM_GAME</a></li><li><a href="global.html#SCRIM_GAME_LABEL">SCRIM_GAME_LABEL</a></li><li><a href="global.html#SCRIM_LEVEL_CHOICES">SCRIM_LEVEL_CHOICES</a></li><li><a href="global.html#SITE_VISITOR_WINDOW_MONTHS">SITE_VISITOR_WINDOW_MONTHS</a></li><li><a href="global.html#SNOWFLAKE_PATTERN">SNOWFLAKE_PATTERN</a></li><li><a href="global.html#SQLITE_MAGIC">SQLITE_MAGIC</a></li><li><a href="global.html#STAFF_LOG_RETENTION_DAYS">STAFF_LOG_RETENTION_DAYS</a></li><li><a href="global.html#STALE_AFTER_MS">STALE_AFTER_MS</a></li><li><a href="global.html#TRANSIENT_NETWORK_CODES">TRANSIENT_NETWORK_CODES</a></li><li><a href="global.html#_deleteTempMsg">_deleteTempMsg</a></li><li><a href="global.html#_resetChannel">_resetChannel</a></li><li><a href="global.html#_resetProcessGuards">_resetProcessGuards</a></li><li><a href="global.html#_resetServer">_resetServer</a></li><li><a href="global.html#absDelta">absDelta</a></li><li><a href="global.html#activeBanMessageIds">activeBanMessageIds</a></li><li><a href="global.html#adhesionDir">adhesionDir</a></li><li><a href="global.html#adhesionFilePath">adhesionFilePath</a></li><li><a href="global.html#adhesionPerimee">adhesionPerimee</a></li><li><a href="global.html#adhesionValide">adhesionValide</a></li><li><a href="global.html#alertLeadership">alertLeadership</a></li><li><a href="global.html#alertReferees">alertReferees</a></li><li><a href="global.html#anonymizeOldActivity">anonymizeOldActivity</a></li><li><a href="global.html#answerTmp">answerTmp</a></li><li><a href="global.html#archiveSourcesFromEnv">archiveSourcesFromEnv</a></li><li><a href="global.html#areaFilter">areaFilter</a></li><li><a href="global.html#asLogChannel">asLogChannel</a></li><li><a href="global.html#assertSqlIdentifier">assertSqlIdentifier</a></li><li><a href="global.html#authorize">authorize</a></li><li><a href="global.html#ban">ban</a></li><li><a href="global.html#banMessageIds">banMessageIds</a></li><li><a href="global.html#ban_id">ban_id</a></li><li><a href="global.html#ban_username">ban_username</a></li><li><a href="global.html#banlist">banlist</a></li><li><a href="global.html#broadcast">broadcast</a></li><li><a href="global.html#buildEmbedPage">buildEmbedPage</a></li><li><a href="global.html#buildServerChoices">buildServerChoices</a></li><li><a href="global.html#buildServiceMessage">buildServiceMessage</a></li><li><a href="global.html#capRefereeTargets">capRefereeTargets</a></li><li><a href="global.html#checkAdminRole">checkAdminRole</a></li><li><a href="global.html#checkBan">checkBan</a></li><li><a href="global.html#checkChannelMinPermissions">checkChannelMinPermissions</a></li><li><a href="global.html#checkCooldown">checkCooldown</a></li><li><a href="global.html#checkIntervalleAdhesion">checkIntervalleAdhesion</a></li><li><a href="global.html#checkMessageValidity">checkMessageValidity</a></li><li><a href="global.html#checkPermissions">checkPermissions</a></li><li><a href="global.html#checkTargets">checkTargets</a></li><li><a href="global.html#choiceLabel">choiceLabel</a></li><li><a href="global.html#classifyError">classifyError</a></li><li><a href="global.html#client">client</a></li><li><a href="global.html#closeBddInstance">closeBddInstance</a></li><li><a href="global.html#commands">commands</a></li><li><a href="global.html#configModule">configModule</a></li><li><a href="global.html#contactAdminServer">contactAdminServer</a></li><li><a href="global.html#createErrorReporter">createErrorReporter</a></li><li><a href="global.html#decryptDatabase">decryptDatabase</a></li><li><a href="global.html#dedupeRecipients">dedupeRecipients</a></li><li><a href="global.html#defaultRunner">defaultRunner</a></li><li><a href="global.html#defineRankRange">defineRankRange</a></li><li><a href="global.html#delay">delay</a></li><li><a href="global.html#deleteBanMessages">deleteBanMessages</a></li><li><a href="global.html#deleteDPMsgs">deleteDPMsgs</a></li><li><a href="global.html#deleteOldAttachment">deleteOldAttachment</a></li><li><a href="global.html#deleteSetupAdhesion">deleteSetupAdhesion</a></li><li><a href="global.html#deliverDirectMessages">deliverDirectMessages</a></li><li><a href="global.html#describeError">describeError</a></li><li><a href="global.html#deterministicColor">deterministicColor</a></li><li><a href="global.html#displayChannelFilter">displayChannelFilter</a></li><li><a href="global.html#displayChannelRankFilter">displayChannelRankFilter</a></li><li><a href="global.html#displaySetupAdhesion">displaySetupAdhesion</a></li><li><a href="global.html#downloadAttachment">downloadAttachment</a></li><li><a href="global.html#eraseGuild">eraseGuild</a></li><li><a href="global.html#eraseLeftGuild">eraseLeftGuild</a></li><li><a href="global.html#errorCode">errorCode</a></li><li><a href="global.html#escapeLinkLabel">escapeLinkLabel</a></li><li><a href="global.html#extractRanks">extractRanks</a></li><li><a href="global.html#fetchArchive">fetchArchive</a></li><li><a href="global.html#fetchHomeGuilds">fetchHomeGuilds</a></li><li><a href="global.html#fetchTargets">fetchTargets</a></li><li><a href="global.html#fillBlueCommands">fillBlueCommands</a></li><li><a href="global.html#filterArchiveNames">filterArchiveNames</a></li><li><a href="global.html#findGuildMemberByHandle">findGuildMemberByHandle</a></li><li><a href="global.html#findHomeMember">findHomeMember</a></li><li><a href="global.html#findMemberIn">findMemberIn</a></li><li><a href="global.html#forgetDepartedGuilds">forgetDepartedGuilds</a></li><li><a href="global.html#formatBackupStatus">formatBackupStatus</a></li><li><a href="global.html#formatBytes">formatBytes</a></li><li><a href="global.html#formatCadence">formatCadence</a></li><li><a href="global.html#formatDiskUsage">formatDiskUsage</a></li><li><a href="global.html#formatPlayerStats">formatPlayerStats</a></li><li><a href="global.html#formatRawRanks">formatRawRanks</a></li><li><a href="global.html#formatSiteVisitStats">formatSiteVisitStats</a></li><li><a href="global.html#formatSnapshotAge">formatSnapshotAge</a></li><li><a href="global.html#formatTarget">formatTarget</a></li><li><a href="global.html#getAdhesion">getAdhesion</a></li><li><a href="global.html#getAdminRole">getAdminRole</a></li><li><a href="global.html#getBacklog">getBacklog</a></li><li><a href="global.html#getBddInstance">getBddInstance</a></li><li><a href="global.html#getCpuPercent">getCpuPercent</a></li><li><a href="global.html#getDiskUsage">getDiskUsage</a></li><li><a href="global.html#getInviteFromChannel">getInviteFromChannel</a></li><li><a href="global.html#getInviteFromMessage">getInviteFromMessage</a></li><li><a href="global.html#getReporter">getReporter</a></li><li><a href="global.html#getServicesAndID">getServicesAndID</a></li><li><a href="global.html#getSnapshotsBetween">getSnapshotsBetween</a></li><li><a href="global.html#getTargetRegions">getTargetRegions</a></li><li><a href="global.html#getTips">getTips</a></li><li><a href="global.html#homeGuildIds">homeGuildIds</a></li><li><a href="global.html#initialIteration">initialIteration</a></li><li><a href="global.html#installProcessGuards">installProcessGuards</a></li><li><a href="global.html#isBackupFresh">isBackupFresh</a></li><li><a href="global.html#isDiscordInvite">isDiscordInvite</a></li><li><a href="global.html#isGone">isGone</a></li><li><a href="global.html#isIgnorableDiscordError">isIgnorableDiscordError</a></li><li><a href="global.html#isLoopbackHost">isLoopbackHost</a></li><li><a href="global.html#isModuleEnabled">isModuleEnabled</a></li><li><a href="global.html#isSnowflake">isSnowflake</a></li><li><a href="global.html#isTransientNetworkError">isTransientNetworkError</a></li><li><a href="global.html#isValidModule">isValidModule</a></li><li><a href="global.html#leadershipIds">leadershipIds</a></li><li><a href="global.html#listArchives">listArchives</a></li><li><a href="global.html#listModules">listModules</a></li><li><a href="global.html#listPartner">listPartner</a></li><li><a href="global.html#loadAdhesionFiles">loadAdhesionFiles</a></li><li><a href="global.html#loadAdhesionPaths">loadAdhesionPaths</a></li><li><a href="global.html#manageDistribution">manageDistribution</a></li><li><a href="global.html#manageMsgExpiration">manageMsgExpiration</a></li><li><a href="global.html#manageOldFiles">manageOldFiles</a></li><li><a href="global.html#manageServiceSuccess">manageServiceSuccess</a></li><li><a href="global.html#matchesToken">matchesToken</a></li><li><a href="global.html#maxSnowflake">maxSnowflake</a></li><li><a href="global.html#memberMatchesHandle">memberMatchesHandle</a></li><li><a href="global.html#newChannelPartner">newChannelPartner</a></li><li><a href="global.html#nextTips">nextTips</a></li><li><a href="global.html#nextTransmissionAfter">nextTransmissionAfter</a></li><li><a href="global.html#normalizeInvite">normalizeInvite</a></li><li><a href="global.html#normalizeText">normalizeText</a></li><li><a href="global.html#notifyBannedUser">notifyBannedUser</a></li><li><a href="global.html#olderThanRetention">olderThanRetention</a></li><li><a href="global.html#ownsDatabase">ownsDatabase</a></li><li><a href="global.html#parisDaysLater">parisDaysLater</a></li><li><a href="global.html#parisOffsetMs">parisOffsetMs</a></li><li><a href="global.html#parisWallClock">parisWallClock</a></li><li><a href="global.html#parseDirectMessageRequest">parseDirectMessageRequest</a></li><li><a href="global.html#parseDiscordHandle">parseDiscordHandle</a></li><li><a href="global.html#parseRefereeAlert">parseRefereeAlert</a></li><li><a href="global.html#parseSiteVisitStats">parseSiteVisitStats</a></li><li><a href="global.html#pctDelta">pctDelta</a></li><li><a href="global.html#pickArchive">pickArchive</a></li><li><a href="global.html#ping">ping</a></li><li><a href="global.html#printHelp">printHelp</a></li><li><a href="global.html#purgeFeedIdentifiers">purgeFeedIdentifiers</a></li><li><a href="global.html#purgeLogChannel">purgeLogChannel</a></li><li><a href="global.html#purgeOldFeedEvents">purgeOldFeedEvents</a></li><li><a href="global.html#purgeOldRollbacks">purgeOldRollbacks</a></li><li><a href="global.html#purgeStaffLogs">purgeStaffLogs</a></li><li><a href="global.html#rankChoices">rankChoices</a></li><li><a href="global.html#readBackupStatus">readBackupStatus</a></li><li><a href="global.html#readPackageInfo">readPackageInfo</a></li><li><a href="global.html#readSiteVisitStats">readSiteVisitStats</a></li><li><a href="global.html#recordDailySnapshot">recordDailySnapshot</a></li><li><a href="global.html#recordEvent">recordEvent</a></li><li><a href="global.html#recrute">recrute</a></li><li><a href="global.html#refuseUnjoinedGuild">refuseUnjoinedGuild</a></li><li><a href="global.html#relay">relay</a></li><li><a href="global.html#remainingIteration">remainingIteration</a></li><li><a href="global.html#remoteServerReset">remoteServerReset</a></li><li><a href="global.html#removeIntervalle">removeIntervalle</a></li><li><a href="global.html#reportError">reportError</a></li><li><a href="global.html#resetBddInstance">resetBddInstance</a></li><li><a href="global.html#resetChannel">resetChannel</a></li><li><a href="global.html#resetRefereeRole">resetRefereeRole</a></li><li><a href="global.html#resetServer">resetServer</a></li><li><a href="global.html#resetServerInvite">resetServerInvite</a></li><li><a href="global.html#resolutionWaves">resolutionWaves</a></li><li><a href="global.html#resolveDiscordHandle">resolveDiscordHandle</a></li><li><a href="global.html#restoreBackup">restoreBackup</a></li><li><a href="global.html#restoreDatabase">restoreDatabase</a></li><li><a href="global.html#rollbackTimestamp">rollbackTimestamp</a></li><li><a href="global.html#runDataRetention">runDataRetention</a></li><li><a href="global.html#runDataRetentionOnce">runDataRetentionOnce</a></li><li><a href="global.html#runSetupWizard">runSetupWizard</a></li><li><a href="global.html#safeChannel">safeChannel</a></li><li><a href="global.html#safeFollowUp">safeFollowUp</a></li><li><a href="global.html#safeMsgReply">safeMsgReply</a></li><li><a href="global.html#safeReact">safeReact</a></li><li><a href="global.html#safeReply">safeReply</a></li><li><a href="global.html#safeUser">safeUser</a></li><li><a href="global.html#saveAdhesionPaths">saveAdhesionPaths</a></li><li><a href="global.html#saveSiteVisitStats">saveSiteVisitStats</a></li><li><a href="global.html#scrim">scrim</a></li><li><a href="global.html#scrubFeedField">scrubFeedField</a></li><li><a href="global.html#scrubFeedText">scrubFeedText</a></li><li><a href="global.html#searchInWaves">searchInWaves</a></li><li><a href="global.html#searchString">searchString</a></li><li><a href="global.html#selectExpiredLogMessages">selectExpiredLogMessages</a></li><li><a href="global.html#selectExpiredRollbacks">selectExpiredRollbacks</a></li><li><a href="global.html#sendAdhesion">sendAdhesion</a></li><li><a href="global.html#sendDatabaseBackup">sendDatabaseBackup</a></li><li><a href="global.html#sendInteractiveMsg">sendInteractiveMsg</a></li><li><a href="global.html#sendLog">sendLog</a></li><li><a href="global.html#sendServiceMessage">sendServiceMessage</a></li><li><a href="global.html#servicesChoices">servicesChoices</a></li><li><a href="global.html#servicesWithNoRanks">servicesWithNoRanks</a></li><li><a href="global.html#setBotAdminRole">setBotAdminRole</a></li><li><a href="global.html#setChannelFilter">setChannelFilter</a></li><li><a href="global.html#setChannelRankFilter">setChannelRankFilter</a></li><li><a href="global.html#setModuleEnabled">setModuleEnabled</a></li><li><a href="global.html#setRankFilter">setRankFilter</a></li><li><a href="global.html#setRefereeRole">setRefereeRole</a></li><li><a href="global.html#setServerInvite">setServerInvite</a></li><li><a href="global.html#setupIntervalAdhesion">setupIntervalAdhesion</a></li><li><a href="global.html#showBotAdminRole">showBotAdminRole</a></li><li><a href="global.html#showRefereeRole">showRefereeRole</a></li><li><a href="global.html#showServerInvite">showServerInvite</a></li><li><a href="global.html#splitForDiscord">splitForDiscord</a></li><li><a href="global.html#startInternalApi">startInternalApi</a></li><li><a href="global.html#statsPlayer">statsPlayer</a></li><li><a href="global.html#statsSite">statsSite</a></li><li><a href="global.html#subscribe">subscribe</a></li><li><a href="global.html#toSQLiteDate">toSQLiteDate</a></li><li><a href="global.html#truncateMessage">truncateMessage</a></li><li><a href="global.html#ts">ts</a></li><li><a href="global.html#unban">unban</a></li><li><a href="global.html#updateCommands">updateCommands</a></li><li><a href="global.html#validateSqliteFile">validateSqliteFile</a></li></ul>
 </nav>
 
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Thu Oct 01 2026 05:53:30 GMT+0200 (heure d’été d’Europe centrale)
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Thu Oct 01 2026 12:26:59 GMT+0200 (heure d’été d’Europe centrale)
 </footer>
 
 <script> prettyPrint(); </script>
