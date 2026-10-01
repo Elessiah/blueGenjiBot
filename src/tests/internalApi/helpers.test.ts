@@ -31,6 +31,24 @@ test("isLoopbackHost reconnait les adresses confinees a la machine", () => {
   assert.equal(isLoopbackHost("::1"), true);
   assert.equal(isLoopbackHost("localhost"), true);
   assert.equal(isLoopbackHost("::ffff:127.0.0.1"), true);
+  assert.equal(isLoopbackHost("::FFFF:127.0.0.1"), true);
+});
+
+test("isLoopbackHost refuse une IPv4 mappee qui n'est pas la boucle locale", () => {
+  assert.equal(isLoopbackHost("::ffff:10.0.0.1"), false);
+  assert.equal(isLoopbackHost("::ffff:0.0.0.0"), false);
+  assert.equal(isLoopbackHost("::ffff:"), false);
+  assert.equal(isLoopbackHost("0.0.0.0"), false);
+  assert.equal(isLoopbackHost("::"), false);
+});
+
+test("deterministicColor garde les teintes calculees avant le passage a Int32Array", () => {
+  // Valeurs de l'ancien `(h * 31 + charCodeAt) | 0` : une couleur deja vue
+  // sur la page publique ne doit pas changer.
+  assert.equal(deterministicColor("123456789012345678"), "hsl(49, 65%, 50%)");
+  assert.equal(deterministicColor("1098765432109876543"), "hsl(196, 65%, 50%)");
+  assert.equal(deterministicColor("aaaaaaaaaaaaaaaaaa"), "hsl(24, 65%, 50%)");
+  assert.equal(deterministicColor(""), "hsl(0, 65%, 50%)");
 });
 
 test("isLoopbackHost retient la valeur par defaut de startInternalApi", () => {

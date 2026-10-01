@@ -38,3 +38,9 @@ test("normalizeInvite preserve un protocole existant", () => {
   assert.equal(normalizeInvite("http://discord.gg/abc123"), "http://discord.gg/abc123");
   assert.equal(normalizeInvite("https://discord.com/invite/abc123"), "https://discord.com/invite/abc123");
 });
+
+test("isDiscordInvite accepte un code en majuscules ou mixte (classe insensible a la casse)", () => {
+  assert.equal(isDiscordInvite("https://discord.gg/AbCdEf-12"), true);
+  assert.equal(isDiscordInvite("DISCORD.GG/ABC"), true);
+  assert.equal(isDiscordInvite("https://discord.gg/abc_def"), false);
+});

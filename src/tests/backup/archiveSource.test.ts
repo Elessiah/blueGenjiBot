@@ -185,11 +185,56 @@ test("resolveCommand refuse tout ce qui n'est pas un nom nu", () => {
   }
 });
 
-test("commandEnv fige le PATH et garde le reste de l'environnement", () => {
-  const env = commandEnv({ PATH: "/home/bot/.local/bin:.:/usr/bin", HOME: "/home/bot" });
+test("commandEnv fige le PATH et garde ce qui mène à la configuration rclone", () => {
+  const env = commandEnv({
+    PATH: "/home/bot/.local/bin:.:/usr/bin",
+    HOME: "/home/bot",
+    XDG_CONFIG_HOME: "/home/bot/.config",
+    RCLONE_CONFIG: "/home/bot/rclone.conf",
+    RCLONE_CONFIG_PASS: "pass",
+    LANG: "fr_FR.UTF-8",
+    LC_ALL: "C.UTF-8",
+    TMPDIR: "/var/tmp",
+    TZ: "Europe/Paris",
+  });
   assert.equal(env.PATH, COMMAND_PATH);
   assert.equal(env.PATH, "/usr/local/bin:/usr/bin:/bin");
   assert.equal(env.HOME, "/home/bot");
+  assert.equal(env.XDG_CONFIG_HOME, "/home/bot/.config");
+  assert.equal(env.RCLONE_CONFIG, "/home/bot/rclone.conf");
+  assert.equal(env.RCLONE_CONFIG_PASS, "pass");
+  assert.equal(env.LANG, "fr_FR.UTF-8");
+  assert.equal(env.LC_ALL, "C.UTF-8");
+  assert.equal(env.TMPDIR, "/var/tmp");
+  assert.equal(env.TZ, "Europe/Paris");
+});
+
+test("commandEnv ne transmet aucun secret du bot aux processus enfants", () => {
+  const source: NodeJS.ProcessEnv = {
+    PATH: "/usr/bin",
+    HOME: "/home/bot",
+    TOKEN: "discord-token",
+    INTERNAL_API_TOKEN: "internal-token",
+    OWNER_ID: "1",
+    BACKUP_AGE_IDENTITY: "/home/bot/.bluegenji-backup.key",
+    BACKUP_RCLONE_REMOTE: "onedrive:BlueGenji/backups",
+    NODE_OPTIONS: "--require /tmp/x.js",
+    LD_PRELOAD: "/tmp/x.so",
+  };
+  const env = commandEnv(source);
+  assert.deepEqual(Object.keys(env).sort(), ["HOME", "PATH"]);
+  // Une copie : l'environnement du bot reste intact.
+  assert.equal(source.PATH, "/usr/bin");
+  assert.equal(source.TOKEN, "discord-token");
+});
+
+test("commandEnv sans environnement de départ ne garde que le PATH figé", () => {
+  assert.deepEqual(commandEnv({}), { PATH: COMMAND_PATH });
+});
+
+test("commandEnv ignore une variable au préfixe proche (RCLONEX, LCX)", () => {
+  const env = commandEnv({ RCLONEX: "a", LCX: "b", LC: "c", rclone_config: "d" });
+  assert.deepEqual(env, { PATH: COMMAND_PATH });
 });
 
 test("execCommand traduit un binaire absent en MissingCommandError, sans chemin dans le message", async () => {
