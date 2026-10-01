@@ -420,9 +420,17 @@ export async function checkLatestArchive(config: BackupCheckConfig, deps: Backup
     const local = config.sources.localDir && findMissingCommand(error) ? ", et le dossier local d'archives est illisible" : "";
     return { label, ok: false, detail: `${failureDetail(error, "stockage des archives illisible")}${local}` };
   }
+  // Une source muette (stockage distant injoignable, commande introuvable,
+  // dossier local illisible) : ce que l'autre a rendu n'est peut-être pas le
+  // plus récent — le contrôle ne peut pas s'annoncer réussi sur ce qu'il n'a
+  // pas vu, ni dire « aucune archive » quand une source n'a pas été lue.
+  for (const failure of failures) {
+    log(`[backup-check] ${label} : ${failure}`);
+  }
+  const silent = missingCommand ? missingCommandText(missingCommand) : "une source d'archives n'a pas répondu";
   const latest = archives[0];
   if (!latest) {
-    return { label, ok: false, detail: "aucune archive trouvée" };
+    return { label, ok: false, detail: failures.length > 0 ? `${silent} — aucune archive dans l'autre source` : "aucune archive trouvée" };
   }
   const decrypt: PipelineStage = { command: "age", args: ["--decrypt", "-i", config.sources.identity] };
   const stages: PipelineStage[] =
@@ -444,14 +452,7 @@ export async function checkLatestArchive(config: BackupCheckConfig, deps: Backup
   }
   const site = config.expectedEntries.includes("appbluegenji.sql") ? "" : " (dump du site non configuré)";
   const verified = `\`${latest.name}\` déchiffrée, ${config.expectedEntries.join(" et ")} présents${site}`;
-  // Une source muette (stockage distant injoignable, dossier local illisible) :
-  // l'archive lue n'est peut-être pas la plus récente — le contrôle ne peut
-  // pas s'annoncer réussi sur ce qu'il n'a pas vu.
   if (failures.length > 0) {
-    for (const failure of failures) {
-      log(`[backup-check] ${label} : ${failure}`);
-    }
-    const silent = missingCommand ? missingCommandText(missingCommand) : "une source d'archives n'a pas répondu";
     return { label, ok: false, detail: `${silent} — seule ${verified}, peut-être pas la plus récente` };
   }
   return { label, ok: true, detail: verified };
