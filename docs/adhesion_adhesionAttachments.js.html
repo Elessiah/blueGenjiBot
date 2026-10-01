@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>JSDoc: Source: utils/parisTime.js</title>
+    <title>JSDoc: Source: adhesion/adhesionAttachments.js</title>
 
     <script src="scripts/prettify/prettify.js"> </script>
     <script src="scripts/prettify/lang-css.js"> </script>
@@ -17,7 +17,7 @@
 
 <div id="main">
 
-    <h1 class="page-title">Source: utils/parisTime.js</h1>
+    <h1 class="page-title">Source: adhesion/adhesionAttachments.js</h1>
 
     
 
@@ -26,109 +26,80 @@
     
     <section>
         <article>
-            <pre class="prettyprint source linenums"><code>/**
- * Résolution d'une heure de l'horloge **parisienne** en instant absolu.
- *
- * Les rappels d'adhésion sont annoncés « à 10:00 (heure Europe/Paris) » —
- * `doc/adhesions-commands-user.md` l'écrit deux fois — et la tâche cron qui les
- * déclenche épingle bien ce fuseau. Mais la date du prochain envoi, elle, se
- * calculait avec `Date.prototype.setHours`, qui ne connaît qu'un seul fuseau :
- * **celui de la machine**. Trois conventions se croisaient donc — cron en
- * Europe/Paris, calcul en heure serveur, stockage et comparaison en UTC — et
- * elles ne s'accordaient que tant que l'horloge du serveur était à Paris.
- *
- * Ce n'est pas une hypothèse d'école : l'image Docker par défaut tourne en UTC.
- * Là, `setHours(10)` écrit 10:00 UTC quand le cron se réveille à 08:00 UTC ;
- * la ligne n'est donc pas due, elle attend le réveil du lendemain, et comme
- * chaque envoi réamorce le compte depuis cet instant, **le rappel gagne un jour
- * à chaque période**, sans une erreur ni une ligne de journal.
- *
- * Le fuseau est ici nommé une fois et résolu par `Intl`, qui porte la base des
- * changements d'heure. Plus rien ne dépend de `TZ`.
- */
-/** Le seul fuseau dans lequel ce bot annonce une heure. */
-const PARIS_TIME_ZONE = "Europe/Paris";
-const PARIS_PARTS = new Intl.DateTimeFormat("en-US", {
-    timeZone: PARIS_TIME_ZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hourCycle: "h23",
-});
+            <pre class="prettyprint source linenums"><code>import { AttachmentBuilder } from "discord.js";
+import { loadAdhesionPaths } from "../adhesion/loadAdhesionPaths.js";
+import { safeUser } from "../safe/safeUser.js";
+import { logAdhesion, logAdhesionError } from "../adhesion/adhesionLog.js";
+import { MISSING_FILES_NOTICE } from "../adhesion/adhesionNotices.js";
 /**
- * Lit l'horloge parisienne d'un instant.
- * @param instant Instant à lire.
- * @returns Les champs affichés par une horloge posée à Paris.
+ * Lit la configuration des fichiers d'adhésion.
+ *
+ * Une configuration absente est signalée à l'auteur (qui attend ses papiers)
+ * et au journal ; une lecture qui lève n'est signalée qu'au journal.
+ * @param client Client Discord utilisé pour les envois et le journal.
+ * @param author Auteur de l'envoi, prévenu si les fichiers manquent.
+ * @returns Les chemins configurés, ou `null` s'ils sont indisponibles.
  */
-function parisWallClock(instant) {
-    const parts = PARIS_PARTS.formatToParts(instant);
-    const read = (type) => {
-        const found = parts.find((part) => part.type === type);
-        return found ? Number(found.value) : 0;
-    };
-    return {
-        year: read("year"),
-        month: read("month"),
-        day: read("day"),
-        hour: read("hour"),
-        minute: read("minute"),
-        second: read("second"),
-    };
+async function readAdhesionPaths(client, author) {
+    let paths;
+    try {
+        paths = await loadAdhesionPaths(undefined, client);
+    }
+    catch (err) {
+        await logAdhesionError(client, "sendAdhesion loadAdhesionPaths", err);
+        return null;
+    }
+    if (!paths) {
+        await reportMissingPaths(client, author);
+        return null;
+    }
+    return paths;
 }
 /**
- * Décalage d'Europe/Paris par rapport à UTC, à un instant donné.
- * @param instant Instant auquel mesurer le décalage.
- * @returns Le décalage en millisecondes (+1 h en hiver, +2 h en été).
+ * Prévient l'auteur puis le journal que les fichiers sont introuvables.
+ * @param client Client Discord utilisé pour les envois et le journal.
+ * @param author Auteur de l'envoi.
+ * @returns Une promesse résolue une fois les deux avis tentés.
  */
-function parisOffsetMs(instant) {
-    if (!Number.isFinite(instant.getTime()))
-        return Number.NaN;
-    const wall = parisWallClock(instant);
-    const asIfUtc = Date.UTC(wall.year, wall.month - 1, wall.day, wall.hour, wall.minute, wall.second);
-    // `formatToParts` tronque à la seconde : on compare donc à l'instant
-    // lui-même tronqué, sinon le décalage porterait les millisecondes en trop.
-    return asIfUtc - Math.floor(instant.getTime() / 1000) * 1000;
+async function reportMissingPaths(client, author) {
+    try {
+        await safeUser(client, author, undefined, [], MISSING_FILES_NOTICE);
+    }
+    catch (err) {
+        await logAdhesionError(client, "sendAdhesion safeUser (no paths)", err);
+    }
+    await logAdhesion(client, "Echec de l'envoi d'adhésion car non récupération des chemins");
 }
 /**
- * Instant auquel l'horloge parisienne affichera `hour:00:00`, `days` jours
- * après le **jour parisien** de `from`.
- *
- * Le jour se compte sur le calendrier de Paris et non sur celui du serveur :
- * à 23:30 UTC on est déjà au lendemain à Paris, et « dans 7 jours » doit partir
- * de ce lendemain-là.
- *
- * Deux passes suffisent : la première corrige avec le décalage d'un instant
- * approché, la seconde avec celui de l'instant trouvé. Elles convergent parce
- * que l'erreur de la première est au plus d'une heure, et qu'une heure autour
- * de 10:00 ne franchit aucun changement d'heure — à Paris ils tombent à 02:00
- * et à 03:00. Une heure choisie dans ce creux-là n'aurait pas cette garantie :
- * 02:30 n'existe pas le dimanche de mars et existe deux fois celui d'octobre.
- *
- * @param from Instant de référence.
- * @param days Nombre de jours à ajouter au jour parisien de `from`.
- * @param hour Heure parisienne visée, sur 24 h.
- * @returns L'instant correspondant.
+ * Prépare les deux pièces jointes d'un envoi : le bulletin d'adhésion puis les statuts.
+ * @param client Client Discord utilisé pour le journal.
+ * @param paths Chemins et noms des deux fichiers.
+ * @returns Les pièces jointes dans cet ordre, ou `null` si l'une ne peut être préparée.
  */
-function parisDaysLater(from, days, hour) {
-    if (!Number.isFinite(from.getTime()))
-        return new Date(Number.NaN);
-    const wall = parisWallClock(from);
-    // `Date.UTC` normalise le débordement : le 35 octobre devient le 4 novembre.
-    const asIfUtc = Date.UTC(wall.year, wall.month - 1, wall.day + days, hour);
-    // Au-delà de ce que `Date` sait représenter (± 8,64e15 ms), `Date.UTC` rend
-    // `NaN`. On **rend une date invalide** plutôt que de laisser `Intl` lever :
-    // une cadence absurde est une saisie à refuser, pas une panne — et le refus
-    // est écrit une seule fois, la où le rappel s'écrit.
-    if (!Number.isFinite(asIfUtc))
-        return new Date(Number.NaN);
-    const approx = asIfUtc - parisOffsetMs(new Date(asIfUtc));
-    return new Date(asIfUtc - parisOffsetMs(new Date(approx)));
+async function buildAttachments(client, paths) {
+    try {
+        return [
+            new AttachmentBuilder(paths.adhesion, { name: paths.adhesionName }),
+            new AttachmentBuilder(paths.status, { name: paths.statusName }),
+        ];
+    }
+    catch (err) {
+        await logAdhesionError(client, "Failed to fetch adhesion and/or status", err);
+        return null;
+    }
 }
-export { PARIS_TIME_ZONE, parisDaysLater, parisOffsetMs, parisWallClock };
-//# sourceMappingURL=parisTime.js.map</code></pre>
+/**
+ * Charge les pièces jointes à envoyer, ou signale pourquoi c'est impossible.
+ * @param client Client Discord utilisé pour les envois et le journal.
+ * @param author Auteur de l'envoi, prévenu si les fichiers ne sont pas configurés.
+ * @returns Le bulletin d'adhésion et les statuts, ou `null` en cas d'échec (déjà signalé).
+ */
+async function loadAdhesionAttachments(client, author) {
+    const paths = await readAdhesionPaths(client, author);
+    return paths ? buildAttachments(client, paths) : null;
+}
+export { loadAdhesionAttachments };
+//# sourceMappingURL=adhesionAttachments.js.map</code></pre>
         </article>
     </section>
 

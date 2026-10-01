@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>JSDoc: Source: utils/parisTime.js</title>
+    <title>JSDoc: Source: adhesion/adhesionLog.js</title>
 
     <script src="scripts/prettify/prettify.js"> </script>
     <script src="scripts/prettify/lang-css.js"> </script>
@@ -17,7 +17,7 @@
 
 <div id="main">
 
-    <h1 class="page-title">Source: utils/parisTime.js</h1>
+    <h1 class="page-title">Source: adhesion/adhesionLog.js</h1>
 
     
 
@@ -26,109 +26,40 @@
     
     <section>
         <article>
-            <pre class="prettyprint source linenums"><code>/**
- * Résolution d'une heure de l'horloge **parisienne** en instant absolu.
- *
- * Les rappels d'adhésion sont annoncés « à 10:00 (heure Europe/Paris) » —
- * `doc/adhesions-commands-user.md` l'écrit deux fois — et la tâche cron qui les
- * déclenche épingle bien ce fuseau. Mais la date du prochain envoi, elle, se
- * calculait avec `Date.prototype.setHours`, qui ne connaît qu'un seul fuseau :
- * **celui de la machine**. Trois conventions se croisaient donc — cron en
- * Europe/Paris, calcul en heure serveur, stockage et comparaison en UTC — et
- * elles ne s'accordaient que tant que l'horloge du serveur était à Paris.
- *
- * Ce n'est pas une hypothèse d'école : l'image Docker par défaut tourne en UTC.
- * Là, `setHours(10)` écrit 10:00 UTC quand le cron se réveille à 08:00 UTC ;
- * la ligne n'est donc pas due, elle attend le réveil du lendemain, et comme
- * chaque envoi réamorce le compte depuis cet instant, **le rappel gagne un jour
- * à chaque période**, sans une erreur ni une ligne de journal.
- *
- * Le fuseau est ici nommé une fois et résolu par `Intl`, qui porte la base des
- * changements d'heure. Plus rien ne dépend de `TZ`.
- */
-/** Le seul fuseau dans lequel ce bot annonce une heure. */
-const PARIS_TIME_ZONE = "Europe/Paris";
-const PARIS_PARTS = new Intl.DateTimeFormat("en-US", {
-    timeZone: PARIS_TIME_ZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hourCycle: "h23",
-});
+            <pre class="prettyprint source linenums"><code>import { sendLog } from "../safe/sendLog.js";
 /**
- * Lit l'horloge parisienne d'un instant.
- * @param instant Instant à lire.
- * @returns Les champs affichés par une horloge posée à Paris.
+ * Journalisation de l'envoi des adhésions.
+ *
+ * L'envoi ne doit jamais lever : il tourne aussi bien sous une commande que
+ * sous la tâche planifiée des rappels, où une exception arrêterait le passage
+ * pour toutes les lignes suivantes. Chaque écriture au journal est donc
+ * elle-même gardée — un journal injoignable ne fait pas échouer l'envoi.
  */
-function parisWallClock(instant) {
-    const parts = PARIS_PARTS.formatToParts(instant);
-    const read = (type) => {
-        const found = parts.find((part) => part.type === type);
-        return found ? Number(found.value) : 0;
-    };
-    return {
-        year: read("year"),
-        month: read("month"),
-        day: read("day"),
-        hour: read("hour"),
-        minute: read("minute"),
-        second: read("second"),
-    };
+/**
+ * Écrit une ligne au journal de supervision, sans jamais lever.
+ * @param client Client Discord utilisé pour le journal.
+ * @param text Ligne à journaliser.
+ * @returns Une promesse résolue une fois la tentative terminée.
+ */
+async function logAdhesion(client, text) {
+    try {
+        await sendLog(client, text);
+    }
+    catch { /* le journal est la voie de secours : rien d'autre à tenter */ }
 }
 /**
- * Décalage d'Europe/Paris par rapport à UTC, à un instant donné.
- * @param instant Instant auquel mesurer le décalage.
- * @returns Le décalage en millisecondes (+1 h en hiver, +2 h en été).
+ * Journalise une exception sous le nom de l'étape qui l'a levée.
+ * @param client Client Discord utilisé pour le journal.
+ * @param step Étape en cause, en tête de la ligne (`&lt;étape>: &lt;message>`).
+ * @param err Valeur levée, `Error` ou non.
+ * @returns Une promesse résolue une fois la tentative terminée.
  */
-function parisOffsetMs(instant) {
-    if (!Number.isFinite(instant.getTime()))
-        return Number.NaN;
-    const wall = parisWallClock(instant);
-    const asIfUtc = Date.UTC(wall.year, wall.month - 1, wall.day, wall.hour, wall.minute, wall.second);
-    // `formatToParts` tronque à la seconde : on compare donc à l'instant
-    // lui-même tronqué, sinon le décalage porterait les millisecondes en trop.
-    return asIfUtc - Math.floor(instant.getTime() / 1000) * 1000;
+async function logAdhesionError(client, step, err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    await logAdhesion(client, step + ": " + reason);
 }
-/**
- * Instant auquel l'horloge parisienne affichera `hour:00:00`, `days` jours
- * après le **jour parisien** de `from`.
- *
- * Le jour se compte sur le calendrier de Paris et non sur celui du serveur :
- * à 23:30 UTC on est déjà au lendemain à Paris, et « dans 7 jours » doit partir
- * de ce lendemain-là.
- *
- * Deux passes suffisent : la première corrige avec le décalage d'un instant
- * approché, la seconde avec celui de l'instant trouvé. Elles convergent parce
- * que l'erreur de la première est au plus d'une heure, et qu'une heure autour
- * de 10:00 ne franchit aucun changement d'heure — à Paris ils tombent à 02:00
- * et à 03:00. Une heure choisie dans ce creux-là n'aurait pas cette garantie :
- * 02:30 n'existe pas le dimanche de mars et existe deux fois celui d'octobre.
- *
- * @param from Instant de référence.
- * @param days Nombre de jours à ajouter au jour parisien de `from`.
- * @param hour Heure parisienne visée, sur 24 h.
- * @returns L'instant correspondant.
- */
-function parisDaysLater(from, days, hour) {
-    if (!Number.isFinite(from.getTime()))
-        return new Date(Number.NaN);
-    const wall = parisWallClock(from);
-    // `Date.UTC` normalise le débordement : le 35 octobre devient le 4 novembre.
-    const asIfUtc = Date.UTC(wall.year, wall.month - 1, wall.day + days, hour);
-    // Au-delà de ce que `Date` sait représenter (± 8,64e15 ms), `Date.UTC` rend
-    // `NaN`. On **rend une date invalide** plutôt que de laisser `Intl` lever :
-    // une cadence absurde est une saisie à refuser, pas une panne — et le refus
-    // est écrit une seule fois, la où le rappel s'écrit.
-    if (!Number.isFinite(asIfUtc))
-        return new Date(Number.NaN);
-    const approx = asIfUtc - parisOffsetMs(new Date(asIfUtc));
-    return new Date(asIfUtc - parisOffsetMs(new Date(approx)));
-}
-export { PARIS_TIME_ZONE, parisDaysLater, parisOffsetMs, parisWallClock };
-//# sourceMappingURL=parisTime.js.map</code></pre>
+export { logAdhesion, logAdhesionError };
+//# sourceMappingURL=adhesionLog.js.map</code></pre>
         </article>
     </section>
 
