@@ -209,26 +209,50 @@ test("un membre injoignable : les autres reçoivent, l'auteur reçoit la liste d
   ]);
 });
 
-test("rôle vide sans membre : la confirmation lève, l'erreur est journalisée", async () => {
+const NO_RECIPIENT_LOG = "sendAdhesion: aucun destinataire à servir (rôle sans membre ou membres illisibles), envoi annulé.";
+const NO_RECIPIENT_NOTICE = "Echec de l'envoi des adhésions : personne n'a pu être joint (rôle visé sans membre ou illisible). " +
+  "Vérifiez la cible avant de réessayer !";
+
+test("rôle vide sans membre : l'auteur est avisé, le journal sans nom, échec", async () => {
   validPaths();
   const rec = recorder();
   const ok = await sendAdhesion(fakeClient(rec), null, null, null, fakeRole([]), false, author(rec));
-  assert.equal(ok, true);
-  assert.deepEqual(rec.trace, [
-    log("sendAdhesion safeUser author success: Cannot read properties of undefined (reading 'globalName')"),
-  ]);
+  assert.equal(ok, false);
+  assert.deepEqual(rec.trace, [log(NO_RECIPIENT_LOG), dm("author", NO_RECIPIENT_NOTICE)]);
 });
 
-test("membres du rôle illisibles : journalisé, le membre direct n'est pas ajouté", async () => {
+test("membres du rôle illisibles : journalisé, le membre direct n'est pas ajouté, l'auteur avisé, échec", async () => {
   validPaths();
   const rec = recorder();
   const role = { members: { map: () => { throw new Error("kaboom"); } } } as unknown as Role;
   const ok = await sendAdhesion(fakeClient(rec), null, null, fakeMember(fakeUser(rec, "Alice")), role, false, author(rec));
-  assert.equal(ok, true);
+  assert.equal(ok, false);
   assert.deepEqual(rec.trace, [
     log("sendAdhesion targets: kaboom"),
-    log("sendAdhesion safeUser author success: Cannot read properties of undefined (reading 'globalName')"),
+    log(NO_RECIPIENT_LOG),
+    dm("author", NO_RECIPIENT_NOTICE),
   ]);
+});
+
+test("salon servi mais rôle vide : le salon reçoit, l'auteur est avisé des deux, échec", async () => {
+  validPaths();
+  const rec = recorder();
+  const ok = await sendAdhesion(fakeClient(rec), null, fakeChannel(rec), null, fakeRole([]), false, author(rec));
+  assert.equal(ok, false);
+  assert.deepEqual(rec.trace, [
+    { to: "channel:general", content: DEFAULT_MESSAGE, files: FILES },
+    dm("author", "Adhésion envoyé avec succès dans le channel general !"),
+    log(NO_RECIPIENT_LOG),
+    dm("author", NO_RECIPIENT_NOTICE),
+  ]);
+});
+
+test("rôle vide et auteur injoignable : l'avis manqué est journalisé, toujours un échec", async () => {
+  validPaths();
+  const rec = recorder();
+  const ok = await sendAdhesion(fakeClient(rec), null, null, null, fakeRole([]), false, author(rec, true));
+  assert.equal(ok, false);
+  assert.deepEqual(rec.trace, [log(NO_RECIPIENT_LOG), log("SafeUser failed : boom")]);
 });
 
 test("salon et membre : le salon d'abord, puis les membres, chacun confirmé", async () => {
