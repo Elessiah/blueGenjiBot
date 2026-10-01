@@ -125,7 +125,10 @@ function describeError(error: unknown): string {
         const shownCode = typeof code === "number" || (typeof code === "string" && /^[A-Za-z0-9_]{1,40}$/.test(code)) ? code : null;
         if (error instanceof Error) {
             const message = typeof error.message === "string" ? error.message : "(message non textuel)";
-            return shownCode === null ? message : `${message} [${shownCode}]`;
+            // Une vraie `Error` garde son code (« auth/invalid-token »…) : son
+            // message est déjà rendu, filtrer le code ne protégerait rien.
+            const errCode = typeof code === "number" || (typeof code === "string" && /^\S{1,80}$/.test(code)) ? code : null;
+            return errCode === null ? message : `${message} [${errCode}]`;
         }
         // Une chaîne levée est rendue telle quelle : aucun code du bot ne lève
         // le texte d'une annonce (règle à garder : lever une `Error`).
