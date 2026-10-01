@@ -98,7 +98,7 @@ command -v mysqldump    # le script de sauvegarde appelle ce nom
 
 MariaDB 11.8 : `sudo apt install -y mariadb-server` **seulement si la distribution la livre** (Debian 13) — vérifier avec `apt-cache policy mariadb-server` avant d'installer, puis `mariadb --version`. Sinon, l'installer depuis le dépôt officiel de MariaDB (série 11.8). À faire **ici**, pas à l'étape 4 : une version trop ancienne ne se découvre sinon qu'à l'import.
 
-Sur Debian 13, `mysqldump` est fourni par **`mariadb-client` lui-même** (lien vers `mariadb-dump`, constaté sur l'ancienne machine) : aucun paquet de plus. Sur une autre distribution, si `command -v mysqldump` ne rend rien, chercher le paquet qui fournit `/usr/bin/mysqldump` (`apt-file search /usr/bin/mysqldump`) : sans lui, la sauvegarde du lundi échoue sur un `mysqldump: command not found`.
+Sur Debian 13, `mysqldump` est fourni par **`mariadb-client` lui-même** (lien vers `mariadb-dump` ; `dpkg -S /usr/bin/mysqldump` répondait `mariadb-client` sur l'ancienne machine) : aucun paquet de plus. Sur une autre distribution, si `command -v mysqldump` ne rend rien, chercher le paquet qui fournit `/usr/bin/mysqldump` (`apt-file search /usr/bin/mysqldump`) : sans lui, la sauvegarde du lundi échoue sur un `mysqldump: command not found`.
 
 Créer aussi le **dossier des journaux** que nomment l'entrée pm2 du site (`--output`, `--error`) et les lignes de cron (`>> …/bluegenji-backup.log`) — même emplacement que sur l'ancienne machine. Absent, `pm2 start` échoue en `ENOENT`, et le shell du cron refuse la redirection **sans lancer le script** : aucune sauvegarde, et aucune trace de l'échec.
 
@@ -278,9 +278,10 @@ ls data/quarantine/teams data/quarantine/players
 
 Chaque ligne désigne un fichier attendu : `data/quarantine/teams/team-<team_id>-<nom>`
 pour un logo, `data/quarantine/players/user-<user_id>-<nom>` pour un avatar, où
-`<nom>` est le dernier segment de `logo_url`. Trois écarts possibles :
+`<nom>` est le dernier segment de `logo_url`. Les écarts se règlent dans cet ordre :
 
-- **Ligne sans fichier, et `<nom>` présent dans `public/uploads/teams` (ou `avatars`)** : l'image a été rétablie après l'archive. Rejouer le rétablissement :
+- **Logo partagé** — d'abord vérifier, pour chaque ligne d'équipe sans fichier, qu'aucune autre équipe ne désigne le même logo (`SELECT id FROM bg_teams WHERE logo_url = '<logo_url>'`). S'il y en a une, le fichier en ligne est resté présent quoi qu'il soit arrivé (le masquage d'un logo partagé copie au lieu de déplacer) : on ne peut plus savoir s'il avait été rétabli. Clore la ligne comme supprimée (cas suivant) — l'équipe signalée pourra renvoyer son logo —, **jamais** la rétablir sur la seule présence du fichier.
+- **Ligne sans fichier, logo non partagé, et `<nom>` présent dans `public/uploads/teams` (ou `avatars`)** : l'image a été rétablie après l'archive. Rejouer le rétablissement :
 
   ```sql
   UPDATE bg_teams SET logo_url = '<logo_url>' WHERE id = <team_id> AND logo_url IS NULL;
@@ -289,7 +290,7 @@ pour un logo, `data/quarantine/players/user-<user_id>-<nom>` pour un avatar, où
   ```
 
   Le logo d'entrée solo d'un joueur dont l'avatar est ainsi rétabli se recale à sa prochaine modification de profil ou inscription.
-- **Ligne sans fichier nulle part** : l'image a été supprimée après l'archive. Clore la ligne : `UPDATE bg_logo_quarantines SET status = 'PURGED', closed_at = NOW() WHERE id = <id>;`. Même geste quand le logo est **partagé** avec une autre équipe (le fichier en ligne reste alors présent quoi qu'il soit arrivé) : on ne peut plus savoir s'il avait été rétabli, et l'équipe signalée pourra le renvoyer.
+- **Ligne sans fichier nulle part** : l'image a été supprimée après l'archive. Clore la ligne : `UPDATE bg_logo_quarantines SET status = 'PURGED', closed_at = NOW() WHERE id = <id>;`. Même geste pour un logo partagé (cas précédent).
 - **Fichier sans ligne `HIDDEN`** : l'image a été masquée après l'archive, et la base restaurée l'affiche toujours. Si `bg_teams.logo_url` (ou `bg_users.avatar_url`) de l'équipe ou du joueur indiqué par le nom du fichier désigne encore `<nom>`, remettre le fichier en ligne (`mv data/quarantine/teams/team-<team_id>-<nom> public/uploads/teams/<nom>`, ou `players/user-<user_id>-<nom>` vers `public/uploads/avatars/<nom>`) puis **rejuger** : masquer ou retirer de nouveau depuis le panneau des signalements si le signalement figure dans la base restaurée, sinon depuis la fiche de l'équipe. Si plus rien ne le désigne, supprimer le fichier : il serait recopié chaque heure sans jamais être purgé.
 
 ## 6. Le site : rejouer les suppressions de compte
