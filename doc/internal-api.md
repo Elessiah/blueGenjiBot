@@ -15,7 +15,17 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
 ## Endpoints
 
 - `GET /internal/stats`
-  - Retourne les stats du bot (serveurs/channels/messages/users 30 jours).
+  - Retourne les stats du bot : `affiliatedServers`, `affiliatedChannels`,
+    `messagesLast7Days`, `relayedMessagesLast7Days`, `uniqueUsersLast7Days`
+    et `windowDays` (7).
+  - Les compteurs de messages ne regardent pas plus loin que la purge des
+    messages relayés (`MESSAGE_RETENTION_DAYS`, 7 jours) : annoncés sur
+    30 jours (`…Last30Days`), ils n'en voyaient que sept. Même fenêtre pour
+    `GET /internal/kpis` (tuiles « messages » et « relais » : `delta: null`,
+    la période précédente étant déjà purgée ; `windowDays` dans la réponse)
+    et `GET /internal/servers` (`relays7j` au lieu de `relays30j`,
+    `windowDays` dans la réponse). Le site lit les deux noms pendant le
+    déploiement.
 
 - `POST /internal/auth/send-code`
   - Body: `{ "discordId": "123...", "code": "123456" }`

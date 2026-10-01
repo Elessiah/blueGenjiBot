@@ -21,11 +21,25 @@ import { describeError } from "@/safe/errorGuards.js";
 import { recordEvent, getBacklog, subscribe } from "@/feed/feedBus.js";
 import { getSnapshotsBetween } from "@/snapshots/dailySnapshot.js";
 import { listModules, isValidModule, setModuleEnabled, MODULE_KEYS, type ModuleKey } from "@/modules/moduleGuard.js";
-import { pctDelta, absDelta, deterministicColor, isLoopbackHost, matchesToken } from "@/internalApi/helpers.js";
+import { absDelta, deterministicColor, isLoopbackHost, matchesToken } from "@/internalApi/helpers.js";
 import { parseSiteVisitStats, saveSiteVisitStats } from "@/siteVisits/siteVisits.js";
 import { parseDirectMessageRequest, parseRefereeAlert } from "@/notifications/notifications.js";
 import { deliverDirectMessages, alertLeadership, alertReferees, HomeGuildUnavailableError } from "@/notifications/deliver.js";
 import { HandleResolutionTimeoutError, resolveDiscordHandle } from "@/notifications/resolveHandle.js";
+import { MESSAGE_RETENTION_DAYS } from "@/privacy/retentionPeriods.js";
+
+/**
+ * Fenetre des compteurs tires de `OGMsg` / `DPMsg` (`/internal/stats`,
+ * `/internal/kpis`, `/internal/servers`).
+ *
+ * Ces tables sont purgees a `MESSAGE_RETENTION_DAYS` : un compteur annonce sur
+ * 30 jours n'en voyait que sept, et la comparaison des KPI a la periode
+ * 30-60 jours portait sur une plage toujours vide. La fenetre est donc celle de
+ * la conservation, et elle est renvoyee dans les reponses (`windowDays`) pour
+ * que le site affiche ce qui a ete compte plutot qu'une duree recopiee.
+ */
+const MESSAGE_WINDOW_DAYS = MESSAGE_RETENTION_DAYS;
+const MESSAGE_WINDOW_SQL = `date >= datetime('now', '-${MESSAGE_WINDOW_DAYS} day')`;
 
 /**
  * Verifie le header `x-internal-token` avant de laisser passer une requete `/internal/*`.
@@ -275,33 +289,34 @@ export function startInternalApi(client: Client) {
         { query: "1 = 1", values: [] },
       )) as { total: number }[];
 
-      const messagesLast30Days = (await bdd.get(
+      const messagesLast7Days = (await bdd.get(
         "OGMsg",
         ["COUNT(*) AS total"],
         {},
-        { query: "date >= datetime('now', '-30 day')", values: [] },
+        { query: MESSAGE_WINDOW_SQL, values: [] },
       )) as { total: number }[];
 
-      const relayedMessagesLast30Days = (await bdd.get(
+      const relayedMessagesLast7Days = (await bdd.get(
         "DPMsg",
         ["COUNT(*) AS total"],
         {},
-        { query: "date >= datetime('now', '-30 day')", values: [] },
+        { query: MESSAGE_WINDOW_SQL, values: [] },
       )) as { total: number }[];
 
-      const uniqueUsersLast30Days = (await bdd.get(
+      const uniqueUsersLast7Days = (await bdd.get(
         "OGMsg",
         ["COUNT(DISTINCT id_author) AS total"],
         {},
-        { query: "date >= datetime('now', '-30 day')", values: [] },
+        { query: MESSAGE_WINDOW_SQL, values: [] },
       )) as { total: number }[];
 
       res.json({
         affiliatedServers: Number(affiliatedServers[0]?.total ?? 0),
         affiliatedChannels: Number(affiliatedChannels[0]?.total ?? 0),
-        messagesLast30Days: Number(messagesLast30Days[0]?.total ?? 0),
-        relayedMessagesLast30Days: Number(relayedMessagesLast30Days[0]?.total ?? 0),
-        uniqueUsersLast30Days: Number(uniqueUsersLast30Days[0]?.total ?? 0),
+        messagesLast7Days: Number(messagesLast7Days[0]?.total ?? 0),
+        relayedMessagesLast7Days: Number(relayedMessagesLast7Days[0]?.total ?? 0),
+        uniqueUsersLast7Days: Number(uniqueUsersLast7Days[0]?.total ?? 0),
+        windowDays: MESSAGE_WINDOW_DAYS,
       });
     } catch (error) {
       await sendLog(client, `/internal/stats error: ${(error as Error).message}`);
@@ -477,24 +492,24 @@ export function startInternalApi(client: Client) {
       const channelsNowRows = (await bdd.get("ChannelPartner", ["COUNT(*) AS total"], {}, { query: "1 = 1", values: [] })) as { total: number }[];
       const channelsNow = Number(channelsNowRows[0]?.total ?? 0);
 
-      const msgCurrRows = (await bdd.get("OGMsg", ["COUNT(*) AS total"], {}, { query: "date >= datetime('now', '-30 day')", values: [] })) as { total: number }[];
-      const msgPrevRows = (await bdd.get("OGMsg", ["COUNT(*) AS total"], {}, { query: "date >= datetime('now', '-60 day') AND date < datetime('now', '-30 day')", values: [] })) as { total: number }[];
+      // Aucune periode precedente pour les messages : elle tomberait avant la
+      // purge de `OGMsg` / `DPMsg`, donc toujours vide — d'ou `delta: null`
+      // plutot qu'une variation calculee contre zero.
+      const msgCurrRows = (await bdd.get("OGMsg", ["COUNT(*) AS total"], {}, { query: MESSAGE_WINDOW_SQL, values: [] })) as { total: number }[];
       const messagesNow = Number(msgCurrRows[0]?.total ?? 0);
-      const messagesPrev = Number(msgPrevRows[0]?.total ?? 0);
 
-      const relayCurrRows = (await bdd.get("DPMsg", ["COUNT(*) AS total"], {}, { query: "date >= datetime('now', '-30 day')", values: [] })) as { total: number }[];
-      const relayPrevRows = (await bdd.get("DPMsg", ["COUNT(*) AS total"], {}, { query: "date >= datetime('now', '-60 day') AND date < datetime('now', '-30 day')", values: [] })) as { total: number }[];
+      const relayCurrRows = (await bdd.get("DPMsg", ["COUNT(*) AS total"], {}, { query: MESSAGE_WINDOW_SQL, values: [] })) as { total: number }[];
       const relaysNow = Number(relayCurrRows[0]?.total ?? 0);
-      const relaysPrev = Number(relayPrevRows[0]?.total ?? 0);
 
       const snap30 = await getSnapshotsBetween(31, 29);
       const serversPrev = snap30.length > 0 ? snap30[0].servers_count : serversNow;
       const channelsPrev = snap30.length > 0 ? snap30[0].channels_count : channelsNow;
 
       const buildSeries = async (table: "OGMsg" | "DPMsg"): Promise<number[]> => {
+        // Douze points sur la fenetre de conservation (14 h chacun a 7 jours).
         const rows = await bdd.raw<{ bucket: number; count: number }>(
-          `SELECT CAST((julianday('now') - julianday(date)) / 2.5 AS INTEGER) AS bucket, COUNT(*) AS count FROM ${table} WHERE date >= datetime('now', '-30 day') GROUP BY bucket ORDER BY bucket DESC`,
-          []
+          `SELECT CAST((julianday('now') - julianday(date)) / ? AS INTEGER) AS bucket, COUNT(*) AS count FROM ${table} WHERE ${MESSAGE_WINDOW_SQL} GROUP BY bucket ORDER BY bucket DESC`,
+          [MESSAGE_WINDOW_DAYS / 12]
         );
         const series = new Array(12).fill(0);
         for (const r of rows) {
@@ -526,8 +541,9 @@ export function startInternalApi(client: Client) {
       res.json({
         servers: { value: serversNow, delta: absDelta(serversNow, serversPrev), series: serversSeries },
         channels: { value: channelsNow, delta: absDelta(channelsNow, channelsPrev), series: channelsSeries },
-        messages: { value: messagesNow, delta: pctDelta(messagesNow, messagesPrev), series: messagesSeries },
-        relays: { value: relaysNow, delta: pctDelta(relaysNow, relaysPrev), series: relaysSeries },
+        messages: { value: messagesNow, delta: null, series: messagesSeries },
+        relays: { value: relaysNow, delta: null, series: relaysSeries },
+        windowDays: MESSAGE_WINDOW_DAYS,
       });
     } catch (error) {
       await sendLog(client, `/internal/kpis error: ${(error as Error).message}`);
@@ -546,7 +562,7 @@ export function startInternalApi(client: Client) {
         id: string;
         name: string;
         memberCount: number;
-        relays30j: number;
+        relays7j: number;
         status: "ok" | "lag" | "off";
         sparkline: number[];
         accentColor: string;
@@ -555,10 +571,10 @@ export function startInternalApi(client: Client) {
 
       for (const g of guilds) {
         const relayRows = await bdd.raw<{ total: number }>(
-          "SELECT COUNT(*) AS total FROM DPMsg d JOIN ChannelPartner c ON d.id_channel = c.id_channel WHERE c.id_guild = ? AND d.date >= datetime('now', '-30 day')",
+          `SELECT COUNT(*) AS total FROM DPMsg d JOIN ChannelPartner c ON d.id_channel = c.id_channel WHERE c.id_guild = ? AND d.${MESSAGE_WINDOW_SQL}`,
           [g.id]
         );
-        const relays30j = Number(relayRows[0]?.total ?? 0);
+        const relays7j = Number(relayRows[0]?.total ?? 0);
 
         const lastRows = await bdd.raw<{ last_ts: string | null; hours_ago: number | null }>(
           "SELECT MAX(d.date) AS last_ts, (julianday('now') - julianday(MAX(d.date))) * 24 AS hours_ago FROM DPMsg d JOIN ChannelPartner c ON d.id_channel = c.id_channel WHERE c.id_guild = ?",
@@ -575,8 +591,8 @@ export function startInternalApi(client: Client) {
         }
 
         const sparkRows = await bdd.raw<{ bucket: number; count: number }>(
-          "SELECT CAST((julianday('now') - julianday(d.date)) / 3 AS INTEGER) AS bucket, COUNT(*) AS count FROM DPMsg d JOIN ChannelPartner c ON d.id_channel = c.id_channel WHERE c.id_guild = ? AND d.date >= datetime('now', '-30 day') GROUP BY bucket ORDER BY bucket DESC",
-          [g.id]
+          `SELECT CAST((julianday('now') - julianday(d.date)) / ? AS INTEGER) AS bucket, COUNT(*) AS count FROM DPMsg d JOIN ChannelPartner c ON d.id_channel = c.id_channel WHERE c.id_guild = ? AND d.${MESSAGE_WINDOW_SQL} GROUP BY bucket ORDER BY bucket DESC`,
+          [MESSAGE_WINDOW_DAYS / 10, g.id]
         );
         const sparkline = new Array(10).fill(0);
         for (const r of sparkRows) {
@@ -590,7 +606,7 @@ export function startInternalApi(client: Client) {
           id: g.id,
           name: g.name,
           memberCount,
-          relays30j,
+          relays7j,
           status,
           sparkline,
           accentColor: deterministicColor(g.id),
@@ -598,9 +614,9 @@ export function startInternalApi(client: Client) {
         });
       }
 
-      enriched.sort((a, b) => b.relays30j - a.relays30j);
+      enriched.sort((a, b) => b.relays7j - a.relays7j);
       const paged = enriched.slice(offset, offset + limit);
-      res.json({ servers: paged, total: enriched.length, limit, offset });
+      res.json({ servers: paged, total: enriched.length, limit, offset, windowDays: MESSAGE_WINDOW_DAYS });
     } catch (error) {
       await sendLog(client, `/internal/servers error: ${(error as Error).message}`);
       res.status(500).json({ error: "INTERNAL_SERVERS_ERROR" });

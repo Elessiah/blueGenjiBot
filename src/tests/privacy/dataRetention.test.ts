@@ -4,7 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
-import type { Client } from "discord.js";
+import { DiscordAPIError, type Client } from "discord.js";
+import { RESTJSONErrorCodes } from "discord-api-types/v10";
 
 const TMP_DB = path.join(os.tmpdir(), `bgenji-retention-${randomUUID()}.sqlite`);
 process.env.BDD_PATH = TMP_DB;
@@ -15,6 +16,7 @@ import {
   anonymizeOldActivity,
   eraseGuild,
   eraseLeftGuild,
+  forgetDeletedChannels,
   forgetDepartedGuilds,
   runDataRetention,
 } from "../../privacy/dataRetention.js";
@@ -255,6 +257,95 @@ test("guildDelete d'une autre application n'efface pas le serveur", async () => 
 test("un client pas encore prêt n'efface rien", async () => {
   assert.equal(await forgetDepartedGuilds(fakeClient([], "app-prod", false)), null);
   assert.equal(await count("SELECT COUNT(*) AS n FROM ChannelPartner WHERE id_guild = 'g-stay'"), 1);
+});
+
+/** Erreur discord.js portant le code donné, comme celles de `channels.fetch`. */
+function apiError(code: number): DiscordAPIError {
+  return new DiscordAPIError({ code, message: "test" }, code, 404, "GET", "https://discord.test", {});
+}
+
+/**
+ * Client dont un serveur rejoint expose un cache de salons. `fetch` lève
+ * « salon inconnu » pour `gone`, « accès manquant » pour `hidden`, et rend un
+ * salon où `sendLog` peut écrire pour tout le reste.
+ */
+function channelClient(
+  guildId: string,
+  cachedChannelIds: string[],
+  { gone = [] as string[], hidden = [] as string[], available = true, applicationId = "app-prod", ready = true } = {},
+): Client {
+  const fetched: string[] = [];
+  return {
+    isReady: () => ready,
+    application: { id: applicationId },
+    user: { id: `user-of-${applicationId}` },
+    guilds: {
+      cache: new Map([[guildId, { id: guildId, available, channels: { cache: new Map(cachedChannelIds.map((id) => [id, { id }])) } }]]),
+    },
+    users: { fetch: async () => ({ send: async (msg: string) => { logs.push(msg); return { id: "m1" }; } }) },
+    channels: {
+      fetched,
+      fetch: async (id: string) => {
+        fetched.push(id);
+        if (gone.includes(id)) { throw apiError(RESTJSONErrorCodes.UnknownChannel); }
+        if (hidden.includes(id)) { throw apiError(RESTJSONErrorCodes.MissingAccess); }
+        return { id, send: async (msg: string) => { logs.push(msg); return { id: "m2" }; } };
+      },
+    },
+  } as unknown as Client;
+}
+
+async function addPartnerChannel(guildId: string, channelId: string): Promise<void> {
+  const bdd = await getBddInstance();
+  await bdd.raw("INSERT INTO ChannelPartner (id_channel, id_guild) VALUES (?, ?)", [channelId, guildId]);
+}
+
+async function partnerChannelCount(channelId: string): Promise<number> {
+  return count("SELECT COUNT(*) AS n FROM ChannelPartner WHERE id_channel = ?", [channelId]);
+}
+
+test("un salon relayé supprimé pendant l'arrêt est retiré, ses voisins restent", async () => {
+  await seedGuild("g-chan", "c-alive");
+  await addPartnerChannel("g-chan", "c-deleted");
+  const bdd = await getBddInstance();
+  await bdd.raw("INSERT INTO ChannelPartnerRank (id_channel, id_rank) VALUES ('c-deleted', 2)");
+  logs.length = 0;
+  const removed = await forgetDeletedChannels(channelClient("g-chan", ["c-alive"], { gone: ["c-deleted"] }));
+  assert.deepEqual(removed, ["c-deleted"]);
+  assert.equal(await partnerChannelCount("c-deleted"), 0);
+  assert.equal(await count("SELECT COUNT(*) AS n FROM ChannelPartnerRank WHERE id_channel = 'c-deleted'"), 0);
+  assert.equal(await partnerChannelCount("c-alive"), 1);
+  // La configuration du serveur, elle, n'est pas touchée : il est toujours rejoint.
+  assert.equal(await count("SELECT COUNT(*) AS n FROM RefereeRole WHERE id_guild = 'g-chan'"), 1);
+  assert.ok(logs.some((line) => line.includes("1 salon(s) relayé(s) supprimé(s)")));
+});
+
+test("un salon absent du cache mais injoignable pour une autre raison est gardé", async () => {
+  await seedGuild("g-hidden", "c-hidden");
+  await addPartnerChannel("g-hidden", "c-thread");
+  // `c-thread` : fil archivé, absent du cache mais rendu par Discord.
+  const removed = await forgetDeletedChannels(channelClient("g-hidden", [], { hidden: ["c-hidden"] }));
+  assert.deepEqual(removed, []);
+  assert.equal(await partnerChannelCount("c-hidden"), 1);
+  assert.equal(await partnerChannelCount("c-thread"), 1);
+});
+
+test("un salon présent dans le cache n'est pas relu chez Discord", async () => {
+  await seedGuild("g-cached", "c-cached");
+  const client = channelClient("g-cached", ["c-cached"]);
+  assert.deepEqual(await forgetDeletedChannels(client), []);
+  assert.deepEqual((client.channels as unknown as { fetched: string[] }).fetched, []);
+});
+
+test("rien n'est retiré d'un serveur indisponible, d'un client pas prêt ou d'une autre application", async () => {
+  await seedGuild("g-guarded", "c-guarded");
+  assert.deepEqual(await forgetDeletedChannels(channelClient("g-guarded", [], { gone: ["c-guarded"], available: false })), []);
+  assert.equal(await forgetDeletedChannels(channelClient("g-guarded", [], { gone: ["c-guarded"], ready: false })), null);
+  assert.equal(
+    await forgetDeletedChannels(channelClient("g-guarded", [], { gone: ["c-guarded"], applicationId: "app-dev" })),
+    null,
+  );
+  assert.equal(await partnerChannelCount("c-guarded"), 1);
 });
 
 test.after(async () => {
