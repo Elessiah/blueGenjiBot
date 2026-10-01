@@ -135,6 +135,10 @@ test("describeError ne serialise jamais une valeur non-Error", () => {
   assert.equal(describeError({ content: "LFT pseudo#1234" }), "valeur levée non standard (object)");
   assert.equal(describeError(null), "valeur levée non standard (null)");
   assert.equal(describeError(42), "valeur levée non standard (42)");
+  assert.equal(
+    describeError(new Error("fetch failed", { cause: withCode("getaddrinfo", "EAI_AGAIN") })),
+    "fetch failed (cause : getaddrinfo [EAI_AGAIN])",
+  );
   assert.equal(describeError({ code: 50013, content: "pseudo" }), "valeur levée non standard (object, code 50013)");
 });
 

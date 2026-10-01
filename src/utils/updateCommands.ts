@@ -38,7 +38,10 @@ async function updateCommands(client: Client,
     } catch (error) {
         // `reportError` trie pannes réseau, erreurs Discord sans gravité (sur la
         // console pm2) et vraies fautes (au journal), et ne lève jamais.
-        await reportError(client, `updateCommands (${guildId})`, error);
+        // Contexte fixe : une panne commune à tous les serveurs (jeton, corps
+        // refusé) se dédoublonne en un seul signalement ; le serveur va à pm2.
+        console.warn(`updateCommands: échec pour le serveur ${guildId}`);
+        await reportError(client, "updateCommands", error);
     }
 }
 

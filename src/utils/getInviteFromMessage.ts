@@ -1,9 +1,8 @@
-﻿import {describeError} from "@/safe/errorGuards.js";
+﻿import {reportError} from "@/safe/processGuards.js";
 import type {Client, Message, TextChannel} from "discord.js";
 import {PermissionsBitField} from "discord.js";
 import {getInviteFromChannel} from "./getInviteFromChannel.js";
 import {getBddInstance} from "../bdd/Bdd.js";
-import {sendLog} from "@/safe/sendLog.js";
 
 /**
  * Extrait un lien d'invitation à partir d'un message.
@@ -40,7 +39,9 @@ async function getInviteFromMessage(client: Client,
     } catch (e) {
         // L'identifiant du message, jamais son texte : une annonce cite des
         // pseudos, que le journal ne reçoit pas.
-        await sendLog(client, "(getInviteFromMessage)Erreur pour le message " + message.id + " (salon " + message.channelId + ", serveur " + message.guildId + ")" + "\nMessage d'erreur : \n" + describeError(e));
+        // Ni le texte de l'annonce ni de quoi la retrouver : `reportError` trie
+        // et dédoublonne (une permission manquante ne réécrit pas à chaque annonce).
+        await reportError(client, "getInviteFromMessage", e);
         return ("");
     }
 }
