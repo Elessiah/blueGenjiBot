@@ -126,7 +126,11 @@ async function manageDistribution(message: Message,
         // l'annonce (pseudo de l'auteur, texte), que les journaux ne gardent pas.
         const description = describeError(err);
         // La pile pour pm2 (elle ne porte pas l'annonce), jamais l'objet entier.
-        console.error("manageDistribution error:", err instanceof Error && err.stack ? err.stack : description);
+        let trace = description;
+        try {
+            if (err instanceof Error && err.stack) { trace = err.stack; }
+        } catch { /* valeur illisible : la description suffit */ }
+        console.error("manageDistribution error:", trace);
         await sendLog(client, "manageDistribution error : \n" + description);
         return false;
     }
