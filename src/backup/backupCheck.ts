@@ -41,20 +41,19 @@
  * (`MYSQL_DEFAULTS_FILE` et `DB_DATABASE`), comme le script lui-même.
  */
 
-import { execFile, spawn, type ChildProcess, type SpawnOptions } from "node:child_process";
+import type { ChildProcess, SpawnOptions } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { promisify } from "node:util";
 
 import {
   archiveSourcesFromEnv,
+  execCommand,
   listArchives,
+  spawnCommand,
   type ArchiveSources,
   type CommandRunner,
 } from "@/backup/archiveSource.js";
-
-const execFileAsync = promisify(execFile);
 
 /** Fichiers qu'une archive complète doit contenir. */
 export const EXPECTED_ARCHIVE_ENTRIES = ["database.sqlite", "appbluegenji.sql"] as const;
@@ -110,11 +109,8 @@ export interface BackupCheckConfig {
   expectedEntries: string[];
 }
 
-/** Exécuteur par défaut : `execFile`, sans shell. */
-const defaultRunner: CommandRunner = async (command, args) => {
-  const { stdout } = await execFileAsync(command, args, { timeout: CHECK_TIMEOUT_MS, maxBuffer: 1024 * 1024 });
-  return stdout;
-};
+/** Exécuteur par défaut : `execCommand` (chemin absolu, `PATH` figé), sans shell. */
+const defaultRunner: CommandRunner = (command, args) => execCommand(command, args, CHECK_TIMEOUT_MS);
 
 /**
  * Lit un fichier `KEY=VALUE` (celui de `scripts/backup-onedrive.sh`), sans
@@ -252,7 +248,7 @@ function readOptionalFile(file: string): string | null {
  */
 export function runPipeline(
   stages: PipelineStage[],
-  spawnFn: SpawnFn = spawn as SpawnFn,
+  spawnFn: SpawnFn = spawnCommand,
   timeoutMs: number = CHECK_TIMEOUT_MS,
 ): Promise<string> {
   return new Promise((resolve, reject) => {

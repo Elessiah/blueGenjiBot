@@ -1,7 +1,10 @@
 import { classifyError, describeError, type ErrorSeverity } from "./errorGuards.js";
 
-/** Signature d'un rapporteur d'erreur : renvoie la gravité retenue. */
-type ErrorReporter = (context: string, error: unknown) => Promise<ErrorSeverity>;
+/**
+ * Signature d'un rapporteur d'erreur. La gravité n'est pas renvoyée : elle ne
+ * dépend que de l'erreur (`classifyError`) et figure en tête de la ligne émise.
+ */
+type ErrorReporter = (context: string, error: unknown) => Promise<void>;
 
 /** Dépendances injectables du rapporteur, pour le rendre testable hors Discord. */
 type ErrorReporterOptions = {
@@ -60,7 +63,7 @@ function createErrorReporter(options: ErrorReporterOptions): ErrorReporter {
         }
     }
 
-    return async function report(context: string, error: unknown): Promise<ErrorSeverity> {
+    return async function report(context: string, error: unknown): Promise<void> {
         const severity: ErrorSeverity = classifyError(error);
         const description: string = describeError(error);
         const key = `${severity}|${context}|${description}`;
@@ -69,7 +72,7 @@ function createErrorReporter(options: ErrorReporterOptions): ErrorReporter {
 
         if (entry && current - entry.last < windowMs) {
             entry.suppressed += 1;
-            return severity;
+            return;
         }
 
         const repeated: string = entry && entry.suppressed > 0
@@ -91,7 +94,6 @@ function createErrorReporter(options: ErrorReporterOptions): ErrorReporter {
                 await options.toRemote(line);
             } catch { /* idem : le report ne doit jamais lever */ }
         }
-        return severity;
     };
 }
 

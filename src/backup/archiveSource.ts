@@ -17,7 +17,7 @@
  * - `BACKUP_AGE_IDENTITY` : clé privée age (défaut `~/.bluegenji-backup.key`).
  */
 
-import { execFile, spawn } from "node:child_process";
+import { execFile, spawn, type ChildProcess, type SpawnOptions } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -49,11 +49,108 @@ export interface ArchiveRef {
 /** Exécute une commande externe ; injectable pour les tests. */
 export type CommandRunner = (command: string, args: string[]) => Promise<string>;
 
-/** Exécuteur par défaut : `execFile`, sans shell (aucun argument n'est interprété). */
-const defaultRunner: CommandRunner = async (command, args) => {
-  const { stdout } = await execFileAsync(command, args, { timeout: COMMAND_TIMEOUT_MS, maxBuffer: 1024 * 1024 });
+/**
+ * Seuls dossiers où une commande externe (`rclone`, `age`, `tar`) est
+ * cherchée. Le `PATH` hérité du process n'est jamais consulté : un dossier
+ * inscriptible placé devant (`~/.local/bin`, `.`…) suffirait sinon à faire
+ * exécuter un faux `age` qui recevrait la clé privée de l'exploitant.
+ */
+export const COMMAND_DIRS: readonly string[] = ["/usr/local/bin", "/usr/bin", "/bin"];
+/** `PATH` figé transmis aux processus enfants, pour leurs propres appels. */
+export const COMMAND_PATH = COMMAND_DIRS.join(":");
+
+/**
+ * Teste qu'un fichier existe et est exécutable.
+ * @param file Chemin absolu.
+ * @returns `true` si le fichier peut être lancé.
+ */
+function isExecutable(file: string): boolean {
+  try {
+    fs.accessSync(file, fs.constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Chemin absolu d'une commande, cherché dans `COMMAND_DIRS` seuls.
+ *
+ * Introuvable, la commande garde le chemin du premier dossier : le lancement
+ * échoue alors en `ENOENT`, que les appelants traitent déjà comme un binaire
+ * absent.
+ * @param name Nom nu de la commande (`age`, `rclone`, `tar`).
+ * @param dirs Dossiers de recherche (injectable pour les tests).
+ * @param canRun Test d'exécution (injectable pour les tests).
+ * @returns Le chemin absolu à lancer.
+ * @throws Si `name` n'est pas un nom nu (chemin, option…).
+ */
+export function resolveCommand(
+  name: string,
+  dirs: readonly string[] = COMMAND_DIRS,
+  canRun: (file: string) => boolean = isExecutable,
+): string {
+  if (!/^[a-z][a-z0-9_-]*$/i.test(name)) {
+    throw new Error(`nom de commande invalide : ${name}`);
+  }
+  const candidates = dirs.map((dir) => path.posix.join(dir, name));
+  return candidates.find(canRun) ?? candidates[0];
+}
+
+/**
+ * Environnement d'un processus enfant : celui du bot (`HOME` mène à la
+ * configuration rclone), au `PATH` près, figé.
+ * @param env Environnement de départ (par défaut `process.env`).
+ * @returns Une copie, `PATH` remplacé.
+ */
+export function commandEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  return { ...env, PATH: COMMAND_PATH };
+}
+
+/**
+ * `spawn` d'une commande externe : chemin absolu et `PATH` figé.
+ * @param command Nom nu de la commande.
+ * @param args Arguments, passés sans shell.
+ * @param options Options de `spawn` (l'environnement est imposé).
+ * @returns Le processus lancé.
+ */
+export function spawnCommand(command: string, args: string[], options: SpawnOptions): ChildProcess {
+  return spawn(resolveCommand(command), args, { ...options, env: commandEnv() });
+}
+
+/**
+ * `execFile` d'une commande externe : chemin absolu, `PATH` figé, sans shell.
+ * @param command Nom nu de la commande.
+ * @param args Arguments, passés sans shell.
+ * @param timeout Délai maximal, en millisecondes.
+ * @returns La sortie standard.
+ */
+export async function execCommand(command: string, args: string[], timeout: number = COMMAND_TIMEOUT_MS): Promise<string> {
+  const { stdout } = await execFileAsync(resolveCommand(command), args, {
+    timeout,
+    maxBuffer: 1024 * 1024,
+    env: commandEnv(),
+  });
   return stdout;
-};
+}
+
+/** Exécuteur par défaut : `execCommand`, sans shell (aucun argument n'est interprété). */
+const defaultRunner: CommandRunner = (command, args) => execCommand(command, args);
+
+/**
+ * Ordre décroissant des noms d'archive. Le nom porte une date `AAAA-MM-JJ` à
+ * largeur fixe : l'ordre des unités de code, indépendant de toute locale,
+ * est l'ordre chronologique.
+ * @param a Premier nom.
+ * @param b Second nom.
+ * @returns Négatif si `a` est plus récent que `b`.
+ */
+export function compareNewestFirst(a: string, b: string): number {
+  if (a === b) {
+    return 0;
+  }
+  return a > b ? -1 : 1;
+}
 
 /**
  * Lit la configuration des sources dans l'environnement.
@@ -91,7 +188,7 @@ function expandHome(value: string): string {
  */
 export function filterArchiveNames(names: string[]): string[] {
   const valid = names.map((name) => name.trim()).filter((name) => ARCHIVE_NAME.test(name));
-  return [...new Set(valid)].sort().reverse();
+  return [...new Set(valid)].sort(compareNewestFirst);
 }
 
 /**
@@ -160,7 +257,7 @@ export async function listArchives(sources: ArchiveSources, run: CommandRunner =
     throw new Error(failures.join(" ; "));
   }
   return {
-    archives: [...found.values()].sort((a, b) => (a.name < b.name ? 1 : a.name > b.name ? -1 : 0)),
+    archives: [...found.values()].sort((a, b) => compareNewestFirst(a.name, b.name)),
     failures,
   };
 }
@@ -203,8 +300,12 @@ export async function fetchArchive(
  */
 export function decryptDatabase(archivePath: string, identity: string, workDir: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    const age = spawn("age", ["--decrypt", "-i", identity, archivePath], { stdio: ["ignore", "pipe", "pipe"] });
-    const tar = spawn("tar", ["-x", "-f", "-", "-C", workDir, "database.sqlite"], { stdio: ["pipe", "ignore", "pipe"] });
+    const env = commandEnv();
+    const age = spawn(resolveCommand("age"), ["--decrypt", "-i", identity, archivePath], { stdio: ["ignore", "pipe", "pipe"], env });
+    const tar = spawn(resolveCommand("tar"), ["-x", "-f", "-", "-C", workDir, "database.sqlite"], {
+      stdio: ["pipe", "ignore", "pipe"],
+      env,
+    });
     const errors: string[] = [];
     let pending = 2;
     let failed = false;

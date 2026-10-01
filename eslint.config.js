@@ -17,10 +17,6 @@ export default tseslint.config(
       "docs/",
       "doc/",
       "coverage/",
-      // Ancien point d'entrée JavaScript, remplacé par `src/main.ts`. Il n'est
-      // pas compilé (`allowJs: false`) ni référencé par `package.json` :
-      // l'analyser reviendrait à corriger du code mort.
-      "src/main.js",
     ],
   },
   js.configs.recommended,

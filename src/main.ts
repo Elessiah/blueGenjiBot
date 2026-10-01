@@ -8,7 +8,7 @@ import {
   TextChannel,
 } from "discord.js";
 import cron from "node-cron";
-import { getBddInstance, closeBddInstance } from "./bdd/Bdd.js";
+import { getBddInstance, resetBddInstance } from "./bdd/Bdd.js";
 import { deleteDPMsgs } from "./bdd/deleteDPMsgs.js";
 import { checkBan } from "./check/checkBan.js";
 import { _resetChannel } from "./commandsHandlers/services/resetChannel.js";
@@ -326,14 +326,16 @@ client.on("channelDelete", async (channel) => {
 process.on('SIGINT', async () => {
     console.log('Arrêt du bot...');
     await client.destroy();
-    await closeBddInstance();
+    // Attend la fermeture réelle (WAL checkpointé) avant `process.exit`.
+    await resetBddInstance();
     process.exit(0);
 });
 
 process.on('SIGTERM', async () => {
     console.log('Arrêt du bot...');
     await client.destroy();
-    await closeBddInstance();
+    // Attend la fermeture réelle (WAL checkpointé) avant `process.exit`.
+    await resetBddInstance();
     process.exit(0);
 });
 
