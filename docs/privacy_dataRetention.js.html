@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: privacy/dataRetention.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: privacy/dataRetention.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * Durées de conservation des données personnelles que le bot garde en base
+ * (la purge des messages relayés elle-même vit dans
+ * `messages/manageMsgExpiration.ts` ; ce module ne fait que la rattraper).
+ *
+ * Trois ménages, joués au démarrage, chaque nuit par la tâche `cron`
+ * existante et après une restauration de la base — aucun ordonnanceur de plus :
+ *
+ * - **messages relayés** : la purge à 7 jours (`manageMsgExpiration`) n'était
+ *   entraînée que par un nouveau relais ; une semaine sans relais la laissait
+ *   dormir. La nuit la rattrape ;
+ * - **scrims et recherches** : au-delà de `ACTIVITY_AUTHOR_RETENTION_DAYS`,
+ *   repliés en nombres par jour, serveur et niveau (ou rôle), sans auteur ;
+ * - **serveurs quittés pendant un arrêt** : Discord n'envoie `guildDelete` qu'à
+ *   un bot connecté. Un serveur quitté pendant que le bot était arrêté — ou
+ *   dont l'oubli a échoué à mi-chemin — garderait sinon sa configuration sans
+ *   limite, alors que plus personne sur ce serveur ne peut la retirer.
+ */
+import { getBddInstance } from "../bdd/Bdd.js";
+import { manageMsgExpiration } from "../messages/manageMsgExpiration.js";
+import { reportError } from "../safe/processGuards.js";
+import { sendLog } from "../safe/sendLog.js";
+import { ACTIVITY_AUTHOR_RETENTION_DAYS } from "../privacy/retentionPeriods.js";
+/**
+ * Efface l'auteur des scrims et recherches plus vieux que la durée de
+ * conservation. N'échoue jamais bruyamment : l'erreur est signalée.
+ * @param client Client Discord, pour le signalement d'erreur.
+ * @returns Nombre de lignes anonymisées, ou `null` si le ménage a échoué.
+ */
+export async function anonymizeOldActivity(client) {
+    try {
+        const bdd = await getBddInstance();
+        const removed = await bdd.anonymizeActivityAuthors(ACTIVITY_AUTHOR_RETENTION_DAYS);
+        return removed.Scrim + removed.Recrute;
+    }
+    catch (error) {
+        await reportError(client, "anonymizeOldActivity", error);
+        return null;
+    }
+}
+/**
+ * Efface tout ce que la base garde d'un serveur quitté : sa configuration
+ * (`forgetGuild`), puis ses salons relayés et leurs services.
+ *
+ * Unique chemin d'oubli, partagé par `guildDelete` et le rattrapage du
+ * démarrage : deux copies divergeraient à la prochaine table ajoutée. Le
+ * serveur n'est pas relu chez Discord — il n'y est plus joignable, et
+ * `_resetServer`, qui le relit pour journaliser son nom, échouait justement là.
+ * Un échec de la configuration ne prive pas le serveur du retrait de ses
+ * salons relayés — qui cesseraient sinon d'être visés par des relais
+ * voués à l'échec : les deux sont tentés, puis la première erreur remonte.
+ * Ce qui reste est repris par le rattrapage suivant.
+ * @param guildId Identifiant du serveur quitté.
+ * @throws La première erreur rencontrée, une fois les deux étapes tentées.
+ */
+export async function eraseGuild(guildId) {
+    const bdd = await getBddInstance();
+    let failure = null;
+    // Deux étapes indépendantes (l'ordre n'importe pas) : chacune est tentée
+    // même si l'autre échoue.
+    try {
+        await bdd.forgetGuild(guildId);
+    }
+    catch (error) {
+        failure = error;
+    }
+    try {
+        const removal = await bdd.deleteGuildChannels(guildId);
+        if (!removal.success) {
+            throw new Error(removal.message);
+        }
+    }
+    catch (error) {
+        failure ??= error;
+    }
+    if (failure !== null) {
+        throw failure;
+    }
+}
+/**
+ * La base appartient-elle à l'application connectée (`BotOwner`) ?
+ *
+ * L'application (celle de `CLIENT_ID`), pas l'utilisateur du bot : sur une
+ * application ancienne les deux identifiants diffèrent, et c'est celui de
+ * l'application que l'exploitant reconnaît dans `BotOwner`. Sans elle, rien :
+ * revendiquer la base avec l'identifiant de l'utilisateur la fermerait ensuite
+ * à l'application elle-même.
+ * @param client Client Discord.
+ * @returns `true`/`false`, ou `null` quand rien ne peut être conclu.
+ */
+async function ownsDatabase(client) {
+    const applicationId = client.application?.id;
+    if (!applicationId) {
+        return null;
+    }
+    return (await getBddInstance()).claimOwnerApplication(applicationId);
+}
+/**
+ * `guildDelete` : efface un serveur quitté, **si** la base appartient à
+ * l'application connectée. Un bot lancé avec un autre jeton sur cette base
+ * (développement) et retiré d'un serveur où le bot de production reste
+ * effacerait sinon la configuration de ce dernier : les tables sont indexées
+ * par serveur, pas par application.
+ * @param client Client Discord.
+ * @param guildId Serveur quitté.
+ * @returns `true` si le serveur a été effacé, `false` si la garde l'a empêché.
+ * @throws Comme `eraseGuild`.
+ */
+export async function eraseLeftGuild(client, guildId) {
+    if ((await ownsDatabase(client)) !== true) {
+        return false;
+    }
+    await eraseGuild(guildId);
+    return true;
+}
+/**
+ * Oublie les serveurs configurés en base que le bot n'a plus rejoints.
+ *
+ * Le cache ne perd un serveur que sur `guildDelete` : un retrait survenu
+ * pendant une coupure du gateway qui n'a pas pu reprendre sa session reste
+ * au cache jusqu'au redémarrage — d'où la promesse « au redémarrage suivant »
+ * des textes, la passe de nuit n'étant qu'un rattrapage de plus.
+ *
+ * Deux gardes avant tout effacement, irréversible : le client doit être prêt
+ * (avant `clientReady`, Discord n'a encore livré aucun serveur et le cache
+ * vide effacerait la configuration de tous ; prêt, un cache vide veut bien
+ * dire que le bot n'est plus sur aucun serveur), et la base doit appartenir à l'application connectée
+ * (`claimOwnerApplication`) — un bot lancé avec un autre jeton sur cette base,
+ * un bot de développement par exemple, a un cache qui ne la décrit pas. Un serveur
+ * momentanément indisponible (panne Discord) reste dans le cache, marqué
+ * `available: false` : il n'est donc pas oublié.
+ * @param client Client Discord connecté (`client.guilds.cache` rempli).
+ * @returns Identifiants des serveurs oubliés, ou `null` si le rattrapage n'a
+ *          pas été joué (client pas prêt, application inconnue, base fermée ou
+ *          appartenant à une autre application) — à distinguer d'une passe
+ *          qui n'a rien trouvé.
+ */
+export async function forgetDepartedGuilds(client) {
+    const joined = client.guilds.cache;
+    if (!client.isReady()) {
+        return null;
+    }
+    // Un processus par shard ne voit que ses serveurs : il prendrait ceux des
+    // autres pour quittés. Le bot ne se partitionne pas ; s'il le fait un jour,
+    // le rattrapage se tait plutôt que d'effacer la moitié du réseau.
+    if ((client.shard?.count ?? 1) > 1) {
+        return null;
+    }
+    const bdd = await getBddInstance();
+    const owned = await ownsDatabase(client);
+    if (owned === null) {
+        return null;
+    }
+    if (!owned) {
+        await sendLog(client, "Rattrapage des serveurs quittés ignoré : cette base appartient à une autre application Discord " +
+            "(si le bot a changé d'application, vider la table BotOwner).");
+        return null;
+    }
+    const departed = (await bdd.listConfiguredGuildIds()).filter((id) => !joined.has(id));
+    const forgotten = [];
+    for (const guildId of departed) {
+        // Relu avant chaque effacement : entre la liste et ici, des `await` ont
+        // pu laisser le bot être réinvité sur ce serveur (et y être reconfiguré).
+        if (client.guilds.cache.has(guildId)) {
+            continue;
+        }
+        try {
+            await eraseGuild(guildId);
+            forgotten.push(guildId);
+        }
+        catch (error) {
+            // Le serveur nommé : un échec qui se répète chaque nuit doit dire lequel.
+            await reportError(client, `forgetDepartedGuilds (serveur ${guildId})`, error);
+        }
+    }
+    if (forgotten.length > 0) {
+        // Pas « pendant un arrêt » : après une restauration, ce sont aussi des
+        // serveurs quittés depuis longtemps, que la sauvegarde avait ramenés.
+        await sendLog(client, `${forgotten.length} serveur(s) que le bot ne rejoint plus : configuration effacée.`);
+    }
+    return forgotten;
+}
+/**
+ * Les trois ménages, dans l'ordre. Chacun signale son propre échec sans priver
+ * les autres de passer ; la fonction ne lève jamais.
+ * @param client Client Discord connecté.
+ */
+export function runDataRetention(client) {
+    // Une passe à la fois : démarrage, nuit et restauration peuvent se croiser.
+    // Un appel pendant une passe la rejoint, puis en relance une (la
+    // restauration a pu ramener des lignes que la passe en cours a déjà lues).
+    if (running) {
+        rerunRequested = true;
+        return running;
+    }
+    running = (async () => {
+        try {
+            do {
+                rerunRequested = false;
+                await runDataRetentionOnce(client);
+            } while (rerunRequested);
+        }
+        finally {
+            running = null;
+        }
+    })();
+    return running;
+}
+let running = null;
+let rerunRequested = false;
+/**
+ * Une passe des trois ménages (voir `runDataRetention`).
+ * @param client Client Discord connecté.
+ */
+async function runDataRetentionOnce(client) {
+    let relays = "échec";
+    try {
+        await manageMsgExpiration(client);
+        relays = "jouée";
+    }
+    catch (error) {
+        await reportError(client, "manageMsgExpiration", error);
+    }
+    const anonymized = await anonymizeOldActivity(client);
+    let forgotten = "échec";
+    try {
+        const result = await forgetDepartedGuilds(client);
+        forgotten = result === null ? "non joué" : String(result.length);
+    }
+    catch (error) {
+        await reportError(client, "forgetDepartedGuilds", error);
+    }
+    // Une ligne par passage dans les journaux du serveur (pm2) : une nuit à
+    // zéro se distingue ainsi d'un ménage qui n'a pas tourné. Aucun identifiant.
+    console.log(`[data-retention] purge des relais : ${relays}, auteurs anonymisés : ${anonymized ?? "échec"}, ` +
+        `serveurs oubliés : ${forgotten}`);
+}
+//# sourceMappingURL=dataRetention.js.map</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Classes</h3><ul><li><a href="Bdd.html">Bdd</a></li><li><a href="HandleResolutionTimeoutError.html">HandleResolutionTimeoutError</a></li><li><a href="HomeGuildUnavailableError.html">HomeGuildUnavailableError</a></li><li><a href="Tips.html">Tips</a></li></ul><h3>Global</h3><ul><li><a href="global.html#ACTIVITY_AUTHOR_RETENTION_DAYS">ACTIVITY_AUTHOR_RETENTION_DAYS</a></li><li><a href="global.html#ADHESION_REMINDER_HOUR">ADHESION_REMINDER_HOUR</a></li><li><a href="global.html#CONFIGURED_GUILDS_SQL">CONFIGURED_GUILDS_SQL</a></li><li><a href="global.html#DEFAULT_BDD_PATH">DEFAULT_BDD_PATH</a></li><li><a href="global.html#DEFAULT_DEDUPE_WINDOW_MS">DEFAULT_DEDUPE_WINDOW_MS</a></li><li><a href="global.html#DISCORD_ID_RE">DISCORD_ID_RE</a></li><li><a href="global.html#FEED_ANONYMOUS_ACTOR">FEED_ANONYMOUS_ACTOR</a></li><li><a href="global.html#FETCH_GRACE_MS">FETCH_GRACE_MS</a></li><li><a href="global.html#GONE_CODES">GONE_CODES</a></li><li><a href="global.html#GUILD_CHANNEL_TABLE">GUILD_CHANNEL_TABLE</a></li><li><a href="global.html#GUILD_CONFIG_TABLES">GUILD_CONFIG_TABLES</a></li><li><a href="global.html#IGNORABLE_DISCORD_CODES">IGNORABLE_DISCORD_CODES</a></li><li><a href="global.html#ITERATION_UNLIMITED">ITERATION_UNLIMITED</a></li><li><a href="global.html#KEPT_ROLLBACKS">KEPT_ROLLBACKS</a></li><li><a href="global.html#LOOPBACK_HOSTS">LOOPBACK_HOSTS</a></li><li><a href="global.html#MARKDOWN_LINK_SPECIALS">MARKDOWN_LINK_SPECIALS</a></li><li><a href="global.html#MAX_CAUSE_DEPTH">MAX_CAUSE_DEPTH</a></li><li><a href="global.html#MAX_MESSAGE_LENGTH">MAX_MESSAGE_LENGTH</a></li><li><a href="global.html#MAX_RECIPIENTS">MAX_RECIPIENTS</a></li><li><a href="global.html#MAX_REFEREE_DMS">MAX_REFEREE_DMS</a></li><li><a href="global.html#MAX_TRACKED_KEYS">MAX_TRACKED_KEYS</a></li><li><a href="global.html#MENTION_PATTERN">MENTION_PATTERN</a></li><li><a href="global.html#MESSAGE_RETENTION_DAYS">MESSAGE_RETENTION_DAYS</a></li><li><a href="global.html#MODULE_KEYS">MODULE_KEYS</a></li><li><a href="global.html#PARIS_TIME_ZONE">PARIS_TIME_ZONE</a></li><li><a href="global.html#RESOLVE_BUDGET_MS">RESOLVE_BUDGET_MS</a></li><li><a href="global.html#RESOLVE_CONCURRENCY">RESOLVE_CONCURRENCY</a></li><li><a href="global.html#RESOLVE_WAVE_BUDGET_MS">RESOLVE_WAVE_BUDGET_MS</a></li><li><a href="global.html#RETENTION_MODIFIER">RETENTION_MODIFIER</a></li><li><a href="global.html#SCRIM_GAME">SCRIM_GAME</a></li><li><a href="global.html#SCRIM_GAME_LABEL">SCRIM_GAME_LABEL</a></li><li><a href="global.html#SITE_VISITOR_WINDOW_MONTHS">SITE_VISITOR_WINDOW_MONTHS</a></li><li><a href="global.html#SNOWFLAKE_PATTERN">SNOWFLAKE_PATTERN</a></li><li><a href="global.html#SQLITE_MAGIC">SQLITE_MAGIC</a></li><li><a href="global.html#STALE_AFTER_MS">STALE_AFTER_MS</a></li><li><a href="global.html#TRANSIENT_NETWORK_CODES">TRANSIENT_NETWORK_CODES</a></li><li><a href="global.html#_deleteTempMsg">_deleteTempMsg</a></li><li><a href="global.html#_resetChannel">_resetChannel</a></li><li><a href="global.html#_resetProcessGuards">_resetProcessGuards</a></li><li><a href="global.html#_resetServer">_resetServer</a></li><li><a href="global.html#absDelta">absDelta</a></li><li><a href="global.html#adhesionDir">adhesionDir</a></li><li><a href="global.html#adhesionFilePath">adhesionFilePath</a></li><li><a href="global.html#adhesionPerimee">adhesionPerimee</a></li><li><a href="global.html#adhesionValide">adhesionValide</a></li><li><a href="global.html#alertLeadership">alertLeadership</a></li><li><a href="global.html#alertReferees">alertReferees</a></li><li><a href="global.html#anonymizeOldActivity">anonymizeOldActivity</a></li><li><a href="global.html#answerTmp">answerTmp</a></li><li><a href="global.html#areaFilter">areaFilter</a></li><li><a href="global.html#assertSqlIdentifier">assertSqlIdentifier</a></li><li><a href="global.html#authorize">authorize</a></li><li><a href="global.html#ban">ban</a></li><li><a href="global.html#ban_id">ban_id</a></li><li><a href="global.html#ban_username">ban_username</a></li><li><a href="global.html#banlist">banlist</a></li><li><a href="global.html#broadcast">broadcast</a></li><li><a href="global.html#buildEmbedPage">buildEmbedPage</a></li><li><a href="global.html#buildServerChoices">buildServerChoices</a></li><li><a href="global.html#buildServiceMessage">buildServiceMessage</a></li><li><a href="global.html#capRefereeTargets">capRefereeTargets</a></li><li><a href="global.html#checkAdminRole">checkAdminRole</a></li><li><a href="global.html#checkBan">checkBan</a></li><li><a href="global.html#checkChannelMinPermissions">checkChannelMinPermissions</a></li><li><a href="global.html#checkCooldown">checkCooldown</a></li><li><a href="global.html#checkIntervalleAdhesion">checkIntervalleAdhesion</a></li><li><a href="global.html#checkMessageValidity">checkMessageValidity</a></li><li><a href="global.html#checkPermissions">checkPermissions</a></li><li><a href="global.html#checkTargets">checkTargets</a></li><li><a href="global.html#classifyError">classifyError</a></li><li><a href="global.html#client">client</a></li><li><a href="global.html#closeBddInstance">closeBddInstance</a></li><li><a href="global.html#commands">commands</a></li><li><a href="global.html#configModule">configModule</a></li><li><a href="global.html#contactAdminServer">contactAdminServer</a></li><li><a href="global.html#createErrorReporter">createErrorReporter</a></li><li><a href="global.html#dedupeRecipients">dedupeRecipients</a></li><li><a href="global.html#defineRankRange">defineRankRange</a></li><li><a href="global.html#delay">delay</a></li><li><a href="global.html#deleteDPMsgs">deleteDPMsgs</a></li><li><a href="global.html#deleteOldAttachment">deleteOldAttachment</a></li><li><a href="global.html#deleteSetupAdhesion">deleteSetupAdhesion</a></li><li><a href="global.html#deliverDirectMessages">deliverDirectMessages</a></li><li><a href="global.html#describeError">describeError</a></li><li><a href="global.html#deterministicColor">deterministicColor</a></li><li><a href="global.html#displayChannelFilter">displayChannelFilter</a></li><li><a href="global.html#displayChannelRankFilter">displayChannelRankFilter</a></li><li><a href="global.html#displaySetupAdhesion">displaySetupAdhesion</a></li><li><a href="global.html#downloadAttachment">downloadAttachment</a></li><li><a href="global.html#eraseGuild">eraseGuild</a></li><li><a href="global.html#eraseLeftGuild">eraseLeftGuild</a></li><li><a href="global.html#errorCode">errorCode</a></li><li><a href="global.html#escapeLinkLabel">escapeLinkLabel</a></li><li><a href="global.html#extractRanks">extractRanks</a></li><li><a href="global.html#fetchHomeGuilds">fetchHomeGuilds</a></li><li><a href="global.html#fetchTargets">fetchTargets</a></li><li><a href="global.html#fillBlueCommands">fillBlueCommands</a></li><li><a href="global.html#findGuildMemberByHandle">findGuildMemberByHandle</a></li><li><a href="global.html#findHomeMember">findHomeMember</a></li><li><a href="global.html#findMemberIn">findMemberIn</a></li><li><a href="global.html#forgetDepartedGuilds">forgetDepartedGuilds</a></li><li><a href="global.html#formatBackupStatus">formatBackupStatus</a></li><li><a href="global.html#formatBytes">formatBytes</a></li><li><a href="global.html#formatCadence">formatCadence</a></li><li><a href="global.html#formatDiskUsage">formatDiskUsage</a></li><li><a href="global.html#formatPlayerStats">formatPlayerStats</a></li><li><a href="global.html#formatRawRanks">formatRawRanks</a></li><li><a href="global.html#formatSiteVisitStats">formatSiteVisitStats</a></li><li><a href="global.html#formatSnapshotAge">formatSnapshotAge</a></li><li><a href="global.html#formatTarget">formatTarget</a></li><li><a href="global.html#getAdhesion">getAdhesion</a></li><li><a href="global.html#getAdminRole">getAdminRole</a></li><li><a href="global.html#getBacklog">getBacklog</a></li><li><a href="global.html#getBddInstance">getBddInstance</a></li><li><a href="global.html#getCpuPercent">getCpuPercent</a></li><li><a href="global.html#getDiskUsage">getDiskUsage</a></li><li><a href="global.html#getInviteFromChannel">getInviteFromChannel</a></li><li><a href="global.html#getInviteFromMessage">getInviteFromMessage</a></li><li><a href="global.html#getReporter">getReporter</a></li><li><a href="global.html#getServicesAndID">getServicesAndID</a></li><li><a href="global.html#getSnapshotsBetween">getSnapshotsBetween</a></li><li><a href="global.html#getTargetRegions">getTargetRegions</a></li><li><a href="global.html#getTips">getTips</a></li><li><a href="global.html#homeGuildIds">homeGuildIds</a></li><li><a href="global.html#initialIteration">initialIteration</a></li><li><a href="global.html#installProcessGuards">installProcessGuards</a></li><li><a href="global.html#isBackupFresh">isBackupFresh</a></li><li><a href="global.html#isDiscordInvite">isDiscordInvite</a></li><li><a href="global.html#isGone">isGone</a></li><li><a href="global.html#isIgnorableDiscordError">isIgnorableDiscordError</a></li><li><a href="global.html#isLoopbackHost">isLoopbackHost</a></li><li><a href="global.html#isModuleEnabled">isModuleEnabled</a></li><li><a href="global.html#isSnowflake">isSnowflake</a></li><li><a href="global.html#isTransientNetworkError">isTransientNetworkError</a></li><li><a href="global.html#isValidModule">isValidModule</a></li><li><a href="global.html#leadershipIds">leadershipIds</a></li><li><a href="global.html#listModules">listModules</a></li><li><a href="global.html#listPartner">listPartner</a></li><li><a href="global.html#loadAdhesionFiles">loadAdhesionFiles</a></li><li><a href="global.html#loadAdhesionPaths">loadAdhesionPaths</a></li><li><a href="global.html#manageDistribution">manageDistribution</a></li><li><a href="global.html#manageMsgExpiration">manageMsgExpiration</a></li><li><a href="global.html#manageOldFiles">manageOldFiles</a></li><li><a href="global.html#manageServiceSuccess">manageServiceSuccess</a></li><li><a href="global.html#matchesToken">matchesToken</a></li><li><a href="global.html#memberMatchesHandle">memberMatchesHandle</a></li><li><a href="global.html#newChannelPartner">newChannelPartner</a></li><li><a href="global.html#nextTips">nextTips</a></li><li><a href="global.html#nextTransmissionAfter">nextTransmissionAfter</a></li><li><a href="global.html#normalizeInvite">normalizeInvite</a></li><li><a href="global.html#normalizeText">normalizeText</a></li><li><a href="global.html#notifyBannedUser">notifyBannedUser</a></li><li><a href="global.html#olderThanRetention">olderThanRetention</a></li><li><a href="global.html#ownsDatabase">ownsDatabase</a></li><li><a href="global.html#parisDaysLater">parisDaysLater</a></li><li><a href="global.html#parisOffsetMs">parisOffsetMs</a></li><li><a href="global.html#parisWallClock">parisWallClock</a></li><li><a href="global.html#parseDirectMessageRequest">parseDirectMessageRequest</a></li><li><a href="global.html#parseDiscordHandle">parseDiscordHandle</a></li><li><a href="global.html#parseRefereeAlert">parseRefereeAlert</a></li><li><a href="global.html#parseSiteVisitStats">parseSiteVisitStats</a></li><li><a href="global.html#pctDelta">pctDelta</a></li><li><a href="global.html#ping">ping</a></li><li><a href="global.html#printHelp">printHelp</a></li><li><a href="global.html#purgeFeedIdentifiers">purgeFeedIdentifiers</a></li><li><a href="global.html#purgeOldRollbacks">purgeOldRollbacks</a></li><li><a href="global.html#rankChoices">rankChoices</a></li><li><a href="global.html#readBackupStatus">readBackupStatus</a></li><li><a href="global.html#readPackageInfo">readPackageInfo</a></li><li><a href="global.html#readSiteVisitStats">readSiteVisitStats</a></li><li><a href="global.html#recordDailySnapshot">recordDailySnapshot</a></li><li><a href="global.html#recordEvent">recordEvent</a></li><li><a href="global.html#recrute">recrute</a></li><li><a href="global.html#refuseUnjoinedGuild">refuseUnjoinedGuild</a></li><li><a href="global.html#relay">relay</a></li><li><a href="global.html#remainingIteration">remainingIteration</a></li><li><a href="global.html#remoteServerReset">remoteServerReset</a></li><li><a href="global.html#removeIntervalle">removeIntervalle</a></li><li><a href="global.html#reportError">reportError</a></li><li><a href="global.html#resetBddInstance">resetBddInstance</a></li><li><a href="global.html#resetChannel">resetChannel</a></li><li><a href="global.html#resetRefereeRole">resetRefereeRole</a></li><li><a href="global.html#resetServer">resetServer</a></li><li><a href="global.html#resetServerInvite">resetServerInvite</a></li><li><a href="global.html#resolutionWaves">resolutionWaves</a></li><li><a href="global.html#resolveDiscordHandle">resolveDiscordHandle</a></li><li><a href="global.html#restoreBackup">restoreBackup</a></li><li><a href="global.html#restoreDatabase">restoreDatabase</a></li><li><a href="global.html#runDataRetention">runDataRetention</a></li><li><a href="global.html#runDataRetentionOnce">runDataRetentionOnce</a></li><li><a href="global.html#runSetupWizard">runSetupWizard</a></li><li><a href="global.html#safeChannel">safeChannel</a></li><li><a href="global.html#safeFollowUp">safeFollowUp</a></li><li><a href="global.html#safeMsgReply">safeMsgReply</a></li><li><a href="global.html#safeReact">safeReact</a></li><li><a href="global.html#safeReply">safeReply</a></li><li><a href="global.html#safeUser">safeUser</a></li><li><a href="global.html#saveAdhesionPaths">saveAdhesionPaths</a></li><li><a href="global.html#saveSiteVisitStats">saveSiteVisitStats</a></li><li><a href="global.html#scrim">scrim</a></li><li><a href="global.html#scrubFeedField">scrubFeedField</a></li><li><a href="global.html#scrubFeedText">scrubFeedText</a></li><li><a href="global.html#searchInWaves">searchInWaves</a></li><li><a href="global.html#searchString">searchString</a></li><li><a href="global.html#sendAdhesion">sendAdhesion</a></li><li><a href="global.html#sendDatabaseBackup">sendDatabaseBackup</a></li><li><a href="global.html#sendInteractiveMsg">sendInteractiveMsg</a></li><li><a href="global.html#sendLog">sendLog</a></li><li><a href="global.html#sendServiceMessage">sendServiceMessage</a></li><li><a href="global.html#servicesChoices">servicesChoices</a></li><li><a href="global.html#servicesWithNoRanks">servicesWithNoRanks</a></li><li><a href="global.html#setBotAdminRole">setBotAdminRole</a></li><li><a href="global.html#setChannelFilter">setChannelFilter</a></li><li><a href="global.html#setChannelRankFilter">setChannelRankFilter</a></li><li><a href="global.html#setModuleEnabled">setModuleEnabled</a></li><li><a href="global.html#setRankFilter">setRankFilter</a></li><li><a href="global.html#setRefereeRole">setRefereeRole</a></li><li><a href="global.html#setServerInvite">setServerInvite</a></li><li><a href="global.html#setupIntervalAdhesion">setupIntervalAdhesion</a></li><li><a href="global.html#showBotAdminRole">showBotAdminRole</a></li><li><a href="global.html#showRefereeRole">showRefereeRole</a></li><li><a href="global.html#showServerInvite">showServerInvite</a></li><li><a href="global.html#splitForDiscord">splitForDiscord</a></li><li><a href="global.html#startInternalApi">startInternalApi</a></li><li><a href="global.html#statsPlayer">statsPlayer</a></li><li><a href="global.html#statsSite">statsSite</a></li><li><a href="global.html#subscribe">subscribe</a></li><li><a href="global.html#toSQLiteDate">toSQLiteDate</a></li><li><a href="global.html#truncateMessage">truncateMessage</a></li><li><a href="global.html#ts">ts</a></li><li><a href="global.html#unban">unban</a></li><li><a href="global.html#updateCommands">updateCommands</a></li><li><a href="global.html#validateSqliteFile">validateSqliteFile</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Thu Oct 01 2026 05:19:13 GMT+0200 (heure d’été d’Europe centrale)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>
