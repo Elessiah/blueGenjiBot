@@ -469,7 +469,7 @@ le détail d'un échec va au journal du bot (`pm2 logs`, préfixe `[backup-check
 là, jamais dans le `PATH` de son processus (`/restore-backup` aussi). Un
 binaire installé ailleurs (snap, `~/.local/bin`) répond à `which` mais pas au
 bot : le rapport le dit « introuvable dans les dossiers système où le bot le
-cherche », et `/restore-backup` nomme les trois dossiers. La clé
+cherche », `/restore-backup` aussi. La clé
 privée doit être lisible par son compte (c'est déjà le cas pour
 `/restore-backup`).
 
