@@ -61,11 +61,27 @@ const defaultRunner: CommandRunner = async (command, args) => {
  * @returns Les sources configurées.
  */
 export function archiveSourcesFromEnv(env: NodeJS.ProcessEnv = process.env): ArchiveSources {
+  const localDir = env.BACKUP_ARCHIVE_DIR?.trim();
+  const identity = env.BACKUP_AGE_IDENTITY?.trim();
   return {
-    localDir: env.BACKUP_ARCHIVE_DIR?.trim() || null,
+    localDir: localDir ? expandHome(localDir) : null,
     remote: env.BACKUP_RCLONE_REMOTE?.trim() || null,
-    identity: env.BACKUP_AGE_IDENTITY?.trim() || path.join(os.homedir(), ".bluegenji-backup.key"),
+    identity: identity ? expandHome(identity) : path.join(os.homedir(), ".bluegenji-backup.key"),
   };
+}
+
+/**
+ * Développe un `~` de tête : ni `execFile` ni dotenv ne passent par un shell,
+ * et `~/.bluegenji-backup.key` — la forme que la documentation emploie —
+ * désignerait sinon un dossier nommé `~`.
+ * @param value Chemin lu dans l'environnement.
+ * @returns Le chemin, `~` remplacé par le dossier personnel.
+ */
+function expandHome(value: string): string {
+  if (value === "~") {
+    return os.homedir();
+  }
+  return value.startsWith("~/") ? path.join(os.homedir(), value.slice(2)) : value;
 }
 
 /**
