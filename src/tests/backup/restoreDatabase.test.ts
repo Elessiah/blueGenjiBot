@@ -12,7 +12,7 @@ process.env.BDD_PATH = path.join(WORK_DIR, "database.sqlite");
 const sqlite3 = (await import("sqlite3")).default;
 const { open } = await import("sqlite");
 const { getBddInstance, resetBddInstance } = await import("../../bdd/Bdd.js");
-const { KEPT_ROLLBACKS, purgeOldRollbacks, restoreDatabase, validateSqliteFile } =
+const { purgeOldRollbacks, restoreDatabase, rollbackTimestamp, selectExpiredRollbacks, validateSqliteFile } =
   await import("../../backup/restoreDatabase.js");
 
 /** Crée une base SQLite jetable portant une valeur repère. */
@@ -113,36 +113,50 @@ test("restoreDatabase remet la base precedente en place si la copie echoue", asy
   assert.ok((await getBddInstance()) !== undefined, "le bot doit rester utilisable");
 });
 
-test("purgeOldRollbacks ne garde que les copies les plus recentes", async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bluegenji-purge-"));
-  const dbPath = path.join(dir, "database.sqlite");
-  // Suffixes horodates : le tri lexicographique doit designer les plus anciens.
-  const stamps = ["2026-01-01", "2026-02-01", "2026-03-01", "2026-04-01", "2026-05-01"];
-  for (const stamp of stamps) {
-    await fs.promises.writeFile(`${dbPath}.avant-${stamp}`, "copie");
-  }
+const PREFIX = "database.sqlite.avant-";
+const DAY = 24 * 60 * 60 * 1000;
+const NOW = Date.parse("2026-10-01T12:00:00.000Z");
+/** Nom d'une copie ecrite `days` jours avant NOW, au format de `restoreDatabase`. */
+function rollbackName(days: number): string {
+  return PREFIX + new Date(NOW - days * DAY).toISOString().replace(/[:.]/g, "-");
+}
 
-  const removed = await purgeOldRollbacks(dbPath);
-  const restants = (await fs.promises.readdir(dir)).sort();
-
-  assert.equal(removed, stamps.length - KEPT_ROLLBACKS);
-  assert.deepEqual(restants, [
-    "database.sqlite.avant-2026-03-01",
-    "database.sqlite.avant-2026-04-01",
-    "database.sqlite.avant-2026-05-01",
-  ]);
-  await fs.promises.rm(dir, { recursive: true, force: true });
+test("rollbackTimestamp relit l'horodatage ecrit par restoreDatabase", () => {
+  assert.equal(rollbackTimestamp(rollbackName(3), PREFIX), NOW - 3 * DAY);
+  assert.equal(rollbackTimestamp(`${PREFIX}2026-01-01`, PREFIX), null);
+  assert.equal(rollbackTimestamp("autre-fichier", PREFIX), null);
 });
 
-test("purgeOldRollbacks laisse intactes les copies sous le seuil", async () => {
+test("selectExpiredRollbacks : seules les copies de plus de 30 jours partent la nuit", () => {
+  const names = [rollbackName(31), rollbackName(30), rollbackName(2), `${PREFIX}illisible`, "database.sqlite"];
+  assert.deepEqual(selectExpiredRollbacks(names, PREFIX, NOW, null), [rollbackName(31)]);
+});
+
+test("selectExpiredRollbacks : une restauration reussie emporte toutes les copies precedentes", () => {
+  const keep = rollbackName(0);
+  const names = [rollbackName(10), rollbackName(1), `${PREFIX}illisible`, keep, "database.sqlite"];
+  assert.deepEqual(selectExpiredRollbacks(names, PREFIX, NOW, keep), [
+    rollbackName(10),
+    rollbackName(1),
+    `${PREFIX}illisible`,
+  ]);
+});
+
+test("purgeOldRollbacks supprime les copies perimees et epargne les autres fichiers", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bluegenji-purge-"));
   const dbPath = path.join(dir, "database.sqlite");
-  await fs.promises.writeFile(`${dbPath}.avant-2026-01-01`, "copie");
-  // Un fichier voisin qui ne porte pas le prefixe ne doit jamais etre touche.
-  await fs.promises.writeFile(path.join(dir, "database.sqlite"), "base");
+  await fs.promises.writeFile(path.join(dir, rollbackName(45)), "copie");
+  await fs.promises.writeFile(path.join(dir, rollbackName(5)), "copie");
+  await fs.promises.writeFile(dbPath, "base");
 
-  assert.equal(await purgeOldRollbacks(dbPath), 0);
-  assert.equal((await fs.promises.readdir(dir)).length, 2);
+  assert.equal(await purgeOldRollbacks(dbPath, undefined, NOW), 1);
+  assert.deepEqual((await fs.promises.readdir(dir)).sort(), ["database.sqlite", rollbackName(5)].sort());
+
+  // Restauration reussie : seule la nouvelle copie reste.
+  const keep = path.join(dir, rollbackName(0));
+  await fs.promises.writeFile(keep, "copie");
+  assert.equal(await purgeOldRollbacks(dbPath, keep, NOW), 1);
+  assert.deepEqual((await fs.promises.readdir(dir)).sort(), ["database.sqlite", rollbackName(0)].sort());
   await fs.promises.rm(dir, { recursive: true, force: true });
 });
 
