@@ -57,9 +57,13 @@ const IGNORABLE_DISCORD_CODES: ReadonlySet<number> = new Set([
  * @returns Le champ `code` s'il est une chaîne ou un nombre, sinon `null`.
  */
 function errorCode(error: unknown): string | number | null {
-    if (typeof error !== "object" || error === null) return null;
-    const code = (error as { code?: unknown }).code;
-    if (typeof code === "string" || typeof code === "number") return code;
+    // Lire un objet inconnu peut lever (accesseur, Proxy révoqué) : un code
+    // illisible vaut « pas de code », jamais une exception dans un gardien.
+    try {
+        if (typeof error !== "object" || error === null) return null;
+        const code = (error as { code?: unknown }).code;
+        if (typeof code === "string" || typeof code === "number") return code;
+    } catch { /* illisible */ }
     return null;
 }
 
@@ -114,27 +118,25 @@ function isIgnorableDiscordError(error: unknown): boolean {
  * @returns Message d'erreur (suffixé du code), la chaîne levée, ou le type de la valeur.
  */
 function describeError(error: unknown): string {
-    if (error instanceof Error) {
-        let code: string | number | null = null;
-        try {
-            code = errorCode(error);
-        } catch { /* accesseur hostile : le message suffit */ }
-        return code === null ? error.message : `${error.message} [${code}]`;
-    }
-    if (typeof error === "string") return error;
-    // Un scalaire ne porte rien d'autre que lui-même : il est rendu tel quel.
-    if (error === null || error === undefined || typeof error === "number" || typeof error === "boolean") {
-        return `valeur levée non standard (${String(error)})`;
-    }
-    // Un objet : son seul code, s'il a la forme d'un code (nombre, ou jeton
-    // court en capitales), jamais ses champs. Lire un objet inconnu peut
-    // lever (accesseur, Proxy révoqué) : la description, elle, ne lève pas.
-    let code: string | number | null = null;
     try {
-        code = errorCode(error);
-    } catch { /* objet illisible : son type suffit */ }
-    const shown = typeof code === "number" || (typeof code === "string" && /^[A-Z0-9_]{1,40}$/.test(code)) ? `, code ${code}` : "";
-    return `valeur levée non standard (${typeof error}${shown})`;
+        const code = errorCode(error);
+        // Un code n'est montré que s'il en a la forme (nombre, ou jeton court) :
+        // un champ « code » en texte libre pourrait porter n'importe quoi.
+        const shownCode = typeof code === "number" || (typeof code === "string" && /^[A-Za-z0-9_]{1,40}$/.test(code)) ? code : null;
+        if (error instanceof Error) {
+            return shownCode === null ? error.message : `${error.message} [${shownCode}]`;
+        }
+        if (typeof error === "string") return error;
+        // Un scalaire ne porte rien d'autre que lui-même : il est rendu tel quel.
+        if (error === null || error === undefined || typeof error === "number" || typeof error === "boolean") {
+            return `valeur levée non standard (${String(error)})`;
+        }
+        // Un objet : son seul code, jamais ses champs.
+        return `valeur levée non standard (${typeof error}${shownCode === null ? "" : `, code ${shownCode}`})`;
+    } catch {
+        // Proxy révoqué, accesseur `message` hostile… : la description ne lève jamais.
+        return "valeur levée illisible";
+    }
 }
 
 /** Gravité retenue pour une erreur, qui décide de sa destination. */

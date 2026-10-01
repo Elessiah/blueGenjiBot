@@ -12,13 +12,13 @@ import {describeError} from "../safe/errorGuards.js";
  */
 async function updateCommands(client: Client,
                               guildId: string): Promise<void> {
-    const { TOKEN, CLIENT_ID, SERV_GENJI, SERV_RIVALS } = process.env;
-    const rest = new REST({ version: "10" }).setToken(TOKEN!);
     // Tout sous la même garde, préparation comprise : la fonction ne lève
     // jamais, si bien qu'un serveur en échec ne prive ni les suivants de leurs
     // commandes ni le démarrage de ce qui suit (tâches cron, assistant
     // d'installation), quel que soit l'appelant.
     try {
+        const { TOKEN, CLIENT_ID, SERV_GENJI, SERV_RIVALS } = process.env;
+        const rest = new REST({ version: "10" }).setToken(TOKEN!);
         let installCommands = {};
         if (guildId === SERV_GENJI || guildId === SERV_RIVALS) {
             installCommands = Object.assign({}, commands, await fillBlueCommands(client));

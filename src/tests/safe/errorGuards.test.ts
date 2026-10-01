@@ -139,6 +139,10 @@ test("describeError ne serialise jamais une valeur non-Error", () => {
   assert.equal(describeError({ code: "LFT pseudo#1234" }), "valeur levée non standard (object)");
   const hostile = { get code(): string { throw new Error("boom"); } };
   assert.equal(describeError(hostile), "valeur levée non standard (object)");
+  const { proxy, revoke } = Proxy.revocable({}, {});
+  revoke();
+  assert.equal(describeError(proxy), "valeur levée illisible");
+  assert.equal(errorCode(proxy), null);
 });
 
 test("describeError ne leve pas sur une valeur non serialisable", () => {
