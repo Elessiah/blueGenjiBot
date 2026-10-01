@@ -414,7 +414,11 @@ export async function checkLatestArchive(config: BackupCheckConfig, deps: Backup
     ({ archives, failures, missingCommand } = await listArchives(config.sources, deps.run ?? defaultRunner));
   } catch (error) {
     logFailure(log, label, error);
-    return { label, ok: false, detail: failureDetail(error, "stockage des archives illisible") };
+    // Seul le stockage distant lance une commande : si elle manque alors que
+    // tout a échoué, le dossier local configuré a échoué lui aussi — le taire
+    // ne laisserait voir sa panne qu'une fois la commande remise en place.
+    const local = config.sources.localDir && findMissingCommand(error) ? ", et le dossier local d'archives est illisible" : "";
+    return { label, ok: false, detail: `${failureDetail(error, "stockage des archives illisible")}${local}` };
   }
   const latest = archives[0];
   if (!latest) {
