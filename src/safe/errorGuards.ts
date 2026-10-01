@@ -18,6 +18,8 @@
  * Tout le reste est un vrai défaut : console **et** canal de logs Discord.
  */
 
+import {types} from "node:util";
+
 /** Codes système/undici signalant une indisponibilité réseau passagère. */
 const TRANSIENT_NETWORK_CODES: ReadonlySet<string> = new Set([
     "EAI_AGAIN",
@@ -119,7 +121,8 @@ function isIgnorableDiscordError(error: unknown): boolean {
  */
 function describeError(error: unknown): string {
     try {
-        if (error instanceof Error) {
+        // `isNativeError` reconnaît aussi une `Error` venue d'un autre contexte (vm, worker).
+        if (error instanceof Error || types.isNativeError(error)) {
             const message = typeof error.message === "string" ? error.message : "(message non textuel)";
             // Une vraie `Error` garde son code (« auth/invalid-token »…) : son
             // message est déjà rendu, filtrer le code ne protégerait rien.

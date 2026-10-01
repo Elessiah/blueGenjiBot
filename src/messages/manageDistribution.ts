@@ -131,7 +131,7 @@ async function manageDistribution(message: Message,
             // La description (déjà filtrée), puis les seules lignes d'appel de la
             // pile : sa première ligne recopie le message, quel qu'il soit.
             if (err instanceof Error && typeof err.stack === "string" && err.stack) {
-                trace = [description, ...err.stack.split("\n").slice(1)].join("\n");
+                trace = [description, ...err.stack.split("\n").filter((line) => /^\s+at\s/.test(line))].join("\n");
             }
         } catch { /* valeur illisible : la description suffit */ }
         console.error("manageDistribution error:", trace);
