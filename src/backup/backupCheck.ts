@@ -51,6 +51,7 @@ import {
   execCommand,
   findMissingCommand,
   listArchives,
+  missingCommandText,
   spawnCommand,
   type ArchiveSources,
   type CommandRunner,
@@ -481,18 +482,6 @@ export function pipelineFailureText(stage: string | undefined): string {
     default:
       return "lecture interrompue";
   }
-}
-
-/**
- * Phrase montrable d'une commande introuvable. Le bot ne cherche ses commandes
- * que dans les dossiers système (`COMMAND_DIRS`) : un binaire installé
- * ailleurs (snap, `~/.local/bin`) répond à `which` mais reste introuvable pour
- * lui. Aucun chemin dans la phrase (elle part sur Discord) : la doc les liste.
- * @param command Nom nu de la commande.
- * @returns La phrase.
- */
-export function missingCommandText(command: string): string {
-  return `\`${command}\` introuvable dans les dossiers système où le bot le cherche`;
 }
 
 /**

@@ -119,10 +119,21 @@ export function spawnCommand(command: string, args: string[], options: SpawnOpti
 }
 
 /**
+ * Phrase montrable d'une commande introuvable. Le bot ne cherche ses commandes
+ * que dans `COMMAND_DIRS` : un binaire installé ailleurs (snap,
+ * `~/.local/bin`) répond à `which` mais reste introuvable pour lui. Aucun
+ * chemin dans la phrase (elle part sur Discord) : la doc liste les dossiers.
+ * @param command Nom nu de la commande.
+ * @returns La phrase.
+ */
+export function missingCommandText(command: string): string {
+  return `\`${command}\` introuvable dans les dossiers système où le bot le cherche`;
+}
+
+/**
  * Commande introuvable dans `COMMAND_DIRS`. Distincte d'un échec ordinaire :
- * un binaire installé ailleurs (snap, `~/.local/bin`) répond à `which` mais
- * pas au bot, et le message doit mener l'exploitant vers les dossiers fouillés
- * plutôt que vers le stockage ou la clé.
+ * le message doit mener l'exploitant vers les dossiers fouillés plutôt que
+ * vers le stockage ou la clé.
  */
 export class MissingCommandError extends Error {
   /** Nom nu de la commande. */
@@ -132,7 +143,7 @@ export class MissingCommandError extends Error {
    * @param command Nom nu de la commande.
    */
   constructor(command: string) {
-    super(`\`${command}\` introuvable dans les dossiers système (${COMMAND_DIRS.join(", ")})`);
+    super(missingCommandText(command));
     this.name = "MissingCommandError";
     this.command = command;
   }
