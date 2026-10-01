@@ -189,9 +189,11 @@ age-keygen -y ~/.bluegenji-backup.key > scripts/backup-recipients.txt
 ```
 
 > Ne mets **jamais** `AGE-SECRET-KEY-…` dans ce fichier. Chiffrer ne demande que
-> la clé publique : c'est tout l'intérêt du montage, le Raspberry produit des
-> sauvegardes sans détenir de quoi les relire. Une clé privée posée à côté
-> rendrait le chiffrement inutile pour quiconque accède à la machine.
+> la clé publique ; le fichier des destinataires ne contient rien de secret et
+> peut se recopier n'importe où, une clé privée n'a rien à y faire. Elle reste
+> dans son propre fichier (`chmod 600`), que le bot lit pour `/restore-backup` et
+> `/backup-check` : quiconque accède au Raspberry peut donc relire les archives,
+> et une machine compromise impose de changer de clé.
 
 Le fichier accepte plusieurs destinataires, une clé publique par ligne : chaque
 archive devient alors déchiffrable par n'importe laquelle des clés privées
