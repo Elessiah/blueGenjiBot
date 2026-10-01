@@ -1,10 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { randomUUID } from "node:crypto";
 
+const TMP_DB = path.join(os.tmpdir(), `bgenji-stafflog-${randomUUID()}.sqlite`);
+process.env.BDD_PATH = TMP_DB;
+
+import type { Client } from "discord.js";
+import { closeBddInstance } from "../../bdd/Bdd.js";
 import {
   banMessageIds,
   MAX_LOG_PAGES_PER_RUN,
   purgeLogChannel,
+  purgeStaffLogs,
   selectExpiredLogMessages,
   type LogChannelLike,
   type LogMessageLike,
@@ -109,6 +119,45 @@ test("purgeLogChannel : une suppression refusée n'interrompt pas la passe", asy
   assert.equal(await purgeLogChannel(channel, CUTOFF, BOT, new Set()), 1);
 });
 
+test("purgeStaffLogs : un salon du staff injoignable n'empêche pas la purge des messages privés", async () => {
+  process.env.INFO_SERV = "700000000000000001";
+  process.env.OWNER_ID = "700000000000000002";
+  const deleted: string[] = [];
+  const old = {
+    id: "10",
+    author: { id: BOT },
+    createdTimestamp: Date.now() - 400 * DAY,
+    delete: async () => {
+      deleted.push("10");
+    },
+  };
+  let served = false;
+  const client = {
+    isReady: () => true,
+    user: { id: BOT },
+    channels: {
+      fetch: async () => {
+        throw new Error("Unknown Channel");
+      },
+    },
+    users: {
+      fetch: async () => ({
+        createDM: async () => ({
+          messages: {
+            fetch: async () => {
+              if (served) return new Map();
+              served = true;
+              return new Map([["10", old]]);
+            },
+          },
+        }),
+      }),
+    },
+  } as unknown as Client;
+  await assert.rejects(purgeStaffLogs(client), /Unknown Channel/);
+  assert.deepEqual(deleted, ["10"]);
+});
+
 test("purgeLogChannel s'arrête au plafond de pages sur un historique sans fin", async () => {
   let fetches = 0;
   let next = 1;
@@ -121,4 +170,10 @@ test("purgeLogChannel s'arrête au plafond de pages sur un historique sans fin",
   };
   assert.equal(await purgeLogChannel(channel, CUTOFF, BOT, new Set()), 0);
   assert.equal(fetches, MAX_LOG_PAGES_PER_RUN);
+});
+
+test.after(async () => {
+  closeBddInstance();
+  await new Promise((r) => setTimeout(r, 50));
+  try { fs.unlinkSync(TMP_DB); } catch { /* noop */ }
 });
