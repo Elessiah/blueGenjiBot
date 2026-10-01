@@ -365,7 +365,7 @@ remise en place, à condition qu'elle passe elle-même la vérification d'intég
 Une copie de secours est la base d'avant, **en clair** : elle est supprimée à la
 restauration réussie suivante (qui ne garde que la sienne), et au plus tard au
 bout de 30 jours par le ménage de nuit (`ROLLBACK_RETENTION_DAYS`, aligné sur
-`RETENTION_DAYS`). La base d'origine reste dans les sauvegardes chiffrées.
+`RETENTION_DAYS`). **Attention** : deux restaurations de suite perdent l'état d'avant la première, y compris ce qui a été écrit depuis la dernière sauvegarde. Pour chercher la bonne archive, l'essayer d'abord à la main sur une autre machine (ci-dessous).
 
 À la main, depuis n'importe quelle machine ayant la clé (base du site, ou bot
 arrêté) :

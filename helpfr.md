@@ -86,7 +86,7 @@ Admin :
 - Suivi des messages relayés (identifiants, date) : 7 jours, effacé au plus tard dans la nuit qui suit. Les copies publiées dans les salons partenaires restent ensuite sur Discord (voir « Effacer un message retransmis »).
 - Scrims et recherches (`/scrim`, `/recrute`) : 30 jours avec leur auteur. Dans la nuit qui suit, ils sont repliés en simples nombres par jour, serveur et niveau (ou rôle) : ni auteur, ni heure, ni ordre ne restent.
 - Fil d'activité public (heure, serveur, niveau ou rôle de chaque annonce) : 30 jours, supprimé dans la nuit qui suit.
-- Exclusions du réseau : jusqu'à leur levée. Leur avis et leur motif (salon de journal privé du staff, message privé au titulaire du bot) sont supprimés à la levée.
+- Exclusions du réseau : jusqu'à leur levée. Leur avis et leur motif (salon de journal privé du staff, message privé au titulaire du bot) sont supprimés à la levée (pour une exclusion prononcée avant cette règle, seul le motif publié au salon : le reste l'est au bout d'un an).
 - Autres messages du salon de journal privé du staff : 1 an.
 - Configuration d'un serveur : effacée quand le bot le quitte — y compris s'il l'a quitté pendant un arrêt du bot, au démarrage suivant.
 
