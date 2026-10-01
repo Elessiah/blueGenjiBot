@@ -482,7 +482,9 @@ privée doit être lisible par son compte (c'est déjà le cas pour
 Ces commandes ne reçoivent pas l'environnement du bot (jeton Discord, jeton de
 l'API interne…) : seulement `HOME`, `USER`, `LOGNAME`, `TMPDIR`,
 `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, la langue (`LANG`, `LANGUAGE`, `LC_*`),
-`TZ`, les variables `RCLONE_*` et le `PATH` figé ci-dessus. rclone y trouve sa
+`TZ`, le mandataire réseau (`HTTPS_PROXY`, `HTTP_PROXY`, `NO_PROXY`, en
+majuscules ou minuscules), les certificats (`SSL_CERT_FILE`, `SSL_CERT_DIR`),
+les variables `RCLONE_*` et le `PATH` figé ci-dessus. rclone y trouve sa
 configuration comme en ligne de commande : `~/.config/rclone/rclone.conf` du
 compte du bot, ou le fichier que désigne `RCLONE_CONFIG`.
 
