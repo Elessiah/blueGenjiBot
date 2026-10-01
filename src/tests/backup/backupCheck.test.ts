@@ -243,6 +243,7 @@ test("checkRecipientKey compare la clé dérivée au fichier des destinataires",
 });
 
 test("parseRecipients et parseEnvFile ignorent commentaires et lignes vides", () => {
+  assert.deepEqual(parseEnvFile(`A="store-crypt"  # remote\nB='x y' # c\n`), { A: "store-crypt", B: "x y" });
   assert.deepEqual(parseRecipients(`# commentaire\n\n${KEY}\r\nAGE-SECRET-KEY-1XYZ\n`), [KEY]);
   assert.deepEqual(
     parseEnvFile(`# c\nUPLOADS_RCLONE_REMOTE=store-crypt\nexport UPLOADS_REMOTE_DIR="up loads"\nX='y' \nZ=1 # note\n`),

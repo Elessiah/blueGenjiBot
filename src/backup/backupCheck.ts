@@ -131,8 +131,11 @@ export function parseEnvFile(content: string): Record<string, string> {
       continue;
     }
     let value = match[2].trim();
-    if (value.length >= 2 && (value[0] === '"' || value[0] === "'") && value.at(-1) === value[0]) {
-      value = value.slice(1, -1);
+    const quote = value[0];
+    const closing = quote === '"' || quote === "'" ? value.indexOf(quote, 1) : -1;
+    if (closing > 0) {
+      // Valeur entre guillemets, éventuellement suivie d'un commentaire.
+      value = value.slice(1, closing);
     } else {
       value = value.replace(/\s+#.*$/, "");
     }
