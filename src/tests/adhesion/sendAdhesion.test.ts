@@ -148,7 +148,7 @@ test("salon joignable : envoi au salon puis confirmation à l'auteur", async () 
   ]);
 });
 
-test("salon en échec : trois essais journalisés, l'auteur averti, échec", async () => {
+test("salon en échec : trois essais, un seul journal, l'auteur averti, échec", async () => {
   validPaths();
   const rec = recorder();
   const ok = await sendAdhesion(fakeClient(rec), "Bonjour", fakeChannel(rec, { fails: true }), null, null, false, author(rec));
