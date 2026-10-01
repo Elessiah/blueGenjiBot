@@ -544,13 +544,16 @@ export async function checkRecipientKey(
 ): Promise<{ result: CheckResult; publicKey: string | null }> {
   const label = "Clé de déchiffrement";
   const log = deps.log ?? console.error;
-  let publicKey: string | null;
+  // Une clé par identité du fichier : pendant une rotation, l'ancienne et la
+  // nouvelle y cohabitent, et il suffit que l'une soit destinataire.
+  let derived: string[];
   try {
-    publicKey = parseRecipients(await (deps.run ?? defaultRunner)("age-keygen", ["-y", config.sources.identity]))[0] ?? null;
+    derived = parseRecipients(await (deps.run ?? defaultRunner)("age-keygen", ["-y", config.sources.identity]));
   } catch (error) {
     logFailure(log, label, error);
-    publicKey = null;
+    derived = [];
   }
+  let publicKey: string | null = derived[0] ?? null;
   if (!publicKey) {
     return { result: { label, ok: false, detail: "clé privée du bot illisible" }, publicKey: null };
   }
@@ -564,7 +567,9 @@ export async function checkRecipientKey(
   if (content === null) {
     return { result: { label, ok: false, detail: "fichier des clés publiques (backup-recipients.txt) introuvable" }, publicKey };
   }
-  if (!parseRecipients(content).includes(publicKey)) {
+  const recipients = parseRecipients(content);
+  const matching = derived.find((key) => recipients.includes(key));
+  if (!matching) {
     return {
       result: {
         label,
@@ -574,6 +579,7 @@ export async function checkRecipientKey(
       publicKey,
     };
   }
+  publicKey = matching;
   return { result: { label, ok: true, detail: "correspond à backup-recipients.txt" }, publicKey };
 }
 

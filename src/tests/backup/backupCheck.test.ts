@@ -266,6 +266,14 @@ test("checkRecipientKey compare la clé dérivée au fichier des destinataires",
   assert.match(mismatch.result.detail, /🚨.*PAS/);
   assert.equal(mismatch.publicKey, KEY);
 
+  // Rotation : l'ancienne clé d'abord, seule la nouvelle est destinataire.
+  const rotation = await checkRecipientKey(config(), {
+    run: fakeRun({ "age-keygen -y": `${other}\n${KEY}\n` }),
+    readFile: () => `${KEY}\n`,
+  });
+  assert.equal(rotation.result.ok, true);
+  assert.equal(rotation.publicKey, KEY);
+
   const absent = await checkRecipientKey(config(), { run, readFile: () => null });
   assert.equal(absent.result.ok, false);
 
