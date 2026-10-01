@@ -1,4 +1,5 @@
-﻿import {reportError} from "@/safe/processGuards.js";
+﻿import {describeError} from "@/safe/errorGuards.js";
+import {sendLog} from "@/safe/sendLog.js";
 import type {Client, Message, TextChannel} from "discord.js";
 import {PermissionsBitField} from "discord.js";
 import {getInviteFromChannel} from "./getInviteFromChannel.js";
@@ -37,9 +38,9 @@ async function getInviteFromMessage(client: Client,
         }
         return await getInviteFromChannel(client, channel);
     } catch (e) {
-        // Jamais le texte de l'annonce (elle cite des pseudos), ni de quoi la retrouver : `reportError` trie
-        // et dédoublonne (une permission manquante ne réécrit pas à chaque annonce).
-        await reportError(client, "getInviteFromMessage", e);
+        // Au journal comme avant (une permission manquante prive les annonces de
+        // leur lien), mais jamais le texte de l'annonce : elle cite des pseudos.
+        await sendLog(client, "(getInviteFromMessage) Erreur : \n" + describeError(e));
         return ("");
     }
 }

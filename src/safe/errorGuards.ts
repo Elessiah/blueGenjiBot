@@ -115,7 +115,10 @@ function isIgnorableDiscordError(error: unknown): boolean {
  */
 function describeError(error: unknown): string {
     if (error instanceof Error) {
-        const code = errorCode(error);
+        let code: string | number | null = null;
+        try {
+            code = errorCode(error);
+        } catch { /* accesseur hostile : le message suffit */ }
         return code === null ? error.message : `${error.message} [${code}]`;
     }
     if (typeof error === "string") return error;
@@ -123,9 +126,15 @@ function describeError(error: unknown): string {
     if (error === null || error === undefined || typeof error === "number" || typeof error === "boolean") {
         return `valeur levée non standard (${String(error)})`;
     }
-    // Un objet : son seul code, s'il en a un, jamais ses champs.
-    const code = errorCode(error);
-    return `valeur levée non standard (${typeof error}${code === null ? "" : `, code ${code}`})`;
+    // Un objet : son seul code, s'il a la forme d'un code (nombre, ou jeton
+    // court en capitales), jamais ses champs. Lire un objet inconnu peut
+    // lever (accesseur, Proxy révoqué) : la description, elle, ne lève pas.
+    let code: string | number | null = null;
+    try {
+        code = errorCode(error);
+    } catch { /* objet illisible : son type suffit */ }
+    const shown = typeof code === "number" || (typeof code === "string" && /^[A-Z0-9_]{1,40}$/.test(code)) ? `, code ${code}` : "";
+    return `valeur levée non standard (${typeof error}${shown})`;
 }
 
 /** Gravité retenue pour une erreur, qui décide de sa destination. */
