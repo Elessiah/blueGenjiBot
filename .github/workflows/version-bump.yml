@@ -1,0 +1,108 @@
+# Bump de version à la fusion d'une PR dans main — voir la section « Versionnage » de CLAUDE.md.
+# Niveau lu sur les étiquettes de la PR : release:major, release:minor, sinon patch ;
+# release:skip = aucun bump. Le commit de version porte [skip ci] et n'ouvre aucune PR,
+# donc il ne relance ni ce workflow ni le CI.
+#
+# pull_request_target et non pull_request : une PR venue d'un fork recevrait sinon un
+# jeton en lecture seule et ne serait jamais versionnée. C'est sans danger ici, le job
+# n'extrait que main et n'exécute aucun code de la PR.
+name: Version bump
+
+on:
+  pull_request_target:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+# Pas de groupe global : GitHub ne garde qu'une exécution en attente par groupe et
+# annulerait les autres (un bump perdu sans erreur). Les fusions simultanées se
+# départagent au push, qui recalcule la version sur main à jour à chaque essai.
+concurrency:
+  group: version-bump-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    if: >-
+      github.event.pull_request.merged == true &&
+      !contains(github.event.pull_request.labels.*.name, 'release:skip') &&
+      !startsWith(github.event.pull_request.head.ref, 'release/') &&
+      github.event.pull_request.user.login != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
+      IS_MAJOR: ${{ contains(github.event.pull_request.labels.*.name, 'release:major') }}
+      IS_MINOR: ${{ contains(github.event.pull_request.labels.*.name, 'release:minor') }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_TOKEN || github.token }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Choisir le niveau
+        id: level
+        run: |
+          if [ "$IS_MAJOR" = "true" ]; then level=major
+          elif [ "$IS_MINOR" = "true" ]; then level=minor
+          else level=patch
+          fi
+          echo "level=$level" >> "$GITHUB_OUTPUT"
+
+      - name: Monter la version, commiter, taguer et pousser
+        id: bump
+        env:
+          LEVEL: ${{ steps.level.outputs.level }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          marker="(#$PR_NUMBER) [skip ci]"
+          for attempt in 1 2 3 4 5; do
+            git fetch --tags origin main
+            git reset -q --hard origin/main
+            # Relance après un échec partiel : la version de cette PR est déjà sur
+            # main, on la reprend au lieu d'en monter une seconde.
+            done_sha=$(git log -n 1 --format=%H --fixed-strings --grep="$marker" origin/main)
+            if [ -n "$done_sha" ]; then
+              version=$(git log -n 1 --format=%s "$done_sha" | awk '{print $2}')
+              git rev-parse -q --verify "refs/tags/$version" >/dev/null || git tag "$version" "$done_sha"
+              git push origin "refs/tags/$version"
+              echo "version=$version" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            npm version "$LEVEL" --no-git-tag-version --ignore-scripts
+            version="v$(node -p "require('./package.json').version")"
+            if git rev-parse -q --verify "refs/tags/$version" >/dev/null; then
+              echo "::error::Le tag $version existe déjà."
+              exit 1
+            fi
+            git add package.json package-lock.json
+            git commit -q -m "release $version $marker"
+            git tag "$version"
+            # Atomique : le commit et son tag arrivent ensemble ou pas du tout.
+            if git push --atomic origin HEAD:main "refs/tags/$version"; then
+              echo "version=$version" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            git tag -d "$version"
+            sleep $((attempt * 5))
+          done
+          echo "::error::Push refusé cinq fois."
+          exit 1
+
+      - name: Publier la release
+        env:
+          VERSION: ${{ steps.bump.outputs.version }}
+        run: |
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            echo "Release $VERSION déjà publiée."
+          else
+            gh release create "$VERSION" --title "$VERSION" --generate-notes --verify-tag
+          fi
