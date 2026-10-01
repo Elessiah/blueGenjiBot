@@ -22,7 +22,7 @@ test("restoreFailureText ne rend rien du message brut d'une commande", () => {
 
 test("restoreFailureText nomme une commande introuvable, sans chemin, et renvoie aux journaux", () => {
   const text = restoreFailureText(new MissingCommandError("age"));
-  assert.equal(text, `${missingCommandText("age")} (détail dans les journaux pm2)`);
+  assert.equal(text, `${missingCommandText("age")} — détail dans les journaux pm2`);
   assert.doesNotMatch(text, /\/usr|\/bin/);
 });
 
