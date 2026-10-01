@@ -1,5 +1,5 @@
 import {sendLog} from "../safe/sendLog.js";
-import {describeErrorWithoutPayload} from "../safe/errorGuards.js";
+import {describeError} from "../safe/errorGuards.js";
 import {manageMsgExpiration} from "./manageMsgExpiration.js";
 import {checkMessageValidity} from "./checkMessageValidity.js";
 import {getTargetRegions} from "./getTargetRegions.js";
@@ -124,8 +124,10 @@ async function manageDistribution(message: Message,
     } catch (err) {
         // Le message seul : l'objet d'erreur d'une requête Discord porte
         // l'annonce (pseudo de l'auteur, texte), que les journaux ne gardent pas.
-        console.error("manageDistribution error:", describeErrorWithoutPayload(err));
-        await sendLog(client, "manageDistribution error : \n" + describeErrorWithoutPayload(err));
+        const description = describeError(err);
+        // La pile pour pm2 (elle ne porte pas l'annonce), jamais l'objet entier.
+        console.error("manageDistribution error:", err instanceof Error ? err.stack : description);
+        await sendLog(client, "manageDistribution error : \n" + description);
         return false;
     }
 }

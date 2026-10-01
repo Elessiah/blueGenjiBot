@@ -104,8 +104,14 @@ function isIgnorableDiscordError(error: unknown): boolean {
 
 /**
  * Produit une description lisible d'une valeur levée, quelle que soit sa forme.
+ *
+ * Un objet qui n'est pas une `Error` n'est **jamais sérialisé** : levé sur le
+ * chemin d'une annonce, il peut porter son texte et le pseudo de son auteur,
+ * et cette description part au journal Discord et dans les messages privés
+ * du titulaire (`reportError`, `sendLog`). Seul son type est dit. Le message
+ * d'une `Error`, lui, est rendu tel quel.
  * @param error Valeur capturée.
- * @returns Message d'erreur, éventuellement suffixé du code.
+ * @returns Message d'erreur (suffixé du code), la chaîne levée, ou le type de la valeur.
  */
 function describeError(error: unknown): string {
     if (error instanceof Error) {
@@ -113,24 +119,6 @@ function describeError(error: unknown): string {
         return code === null ? error.message : `${error.message} [${code}]`;
     }
     if (typeof error === "string") return error;
-    try {
-        return JSON.stringify(error);
-    } catch {
-        return String(error);
-    }
-}
-
-/**
- * Comme `describeError`, sans jamais sérialiser une valeur qui n'est pas une
- * `Error` : sur le chemin d'une annonce, un objet levé peut porter son texte
- * et le pseudo de son auteur, que les journaux ne reçoivent pas.
- * @param error Valeur capturée.
- * @returns Message d'une `Error` (suffixé de son code), sinon le seul type de la valeur.
- */
-function describeErrorWithoutPayload(error: unknown): string {
-    if (error instanceof Error) {
-        return describeError(error);
-    }
     return `valeur levée non standard (${error === null ? "null" : typeof error})`;
 }
 
@@ -152,7 +140,6 @@ export {
     classifyError,
     MAX_CAUSE_DEPTH,
     describeError,
-    describeErrorWithoutPayload,
     errorCode,
     isIgnorableDiscordError,
     isTransientNetworkError,

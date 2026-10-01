@@ -1,4 +1,4 @@
-﻿import {describeErrorWithoutPayload} from "@/safe/errorGuards.js";
+﻿import {describeError} from "@/safe/errorGuards.js";
 import type {Client, Message, TextChannel} from "discord.js";
 import {PermissionsBitField} from "discord.js";
 import {getInviteFromChannel} from "./getInviteFromChannel.js";
@@ -40,7 +40,7 @@ async function getInviteFromMessage(client: Client,
     } catch (e) {
         // L'identifiant du message, jamais son texte : une annonce cite des
         // pseudos, que le journal ne reçoit pas.
-        await sendLog(client, "(getInviteFromMessage)Erreur pour le message " + message.id + "\nMessage d'erreur : \n" + describeErrorWithoutPayload(e));
+        await sendLog(client, "(getInviteFromMessage)Erreur pour le message " + message.id + "\nMessage d'erreur : \n" + describeError(e));
         return ("");
     }
 }
