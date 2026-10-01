@@ -90,7 +90,7 @@ Ces traitements reposent sur l'**intérêt légitime** de l'association (article
 
 - **Discord** (États-Unis) : décision d'adéquation (UE) 2023/1795 de la Commission européenne du 10 juillet 2023 (EU-U.S. Data Privacy Framework).
 - **Microsoft** : transfert possible vers les États-Unis, Microsoft ne garantissant pas le lieu de stockage d'un compte personnel ; une demande envoyée par courriel à l'hébergeur technique, et sa réponse par courriel, lui parviennent non chiffrées par l'association, donc lisibles par Microsoft — décision d'adéquation (UE) 2023/1795 de la Commission européenne du 10 juillet 2023 (EU-U.S. Data Privacy Framework).
-- Les sauvegardes ne quittent pas l'Union européenne : Hetzner les stocke en Allemagne.
+- Depuis le 1er octobre 2026, les sauvegardes sont envoyées chez Hetzner, en Allemagne : elles ne font l'objet d'aucun transfert hors de l'Union.
 
 ---
 

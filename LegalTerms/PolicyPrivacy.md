@@ -90,7 +90,7 @@ This processing is based on the association's **legitimate interest** (Article 6
 
 - **Discord** (United States): European Commission adequacy decision (EU) 2023/1795 of 10 July 2023 (EU-U.S. Data Privacy Framework).
 - **Microsoft**: possible transfer to the United States, as Microsoft does not guarantee the storage location of a personal account; a request emailed to the technical host, and their emailed reply, reach it without encryption by the association, and so readable by Microsoft — European Commission adequacy decision (EU) 2023/1795 of 10 July 2023 (EU-U.S. Data Privacy Framework).
-- Backups do not leave the European Union: Hetzner stores them in Germany.
+- Since 1 October 2026, backups are sent to Hetzner, in Germany: they are not transferred outside the Union.
 
 ---
 
