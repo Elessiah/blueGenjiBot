@@ -30,7 +30,9 @@ src/
 │   ├── admin/              # commandes admin
 │   ├── services/           # gestion des services (resetChannel, resetServer)
 │   ├── ban/, broadcast.ts, contactAdminServer.ts, printHelp.ts
-├── adhesion/               # logique d'adhésion (checkIntervalleAdhesion…)
+├── adhesion/               # logique d'adhésion : rappels (checkIntervalleAdhesion…) ; envoi
+│                           #   sendAdhesion → adhesionAttachments, adhesionRecipients, adhesionDelivery
+│                           #   (textes : adhesionNotices, journal : adhesionLog)
 ├── check/                  # checks runtime (checkBan…)
 ├── messages/               # buildServiceMessage, manageDistribution
 ├── safe/                   # wrappers défensifs : safeReply, sendLog
