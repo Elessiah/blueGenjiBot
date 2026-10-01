@@ -1574,6 +1574,75 @@ au plus tard dans la nuit qui suit.
 
         
             
+<h4 class="name" id="MESSAGE_WINDOW_DAYS"><span class="type-signature">(constant) </span>MESSAGE_WINDOW_DAYS<span class="type-signature"></span></h4>
+
+
+
+
+<div class="description">
+    Fenetre des compteurs tires de `OGMsg` / `DPMsg` (`/internal/stats`,
+`/internal/kpis`, `/internal/servers`).
+
+Ces tables sont purgees a `MESSAGE_RETENTION_DAYS` : un compteur annonce sur
+30 jours n'en voyait que sept, et la comparaison des KPI a la periode
+30-60 jours portait sur une plage toujours vide. La fenetre est donc celle de
+la conservation, et elle est renvoyee dans les reponses (`windowDays`) pour
+que le site affiche ce qui a ete compte plutot qu'une duree recopiee.
+</div>
+
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="internalApi.js.html">internalApi.js</a>, <a href="internalApi.js.html#line38">line 38</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+        
+            
 <h4 class="name" id="MODULE_KEYS"><span class="type-signature">(constant) </span>MODULE_KEYS<span class="type-signature"></span></h4>
 
 
@@ -3368,7 +3437,7 @@ nominal de cet échec est justement que le message a déjà été supprimé.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="internalApi_helpers.js.html">internalApi/helpers.js</a>, <a href="internalApi_helpers.js.html#line54">line 54</a>
+        <a href="internalApi_helpers.js.html">internalApi/helpers.js</a>, <a href="internalApi_helpers.js.html#line43">line 43</a>
     </li></ul></dd>
     
 
@@ -4375,7 +4444,7 @@ conservation. N'échoue jamais bruyamment : l'erreur est signalée.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="privacy_dataRetention.js.html">privacy/dataRetention.js</a>, <a href="privacy_dataRetention.js.html#line30">line 30</a>
+        <a href="privacy_dataRetention.js.html">privacy/dataRetention.js</a>, <a href="privacy_dataRetention.js.html#line35">line 35</a>
     </li></ul></dd>
     
 
@@ -4903,7 +4972,7 @@ doit pas suffire a la publier, donc tout est refuse.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="internalApi.js.html">internalApi.js</a>, <a href="internalApi.js.html#line41">line 41</a>
+        <a href="internalApi.js.html">internalApi.js</a>, <a href="internalApi.js.html#line54">line 54</a>
     </li></ul></dd>
     
 
@@ -6415,6 +6484,170 @@ Pur, donc testable sans Discord : c'est la règle qui compte, pas le canal.
         
 <div class="param-desc">
     Les destinataires retenus et le nombre d'écartés.
+</div>
+
+
+
+    
+
+
+
+
+
+        
+            
+
+    
+
+    
+    <h4 class="name" id="channelIsGone"><span class="type-signature">(async) </span>channelIsGone<span class="signature">(client, channelId)</span><span class="type-signature"></span></h4>
+    
+
+    
+
+
+
+<div class="description">
+    Discord a-t-il dit que ce salon **n'existe plus** ?
+
+Seul `UnknownChannel` autorise l'effacement : un accès retiré (`MissingAccess`),
+une limite de débit ou une coupure réseau lèvent aussi, et ne disent rien de
+l'existence du salon — dans le doute, la ligne reste.
+</div>
+
+
+
+
+
+
+
+
+
+    <h5>Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>client</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Client Discord connecté.</td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>channelId</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Salon absent du cache.</td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="privacy_dataRetention.js.html">privacy/dataRetention.js</a>, <a href="privacy_dataRetention.js.html#line198">line 198</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5>Returns:</h5>
+
+        
+<div class="param-desc">
+    `true` seulement sur un refus explicite « salon inconnu ».
 </div>
 
 
@@ -9828,7 +10061,7 @@ d'une `Error`, lui, est rendu tel quel.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="internalApi_helpers.js.html">internalApi/helpers.js</a>, <a href="internalApi_helpers.js.html#line59">line 59</a>
+        <a href="internalApi_helpers.js.html">internalApi/helpers.js</a>, <a href="internalApi_helpers.js.html#line48">line 48</a>
     </li></ul></dd>
     
 
@@ -10608,7 +10841,7 @@ Ce qui reste est repris par le rattrapage suivant.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="privacy_dataRetention.js.html">privacy/dataRetention.js</a>, <a href="privacy_dataRetention.js.html#line56">line 56</a>
+        <a href="privacy_dataRetention.js.html">privacy/dataRetention.js</a>, <a href="privacy_dataRetention.js.html#line61">line 61</a>
     </li></ul></dd>
     
 
@@ -10774,7 +11007,7 @@ par serveur, pas par application.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="privacy_dataRetention.js.html">privacy/dataRetention.js</a>, <a href="privacy_dataRetention.js.html#line109">line 109</a>
+        <a href="privacy_dataRetention.js.html">privacy/dataRetention.js</a>, <a href="privacy_dataRetention.js.html#line114">line 114</a>
     </li></ul></dd>
     
 
@@ -12135,6 +12368,158 @@ recherche par tag. Dans les deux cas, la réponse vaut appartenance — un
     
 
     
+    <h4 class="name" id="forgetDeletedChannels"><span class="type-signature"></span>forgetDeletedChannels<span class="signature">(client)</span><span class="type-signature"></span></h4>
+    
+
+    
+
+
+
+<div class="description">
+    Retire les salons relayés des serveurs **rejoints** que Discord ne connaît
+plus : supprimés pendant que le bot était arrêté, ils n'ont déclenché aucun
+`channelDelete`. Les serveurs quittés relèvent de `forgetDepartedGuilds`.
+
+Mêmes gardes que lui : client prêt (c'est `clientReady` qui remplit les
+caches de salons) et base appartenant à l'application connectée. Un serveur
+marqué indisponible est sauté (son cache de salons ne le décrit pas), et un
+salon absent du cache n'est effacé qu'après une relecture chez Discord qui
+répond « salon inconnu » (`channelIsGone`) — le cache ne garde pas les fils
+archivés, et toute autre erreur laisse la ligne en place.
+</div>
+
+
+
+
+
+
+
+
+
+    <h5>Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>client</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Client Discord connecté.</td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="privacy_dataRetention.js.html">privacy/dataRetention.js</a>, <a href="privacy_dataRetention.js.html#line222">line 222</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5>Returns:</h5>
+
+        
+<div class="param-desc">
+    Identifiants des salons retirés, ou `null` si le rattrapage n'a pas
+         été joué (client pas prêt, application inconnue, autre application).
+</div>
+
+
+
+    
+
+
+
+
+
+        
+            
+
+    
+
+    
     <h4 class="name" id="forgetDepartedGuilds"><span class="type-signature"></span>forgetDepartedGuilds<span class="signature">(client)</span><span class="type-signature"></span></h4>
     
 
@@ -12245,7 +12630,7 @@ momentanément indisponible (panne Discord) reste dans le cache, marqué
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="privacy_dataRetention.js.html">privacy/dataRetention.js</a>, <a href="privacy_dataRetention.js.html#line138">line 138</a>
+        <a href="privacy_dataRetention.js.html">privacy/dataRetention.js</a>, <a href="privacy_dataRetention.js.html#line143">line 143</a>
     </li></ul></dd>
     
 
@@ -14182,7 +14567,7 @@ lisser le bruit sans ralentir la route de facon perceptible.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="internalApi.js.html">internalApi.js</a>, <a href="internalApi.js.html#line92">line 92</a>
+        <a href="internalApi.js.html">internalApi.js</a>, <a href="internalApi.js.html#line105">line 105</a>
     </li></ul></dd>
     
 
@@ -19927,7 +20312,7 @@ revendiquer la base avec l'identifiant de l'utilisateur la fermerait ensuite
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="privacy_dataRetention.js.html">privacy/dataRetention.js</a>, <a href="privacy_dataRetention.js.html#line91">line 91</a>
+        <a href="privacy_dataRetention.js.html">privacy/dataRetention.js</a>, <a href="privacy_dataRetention.js.html#line96">line 96</a>
     </li></ul></dd>
     
 
@@ -21025,95 +21410,6 @@ porte aucun compteur exploitable, est refusé.
     
 
     
-    <h4 class="name" id="pctDelta"><span class="type-signature"></span>pctDelta<span class="signature">()</span><span class="type-signature"></span></h4>
-    
-
-    
-
-
-
-<div class="description">
-    Pourcentage de variation entre curr et prev, formate '+12 %' / '-5 %'.
-Si prev=0 et curr>0 renvoie '+100 %' ; si prev=0 et curr=0 renvoie '+0 %'.
-</div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-<dl class="details">
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-    <dt class="tag-source">Source:</dt>
-    <dd class="tag-source"><ul class="dummy"><li>
-        <a href="internalApi_helpers.js.html">internalApi/helpers.js</a>, <a href="internalApi_helpers.js.html#line46">line 46</a>
-    </li></ul></dd>
-    
-
-    
-
-    
-
-    
-</dl>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        
-            
-
-    
-
-    
     <h4 class="name" id="ping"><span class="type-signature"></span>ping<span class="signature">(client, interaction)</span><span class="type-signature"></span></h4>
     
 
@@ -21914,7 +22210,7 @@ dependre d'un outillage git absent en production.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="internalApi.js.html">internalApi.js</a>, <a href="internalApi.js.html#line68">line 68</a>
+        <a href="internalApi.js.html">internalApi.js</a>, <a href="internalApi.js.html#line81">line 81</a>
     </li></ul></dd>
     
 
@@ -22707,7 +23003,7 @@ trompeur. Une seule règle pour les deux routes.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="internalApi.js.html">internalApi.js</a>, <a href="internalApi.js.html#line112">line 112</a>
+        <a href="internalApi.js.html">internalApi.js</a>, <a href="internalApi.js.html#line125">line 125</a>
     </li></ul></dd>
     
 
@@ -25050,7 +25346,7 @@ réversible, et le fichier de secours n'est jamais supprimé automatiquement.
 
 
 <div class="description">
-    Les trois ménages, dans l'ordre. Chacun signale son propre échec sans priver
+    Les quatre ménages, dans l'ordre. Chacun signale son propre échec sans priver
 les autres de passer ; la fonction ne lève jamais.
 </div>
 
@@ -25139,7 +25435,7 @@ les autres de passer ; la fonction ne lève jamais.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="privacy_dataRetention.js.html">privacy/dataRetention.js</a>, <a href="privacy_dataRetention.js.html#line188">line 188</a>
+        <a href="privacy_dataRetention.js.html">privacy/dataRetention.js</a>, <a href="privacy_dataRetention.js.html#line263">line 263</a>
     </li></ul></dd>
     
 
@@ -25183,7 +25479,7 @@ les autres de passer ; la fonction ne lève jamais.
 
 
 <div class="description">
-    Une passe des trois ménages (voir `runDataRetention`).
+    Une passe des quatre ménages (voir `runDataRetention`).
 </div>
 
 
@@ -25271,7 +25567,7 @@ les autres de passer ; la fonction ne lève jamais.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="privacy_dataRetention.js.html">privacy/dataRetention.js</a>, <a href="privacy_dataRetention.js.html#line215">line 215</a>
+        <a href="privacy_dataRetention.js.html">privacy/dataRetention.js</a>, <a href="privacy_dataRetention.js.html#line290">line 290</a>
     </li></ul></dd>
     
 
@@ -31030,7 +31326,7 @@ de laisser tourner un bot dont l'API interne est inaccessible.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="internalApi.js.html">internalApi.js</a>, <a href="internalApi.js.html#line133">line 133</a>
+        <a href="internalApi.js.html">internalApi.js</a>, <a href="internalApi.js.html#line146">line 146</a>
     </li></ul></dd>
     
 
@@ -32350,13 +32646,13 @@ production avec un fichier corrompu serait pire que l'absence de restauration.
 </div>
 
 <nav>
-    <h2><a href="index.html">Home</a></h2><h3>Classes</h3><ul><li><a href="Bdd.html">Bdd</a></li><li><a href="HandleResolutionTimeoutError.html">HandleResolutionTimeoutError</a></li><li><a href="HomeGuildUnavailableError.html">HomeGuildUnavailableError</a></li><li><a href="Tips.html">Tips</a></li></ul><h3>Global</h3><ul><li><a href="global.html#ACTIVITY_AUTHOR_RETENTION_DAYS">ACTIVITY_AUTHOR_RETENTION_DAYS</a></li><li><a href="global.html#ADHESION_REMINDER_HOUR">ADHESION_REMINDER_HOUR</a></li><li><a href="global.html#CONFIGURED_GUILDS_SQL">CONFIGURED_GUILDS_SQL</a></li><li><a href="global.html#DEFAULT_BDD_PATH">DEFAULT_BDD_PATH</a></li><li><a href="global.html#DEFAULT_DEDUPE_WINDOW_MS">DEFAULT_DEDUPE_WINDOW_MS</a></li><li><a href="global.html#DISCORD_ID_RE">DISCORD_ID_RE</a></li><li><a href="global.html#FEED_ANONYMOUS_ACTOR">FEED_ANONYMOUS_ACTOR</a></li><li><a href="global.html#FETCH_GRACE_MS">FETCH_GRACE_MS</a></li><li><a href="global.html#GONE_CODES">GONE_CODES</a></li><li><a href="global.html#GUILD_CHANNEL_TABLE">GUILD_CHANNEL_TABLE</a></li><li><a href="global.html#GUILD_CONFIG_TABLES">GUILD_CONFIG_TABLES</a></li><li><a href="global.html#IGNORABLE_DISCORD_CODES">IGNORABLE_DISCORD_CODES</a></li><li><a href="global.html#ITERATION_UNLIMITED">ITERATION_UNLIMITED</a></li><li><a href="global.html#KEPT_ROLLBACKS">KEPT_ROLLBACKS</a></li><li><a href="global.html#LOOPBACK_HOSTS">LOOPBACK_HOSTS</a></li><li><a href="global.html#MARKDOWN_LINK_SPECIALS">MARKDOWN_LINK_SPECIALS</a></li><li><a href="global.html#MAX_CAUSE_DEPTH">MAX_CAUSE_DEPTH</a></li><li><a href="global.html#MAX_MESSAGE_LENGTH">MAX_MESSAGE_LENGTH</a></li><li><a href="global.html#MAX_RECIPIENTS">MAX_RECIPIENTS</a></li><li><a href="global.html#MAX_REFEREE_DMS">MAX_REFEREE_DMS</a></li><li><a href="global.html#MAX_TRACKED_KEYS">MAX_TRACKED_KEYS</a></li><li><a href="global.html#MENTION_PATTERN">MENTION_PATTERN</a></li><li><a href="global.html#MESSAGE_RETENTION_DAYS">MESSAGE_RETENTION_DAYS</a></li><li><a href="global.html#MODULE_KEYS">MODULE_KEYS</a></li><li><a href="global.html#PARIS_TIME_ZONE">PARIS_TIME_ZONE</a></li><li><a href="global.html#RESOLVE_BUDGET_MS">RESOLVE_BUDGET_MS</a></li><li><a href="global.html#RESOLVE_CONCURRENCY">RESOLVE_CONCURRENCY</a></li><li><a href="global.html#RESOLVE_WAVE_BUDGET_MS">RESOLVE_WAVE_BUDGET_MS</a></li><li><a href="global.html#RETENTION_MODIFIER">RETENTION_MODIFIER</a></li><li><a href="global.html#SCRIM_GAME">SCRIM_GAME</a></li><li><a href="global.html#SCRIM_GAME_LABEL">SCRIM_GAME_LABEL</a></li><li><a href="global.html#SITE_VISITOR_WINDOW_MONTHS">SITE_VISITOR_WINDOW_MONTHS</a></li><li><a href="global.html#SNOWFLAKE_PATTERN">SNOWFLAKE_PATTERN</a></li><li><a href="global.html#SQLITE_MAGIC">SQLITE_MAGIC</a></li><li><a href="global.html#STALE_AFTER_MS">STALE_AFTER_MS</a></li><li><a href="global.html#TRANSIENT_NETWORK_CODES">TRANSIENT_NETWORK_CODES</a></li><li><a href="global.html#_deleteTempMsg">_deleteTempMsg</a></li><li><a href="global.html#_resetChannel">_resetChannel</a></li><li><a href="global.html#_resetProcessGuards">_resetProcessGuards</a></li><li><a href="global.html#_resetServer">_resetServer</a></li><li><a href="global.html#absDelta">absDelta</a></li><li><a href="global.html#adhesionDir">adhesionDir</a></li><li><a href="global.html#adhesionFilePath">adhesionFilePath</a></li><li><a href="global.html#adhesionPerimee">adhesionPerimee</a></li><li><a href="global.html#adhesionValide">adhesionValide</a></li><li><a href="global.html#alertLeadership">alertLeadership</a></li><li><a href="global.html#alertReferees">alertReferees</a></li><li><a href="global.html#anonymizeOldActivity">anonymizeOldActivity</a></li><li><a href="global.html#answerTmp">answerTmp</a></li><li><a href="global.html#areaFilter">areaFilter</a></li><li><a href="global.html#assertSqlIdentifier">assertSqlIdentifier</a></li><li><a href="global.html#authorize">authorize</a></li><li><a href="global.html#ban">ban</a></li><li><a href="global.html#ban_id">ban_id</a></li><li><a href="global.html#ban_username">ban_username</a></li><li><a href="global.html#banlist">banlist</a></li><li><a href="global.html#broadcast">broadcast</a></li><li><a href="global.html#buildEmbedPage">buildEmbedPage</a></li><li><a href="global.html#buildServerChoices">buildServerChoices</a></li><li><a href="global.html#buildServiceMessage">buildServiceMessage</a></li><li><a href="global.html#capRefereeTargets">capRefereeTargets</a></li><li><a href="global.html#checkAdminRole">checkAdminRole</a></li><li><a href="global.html#checkBan">checkBan</a></li><li><a href="global.html#checkChannelMinPermissions">checkChannelMinPermissions</a></li><li><a href="global.html#checkCooldown">checkCooldown</a></li><li><a href="global.html#checkIntervalleAdhesion">checkIntervalleAdhesion</a></li><li><a href="global.html#checkMessageValidity">checkMessageValidity</a></li><li><a href="global.html#checkPermissions">checkPermissions</a></li><li><a href="global.html#checkTargets">checkTargets</a></li><li><a href="global.html#classifyError">classifyError</a></li><li><a href="global.html#client">client</a></li><li><a href="global.html#closeBddInstance">closeBddInstance</a></li><li><a href="global.html#commands">commands</a></li><li><a href="global.html#configModule">configModule</a></li><li><a href="global.html#contactAdminServer">contactAdminServer</a></li><li><a href="global.html#createErrorReporter">createErrorReporter</a></li><li><a href="global.html#dedupeRecipients">dedupeRecipients</a></li><li><a href="global.html#defineRankRange">defineRankRange</a></li><li><a href="global.html#delay">delay</a></li><li><a href="global.html#deleteDPMsgs">deleteDPMsgs</a></li><li><a href="global.html#deleteOldAttachment">deleteOldAttachment</a></li><li><a href="global.html#deleteSetupAdhesion">deleteSetupAdhesion</a></li><li><a href="global.html#deliverDirectMessages">deliverDirectMessages</a></li><li><a href="global.html#describeError">describeError</a></li><li><a href="global.html#deterministicColor">deterministicColor</a></li><li><a href="global.html#displayChannelFilter">displayChannelFilter</a></li><li><a href="global.html#displayChannelRankFilter">displayChannelRankFilter</a></li><li><a href="global.html#displaySetupAdhesion">displaySetupAdhesion</a></li><li><a href="global.html#downloadAttachment">downloadAttachment</a></li><li><a href="global.html#eraseGuild">eraseGuild</a></li><li><a href="global.html#eraseLeftGuild">eraseLeftGuild</a></li><li><a href="global.html#errorCode">errorCode</a></li><li><a href="global.html#escapeLinkLabel">escapeLinkLabel</a></li><li><a href="global.html#extractRanks">extractRanks</a></li><li><a href="global.html#fetchHomeGuilds">fetchHomeGuilds</a></li><li><a href="global.html#fetchTargets">fetchTargets</a></li><li><a href="global.html#fillBlueCommands">fillBlueCommands</a></li><li><a href="global.html#findGuildMemberByHandle">findGuildMemberByHandle</a></li><li><a href="global.html#findHomeMember">findHomeMember</a></li><li><a href="global.html#findMemberIn">findMemberIn</a></li><li><a href="global.html#forgetDepartedGuilds">forgetDepartedGuilds</a></li><li><a href="global.html#formatBackupStatus">formatBackupStatus</a></li><li><a href="global.html#formatBytes">formatBytes</a></li><li><a href="global.html#formatCadence">formatCadence</a></li><li><a href="global.html#formatDiskUsage">formatDiskUsage</a></li><li><a href="global.html#formatPlayerStats">formatPlayerStats</a></li><li><a href="global.html#formatRawRanks">formatRawRanks</a></li><li><a href="global.html#formatSiteVisitStats">formatSiteVisitStats</a></li><li><a href="global.html#formatSnapshotAge">formatSnapshotAge</a></li><li><a href="global.html#formatTarget">formatTarget</a></li><li><a href="global.html#getAdhesion">getAdhesion</a></li><li><a href="global.html#getAdminRole">getAdminRole</a></li><li><a href="global.html#getBacklog">getBacklog</a></li><li><a href="global.html#getBddInstance">getBddInstance</a></li><li><a href="global.html#getCpuPercent">getCpuPercent</a></li><li><a href="global.html#getDiskUsage">getDiskUsage</a></li><li><a href="global.html#getInviteFromChannel">getInviteFromChannel</a></li><li><a href="global.html#getInviteFromMessage">getInviteFromMessage</a></li><li><a href="global.html#getReporter">getReporter</a></li><li><a href="global.html#getServicesAndID">getServicesAndID</a></li><li><a href="global.html#getSnapshotsBetween">getSnapshotsBetween</a></li><li><a href="global.html#getTargetRegions">getTargetRegions</a></li><li><a href="global.html#getTips">getTips</a></li><li><a href="global.html#homeGuildIds">homeGuildIds</a></li><li><a href="global.html#initialIteration">initialIteration</a></li><li><a href="global.html#installProcessGuards">installProcessGuards</a></li><li><a href="global.html#isBackupFresh">isBackupFresh</a></li><li><a href="global.html#isDiscordInvite">isDiscordInvite</a></li><li><a href="global.html#isGone">isGone</a></li><li><a href="global.html#isIgnorableDiscordError">isIgnorableDiscordError</a></li><li><a href="global.html#isLoopbackHost">isLoopbackHost</a></li><li><a href="global.html#isModuleEnabled">isModuleEnabled</a></li><li><a href="global.html#isSnowflake">isSnowflake</a></li><li><a href="global.html#isTransientNetworkError">isTransientNetworkError</a></li><li><a href="global.html#isValidModule">isValidModule</a></li><li><a href="global.html#leadershipIds">leadershipIds</a></li><li><a href="global.html#listModules">listModules</a></li><li><a href="global.html#listPartner">listPartner</a></li><li><a href="global.html#loadAdhesionFiles">loadAdhesionFiles</a></li><li><a href="global.html#loadAdhesionPaths">loadAdhesionPaths</a></li><li><a href="global.html#manageDistribution">manageDistribution</a></li><li><a href="global.html#manageMsgExpiration">manageMsgExpiration</a></li><li><a href="global.html#manageOldFiles">manageOldFiles</a></li><li><a href="global.html#manageServiceSuccess">manageServiceSuccess</a></li><li><a href="global.html#matchesToken">matchesToken</a></li><li><a href="global.html#memberMatchesHandle">memberMatchesHandle</a></li><li><a href="global.html#newChannelPartner">newChannelPartner</a></li><li><a href="global.html#nextTips">nextTips</a></li><li><a href="global.html#nextTransmissionAfter">nextTransmissionAfter</a></li><li><a href="global.html#normalizeInvite">normalizeInvite</a></li><li><a href="global.html#normalizeText">normalizeText</a></li><li><a href="global.html#notifyBannedUser">notifyBannedUser</a></li><li><a href="global.html#olderThanRetention">olderThanRetention</a></li><li><a href="global.html#ownsDatabase">ownsDatabase</a></li><li><a href="global.html#parisDaysLater">parisDaysLater</a></li><li><a href="global.html#parisOffsetMs">parisOffsetMs</a></li><li><a href="global.html#parisWallClock">parisWallClock</a></li><li><a href="global.html#parseDirectMessageRequest">parseDirectMessageRequest</a></li><li><a href="global.html#parseDiscordHandle">parseDiscordHandle</a></li><li><a href="global.html#parseRefereeAlert">parseRefereeAlert</a></li><li><a href="global.html#parseSiteVisitStats">parseSiteVisitStats</a></li><li><a href="global.html#pctDelta">pctDelta</a></li><li><a href="global.html#ping">ping</a></li><li><a href="global.html#printHelp">printHelp</a></li><li><a href="global.html#purgeFeedIdentifiers">purgeFeedIdentifiers</a></li><li><a href="global.html#purgeOldRollbacks">purgeOldRollbacks</a></li><li><a href="global.html#rankChoices">rankChoices</a></li><li><a href="global.html#readBackupStatus">readBackupStatus</a></li><li><a href="global.html#readPackageInfo">readPackageInfo</a></li><li><a href="global.html#readSiteVisitStats">readSiteVisitStats</a></li><li><a href="global.html#recordDailySnapshot">recordDailySnapshot</a></li><li><a href="global.html#recordEvent">recordEvent</a></li><li><a href="global.html#recrute">recrute</a></li><li><a href="global.html#refuseUnjoinedGuild">refuseUnjoinedGuild</a></li><li><a href="global.html#relay">relay</a></li><li><a href="global.html#remainingIteration">remainingIteration</a></li><li><a href="global.html#remoteServerReset">remoteServerReset</a></li><li><a href="global.html#removeIntervalle">removeIntervalle</a></li><li><a href="global.html#reportError">reportError</a></li><li><a href="global.html#resetBddInstance">resetBddInstance</a></li><li><a href="global.html#resetChannel">resetChannel</a></li><li><a href="global.html#resetRefereeRole">resetRefereeRole</a></li><li><a href="global.html#resetServer">resetServer</a></li><li><a href="global.html#resetServerInvite">resetServerInvite</a></li><li><a href="global.html#resolutionWaves">resolutionWaves</a></li><li><a href="global.html#resolveDiscordHandle">resolveDiscordHandle</a></li><li><a href="global.html#restoreBackup">restoreBackup</a></li><li><a href="global.html#restoreDatabase">restoreDatabase</a></li><li><a href="global.html#runDataRetention">runDataRetention</a></li><li><a href="global.html#runDataRetentionOnce">runDataRetentionOnce</a></li><li><a href="global.html#runSetupWizard">runSetupWizard</a></li><li><a href="global.html#safeChannel">safeChannel</a></li><li><a href="global.html#safeFollowUp">safeFollowUp</a></li><li><a href="global.html#safeMsgReply">safeMsgReply</a></li><li><a href="global.html#safeReact">safeReact</a></li><li><a href="global.html#safeReply">safeReply</a></li><li><a href="global.html#safeUser">safeUser</a></li><li><a href="global.html#saveAdhesionPaths">saveAdhesionPaths</a></li><li><a href="global.html#saveSiteVisitStats">saveSiteVisitStats</a></li><li><a href="global.html#scrim">scrim</a></li><li><a href="global.html#scrubFeedField">scrubFeedField</a></li><li><a href="global.html#scrubFeedText">scrubFeedText</a></li><li><a href="global.html#searchInWaves">searchInWaves</a></li><li><a href="global.html#searchString">searchString</a></li><li><a href="global.html#sendAdhesion">sendAdhesion</a></li><li><a href="global.html#sendDatabaseBackup">sendDatabaseBackup</a></li><li><a href="global.html#sendInteractiveMsg">sendInteractiveMsg</a></li><li><a href="global.html#sendLog">sendLog</a></li><li><a href="global.html#sendServiceMessage">sendServiceMessage</a></li><li><a href="global.html#servicesChoices">servicesChoices</a></li><li><a href="global.html#servicesWithNoRanks">servicesWithNoRanks</a></li><li><a href="global.html#setBotAdminRole">setBotAdminRole</a></li><li><a href="global.html#setChannelFilter">setChannelFilter</a></li><li><a href="global.html#setChannelRankFilter">setChannelRankFilter</a></li><li><a href="global.html#setModuleEnabled">setModuleEnabled</a></li><li><a href="global.html#setRankFilter">setRankFilter</a></li><li><a href="global.html#setRefereeRole">setRefereeRole</a></li><li><a href="global.html#setServerInvite">setServerInvite</a></li><li><a href="global.html#setupIntervalAdhesion">setupIntervalAdhesion</a></li><li><a href="global.html#showBotAdminRole">showBotAdminRole</a></li><li><a href="global.html#showRefereeRole">showRefereeRole</a></li><li><a href="global.html#showServerInvite">showServerInvite</a></li><li><a href="global.html#splitForDiscord">splitForDiscord</a></li><li><a href="global.html#startInternalApi">startInternalApi</a></li><li><a href="global.html#statsPlayer">statsPlayer</a></li><li><a href="global.html#statsSite">statsSite</a></li><li><a href="global.html#subscribe">subscribe</a></li><li><a href="global.html#toSQLiteDate">toSQLiteDate</a></li><li><a href="global.html#truncateMessage">truncateMessage</a></li><li><a href="global.html#ts">ts</a></li><li><a href="global.html#unban">unban</a></li><li><a href="global.html#updateCommands">updateCommands</a></li><li><a href="global.html#validateSqliteFile">validateSqliteFile</a></li></ul>
+    <h2><a href="index.html">Home</a></h2><h3>Classes</h3><ul><li><a href="Bdd.html">Bdd</a></li><li><a href="HandleResolutionTimeoutError.html">HandleResolutionTimeoutError</a></li><li><a href="HomeGuildUnavailableError.html">HomeGuildUnavailableError</a></li><li><a href="Tips.html">Tips</a></li></ul><h3>Global</h3><ul><li><a href="global.html#ACTIVITY_AUTHOR_RETENTION_DAYS">ACTIVITY_AUTHOR_RETENTION_DAYS</a></li><li><a href="global.html#ADHESION_REMINDER_HOUR">ADHESION_REMINDER_HOUR</a></li><li><a href="global.html#CONFIGURED_GUILDS_SQL">CONFIGURED_GUILDS_SQL</a></li><li><a href="global.html#DEFAULT_BDD_PATH">DEFAULT_BDD_PATH</a></li><li><a href="global.html#DEFAULT_DEDUPE_WINDOW_MS">DEFAULT_DEDUPE_WINDOW_MS</a></li><li><a href="global.html#DISCORD_ID_RE">DISCORD_ID_RE</a></li><li><a href="global.html#FEED_ANONYMOUS_ACTOR">FEED_ANONYMOUS_ACTOR</a></li><li><a href="global.html#FETCH_GRACE_MS">FETCH_GRACE_MS</a></li><li><a href="global.html#GONE_CODES">GONE_CODES</a></li><li><a href="global.html#GUILD_CHANNEL_TABLE">GUILD_CHANNEL_TABLE</a></li><li><a href="global.html#GUILD_CONFIG_TABLES">GUILD_CONFIG_TABLES</a></li><li><a href="global.html#IGNORABLE_DISCORD_CODES">IGNORABLE_DISCORD_CODES</a></li><li><a href="global.html#ITERATION_UNLIMITED">ITERATION_UNLIMITED</a></li><li><a href="global.html#KEPT_ROLLBACKS">KEPT_ROLLBACKS</a></li><li><a href="global.html#LOOPBACK_HOSTS">LOOPBACK_HOSTS</a></li><li><a href="global.html#MARKDOWN_LINK_SPECIALS">MARKDOWN_LINK_SPECIALS</a></li><li><a href="global.html#MAX_CAUSE_DEPTH">MAX_CAUSE_DEPTH</a></li><li><a href="global.html#MAX_MESSAGE_LENGTH">MAX_MESSAGE_LENGTH</a></li><li><a href="global.html#MAX_RECIPIENTS">MAX_RECIPIENTS</a></li><li><a href="global.html#MAX_REFEREE_DMS">MAX_REFEREE_DMS</a></li><li><a href="global.html#MAX_TRACKED_KEYS">MAX_TRACKED_KEYS</a></li><li><a href="global.html#MENTION_PATTERN">MENTION_PATTERN</a></li><li><a href="global.html#MESSAGE_RETENTION_DAYS">MESSAGE_RETENTION_DAYS</a></li><li><a href="global.html#MESSAGE_WINDOW_DAYS">MESSAGE_WINDOW_DAYS</a></li><li><a href="global.html#MODULE_KEYS">MODULE_KEYS</a></li><li><a href="global.html#PARIS_TIME_ZONE">PARIS_TIME_ZONE</a></li><li><a href="global.html#RESOLVE_BUDGET_MS">RESOLVE_BUDGET_MS</a></li><li><a href="global.html#RESOLVE_CONCURRENCY">RESOLVE_CONCURRENCY</a></li><li><a href="global.html#RESOLVE_WAVE_BUDGET_MS">RESOLVE_WAVE_BUDGET_MS</a></li><li><a href="global.html#RETENTION_MODIFIER">RETENTION_MODIFIER</a></li><li><a href="global.html#SCRIM_GAME">SCRIM_GAME</a></li><li><a href="global.html#SCRIM_GAME_LABEL">SCRIM_GAME_LABEL</a></li><li><a href="global.html#SITE_VISITOR_WINDOW_MONTHS">SITE_VISITOR_WINDOW_MONTHS</a></li><li><a href="global.html#SNOWFLAKE_PATTERN">SNOWFLAKE_PATTERN</a></li><li><a href="global.html#SQLITE_MAGIC">SQLITE_MAGIC</a></li><li><a href="global.html#STALE_AFTER_MS">STALE_AFTER_MS</a></li><li><a href="global.html#TRANSIENT_NETWORK_CODES">TRANSIENT_NETWORK_CODES</a></li><li><a href="global.html#_deleteTempMsg">_deleteTempMsg</a></li><li><a href="global.html#_resetChannel">_resetChannel</a></li><li><a href="global.html#_resetProcessGuards">_resetProcessGuards</a></li><li><a href="global.html#_resetServer">_resetServer</a></li><li><a href="global.html#absDelta">absDelta</a></li><li><a href="global.html#adhesionDir">adhesionDir</a></li><li><a href="global.html#adhesionFilePath">adhesionFilePath</a></li><li><a href="global.html#adhesionPerimee">adhesionPerimee</a></li><li><a href="global.html#adhesionValide">adhesionValide</a></li><li><a href="global.html#alertLeadership">alertLeadership</a></li><li><a href="global.html#alertReferees">alertReferees</a></li><li><a href="global.html#anonymizeOldActivity">anonymizeOldActivity</a></li><li><a href="global.html#answerTmp">answerTmp</a></li><li><a href="global.html#areaFilter">areaFilter</a></li><li><a href="global.html#assertSqlIdentifier">assertSqlIdentifier</a></li><li><a href="global.html#authorize">authorize</a></li><li><a href="global.html#ban">ban</a></li><li><a href="global.html#ban_id">ban_id</a></li><li><a href="global.html#ban_username">ban_username</a></li><li><a href="global.html#banlist">banlist</a></li><li><a href="global.html#broadcast">broadcast</a></li><li><a href="global.html#buildEmbedPage">buildEmbedPage</a></li><li><a href="global.html#buildServerChoices">buildServerChoices</a></li><li><a href="global.html#buildServiceMessage">buildServiceMessage</a></li><li><a href="global.html#capRefereeTargets">capRefereeTargets</a></li><li><a href="global.html#channelIsGone">channelIsGone</a></li><li><a href="global.html#checkAdminRole">checkAdminRole</a></li><li><a href="global.html#checkBan">checkBan</a></li><li><a href="global.html#checkChannelMinPermissions">checkChannelMinPermissions</a></li><li><a href="global.html#checkCooldown">checkCooldown</a></li><li><a href="global.html#checkIntervalleAdhesion">checkIntervalleAdhesion</a></li><li><a href="global.html#checkMessageValidity">checkMessageValidity</a></li><li><a href="global.html#checkPermissions">checkPermissions</a></li><li><a href="global.html#checkTargets">checkTargets</a></li><li><a href="global.html#classifyError">classifyError</a></li><li><a href="global.html#client">client</a></li><li><a href="global.html#closeBddInstance">closeBddInstance</a></li><li><a href="global.html#commands">commands</a></li><li><a href="global.html#configModule">configModule</a></li><li><a href="global.html#contactAdminServer">contactAdminServer</a></li><li><a href="global.html#createErrorReporter">createErrorReporter</a></li><li><a href="global.html#dedupeRecipients">dedupeRecipients</a></li><li><a href="global.html#defineRankRange">defineRankRange</a></li><li><a href="global.html#delay">delay</a></li><li><a href="global.html#deleteDPMsgs">deleteDPMsgs</a></li><li><a href="global.html#deleteOldAttachment">deleteOldAttachment</a></li><li><a href="global.html#deleteSetupAdhesion">deleteSetupAdhesion</a></li><li><a href="global.html#deliverDirectMessages">deliverDirectMessages</a></li><li><a href="global.html#describeError">describeError</a></li><li><a href="global.html#deterministicColor">deterministicColor</a></li><li><a href="global.html#displayChannelFilter">displayChannelFilter</a></li><li><a href="global.html#displayChannelRankFilter">displayChannelRankFilter</a></li><li><a href="global.html#displaySetupAdhesion">displaySetupAdhesion</a></li><li><a href="global.html#downloadAttachment">downloadAttachment</a></li><li><a href="global.html#eraseGuild">eraseGuild</a></li><li><a href="global.html#eraseLeftGuild">eraseLeftGuild</a></li><li><a href="global.html#errorCode">errorCode</a></li><li><a href="global.html#escapeLinkLabel">escapeLinkLabel</a></li><li><a href="global.html#extractRanks">extractRanks</a></li><li><a href="global.html#fetchHomeGuilds">fetchHomeGuilds</a></li><li><a href="global.html#fetchTargets">fetchTargets</a></li><li><a href="global.html#fillBlueCommands">fillBlueCommands</a></li><li><a href="global.html#findGuildMemberByHandle">findGuildMemberByHandle</a></li><li><a href="global.html#findHomeMember">findHomeMember</a></li><li><a href="global.html#findMemberIn">findMemberIn</a></li><li><a href="global.html#forgetDeletedChannels">forgetDeletedChannels</a></li><li><a href="global.html#forgetDepartedGuilds">forgetDepartedGuilds</a></li><li><a href="global.html#formatBackupStatus">formatBackupStatus</a></li><li><a href="global.html#formatBytes">formatBytes</a></li><li><a href="global.html#formatCadence">formatCadence</a></li><li><a href="global.html#formatDiskUsage">formatDiskUsage</a></li><li><a href="global.html#formatPlayerStats">formatPlayerStats</a></li><li><a href="global.html#formatRawRanks">formatRawRanks</a></li><li><a href="global.html#formatSiteVisitStats">formatSiteVisitStats</a></li><li><a href="global.html#formatSnapshotAge">formatSnapshotAge</a></li><li><a href="global.html#formatTarget">formatTarget</a></li><li><a href="global.html#getAdhesion">getAdhesion</a></li><li><a href="global.html#getAdminRole">getAdminRole</a></li><li><a href="global.html#getBacklog">getBacklog</a></li><li><a href="global.html#getBddInstance">getBddInstance</a></li><li><a href="global.html#getCpuPercent">getCpuPercent</a></li><li><a href="global.html#getDiskUsage">getDiskUsage</a></li><li><a href="global.html#getInviteFromChannel">getInviteFromChannel</a></li><li><a href="global.html#getInviteFromMessage">getInviteFromMessage</a></li><li><a href="global.html#getReporter">getReporter</a></li><li><a href="global.html#getServicesAndID">getServicesAndID</a></li><li><a href="global.html#getSnapshotsBetween">getSnapshotsBetween</a></li><li><a href="global.html#getTargetRegions">getTargetRegions</a></li><li><a href="global.html#getTips">getTips</a></li><li><a href="global.html#homeGuildIds">homeGuildIds</a></li><li><a href="global.html#initialIteration">initialIteration</a></li><li><a href="global.html#installProcessGuards">installProcessGuards</a></li><li><a href="global.html#isBackupFresh">isBackupFresh</a></li><li><a href="global.html#isDiscordInvite">isDiscordInvite</a></li><li><a href="global.html#isGone">isGone</a></li><li><a href="global.html#isIgnorableDiscordError">isIgnorableDiscordError</a></li><li><a href="global.html#isLoopbackHost">isLoopbackHost</a></li><li><a href="global.html#isModuleEnabled">isModuleEnabled</a></li><li><a href="global.html#isSnowflake">isSnowflake</a></li><li><a href="global.html#isTransientNetworkError">isTransientNetworkError</a></li><li><a href="global.html#isValidModule">isValidModule</a></li><li><a href="global.html#leadershipIds">leadershipIds</a></li><li><a href="global.html#listModules">listModules</a></li><li><a href="global.html#listPartner">listPartner</a></li><li><a href="global.html#loadAdhesionFiles">loadAdhesionFiles</a></li><li><a href="global.html#loadAdhesionPaths">loadAdhesionPaths</a></li><li><a href="global.html#manageDistribution">manageDistribution</a></li><li><a href="global.html#manageMsgExpiration">manageMsgExpiration</a></li><li><a href="global.html#manageOldFiles">manageOldFiles</a></li><li><a href="global.html#manageServiceSuccess">manageServiceSuccess</a></li><li><a href="global.html#matchesToken">matchesToken</a></li><li><a href="global.html#memberMatchesHandle">memberMatchesHandle</a></li><li><a href="global.html#newChannelPartner">newChannelPartner</a></li><li><a href="global.html#nextTips">nextTips</a></li><li><a href="global.html#nextTransmissionAfter">nextTransmissionAfter</a></li><li><a href="global.html#normalizeInvite">normalizeInvite</a></li><li><a href="global.html#normalizeText">normalizeText</a></li><li><a href="global.html#notifyBannedUser">notifyBannedUser</a></li><li><a href="global.html#olderThanRetention">olderThanRetention</a></li><li><a href="global.html#ownsDatabase">ownsDatabase</a></li><li><a href="global.html#parisDaysLater">parisDaysLater</a></li><li><a href="global.html#parisOffsetMs">parisOffsetMs</a></li><li><a href="global.html#parisWallClock">parisWallClock</a></li><li><a href="global.html#parseDirectMessageRequest">parseDirectMessageRequest</a></li><li><a href="global.html#parseDiscordHandle">parseDiscordHandle</a></li><li><a href="global.html#parseRefereeAlert">parseRefereeAlert</a></li><li><a href="global.html#parseSiteVisitStats">parseSiteVisitStats</a></li><li><a href="global.html#ping">ping</a></li><li><a href="global.html#printHelp">printHelp</a></li><li><a href="global.html#purgeFeedIdentifiers">purgeFeedIdentifiers</a></li><li><a href="global.html#purgeOldRollbacks">purgeOldRollbacks</a></li><li><a href="global.html#rankChoices">rankChoices</a></li><li><a href="global.html#readBackupStatus">readBackupStatus</a></li><li><a href="global.html#readPackageInfo">readPackageInfo</a></li><li><a href="global.html#readSiteVisitStats">readSiteVisitStats</a></li><li><a href="global.html#recordDailySnapshot">recordDailySnapshot</a></li><li><a href="global.html#recordEvent">recordEvent</a></li><li><a href="global.html#recrute">recrute</a></li><li><a href="global.html#refuseUnjoinedGuild">refuseUnjoinedGuild</a></li><li><a href="global.html#relay">relay</a></li><li><a href="global.html#remainingIteration">remainingIteration</a></li><li><a href="global.html#remoteServerReset">remoteServerReset</a></li><li><a href="global.html#removeIntervalle">removeIntervalle</a></li><li><a href="global.html#reportError">reportError</a></li><li><a href="global.html#resetBddInstance">resetBddInstance</a></li><li><a href="global.html#resetChannel">resetChannel</a></li><li><a href="global.html#resetRefereeRole">resetRefereeRole</a></li><li><a href="global.html#resetServer">resetServer</a></li><li><a href="global.html#resetServerInvite">resetServerInvite</a></li><li><a href="global.html#resolutionWaves">resolutionWaves</a></li><li><a href="global.html#resolveDiscordHandle">resolveDiscordHandle</a></li><li><a href="global.html#restoreBackup">restoreBackup</a></li><li><a href="global.html#restoreDatabase">restoreDatabase</a></li><li><a href="global.html#runDataRetention">runDataRetention</a></li><li><a href="global.html#runDataRetentionOnce">runDataRetentionOnce</a></li><li><a href="global.html#runSetupWizard">runSetupWizard</a></li><li><a href="global.html#safeChannel">safeChannel</a></li><li><a href="global.html#safeFollowUp">safeFollowUp</a></li><li><a href="global.html#safeMsgReply">safeMsgReply</a></li><li><a href="global.html#safeReact">safeReact</a></li><li><a href="global.html#safeReply">safeReply</a></li><li><a href="global.html#safeUser">safeUser</a></li><li><a href="global.html#saveAdhesionPaths">saveAdhesionPaths</a></li><li><a href="global.html#saveSiteVisitStats">saveSiteVisitStats</a></li><li><a href="global.html#scrim">scrim</a></li><li><a href="global.html#scrubFeedField">scrubFeedField</a></li><li><a href="global.html#scrubFeedText">scrubFeedText</a></li><li><a href="global.html#searchInWaves">searchInWaves</a></li><li><a href="global.html#searchString">searchString</a></li><li><a href="global.html#sendAdhesion">sendAdhesion</a></li><li><a href="global.html#sendDatabaseBackup">sendDatabaseBackup</a></li><li><a href="global.html#sendInteractiveMsg">sendInteractiveMsg</a></li><li><a href="global.html#sendLog">sendLog</a></li><li><a href="global.html#sendServiceMessage">sendServiceMessage</a></li><li><a href="global.html#servicesChoices">servicesChoices</a></li><li><a href="global.html#servicesWithNoRanks">servicesWithNoRanks</a></li><li><a href="global.html#setBotAdminRole">setBotAdminRole</a></li><li><a href="global.html#setChannelFilter">setChannelFilter</a></li><li><a href="global.html#setChannelRankFilter">setChannelRankFilter</a></li><li><a href="global.html#setModuleEnabled">setModuleEnabled</a></li><li><a href="global.html#setRankFilter">setRankFilter</a></li><li><a href="global.html#setRefereeRole">setRefereeRole</a></li><li><a href="global.html#setServerInvite">setServerInvite</a></li><li><a href="global.html#setupIntervalAdhesion">setupIntervalAdhesion</a></li><li><a href="global.html#showBotAdminRole">showBotAdminRole</a></li><li><a href="global.html#showRefereeRole">showRefereeRole</a></li><li><a href="global.html#showServerInvite">showServerInvite</a></li><li><a href="global.html#splitForDiscord">splitForDiscord</a></li><li><a href="global.html#startInternalApi">startInternalApi</a></li><li><a href="global.html#statsPlayer">statsPlayer</a></li><li><a href="global.html#statsSite">statsSite</a></li><li><a href="global.html#subscribe">subscribe</a></li><li><a href="global.html#toSQLiteDate">toSQLiteDate</a></li><li><a href="global.html#truncateMessage">truncateMessage</a></li><li><a href="global.html#ts">ts</a></li><li><a href="global.html#unban">unban</a></li><li><a href="global.html#updateCommands">updateCommands</a></li><li><a href="global.html#validateSqliteFile">validateSqliteFile</a></li></ul>
 </nav>
 
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Thu Oct 01 2026 05:53:30 GMT+0200 (heure d’été d’Europe centrale)
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Thu Oct 01 2026 13:20:38 GMT+0200 (heure d’été d’Europe centrale)
 </footer>
 
 <script> prettyPrint(); </script>
