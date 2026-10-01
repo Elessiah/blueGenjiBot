@@ -106,10 +106,10 @@ export function resolveCommand(
  * `GOOGLE_APPLICATION_CREDENTIALS`…) n'en sont pas : le remote se règle dans
  * `rclone.conf` ou par `RCLONE_CONFIG_<REMOTE>_*`.
  */
-const INHERITED_ENV_KEYS: readonly string[] = [
+const INHERITED_ENV_KEYS: ReadonlySet<string> = new Set([
   "HOME", "USER", "LOGNAME", "TMPDIR", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "LANG", "LANGUAGE", "TZ",
   "HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "NO_PROXY", "no_proxy", "SSL_CERT_FILE", "SSL_CERT_DIR",
-];
+]);
 
 /**
  * Teste qu'une variable passe aux processus enfants : la liste ci-dessus,
@@ -119,7 +119,7 @@ const INHERITED_ENV_KEYS: readonly string[] = [
  * @returns `true` si elle est transmise.
  */
 function isInheritedEnvKey(key: string): boolean {
-  return INHERITED_ENV_KEYS.includes(key) || key.startsWith("LC_") || key.startsWith("RCLONE_");
+  return INHERITED_ENV_KEYS.has(key) || key.startsWith("LC_") || key.startsWith("RCLONE_");
 }
 
 /**
