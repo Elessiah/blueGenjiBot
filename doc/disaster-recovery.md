@@ -81,6 +81,23 @@ Puis effacer l'archive téléchargée. Si l'une de ces commandes échoue — ou 
 liste rien —, la sauvegarde ne sert à rien : c'est maintenant qu'il faut le
 découvrir.
 
+**Teste ta copie hors ligne de la clé** contre la clé publique que donne le bot.
+Le rapport hebdomadaire en message privé (et `/backup-check`, à la demande)
+affiche la clé publique des sauvegardes, tirée de la clé privée du bot ;
+depuis ta copie :
+
+```bash
+age-keygen -y /chemin/vers/copie/.bluegenji-backup.key
+```
+
+doit afficher **exactement** la clé du rapport. Une clé différente veut dire que
+ta copie n'ouvre pas les archives : refais-la depuis la machine **tant qu'elle
+existe**. Le rapport vérifie de son côté, chaque semaine, que la dernière archive
+se déchiffre en flux sur la production (sans rien écrire en clair sur le disque),
+qu'elle contient `database.sqlite` et `appbluegenji.sql`, que le miroir chiffré
+des images se lit et que sa clé figure dans `scripts/backup-recipients.txt` ; il
+ne remplace pas ce contrôle-ci, qui est le seul à éprouver **tes copies**.
+
 ## 1. Préparer la machine neuve
 
 - **Système** : un Debian (ou Raspberry Pi OS) 64 bits — l'ancienne machine tournait sous **Debian 13** (`arm64`), qui livre directement MariaDB 11.8. Les commandes de `backup-onedrive.md` visent `arm64` ; sur une machine x86, prendre les binaires `amd64`.
@@ -418,6 +435,7 @@ Puis, point par point :
 - **Connexion** : une connexion par Google, Discord ou Blizzard aboutit (même domaine, donc mêmes adresses de retour OAuth).
 - **Bot** : en ligne dans Discord, `pm2 logs bluegenjibot` sans erreur, et la page `/bot` du site affiche son état (le site joint le bot).
 - **Images** : un avatar et un logo d'équipe s'affichent.
+- **Sauvegardes relisibles** : `/backup-check` (propriétaire seul) rend trois « ✅ », et la clé publique affichée est celle que donne `age-keygen -y` sur ta copie hors ligne.
 - **Crons** : `crontab -l` montre les deux lignes, et le journal de la synchronisation horaire se remplit à l'heure suivante.
 - **pm2** : `pm2 save` fait après le dernier changement, pour qu'un redémarrage de la machine relance le bot et le site.
 - **Copies hors ligne** : si une clé, un remote ou un `.env` a changé pendant la reprise, mettre à jour les copies de l'étape 0.

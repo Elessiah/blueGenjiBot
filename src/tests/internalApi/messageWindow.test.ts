@@ -60,3 +60,18 @@ test("/internal/servers expose relays7j, plus relays30j", () => {
   assert.doesNotMatch(body, /relays30j/);
   assert.match(body, /relays7j/);
 });
+
+test("/internal/activity ne lit les relais et n'en fait la moyenne que sur les jours conserves", () => {
+  const body = route('app.get("/internal/activity"');
+  assert.match(body, /req\.query\.range \?\? "7j"/, "plage par defaut plus large que la conservation");
+  assert.match(body, /const relayDays = Math\.min\(days, MESSAGE_WINDOW_DAYS\);/);
+  assert.match(body, /\[`-\$\{relayDays\} day`\]/, "relais lus au-dela de la purge");
+  // Jours calendaires entiers : une coupure glissante ferait entrer une partie
+  // du jour J-7 dans les plages 30j / 90j, et pas dans 7j.
+  assert.match(body, /FROM DPMsg WHERE date\(date\) > date\('now', \?\)/);
+  assert.match(body, /sumRelays \/ relayDays/);
+  assert.doesNotMatch(body, /sumRelays \/ days/);
+  assert.match(body, /windowDays: MESSAGE_WINDOW_DAYS/);
+  // Compatibilite : un site plus ancien demande encore 30j / 90j.
+  assert.match(body, /"30j": 30, "90j": 90/);
+});

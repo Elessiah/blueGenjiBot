@@ -623,9 +623,15 @@ export function startInternalApi(client: Client) {
     }
   });
 
+  // Le site n'offre plus que `7j` : les relais (`DPMsg`) sont purgés à
+  // `MESSAGE_RETENTION_DAYS` et aucun compteur journalier ne les prolonge
+  // (`ActivityDaily` ne replie que scrims et recherches). `30j` et `90j`
+  // restent acceptées le temps qu'un site plus ancien les demande encore :
+  // leurs relais au-delà de la fenêtre valent 0, et la moyenne ne se divise
+  // que par les jours effectivement conservés.
   app.get("/internal/activity", async (req: Request, res: Response) => {
     try {
-      const range = String(req.query.range ?? "30j");
+      const range = String(req.query.range ?? "7j");
       const daysMap: Record<string, number> = { "7j": 7, "30j": 30, "90j": 90 };
       if (!(range in daysMap)) {
         res.status(400).json({ error: "INVALID_RANGE", allowed: ["7j", "30j", "90j"] });
@@ -634,9 +640,11 @@ export function startInternalApi(client: Client) {
       const days = daysMap[range];
       const bdd = await getBddInstance();
 
+      const relayDays = Math.min(days, MESSAGE_WINDOW_DAYS);
+      // Jours calendaires entiers (J-6 … J) : même somme quelle que soit la plage.
       const relayRows = await bdd.raw<{ day: string; count: number }>(
-        "SELECT date(date) AS day, COUNT(*) AS count FROM DPMsg WHERE date >= datetime('now', ?) GROUP BY day ORDER BY day ASC",
-        [`-${days} day`]
+        "SELECT date(date) AS day, COUNT(*) AS count FROM DPMsg WHERE date(date) > date('now', ?) GROUP BY day ORDER BY day ASC",
+        [`-${relayDays} day`]
       );
       // Au-delà de 30 jours, les scrims ne sont plus des lignes mais des
       // compteurs journaliers (`ActivityDaily`) : les deux sources s'ajoutent.
@@ -664,8 +672,8 @@ export function startInternalApi(client: Client) {
         scrims.push(scrimMap.get(iso) ?? 0);
       }
       const sumRelays = relays.reduce((a, b) => a + b, 0);
-      const avgPerDay = Number((sumRelays / days).toFixed(2));
-      res.json({ range, labels, relays, scrims, avgPerDay });
+      const avgPerDay = Number((sumRelays / relayDays).toFixed(2));
+      res.json({ range, labels, relays, scrims, avgPerDay, windowDays: MESSAGE_WINDOW_DAYS });
     } catch (error) {
       await sendLog(client, `/internal/activity error: ${(error as Error).message}`);
       res.status(500).json({ error: "INTERNAL_ACTIVITY_ERROR" });

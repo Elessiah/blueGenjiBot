@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>JSDoc: Home</title>
+    <title>JSDoc: Source: commandsHandlers/admin/backupCheck.js</title>
 
     <script src="scripts/prettify/prettify.js"> </script>
     <script src="scripts/prettify/lang-css.js"> </script>
@@ -17,112 +17,63 @@
 
 <div id="main">
 
-    <h1 class="page-title">Home</h1>
+    <h1 class="page-title">Source: commandsHandlers/admin/backupCheck.js</h1>
 
     
 
 
 
     
-
-
-    <h3> </h3>
-
-
-
-
-
-
-
-
-
-
-    
-
-
-
-
     <section>
-        <article><h1>BlueGenjiBot - Help</h1>
-<h2>What this bot does</h2>
-<p>BlueGenjiBot links partner servers through shared services.
-If you post in an assigned channel with the right prefix, your message is forwarded to other partner servers using the same service.</p>
-<h2>Games covered</h2>
-<p>The bot does not offer the same services for each game:</p>
-<ul>
-<li><strong>Marvel Rivals</strong>: announcements dispatched across partner servers (every service below) <strong>and</strong> BlueGenji tournament management.</li>
-<li><strong>Overwatch</strong>: BlueGenji tournament management <strong>only</strong> (match reminders, referee alerts, tournament log). No Overwatch announcement is dispatched across servers.</li>
-</ul>
-<h2>Services (prefixes)</h2>
-<p>Every service below, tournament announcements included, is for
-<strong>Marvel Rivals only</strong>.</p>
-<ul>
-<li><code>LFS</code>: Looking for scrim (Marvel Rivals).</li>
-<li><code>TA</code>: Tournament announcement (Marvel Rivals).</li>
-<li><code>LFSub</code>: Looking for a substitute player (Marvel Rivals).</li>
-<li><code>LFT</code>: Looking for a competitive team (Marvel Rivals).</li>
-<li><code>LFP</code>: Looking for players for a competitive team (Marvel Rivals).</li>
-<li><code>LFG</code>: Looking for a casual/ranked group (Marvel Rivals).</li>
-<li><code>LFStaff</code>: Looking for staff (coach, manager, admin, etc.) for Marvel Rivals.</li>
-<li><code>LFCast</code>: Looking for casters (Marvel Rivals).</li>
-</ul>
-<h2>Good message format</h2>
-<p>Include these details to get better matches:</p>
-<ul>
-<li>Region: <code>EU</code>, <code>NA</code>, <code>LATAM</code>, <code>ASIA</code></li>
-<li>Rank or rank range</li>
-<li>Date + hour</li>
-<li>Timezone</li>
-<li>Useful context (format, role, map pool, etc.)</li>
-</ul>
-<p>Example:
-<code>LFS EU Diamond Tuesday 21:00 CET - BO3 scrim</code></p>
-<h2>Deleting a forwarded message</h2>
-<p>If you delete your original message, the bot deletes the copies it posted in the
-other partner channels.</p>
-<p>It can only do so while it still holds the relay record, which lasts <strong>seven
-days</strong>. After that the original can still be deleted, but the copies stay where
-they are: the bot no longer knows which message they belonged to.</p>
-<h2>Slash commands</h2>
-<p>Everyone:</p>
-<ul>
-<li><code>/help language:&lt;English|Français&gt;</code></li>
-<li><code>/list-partner service:&lt;service&gt;</code></li>
-<li><code>/display-channel-filter-region channel:&lt;channel&gt;</code></li>
-<li><code>/display-channel-filter-rank channel:&lt;channel&gt;</code></li>
-<li><code>/show-bot-admin</code></li>
-<li><code>/scrim &lt;level&gt;</code>: posts a scrim search, <strong>Marvel Rivals only</strong> — level chosen from a list (Débutant, Intermédiaire, Avancé).</li>
-<li><code>/recrute &lt;role&gt;</code>: posts a player or staff search, <strong>Marvel Rivals only</strong> — role chosen from a list (Tank, DPS, Heal, Coach, Manager).</li>
-<li><code>/stats</code>: shows <strong>your own</strong> recent activity (only you see the reply): partner messages from the last 7 days, scrims and searches from the last 30 days. Nobody can look up another player's activity.</li>
-<li><code>/stats-site</code>: shows BlueGenji website traffic (total visits, and unique visitors over the last 25 months).</li>
-</ul>
-<p>Bans are <strong>network-wide</strong>: this is community moderation, decided by the admins of servers with 50+ members. <code>/ban-list</code> therefore shows the admin of any partner server the full list of network bans (banned player, moderator, reason, date), so they know who can no longer post through the bot and why.</p>
-<p>To link your Discord account to the BlueGenji website, sign in to the website with Discord, or use « Applications connectées » on your profile (the former <code>/link</code> command is gone).</p>
-<p>Retention: tracking of relayed messages (IDs, date) 7 days, erased at the latest during the following night — the copies posted in partner channels then stay on Discord; <code>/scrim</code> and <code>/recrute</code> posts 30 days with their author, then folded during the following night into plain counts per day, server and level (or role) — no author, time or order remains; the public activity feed (time, server, level or role of each post) 30 days, deleted during the following night; network bans until they are lifted — their notice and reason (staff's private log channel; the reason also in a private message to the bot owner) are deleted when the ban is lifted (for a ban issued before this rule, only the reason posted in the channel; the rest after one year); the other messages of the staff's private log channel 1 year; a server's configuration is erased when the bot leaves it — including when it left while the bot was offline, at the next startup; likewise a deleted relay channel is removed from the database, at the next startup if it was deleted while the bot was offline.</p>
-<p>Server admins:</p>
-<ul>
-<li><code>/ban-list</code> (network-wide list, see above)</li>
-<li><code>/relay &lt;channel&gt;</code>: adds or removes an inter-server relay channel</li>
-<li><code>/config &lt;module&gt;</code>: turns a module on or off (annonces, scrims, recrutement)</li>
-<li><code>/assign-channel channel:&lt;channel&gt; service:&lt;service&gt; region-filter:&lt;region&gt; [rank-min] [rank-max]</code></li>
-<li><code>/edit-channel-filter-region channel:&lt;channel&gt; region:&lt;region&gt;</code></li>
-<li><code>/edit-channel-filter-rank channel:&lt;channel&gt; rank-min:&lt;rank&gt; rank-max:&lt;rank&gt;</code></li>
-<li><code>/reset-channel channel:&lt;channel&gt;</code></li>
-<li><code>/reset-all</code></li>
-<li><code>/set-bot-admin role:&lt;role&gt;</code></li>
-</ul>
-<p>Moderation (servers with 50+ members):</p>
-<ul>
-<li><code>/ban-user-of-this-server user:&lt;user&gt; reason:&lt;reason&gt;</code></li>
-<li><code>/ban-user-of-another-server username:&lt;username&gt; reason:&lt;reason&gt;</code></li>
-<li><code>/unban id_ban:&lt;id&gt;</code></li>
-</ul>
-<h2>Support</h2>
-<p>Need help, have feedback, or found an issue?
-Contact: <code>elessiah</code></p></article>
+        <article>
+            <pre class="prettyprint source linenums"><code>import { MessageFlags } from "discord.js";
+import { formatBackupChecks, runBackupChecks } from "../../backup/backupCheck.js";
+import { safeReply } from "../../safe/safeReply.js";
+/**
+ * Joue à la demande les contrôles du rapport hebdomadaire de sauvegarde
+ * (`backup/backupCheck.ts`) : déchiffrement en flux de la dernière archive,
+ * lecture du miroir chiffré des images, clé publique à comparer à la copie
+ * hors ligne.
+ *
+ * Réservée au propriétaire déclaré dans `OWNER_ID`, comme `/restore-backup` :
+ * elle manipule la clé privée des sauvegardes, aucun rôle Discord ne suffit.
+ * Réponse éphémère, différée — le déchiffrement d'une archive dépasse les
+ * 3 s d'une interaction.
+ * @param _client Client Discord (inutilisé, signature commune des commandes).
+ * @param interaction Interaction `/backup-check` en cours.
+ * @returns Rien ; la réponse part par `safeReply`.
+ */
+export async function backupCheck(_client, interaction) {
+    await answerBackupCheck(interaction, () => runBackupChecks());
+}
+/**
+ * Corps de `/backup-check`, contrôles injectés. Séparé du gestionnaire : le
+ * registre des commandes passe un troisième argument (l'identifiant du
+ * serveur), qui ne doit pas tomber dans un paramètre facultatif.
+ * @param interaction Interaction en cours.
+ * @param run Contrôles à jouer.
+ * @returns Rien ; la réponse part par `safeReply`.
+ */
+export async function answerBackupCheck(interaction, run) {
+    const ownerId = process.env.OWNER_ID;
+    if (!ownerId || interaction.user.id !== ownerId) {
+        await safeReply(interaction, "❌ Commande réservée au propriétaire du bot.");
+        return;
+    }
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    try {
+        await safeReply(interaction, formatBackupChecks(await run()), true, true);
+    }
+    catch (error) {
+        // Les contrôles rendent leurs échecs ; une exception ici est imprévue, et
+        // son message peut nommer un chemin : il reste au journal.
+        console.error("[backup-check] Échec imprévu :", error.message);
+        await safeReply(interaction, "❌ Vérification impossible — voir le journal du bot.", true, true);
+    }
+}
+//# sourceMappingURL=backupCheck.js.map</code></pre>
+        </article>
     </section>
-
-
 
 
 

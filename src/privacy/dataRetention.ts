@@ -10,7 +10,10 @@
  *   entraînée que par un nouveau relais ; une semaine sans relais la laissait
  *   dormir. La nuit la rattrape ;
  * - **scrims et recherches** : au-delà de `ACTIVITY_AUTHOR_RETENTION_DAYS`,
- *   repliés en nombres par jour, serveur et niveau (ou rôle), sans auteur ;
+ *   repliés en nombres par jour, serveur et niveau (ou rôle), sans auteur —
+ *   et, avant cela, leurs niveaux et rôles saisis en texte libre avant les
+ *   choix fermés ramenés à ces choix ou à « non précisé »
+ *   (`normalizeLegacyActivityDetails`, idempotent) ;
  * - **serveurs quittés pendant un arrêt** : Discord n'envoie `guildDelete` qu'à
  *   un bot connecté. Un serveur quitté pendant que le bot était arrêté — ou
  *   dont l'oubli a échoué à mi-chemin — garderait sinon sa configuration sans
@@ -291,6 +294,13 @@ async function runDataRetentionOnce(client: Client): Promise<void> {
   } catch (error) {
     await reportError(client, "manageMsgExpiration", error);
   }
+  // Avant le repli : les lignes repliées cette nuit le sont déjà ramenées.
+  let legacy = "échec";
+  try {
+    legacy = String(await (await getBddInstance()).normalizeLegacyActivityDetails());
+  } catch (error) {
+    await reportError(client, "normalizeLegacyActivityDetails", error);
+  }
   const anonymized = await anonymizeOldActivity(client);
   let forgotten: string = "échec";
   try {
@@ -324,7 +334,7 @@ async function runDataRetentionOnce(client: Client): Promise<void> {
   // Une ligne par passage dans les journaux du serveur (pm2) : une nuit à
   // zéro se distingue ainsi d'un ménage qui n'a pas tourné. Aucun identifiant.
   console.log(
-    `[data-retention] purge des relais : ${relays}, auteurs anonymisés : ${anonymized ?? "échec"}, ` +
+    `[data-retention] purge des relais : ${relays}, textes libres ramenés aux choix : ${legacy}, auteurs anonymisés : ${anonymized ?? "échec"}, ` +
       `serveurs oubliés : ${forgotten}, salons retirés : ${channels}, évènements du fil purgés : ${feed}, ` +
       `messages du journal du staff purgés : ${staffLogs}, copies de restauration purgées : ${rollbacks}`,
   );
