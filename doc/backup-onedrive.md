@@ -175,15 +175,30 @@ rclone lsd distant:
 ### 3. Clé de chiffrement
 
 ```bash
-age-keygen -o ~/.bluegenji-backup.key      # chmod 600, à sauvegarder AILLEURS
-grep 'public key' ~/.bluegenji-backup.key  # -> age1...
+age-keygen -o ~/.bluegenji-backup.key   # chmod 600, à sauvegarder AILLEURS
 ```
 
-Place la clé publique dans le fichier des destinataires :
+Le fichier produit contient deux choses : deux lignes de commentaire dont la
+clé **publique** (`age1…`), puis la clé **privée** (`AGE-SECRET-KEY-1…`).
+
+Le fichier des destinataires ne reçoit que la clé publique. `age-keygen -y` la
+redérive sans risque de recopier la mauvaise ligne :
 
 ```bash
-echo 'age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxx' > scripts/backup-recipients.txt
+age-keygen -y ~/.bluegenji-backup.key > scripts/backup-recipients.txt
 ```
+
+> Ne mets **jamais** `AGE-SECRET-KEY-…` dans ce fichier. Chiffrer ne demande que
+> la clé publique ; le fichier des destinataires ne contient rien de secret et
+> peut se recopier n'importe où, une clé privée n'a rien à y faire. Elle reste
+> dans son propre fichier (`chmod 600`), que le bot lit pour `/restore-backup` et
+> `/backup-check` : quiconque accède au Raspberry peut donc relire les archives,
+> et une machine compromise impose de changer de clé.
+
+Le fichier accepte plusieurs destinataires, une clé publique par ligne : chaque
+archive devient alors déchiffrable par n'importe laquelle des clés privées
+correspondantes. Utile pour te donner une seconde clé de secours, rangée
+ailleurs que la première.
 
 > **Sans la clé privée, les archives sont irrécupérables.** Garde une copie hors
 > du Raspberry (gestionnaire de mots de passe, clé USB) — sinon la sauvegarde ne
