@@ -46,7 +46,12 @@ async function adhesionValide(client: Client, interaction: ChatInputCommandInter
         return;
     }
 
-    await setupIntervalAdhesion(client, interaction, messagePerimee, null, user, null, 0, datePeremption, 1);
+    await setupIntervalAdhesion(
+        client,
+        interaction,
+        { message: messagePerimee, channel: null, member: user, role: null },
+        { intInterval: 0, nextTransmission: datePeremption, iteration: 1 }
+    );
 }
 
 export {adhesionValide};

@@ -6,13 +6,13 @@ import {Attachment, ChatInputCommandInteraction, Message, MessageFlags} from "di
  * @param interaction Interaction utilisateur en cours.
  * @param content Contenu texte du follow-up à envoyer.
  * @param is_ephemeral Si `true`, envoie la réponse en éphémère.
- * @param attachements Fichiers à joindre au message.
+ * @param attachements Fichiers à joindre au message (aucun par défaut).
  * @returns Message Discord créé si l'envoi réussit, sinon `null` après 3 échecs.
  */
 async function safeFollowUp(interaction: ChatInputCommandInteraction,
                             content: string = "Empty FollowUp",
                             is_ephemeral: boolean = true,
-                            attachements: Array<Attachment>) : Promise<Message | null> {
+                            attachements: Array<Attachment> = []) : Promise<Message | null> {
     let nTry: number = 0;
     let err_msg: string = "";
     while (nTry < 3) {

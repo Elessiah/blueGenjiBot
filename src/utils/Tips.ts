@@ -148,14 +148,15 @@ async function nextTips(client: Client,
 }
 
 class Tips {
-    private messageCounter: number[][];
+    /** Annonces comptées par région puis par service. */
+    private readonly messageCounter: Map<string, Map<string, number>>;
     private tipsRoller: number;
 
     /**
      * Initialise une nouvelle instance de la classe.
      */
     constructor() {
-        this.messageCounter = new Array<number[]>();
+        this.messageCounter = new Map();
         this.tipsRoller = 0;
     }
 
@@ -176,14 +177,15 @@ class Tips {
     async nextTips(client: Client,
                    service: string,
                    region: number): Promise<void> {
-        if (!(regions[region] in this.messageCounter))
-            this.messageCounter[regions[region]] = new Array<number>();
-        const bdd: Bdd = await getBddInstance();
-        if (!(service in this.messageCounter[regions[region]])) {
-            this.messageCounter[regions[region]][service] = 0;
+        let counters = this.messageCounter.get(regions[region]);
+        if (!counters) {
+            counters = new Map();
+            this.messageCounter.set(regions[region], counters);
         }
-        this.messageCounter[regions[region]][service] += 1;
-        if (this.messageCounter[regions[region]][service] % 15 === 0) {
+        const bdd: Bdd = await getBddInstance();
+        const count: number = (counters.get(service) ?? 0) + 1;
+        counters.set(service, count);
+        if (count % 15 === 0) {
                 const targets: ChannelPartnerService[] = await bdd.get(
                     "ChannelPartnerService",
                     ["*"],
@@ -206,7 +208,7 @@ class Tips {
                     // Force comme un gros bourin parce que TypeScript ne voit pas la deuxième surchargé de channel.messages.fetch();
                     const fetchedMessages: Collection<unknown, Message<true>> = await channel.messages.fetch(options as FetchMessagesOptions) as unknown as Collection<unknown, Message<true>>;
                     const lastMessage = fetchedMessages.first();
-                    if (lastMessage == undefined || !(client.user && lastMessage.author.id === client.user.id && lastMessage.content.substring(0, 7) === "# Tips:")) {
+                    if (lastMessage == undefined || !(lastMessage.author.id === client.user?.id && lastMessage.content.startsWith("# Tips:"))) {
                         await safeChannel(client, channel, undefined, [], messages[this.tipsRoller]);
                     }
                 }

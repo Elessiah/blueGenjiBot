@@ -1,5 +1,5 @@
 import {Attachment, ChatInputCommandInteraction, Client, MessageFlags} from "discord.js";
-import {unlink, writeFile} from "fs/promises";
+import {unlink, writeFile} from "node:fs/promises";
 import {adhesionFilePath} from "@/adhesion/adhesionPath.js";
 import {safeFollowUp} from "@/safe/safeFollowUp.js";
 import {PathsAdhesions} from "@/adhesion/types.js";

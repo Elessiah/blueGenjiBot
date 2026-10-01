@@ -13,8 +13,13 @@ const SQLITE_MAGIC = "SQLite format 3\0";
 export interface RestoreResult {
   /** `true` si la base courante a bien été remplacée. */
   success: boolean;
-  /** Message destiné au propriétaire, en français. */
+  /** Message destiné au propriétaire, en français ; en échec, porte l'erreur brute (chemins compris). */
   message: string;
+  /**
+   * Le même message sans l'erreur brute : ni chemin ni sortie système. Seul
+   * texte d'un échec montré sur Discord, le détail allant aux journaux pm2.
+   */
+  summary: string;
   /** Chemin du filet de sécurité écrit avant l'écrasement, si créé. */
   rollbackPath?: string;
 }
@@ -192,7 +197,11 @@ export async function restoreDatabase(
 ): Promise<RestoreResult> {
   const invalid = await validateSqliteFile(candidatePath);
   if (invalid) {
-    return { success: false, message: `Restauration refusée : ${invalid}` };
+    return {
+      success: false,
+      message: `Restauration refusée : ${invalid}`,
+      summary: "Restauration refusée : la base extraite est illisible ou n'est pas une base SQLite saine.",
+    };
   }
 
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
@@ -232,13 +241,10 @@ export async function restoreDatabase(
     const purged = await purgeOldRollbacks(dbPath, rollbackPath);
     const purgedLine = purged > 0 ? ` ${purged} copie(s) précédente(s) supprimée(s).` : "";
 
-    return {
-      success: true,
-      message:
-        `Base restaurée. L'ancienne version est conservée à côté du fichier ` +
-        `(${ROLLBACK_RETENTION_DAYS} jours au plus, ou jusqu'à la prochaine restauration).${purgedLine}`,
-      rollbackPath,
-    };
+    const message =
+      `Base restaurée. L'ancienne version est conservée à côté du fichier ` +
+      `(${ROLLBACK_RETENTION_DAYS} jours au plus, ou jusqu'à la prochaine restauration).${purgedLine}`;
+    return { success: true, message, summary: message, rollbackPath };
   } catch (error) {
     await resetBddInstance().catch(() => {});
 
@@ -264,6 +270,7 @@ export async function restoreDatabase(
     return {
       success: false,
       message: `Restauration échouée : ${(error as Error).message}.${state}`,
+      summary: `Restauration échouée.${state}`,
       rollbackPath: fs.existsSync(rollbackPath) ? rollbackPath : undefined,
     };
   }

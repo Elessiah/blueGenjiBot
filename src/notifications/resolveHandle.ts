@@ -299,6 +299,13 @@ export function searchInWaves<T, R>(
   });
 }
 
+/** Délai total, parallélisme et part d'une vague en production (jamais modifiés). */
+const PRODUCTION_SEARCH_OPTIONS: Readonly<SearchOptions> = Object.freeze({
+  budgetMs: RESOLVE_BUDGET_MS,
+  concurrency: RESOLVE_CONCURRENCY,
+  waveBudgetMs: RESOLVE_WAVE_BUDGET_MS,
+});
+
 /**
  * Résout un identifiant Discord parmi **tous** les serveurs du bot.
  *
@@ -330,11 +337,7 @@ export function searchInWaves<T, R>(
 export async function resolveDiscordHandle(
   client: Client,
   handle: string,
-  options: SearchOptions = {
-    budgetMs: RESOLVE_BUDGET_MS,
-    concurrency: RESOLVE_CONCURRENCY,
-    waveBudgetMs: RESOLVE_WAVE_BUDGET_MS,
-  },
+  options: SearchOptions = PRODUCTION_SEARCH_OPTIONS,
 ): Promise<HandleResolution | null> {
   const parsed = parseDiscordHandle(handle);
   if (!parsed) { return null; }

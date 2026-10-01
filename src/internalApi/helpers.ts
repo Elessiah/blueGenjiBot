@@ -1,7 +1,9 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 
 /** Adresses d'ecoute sur lesquelles seul un process de la machine peut se connecter. */
-const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost", "::ffff:127.0.0.1"]);
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
+/** Prefixe d'une adresse IPv4 ecrite en IPv6 (`::ffff:127.0.0.1`). */
+const IPV4_MAPPED_PREFIX = "::ffff:";
 
 /**
  * Dit si l'API interne n'est joignable que depuis la machine elle-meme.
@@ -18,7 +20,9 @@ const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost", "::ffff:127.0.0
  * @returns `true` si l'ecoute est confinee a la boucle locale.
  */
 export function isLoopbackHost(host: string | undefined): boolean {
-  return LOOPBACK_HOSTS.has(host || "127.0.0.1");
+  const address = host || "127.0.0.1";
+  const ipv4 = address.toLowerCase().startsWith(IPV4_MAPPED_PREFIX) ? address.slice(IPV4_MAPPED_PREFIX.length) : null;
+  return LOOPBACK_HOSTS.has(address) || ipv4 === "127.0.0.1";
 }
 
 /**
@@ -51,10 +55,12 @@ export function absDelta(curr: number, prev: number): string {
 
 /** Couleur HSL deterministe derivee de l'id (hash simple). */
 export function deterministicColor(id: string): string {
-  let h = 0;
+  // Arithmetique entiere 32 bits signee (a la `hashCode` de Java) : la case
+  // d'un `Int32Array` replie chaque somme comme le faisait `| 0`.
+  const hash = new Int32Array(1);
   for (let i = 0; i < id.length; i++) {
-    h = (h * 31 + id.charCodeAt(i)) | 0;
+    hash[0] = Math.imul(hash[0], 31) + (id.codePointAt(i) ?? 0);
   }
-  const hue = Math.abs(h) % 360;
+  const hue = Math.abs(hash[0]) % 360;
   return `hsl(${hue}, 65%, 50%)`;
 }

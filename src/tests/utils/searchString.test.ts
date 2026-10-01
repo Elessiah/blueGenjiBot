@@ -17,3 +17,10 @@ test("searchString is case-sensitive", async () => {
   const result = await searchString("eu", "we play in EU tonight");
   assert.equal(result, false);
 });
+
+test("searchString repond pareil a chaque appel (aucun etat entre deux recherches)", async () => {
+  for (let i = 0; i < 3; i++) {
+    assert.equal(await searchString("eu", "eu eu"), true);
+    assert.equal(await searchString("na", "eu only"), false);
+  }
+});

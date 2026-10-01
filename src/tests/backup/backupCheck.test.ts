@@ -301,6 +301,23 @@ test("parseRecipients et parseEnvFile ignorent commentaires et lignes vides", ()
   );
 });
 
+test("parseEnvFile coupe le commentaire au premier # précédé d'un blanc, et seulement là", () => {
+  assert.deepEqual(parseEnvFile("A=x#y\nB=x\t# c # d\nC=x   #\nD=#tout\nE=a b # c\n"), {
+    A: "x#y",
+    B: "x",
+    C: "x",
+    D: "#tout",
+    E: "a b",
+  });
+});
+
+test("parseEnvFile lit en temps linéaire une longue suite de blancs sans #", () => {
+  const started = Date.now();
+  const values = parseEnvFile(`A=x${" ".repeat(100_000)}y\n`);
+  assert.equal(values.A, `x${" ".repeat(100_000)}y`);
+  assert.ok(Date.now() - started < 1000);
+});
+
 test("backupCheckConfigFromEnv prend l'environnement du bot, puis le fichier du script", () => {
   const scriptEnv =
     "UPLOADS_DIR=/srv/uploads\nUPLOADS_RCLONE_REMOTE=store-crypt\nUPLOADS_REMOTE_DIR=images\nAGE_RECIPIENTS_FILE=/etc/bg/recipients.txt\n";

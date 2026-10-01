@@ -154,3 +154,24 @@ test("describeError ne leve pas sur une valeur non serialisable", () => {
   circular.self = circular;
   assert.equal(typeof describeError(circular), "string");
 });
+
+test("describeError rend le message d'une Error venue d'un autre contexte (vm)", async () => {
+  const vm = await import("node:vm");
+  const foreign: unknown = vm.runInNewContext("new Error('hors contexte')");
+  assert.equal(foreign instanceof Error, false);
+  const description = describeError(foreign);
+  // `Error.isError` (Node 24) la reconnait ; sans lui, elle est decrite par son
+  // seul type, jamais par un message lu sur un objet quelconque.
+  if (typeof (Error as unknown as { isError?: unknown }).isError === "function") {
+    assert.equal(description, "hors contexte");
+  } else {
+    assert.match(description, /^valeur levée non standard/);
+  }
+});
+
+test("describeError ne prend pas un objet deguise en Error pour une Error", () => {
+  const disguised = { [Symbol.toStringTag]: "Error", message: "pseudo de l'auteur" };
+  const description = describeError(disguised);
+  assert.doesNotMatch(description, /pseudo/);
+  assert.match(description, /^valeur levée non standard/);
+});

@@ -134,7 +134,7 @@ const GUILD_CONFIG_TABLES: readonly (readonly [string, string])[] = [
  * @throws Si le nom contient autre chose que lettres, chiffres et `_`.
  */
 function assertSqlIdentifier(name: string): string {
-  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(name)) {
+  if (!/^[A-Za-z_]\w*$/.test(name)) {
     throw new Error(`Identifiant SQL refusé : ${name}`);
   }
   return name;
@@ -162,7 +162,7 @@ const CONFIGURED_GUILDS_SQL =
   ") WHERE id IS NOT NULL AND id <> ''";
 
 class Bdd {
-    private name: string;
+    private readonly name: string;
     private Database: Database | null;
 
   /**
@@ -215,7 +215,7 @@ class Bdd {
     if (fs.existsSync(destPath)) {
       fs.unlinkSync(destPath);
     }
-    await this.Database?.exec(`VACUUM INTO '${destPath.replace(/'/g, "''")}'`);
+    await this.Database?.exec(`VACUUM INTO '${destPath.replaceAll("'", "''")}'`);
   }
 
   /**

@@ -1,15 +1,17 @@
-import {ChatInputCommandInteraction, Client, Message, MessageFlags} from "discord.js";
-import {Bdd, getBddInstance} from "@/bdd/Bdd.js";
-import {safeReply} from "@/safe/safeReply.js";
-import {adhesionIntervalIds} from "@/adhesion/types.js"
-import {ITERATION_UNLIMITED} from "@/adhesion/iteration.js";
-
 import {
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
-    EmbedBuilder
+    ChatInputCommandInteraction,
+    Client,
+    EmbedBuilder,
+    Message,
+    MessageFlags
 } from "discord.js";
+import {Bdd, getBddInstance} from "@/bdd/Bdd.js";
+import {safeReply} from "@/safe/safeReply.js";
+import {adhesionIntervalIds} from "@/adhesion/types.js"
+import {ITERATION_UNLIMITED} from "@/adhesion/iteration.js";
 import {sendLog} from "@/safe/sendLog.js";
 
 /**
@@ -86,9 +88,9 @@ function buildEmbedPage(items: adhesionIntervalIds[], page: number, pageSize: nu
                     // Un rappel peut n'avoir aucun message : la ligne n°4 de la
                     // base de production en était un. Le dire vaut mieux que
                     // laisser un titre vide, qui se lit comme un bug d'affichage.
-                    const msg = rawMsg.length === 0
-                        ? "_(sans message)_"
-                        : rawMsg.length > 60 ? rawMsg.slice(0, 57) + "..." : rawMsg;
+                    let msg = rawMsg;
+                    if (rawMsg.length === 0) msg = "_(sans message)_";
+                    else if (rawMsg.length > 60) msg = rawMsg.slice(0, 57) + "...";
                     const sansCible =
                         ai.member_id === null && ai.role_id === null && ai.channel_id === null;
 
@@ -154,7 +156,7 @@ async function sendInteractiveMsg(
         withResponse: true,
     });
 
-    if (!response.resource || !response.resource.message) {
+    if (!response.resource?.message) {
         await sendLog(client, "Echec de récupération du message de liste de rappels");
         return;
     }
@@ -205,7 +207,7 @@ async function sendInteractiveMsg(
 async function displaySetupAdhesion(client: Client,
                                     interaction: ChatInputCommandInteraction): Promise<void> {
     const bdd: Bdd = await getBddInstance();
-    const result: unknown[] = await bdd.get("AdhesionInterval", ["*"], undefined);
+    const result: unknown[] = await bdd.get("AdhesionInterval", ["*"]);
     if (result.length == 0) {
         await safeReply(interaction, "Pas de rappel paramétré !")
         return;

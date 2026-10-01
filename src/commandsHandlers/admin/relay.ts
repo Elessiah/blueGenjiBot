@@ -27,7 +27,7 @@ export async function relay(client: Client, interaction: ChatInputCommandInterac
       return;
     }
     const member = interaction.member as GuildMember | null;
-    if (!member || !member.permissions.has(PermissionFlagsBits.Administrator)) {
+    if (!member?.permissions.has(PermissionFlagsBits.Administrator)) {
       await safeReply(interaction, "Cette commande necessite la permission Administrateur.", true, false);
       return;
     }

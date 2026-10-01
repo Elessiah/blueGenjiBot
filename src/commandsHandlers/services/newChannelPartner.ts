@@ -11,8 +11,7 @@ import {regions} from "@/utils/globals.js";
 import {defineRankRange} from "@/utils/defineRankRange.js";
 import {setRankFilter} from "@/utils/setRankFilter.js";
 
-import {Client, ChatInputCommandInteraction, TextChannel, MessageFlags} from "discord.js";
-import { EmbedBuilder } from 'discord.js';
+import {Client, ChatInputCommandInteraction, EmbedBuilder, TextChannel, MessageFlags} from "discord.js";
 import {status} from "@/types.js";
 
 /**

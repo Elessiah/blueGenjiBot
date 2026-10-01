@@ -58,6 +58,8 @@ test("restoreDatabase refuse un fichier qui n'est pas une base", async () => {
 
   assert.equal(result.success, false);
   assert.match(result.message, /Restauration refusée/);
+  assert.match(result.summary, /^Restauration refusée : /);
+  assert.ok(!result.summary.includes(file));
 });
 
 test("restoreDatabase remplace la base et conserve l'ancienne", async () => {
@@ -69,6 +71,7 @@ test("restoreDatabase remplace la base et conserve l'ancienne", async () => {
   const result = await restoreDatabase(candidate, dbPath);
 
   assert.equal(result.success, true, result.message);
+  assert.equal(result.summary, result.message);
   assert.equal(await readMarker(dbPath), "restauree");
   assert.ok(result.rollbackPath, "un filet de sécurité doit être écrit");
   assert.ok(fs.existsSync(result.rollbackPath!), "l'ancienne base doit rester sur disque");
@@ -108,6 +111,12 @@ test("restoreDatabase remet la base precedente en place si la copie echoue", asy
   assert.equal(result.success, false);
   assert.match(result.message, /disque plein/);
   assert.match(result.message, /remise en place/);
+  // Le résumé, seul montré sur Discord, garde l'état mais pas l'erreur brute.
+  assert.match(result.summary, /^Restauration échouée\./);
+  assert.match(result.summary, /remise en place/);
+  assert.doesNotMatch(result.summary, /disque plein/);
+  assert.ok(!result.summary.includes(dbPath));
+  assert.ok(!result.summary.includes(candidate));
   // La base reste celle d'avant, pas celle qu'on tentait de restaurer.
   assert.notEqual(await readMarker(dbPath), "jamais-appliquee");
   assert.ok((await getBddInstance()) !== undefined, "le bot doit rester utilisable");

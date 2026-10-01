@@ -1,5 +1,4 @@
-import {type ChatInputCommandInteraction, GuildMember} from "discord.js";
-import type { Client, TextChannel, Role } from "discord.js";
+import {type ChatInputCommandInteraction, type Client, GuildMember, type Role, type TextChannel} from "discord.js";
 import {checkPermissions} from "@/check/checkPermissions.js";
 import {safeFollowUp} from "@/safe/safeFollowUp.js";
 import {safeReply} from "@/safe/safeReply.js";
@@ -28,7 +27,7 @@ async function getAdhesion(client: Client,
     const interval: string | null = interaction.options.getString("interval");
     let intInterval: number = 0;
     if (interval != null) {
-        intInterval = parseInt(interval, 10);
+        intInterval = Number.parseInt(interval, 10);
     }
     const memberPermMissing = !(await checkPermissions(interaction));
     if (memberPermMissing && intInterval > 0) {
@@ -49,12 +48,8 @@ async function getAdhesion(client: Client,
         await setupIntervalAdhesion(
             client,
             interaction,
-            message,
-            channel,
-            member,
-            role,
-            intInterval,
-            nextTransmission
+            { message, channel, member, role },
+            { intInterval, nextTransmission }
         );
     }
 }

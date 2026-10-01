@@ -51,12 +51,13 @@ export async function getDiskUsage(targetPath: string): Promise<DiskUsage | null
  * @returns La taille en Mo, Go ou To, avec une décimale.
  */
 function formatBytes(bytes: number): string {
+  const smallest = { limit: 1024 ** 2, suffix: "Mo" };
   const units = [
     { limit: 1024 ** 4, suffix: "To" },
     { limit: 1024 ** 3, suffix: "Go" },
-    { limit: 1024 ** 2, suffix: "Mo" },
+    smallest,
   ];
-  const unit = units.find((candidate) => bytes >= candidate.limit) ?? units[units.length - 1];
+  const unit = units.find((candidate) => bytes >= candidate.limit) ?? smallest;
   return `${(bytes / unit.limit).toFixed(1).replace(".", ",")} ${unit.suffix}`;
 }
 

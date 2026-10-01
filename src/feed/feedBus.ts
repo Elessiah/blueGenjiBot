@@ -9,7 +9,7 @@
  * base (`FeedEvent`) est ce qui rend le backlog possible.
  */
 
-import { EventEmitter } from "events";
+import { EventEmitter } from "node:events";
 import type { Client } from "discord.js";
 import { getBddInstance } from "@/bdd/Bdd.js";
 import { scrubFeedField, scrubFeedText } from "@/feed/feedPrivacy.js";

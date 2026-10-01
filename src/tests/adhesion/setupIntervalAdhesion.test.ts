@@ -67,13 +67,8 @@ async function poser(nextTransmission: Date, iteration?: number): Promise<Trace>
   await setupIntervalAdhesion(
     fakeClient(),
     fakeInteraction(trace),
-    "Pense a ton adhesion",
-    null,
-    null,
-    null,
-    14,
-    nextTransmission,
-    iteration,
+    { message: "Pense a ton adhesion", channel: null, member: null, role: null },
+    { intInterval: 14, nextTransmission, iteration },
   );
   return trace;
 }

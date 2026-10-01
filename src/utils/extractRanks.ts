@@ -16,8 +16,8 @@ async function extractRanks(client: Client,
     let matchs: string[] = [];
     const cleanMessage = normalizeText(message.content);
     for (const [key, value] of Object.entries(ranksMatch)) {
-        const safeKey = key.replace(/\s+/g, '\\s*');
-        const regex = new RegExp(`\\b${safeKey}\\s*\\d*\\b`, 'i');
+        const safeKey = key.replaceAll(/\s+/g, String.raw`\s*`);
+        const regex = new RegExp(String.raw`\b${safeKey}\s*\d*\b`, 'i');
         if (regex.test(cleanMessage)) {
             matchs.push(value);
         }

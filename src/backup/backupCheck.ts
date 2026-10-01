@@ -53,6 +53,7 @@ import {
   listArchives,
   missingCommandText,
   spawnCommand,
+  stopProcess,
   type ArchiveSources,
   type CommandRunner,
 } from "@/backup/archiveSource.js";
@@ -125,7 +126,7 @@ export function parseEnvFile(content: string): Record<string, string> {
   const values: Record<string, string> = {};
   for (const raw of content.split(/\r?\n/)) {
     const line = raw.trim();
-    const match = /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(line);
+    const match = /^(?:export\s+)?([A-Za-z_]\w*)=(.*)$/.exec(line);
     if (!match) {
       continue;
     }
@@ -136,7 +137,12 @@ export function parseEnvFile(content: string): Record<string, string> {
       // Valeur entre guillemets, éventuellement suivie d'un commentaire.
       value = value.slice(1, closing);
     } else {
-      value = value.replace(/\s+#.*$/, "");
+      // Commentaire de fin de ligne : dès le premier `#` précédé d'un blanc.
+      // Une recherche plutôt que `/\s+#.*$/`, au retour arrière quadratique.
+      const comment = value.search(/\s#/);
+      if (comment >= 0) {
+        value = value.slice(0, comment).trimEnd();
+      }
     }
     values[match[1]] = value;
   }
@@ -178,11 +184,12 @@ export function backupCheckConfigFromEnv(
   // Un `AGE_RECIPIENTS_FILE` que l'on ne sait pas résoudre comme bash (chemin
   // relatif au répertoire de cron, autre variable) n'est pas remplacé par le
   // défaut : on vérifierait un autre fichier que celui qui chiffre.
-  const recipientsFile = env.BACKUP_RECIPIENTS_FILE?.trim()
-    ? path.resolve(env.BACKUP_RECIPIENTS_FILE.trim())
-    : scriptEnv.AGE_RECIPIENTS_FILE
-      ? scriptPath("AGE_RECIPIENTS_FILE")
-      : path.join(scriptDir, "backup-recipients.txt");
+  let recipientsFile: string | null = path.join(scriptDir, "backup-recipients.txt");
+  if (env.BACKUP_RECIPIENTS_FILE?.trim()) {
+    recipientsFile = path.resolve(env.BACKUP_RECIPIENTS_FILE.trim());
+  } else if (scriptEnv.AGE_RECIPIENTS_FILE) {
+    recipientsFile = scriptPath("AGE_RECIPIENTS_FILE");
+  }
 
   // Les archives : celles de `/restore-backup`, plus le stockage où écrit le
   // script quand aucun distant n'est réglé — le script ne garde aucune archive
@@ -277,7 +284,7 @@ export function runPipeline(
         if (!settled.has(index)) {
           killed.add(index);
         }
-        child.kill();
+        stopProcess(child);
       });
     };
     const timer = setTimeout(() => {
@@ -340,15 +347,15 @@ export function runPipeline(
       }
     });
 
-    const last = children[children.length - 1];
-    last.stdout?.on("data", (chunk: Buffer) => {
+    const last = children.at(-1);
+    last?.stdout?.on("data", (chunk: Buffer) => {
       if (output.length + chunk.length > MAX_LISTING_BYTES) {
         truncated = true;
         return;
       }
       output += chunk.toString();
     });
-    last.stdout?.on("end", () => {
+    last?.stdout?.on("end", () => {
       if (truncated) {
         diagnostics.push("sortie tronquée");
       }
@@ -396,7 +403,8 @@ export interface BackupCheckDeps {
  */
 function logFailure(log: (message: string) => void, label: string, error: unknown): void {
   const err = error as Error & { diagnostics?: string };
-  log(`[backup-check] ${label} : ${err.message}${err.diagnostics ? ` — ${err.diagnostics}` : ""}`);
+  const diagnostics = err.diagnostics ? " — " + err.diagnostics : "";
+  log(`[backup-check] ${label} : ${err.message}${diagnostics}`);
 }
 
 /**
@@ -647,9 +655,7 @@ export function formatBackupChecks(report: BackupCheckReport): string {
     ? `🔑 Clé publique des sauvegardes : \`${report.publicKey}\`\n` +
       "Compare-la à ta copie hors ligne : `age-keygen -y <copie>` doit afficher exactement cette clé."
     : "🔑 Clé publique des sauvegardes : indisponible.";
-  const block =
-    failures.length > 0
-      ? `\n\`\`\`diff\n${failures.map((check) => `- ÉCHEC ${check.label.toUpperCase()}`).join("\n")}\n\`\`\``
-      : "";
+  const failureLines = failures.map((check) => "- ÉCHEC " + check.label.toUpperCase()).join("\n");
+  const block = failures.length > 0 ? `\n\`\`\`diff\n${failureLines}\n\`\`\`` : "";
   return `Vérification de restauration :\n${lines.join("\n")}${block}\n${keyLine}`;
 }

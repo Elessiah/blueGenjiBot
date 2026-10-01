@@ -15,7 +15,7 @@ const HELP_CHUNK_MAX_LENGTH = 1900;
  * @returns Liste de blocs tous <= maxLength.
  */
 function splitForDiscord(content: string, maxLength: number = HELP_CHUNK_MAX_LENGTH): string[] {
-    const normalized = content.replace(/\r\n/g, "\n").trim();
+    const normalized = content.replaceAll("\r\n", "\n").trim();
     if (normalized.length <= maxLength) {
         return [normalized];
     }

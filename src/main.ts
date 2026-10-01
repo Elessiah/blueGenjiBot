@@ -355,7 +355,9 @@ process.on('SIGTERM', onSignal);
 // Contrairement aux erreurs de runtime, un échec de connexion laisse un process
 // vivant mais inutile : on journalise puis on sort en erreur pour que pm2
 // relance avec son backoff.
-client.login(process.env.TOKEN).catch(async (error: unknown) => {
+try {
+  await client.login(process.env.TOKEN);
+} catch (error: unknown) {
   await reportError(client, "login", error);
   process.exit(1);
-});
+}

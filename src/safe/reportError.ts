@@ -10,8 +10,8 @@ type ErrorReporter = (context: string, error: unknown) => Promise<void>;
 type ErrorReporterOptions = {
     /** Sortie technique, toujours appelée (sauf doublon étouffé). */
     toConsole: (line: string) => void;
-    /** Sortie de supervision, appelée uniquement pour les erreurs `fatal`. */
-    toRemote: (line: string) => Promise<unknown> | unknown;
+    /** Sortie de supervision, appelée uniquement pour les erreurs `fatal` (une promesse est attendue). */
+    toRemote: (line: string) => unknown;
     /** Horloge injectable pour les tests. */
     now?: () => number;
     /** Fenêtre de dédoublonnage en millisecondes. */

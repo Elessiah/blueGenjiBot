@@ -25,7 +25,7 @@ export type BanCheckMemo = {verdict: BanVerdict | null};
  * @param messageContentLower Contenu du message en minuscules, utilisé pour détecter les mots-clés.
  * @param message Message Discord source à valider.
  * @param hasValidService Référence mutable marquée à `true` dès qu'un service valide est détecté.
- * @param banCheck Verdict d'exclusion partagé par tous les services d'un même message (voir `BanCheckMemo`).
+ * @param banCheckMemo Verdict d'exclusion partagé par tous les services d'un même message (voir `BanCheckMemo`).
  * @returns `true` si le message cible ce service, que l'auteur n'est pas banni et que le cooldown est expiré; sinon `false`.
  */
 async function checkMessageValidity(client: Client,
@@ -33,7 +33,8 @@ async function checkMessageValidity(client: Client,
                                     messageContentLower: string,
                                     message: Message,
                                     hasValidService: {value: boolean},
-                                    banCheck: BanCheckMemo = {verdict: null}): Promise<boolean> {
+                                    banCheckMemo?: BanCheckMemo): Promise<boolean> {
+    const banCheck: BanCheckMemo = banCheckMemo ?? {verdict: null};
     if (!await searchString(service.name, messageContentLower)) {
         return false;
     } else {

@@ -11,12 +11,10 @@ let installed = false;
  * @returns Rapporteur partagé par tous les garde-fous.
  */
 function getReporter(client: Client): ErrorReporter {
-    if (!reporter) {
-        reporter = createErrorReporter({
-            toConsole: (line: string) => console.error(line),
-            toRemote: (line: string) => sendLog(client, line),
-        });
-    }
+    reporter ??= createErrorReporter({
+        toConsole: (line: string) => console.error(line),
+        toRemote: (line: string) => sendLog(client, line),
+    });
     return reporter;
 }
 
