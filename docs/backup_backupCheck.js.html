@@ -127,10 +127,15 @@ export function backupCheckConfigFromEnv(env = process.env, readFile = readOptio
     const content = readFile(scriptEnvPath);
     const scriptEnv = parseEnvFile(content ?? "");
     const scriptPath = (key) => resolveScriptPath(scriptEnv[key], scriptDir);
+    // Défauts du script lui-même (`backup-onedrive.sh`,
+    // `sync-uploads-onedrive.sh`), seulement quand son fichier a pu être lu.
+    const scriptRemote = content === null ? null : (scriptEnv.RCLONE_REMOTE || "onedrive").replace(/:$/, "");
     let uploadsRemote = env.BACKUP_UPLOADS_REMOTE?.trim() || null;
-    if (!uploadsRemote &amp;&amp; scriptEnv.UPLOADS_RCLONE_REMOTE) {
-        const name = scriptEnv.UPLOADS_RCLONE_REMOTE.replace(/:$/, "");
-        uploadsRemote = `${name}:${scriptEnv.UPLOADS_REMOTE_DIR || "uploads"}`;
+    // Le miroir des images n'existe que si le script a un dossier à copier.
+    const uploadsExpected = Boolean(uploadsRemote) || content === null || Boolean(scriptEnv.UPLOADS_DIR);
+    if (!uploadsRemote &amp;&amp; content !== null &amp;&amp; scriptEnv.UPLOADS_DIR) {
+        const name = (scriptEnv.UPLOADS_RCLONE_REMOTE || scriptRemote || "").replace(/:$/, "");
+        uploadsRemote = name ? `${name}:${scriptEnv.UPLOADS_REMOTE_DIR || "uploads"}` : null;
     }
     const recipientsFile = env.BACKUP_RECIPIENTS_FILE?.trim()
         ? path.resolve(env.BACKUP_RECIPIENTS_FILE.trim())
@@ -139,15 +144,15 @@ export function backupCheckConfigFromEnv(env = process.env, readFile = readOptio
     // celles qu'écrit le script — un rapport ne doit pas accuser le stockage
     // d'une variable que seule la restauration lisait.
     const sources = archiveSourcesFromEnv(env);
-    if (!sources.localDir &amp;&amp; !sources.remote &amp;&amp; scriptEnv.RCLONE_REMOTE) {
-        sources.remote = `${scriptEnv.RCLONE_REMOTE.replace(/:$/, "")}:${scriptEnv.REMOTE_DIR || "BlueGenji/backups"}`;
+    if (!sources.localDir &amp;&amp; !sources.remote &amp;&amp; scriptRemote) {
+        sources.remote = `${scriptRemote}:${scriptEnv.REMOTE_DIR || "BlueGenji/backups"}`;
     }
     // Le script n'ajoute le dump du site que si MySQL est configuré : sans lui,
     // l'exiger ferait du rapport une fausse alerte permanente. Fichier du script
     // illisible : on attend l'archive complète, celle de la production.
     const siteDumpConfigured = content === null || Boolean(scriptEnv.MYSQL_DEFAULTS_FILE &amp;&amp; scriptEnv.DB_DATABASE);
     const expectedEntries = siteDumpConfigured ? [...EXPECTED_ARCHIVE_ENTRIES] : ["database.sqlite"];
-    return { sources, uploadsRemote, recipientsFile, expectedEntries };
+    return { sources, uploadsRemote, uploadsExpected, recipientsFile, expectedEntries };
 }
 /**
  * Résout un chemin lu dans le fichier du script, comme bash l'aurait fait pour
@@ -330,8 +335,9 @@ export async function checkLatestArchive(config, deps = {}) {
     const label = "Archive la plus récente";
     const log = deps.log ?? console.error;
     let archives;
+    let failures;
     try {
-        ({ archives } = await listArchives(config.sources, deps.run ?? defaultRunner));
+        ({ archives, failures } = await listArchives(config.sources, deps.run ?? defaultRunner));
     }
     catch (error) {
         logFailure(log, label, error);
@@ -359,7 +365,17 @@ export async function checkLatestArchive(config, deps = {}) {
         return { label, ok: false, detail: `\`${latest.name}\` déchiffrée mais incomplète — manque ${missing.join(", ")}` };
     }
     const site = config.expectedEntries.includes("appbluegenji.sql") ? "" : " (dump du site non configuré)";
-    return { label, ok: true, detail: `\`${latest.name}\` déchiffrée, ${config.expectedEntries.join(" et ")} présents${site}` };
+    const verified = `\`${latest.name}\` déchiffrée, ${config.expectedEntries.join(" et ")} présents${site}`;
+    // Une source muette (stockage distant injoignable, dossier local illisible) :
+    // l'archive lue n'est peut-être pas la plus récente — le contrôle ne peut
+    // pas s'annoncer réussi sur ce qu'il n'a pas vu.
+    if (failures.length > 0) {
+        for (const failure of failures) {
+            log(`[backup-check] ${label} : ${failure}`);
+        }
+        return { label, ok: false, detail: `une source d'archives n'a pas répondu — seule ${verified}, peut-être pas la plus récente` };
+    }
+    return { label, ok: true, detail: verified };
 }
 /**
  * Phrase d'un échec du tube de déchiffrement, d'après l'étape qui a cédé :
@@ -391,6 +407,10 @@ export async function checkUploadsMirror(config, deps = {}) {
     const label = "Miroir des images";
     const log = deps.log ?? console.error;
     const run = deps.run ?? defaultRunner;
+    if (!config.uploadsExpected) {
+        // Le script ne copie aucune image (`UPLOADS_DIR` vide) : rien à vérifier.
+        return { label, ok: true, detail: "sans objet — aucune image sauvegardée (UPLOADS_DIR vide)" };
+    }
     if (!config.uploadsRemote) {
         return { label, ok: false, detail: "non configuré (BACKUP_UPLOADS_REMOTE)" };
     }
@@ -525,7 +545,7 @@ export function formatBackupChecks(report) {
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Thu Oct 01 2026 16:45:56 GMT+0200 (heure d’été d’Europe centrale)
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Thu Oct 01 2026 16:58:33 GMT+0200 (heure d’été d’Europe centrale)
 </footer>
 
 <script> prettyPrint(); </script>
