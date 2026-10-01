@@ -80,18 +80,35 @@ function maxSnowflake(a: string, b: string): string {
   return BigInt(a) >= BigInt(b) ? a : b;
 }
 
+/** Résultat d'une passe sur un salon. */
+export interface LogPurgeResult {
+  /** Messages supprimés. */
+  deleted: number;
+  /**
+   * Où reprendre à la passe suivante : `"0"` quand le salon a été parcouru
+   * jusqu'aux messages récents, sinon le dernier identifiant entièrement
+   * traité (plafond de pages ou de suppressions atteint).
+   */
+  resumeAfter: string;
+}
+
 /**
- * Parcourt un salon depuis son début et supprime les messages périmés.
+ * Parcourt un salon du plus ancien au plus récent et supprime les messages
+ * périmés.
  *
  * S'arrête au premier message récent (la suite l'est aussi), à une page vide,
- * ou à l'un des plafonds. Une suppression qui échoue (message déjà effacé)
+ * ou à l'un des plafonds — et rend alors l'endroit où reprendre : sans lui, un
+ * début de salon encombré de messages qu'on ne supprime pas (écrits par le
+ * staff, ou d'une exclusion en cours) serait relu chaque nuit sans que la purge
+ * n'atteigne jamais la suite. Une suppression qui échoue (message déjà effacé)
  * n'interrompt pas la passe.
  * @param channel Salon à parcourir.
  * @param cutoff Instant (ms) avant lequel un message est périmé.
  * @param botId Identifiant du bot.
  * @param protectedIds Messages à ne jamais supprimer.
  * @param budget Suppressions encore permises pendant cette passe.
- * @returns Le nombre de messages supprimés.
+ * @param start Identifiant après lequel commencer (`"0"` : début du salon).
+ * @returns Le nombre de messages supprimés et le point de reprise.
  */
 export async function purgeLogChannel(
   channel: LogChannelLike,
@@ -99,17 +116,20 @@ export async function purgeLogChannel(
   botId: string,
   protectedIds: ReadonlySet<string>,
   budget: number = MAX_LOG_DELETIONS_PER_RUN,
-): Promise<number> {
-  let cursor = "0";
+  start: string = "0",
+): Promise<LogPurgeResult> {
+  let cursor = start;
   let deleted = 0;
   for (let page = 0; page < MAX_LOG_PAGES_PER_RUN && deleted < budget; page++) {
+    const pageStart = cursor;
     const messages = await channel.fetchAfter(cursor);
     if (messages.length === 0) {
-      break;
+      return { deleted, resumeAfter: "0" };
     }
     for (const message of selectExpiredLogMessages(messages, cutoff, botId, protectedIds)) {
       if (deleted >= budget) {
-        break;
+        // Page entamée : la reprendre en entier la prochaine fois.
+        return { deleted, resumeAfter: pageStart };
       }
       const ok = await message.delete().then(
         () => true,
@@ -120,12 +140,18 @@ export async function purgeLogChannel(
       }
     }
     if (messages.some((message) => message.createdTimestamp >= cutoff)) {
-      break;
+      return { deleted, resumeAfter: "0" };
     }
     cursor = messages.reduce((max, message) => maxSnowflake(max, message.id), cursor);
   }
-  return deleted;
+  return { deleted, resumeAfter: cursor };
 }
+
+/**
+ * Points de reprise par salon, gardés le temps du processus : un redémarrage
+ * repart du début, ce qui ne coûte qu'une relecture.
+ */
+const resumePoints: { channel: string; dm: string } = { channel: "0", dm: "0" };
 
 /**
  * Adapte un salon discord.js (texte ou message privé) à `LogChannelLike`.
@@ -185,7 +211,16 @@ export async function purgeStaffLogs(client: Client, now: number = Date.now()): 
     try {
       const channel = (await client.channels.fetch(process.env.INFO_SERV)) as TextChannel | null;
       if (channel && "messages" in channel) {
-        deleted += await purgeLogChannel(asLogChannel(channel), cutoff, botId, protectedIds);
+        const result = await purgeLogChannel(
+          asLogChannel(channel),
+          cutoff,
+          botId,
+          protectedIds,
+          MAX_LOG_DELETIONS_PER_RUN,
+          resumePoints.channel,
+        );
+        deleted += result.deleted;
+        resumePoints.channel = result.resumeAfter;
       }
     } catch (error) {
       failure = error;
@@ -195,13 +230,16 @@ export async function purgeStaffLogs(client: Client, now: number = Date.now()): 
     try {
       const owner = await client.users.fetch(process.env.OWNER_ID);
       const dm = await owner.createDM();
-      deleted += await purgeLogChannel(
+      const result = await purgeLogChannel(
         asLogChannel(dm),
         cutoff,
         botId,
         protectedIds,
         Math.max(0, MAX_LOG_DELETIONS_PER_RUN - deleted),
+        resumePoints.dm,
       );
+      deleted += result.deleted;
+      resumePoints.dm = result.resumeAfter;
     } catch (error) {
       failure ??= error;
     }
