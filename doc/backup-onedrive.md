@@ -486,7 +486,10 @@ l'API interne…) : seulement `HOME`, `USER`, `LOGNAME`, `TMPDIR`,
 majuscules ou minuscules), les certificats (`SSL_CERT_FILE`, `SSL_CERT_DIR`),
 les variables `RCLONE_*` et le `PATH` figé ci-dessus. rclone y trouve sa
 configuration comme en ligne de commande : `~/.config/rclone/rclone.conf` du
-compte du bot, ou le fichier que désigne `RCLONE_CONFIG`.
+compte du bot, ou le fichier que désigne `RCLONE_CONFIG`. Un remote dont les
+identifiants viendraient de l'environnement (`env_auth = true`, `AWS_*`,
+`GOOGLE_APPLICATION_CREDENTIALS`…) ne les recevrait pas : ses identifiants se
+mettent dans `rclone.conf`, ou dans des variables `RCLONE_CONFIG_<REMOTE>_*`.
 
 ## Variables côté bot
 
