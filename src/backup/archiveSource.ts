@@ -119,19 +119,69 @@ export function spawnCommand(command: string, args: string[], options: SpawnOpti
 }
 
 /**
+ * Commande introuvable dans `COMMAND_DIRS`. Distincte d'un échec ordinaire :
+ * un binaire installé ailleurs (snap, `~/.local/bin`) répond à `which` mais
+ * pas au bot, et le message doit mener l'exploitant vers les dossiers fouillés
+ * plutôt que vers le stockage ou la clé.
+ */
+export class MissingCommandError extends Error {
+  /** Nom nu de la commande. */
+  readonly command: string;
+
+  /**
+   * @param command Nom nu de la commande.
+   */
+  constructor(command: string) {
+    super(`\`${command}\` introuvable dans les dossiers système (${COMMAND_DIRS.join(", ")})`);
+    this.name = "MissingCommandError";
+    this.command = command;
+  }
+}
+
+/**
+ * Teste qu'un échec de lancement signale un binaire absent.
+ * @param error Erreur levée ou émise par le processus.
+ * @returns `true` pour `ENOENT`.
+ */
+function isMissingBinary(error: unknown): boolean {
+  return (error as NodeJS.ErrnoException | null)?.code === "ENOENT";
+}
+
+/**
+ * Remonte la chaîne des causes à la recherche d'une commande introuvable.
+ * @param error Erreur reçue.
+ * @returns La commande manquante, ou `null`.
+ */
+export function findMissingCommand(error: unknown): string | null {
+  let current: unknown = error;
+  for (let depth = 0; current instanceof Error && depth < 5; depth++) {
+    if (current instanceof MissingCommandError) {
+      return current.command;
+    }
+    current = current.cause;
+  }
+  return null;
+}
+
+/**
  * `execFile` d'une commande externe : chemin absolu, `PATH` figé, sans shell.
  * @param command Nom nu de la commande.
  * @param args Arguments, passés sans shell.
  * @param timeout Délai maximal, en millisecondes.
  * @returns La sortie standard.
+ * @throws {MissingCommandError} Si la commande n'est dans aucun de `COMMAND_DIRS`.
  */
 export async function execCommand(command: string, args: string[], timeout: number = COMMAND_TIMEOUT_MS): Promise<string> {
-  const { stdout } = await execFileAsync(resolveCommand(command), args, {
-    timeout,
-    maxBuffer: 1024 * 1024,
-    env: commandEnv(),
-  });
-  return stdout;
+  try {
+    const { stdout } = await execFileAsync(resolveCommand(command), args, {
+      timeout,
+      maxBuffer: 1024 * 1024,
+      env: commandEnv(),
+    });
+    return stdout;
+  } catch (error) {
+    throw isMissingBinary(error) ? new MissingCommandError(command) : error;
+  }
 }
 
 /** Exécuteur par défaut : `execCommand`, sans shell (aucun argument n'est interprété). */
@@ -232,6 +282,7 @@ export async function listArchives(sources: ArchiveSources, run: CommandRunner =
   }
   const found = new Map<string, ArchiveRef>();
   const failures: string[] = [];
+  let missing: MissingCommandError | undefined;
 
   if (sources.remote) {
     try {
@@ -240,6 +291,9 @@ export async function listArchives(sources: ArchiveSources, run: CommandRunner =
         found.set(name, { name, location: "remote" });
       }
     } catch (error) {
+      if (error instanceof MissingCommandError) {
+        missing = error;
+      }
       failures.push(`stockage distant : ${(error as Error).message}`);
     }
   }
@@ -254,7 +308,8 @@ export async function listArchives(sources: ArchiveSources, run: CommandRunner =
   }
   const configured = Number(Boolean(sources.localDir)) + Number(Boolean(sources.remote));
   if (failures.length === configured) {
-    throw new Error(failures.join(" ; "));
+    // `cause` garde la commande manquante lisible pour le rapport de sauvegarde.
+    throw new Error(failures.join(" ; "), { cause: missing });
   }
   return {
     archives: [...found.values()].sort((a, b) => compareNewestFirst(a.name, b.name)),
@@ -346,11 +401,11 @@ export function decryptDatabase(archivePath: string, identity: string, workDir: 
       }
     };
     age.on("error", (error) => {
-      errors.push(`age: ${error.message}`);
+      errors.push(isMissingBinary(error) ? new MissingCommandError("age").message : `age: ${error.message}`);
       done("age", 1);
     });
     tar.on("error", (error) => {
-      errors.push(`tar: ${error.message}`);
+      errors.push(isMissingBinary(error) ? new MissingCommandError("tar").message : `tar: ${error.message}`);
       done("tar", 1);
     });
     age.on("close", (code) => done("age", code));

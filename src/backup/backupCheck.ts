@@ -49,6 +49,7 @@ import path from "node:path";
 import {
   archiveSourcesFromEnv,
   execCommand,
+  findMissingCommand,
   listArchives,
   spawnCommand,
   type ArchiveSources,
@@ -412,7 +413,7 @@ export async function checkLatestArchive(config: BackupCheckConfig, deps: Backup
     ({ archives, failures } = await listArchives(config.sources, deps.run ?? defaultRunner));
   } catch (error) {
     logFailure(log, label, error);
-    return { label, ok: false, detail: "stockage des archives illisible" };
+    return { label, ok: false, detail: failureDetail(error, "stockage des archives illisible") };
   }
   const latest = archives[0];
   if (!latest) {
@@ -469,13 +470,33 @@ export function pipelineFailureText(stage: string | undefined): string {
     case "rclone absent":
     case "age absent":
     case "tar absent":
-      // Le bot ne cherche ses commandes que dans les dossiers système
-      // (`COMMAND_DIRS`) : un binaire installé ailleurs (snap, ~/.local/bin)
-      // répond à `which` mais reste introuvable pour lui.
-      return `\`${stage.replace(/ absent$/, "")}\` introuvable dans les dossiers système où le bot le cherche`;
+      return missingCommandText(stage.replace(/ absent$/, ""));
     default:
       return "lecture interrompue";
   }
+}
+
+/**
+ * Phrase montrable d'une commande introuvable. Le bot ne cherche ses commandes
+ * que dans les dossiers système (`COMMAND_DIRS`) : un binaire installé
+ * ailleurs (snap, `~/.local/bin`) répond à `which` mais reste introuvable pour
+ * lui. Aucun chemin dans la phrase (elle part sur Discord) : la doc les liste.
+ * @param command Nom nu de la commande.
+ * @returns La phrase.
+ */
+export function missingCommandText(command: string): string {
+  return `\`${command}\` introuvable dans les dossiers système où le bot le cherche`;
+}
+
+/**
+ * Détail d'un échec : la commande manquante si c'en est une, sinon le repli.
+ * @param error Erreur reçue.
+ * @param fallback Phrase par défaut.
+ * @returns La phrase montrable.
+ */
+function failureDetail(error: unknown, fallback: string): string {
+  const missing = findMissingCommand(error);
+  return missing ? missingCommandText(missing) : fallback;
 }
 
 /**
@@ -514,7 +535,7 @@ export async function checkUploadsMirror(config: BackupCheckConfig, deps: Backup
     }
   } catch (error) {
     logFailure(log, label, error);
-    return { label, ok: false, detail: "remote chiffré illisible" };
+    return { label, ok: false, detail: failureDetail(error, "remote chiffré illisible") };
   }
   return { label, ok: true, detail: "remote chiffré lisible" };
 }
@@ -550,6 +571,10 @@ export async function checkRecipientKey(
     derived = parseRecipients(await (deps.run ?? defaultRunner)("age-keygen", ["-y", config.sources.identity]));
   } catch (error) {
     logFailure(log, label, error);
+    const missing = findMissingCommand(error);
+    if (missing) {
+      return { result: { label, ok: false, detail: missingCommandText(missing) }, publicKey: null };
+    }
     derived = [];
   }
   let publicKey: string | null = derived[0] ?? null;
