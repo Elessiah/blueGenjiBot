@@ -204,15 +204,11 @@ client.on("clientReady", async () => {
     // échec ne peut pas le priver de passer.
     void runDataRetention(client);
 
-    // Un serveur en échec ne prive ni les suivants de leurs commandes, ni le
-    // démarrage des tâches cron posées plus bas (ménage de la nuit compris).
+    // `updateCommands` ne lève pas : un serveur en échec ne bloque ni les
+    // suivants ni la pose des tâches cron plus bas.
     for (const guild of client.guilds.cache.values()) {
       console.log("Server ready : ", guild.name);
-      try {
-        await updateCommands(client, guild.id);
-      } catch (error) {
-        await reportError(client, `clientReady updateCommands (${guild.id})`, error);
-      }
+      await updateCommands(client, guild.id);
     }
 
     // Chacun sous sa garde : un échec au démarrage ne doit pas empêcher la

@@ -121,7 +121,9 @@ async function manageDistribution(message: Message,
         await manageMsgExpiration(client);
         return true
     } catch (err) {
-        console.error(err);
+        // Le message seul : l'objet d'erreur d'une requête Discord porte
+        // l'annonce (pseudo de l'auteur, texte), que les journaux ne gardent pas.
+        console.error("manageDistribution error:", (err as Error).message);
         await sendLog(client, "manageDistribution error : \n" + (err as TypeError).message);
         return false;
     }

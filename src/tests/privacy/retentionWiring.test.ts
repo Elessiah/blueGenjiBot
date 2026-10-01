@@ -51,3 +51,13 @@ test("guildDelete passe par eraseGuild, le chemin du rattrapage", () => {
   assert.ok(handler.includes("eraseLeftGuild(client, guild.id)"));
   assert.ok(!handler.includes("_resetServer"));
 });
+
+test("la synchronisation des commandes ne lève jamais : la préparation est sous la garde", () => {
+  const source = read("utils", "updateCommands.ts");
+  assert.ok(source.indexOf("try {") < source.indexOf("fillBlueCommands(client)"));
+});
+
+test("aucun journal ne reçoit le texte d'une annonce", () => {
+  assert.ok(!read("utils", "getInviteFromMessage.ts").includes("message.content"));
+  assert.ok(!/console\.error\(err\)/.test(read("messages", "manageDistribution.ts")));
+});
