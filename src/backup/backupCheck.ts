@@ -53,6 +53,7 @@ import {
   listArchives,
   missingCommandText,
   spawnCommand,
+  stopProcess,
   type ArchiveSources,
   type CommandRunner,
 } from "@/backup/archiveSource.js";
@@ -283,7 +284,7 @@ export function runPipeline(
         if (!settled.has(index)) {
           killed.add(index);
         }
-        child.kill();
+        stopProcess(child);
       });
     };
     const timer = setTimeout(() => {

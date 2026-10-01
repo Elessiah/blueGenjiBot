@@ -100,10 +100,12 @@ export function resolveCommand(
 /**
  * Variables reprises telles quelles de l'environnement du bot : de quoi
  * trouver la configuration rclone (`HOME`, `XDG_CONFIG_HOME`), un dossier
- * temporaire, la langue et le fuseau des sorties lues (`tar -tv`).
+ * temporaire, la langue et le fuseau des sorties lues (`tar -tv`), et la
+ * sortie réseau de rclone (mandataire, certificats d'autorité).
  */
 const INHERITED_ENV_KEYS: readonly string[] = [
   "HOME", "USER", "LOGNAME", "TMPDIR", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "LANG", "LANGUAGE", "TZ",
+  "HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "NO_PROXY", "no_proxy", "SSL_CERT_FILE", "SSL_CERT_DIR",
 ];
 
 /**
@@ -391,6 +393,20 @@ export async function fetchArchive(
 }
 
 /**
+ * Arrête un processus enfant sans jamais lever. `kill` lève (`EINVAL`…) sur
+ * un processus qui n'a pas pu être lancé — binaire absent — et l'exception,
+ * levée dans un gestionnaire d'événement, tuerait le bot.
+ * @param child Processus à arrêter.
+ */
+export function stopProcess(child: ChildProcess): void {
+  try {
+    child.kill();
+  } catch {
+    // Processus jamais lancé ou déjà terminé : rien à arrêter.
+  }
+}
+
+/**
  * Déchiffre l'archive et n'en extrait que `database.sqlite`.
  *
  * `age` écrit dans un tube que `tar` lit : l'archive en clair — qui porte
@@ -409,11 +425,13 @@ export function decryptDatabase(archivePath: string, identity: string, workDir: 
       env,
     });
     const errors: string[] = [];
+    // Gardée pour `cause` : `/restore-backup` nomme une commande introuvable.
+    let missing: MissingCommandError | undefined;
     let pending = 2;
     let failed = false;
     const timer = setTimeout(() => {
-      age.kill();
-      tar.kill();
+      stopProcess(age);
+      stopProcess(tar);
     }, COMMAND_TIMEOUT_MS);
 
     age.stdout.pipe(tar.stdin);
@@ -433,8 +451,8 @@ export function decryptDatabase(archivePath: string, identity: string, workDir: 
       if (code !== 0) {
         failed = true;
         // L'autre extrémité du tube n'attendra rien de plus.
-        age.kill();
-        tar.kill();
+        stopProcess(age);
+        stopProcess(tar);
       }
       pending--;
       if (pending > 0) {
@@ -442,19 +460,22 @@ export function decryptDatabase(archivePath: string, identity: string, workDir: 
       }
       clearTimeout(timer);
       if (failed) {
-        reject(new Error(errors.join(" ; ") || "déchiffrement ou extraction impossible"));
+        reject(new Error(errors.join(" ; ") || "déchiffrement ou extraction impossible", { cause: missing }));
       } else {
         resolve(path.join(workDir, "database.sqlite"));
       }
     };
-    age.on("error", (error) => {
-      errors.push(isMissingBinary(error) ? new MissingCommandError("age").message : `age: ${error.message}`);
-      done("age", 1);
-    });
-    tar.on("error", (error) => {
-      errors.push(isMissingBinary(error) ? new MissingCommandError("tar").message : `tar: ${error.message}`);
-      done("tar", 1);
-    });
+    const onSpawnError = (which: "age" | "tar", error: Error): void => {
+      if (isMissingBinary(error)) {
+        missing ??= new MissingCommandError(which);
+        errors.push(new MissingCommandError(which).message);
+      } else {
+        errors.push(`${which}: ${error.message}`);
+      }
+      done(which, 1);
+    };
+    age.on("error", (error) => onSpawnError("age", error));
+    tar.on("error", (error) => onSpawnError("tar", error));
     age.on("close", (code) => done("age", code));
     tar.on("close", (code) => done("tar", code));
   });
