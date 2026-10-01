@@ -46,6 +46,14 @@ test("archiveSourcesFromEnv lit les trois réglages, clé par défaut dans le do
     archiveSourcesFromEnv({ BACKUP_ARCHIVE_DIR: " /srv/b ", BACKUP_RCLONE_REMOTE: "hetzner:backups", BACKUP_AGE_IDENTITY: "/k" }),
     { localDir: "/srv/b", remote: "hetzner:backups", identity: "/k" },
   );
+  assert.deepEqual(
+    archiveSourcesFromEnv({ BACKUP_ARCHIVE_DIR: "~/archives", BACKUP_AGE_IDENTITY: "~/.bluegenji-backup.key" }),
+    {
+      localDir: path.join(os.homedir(), "archives"),
+      remote: null,
+      identity: path.join(os.homedir(), ".bluegenji-backup.key"),
+    },
+  );
   const defaults = archiveSourcesFromEnv({});
   assert.equal(defaults.localDir, null);
   assert.equal(defaults.remote, null);
