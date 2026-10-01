@@ -41,6 +41,9 @@ versions :
   qui suit un remote `crypt` jusqu'au remote qu'il enveloppe) et passent alors
   `--onedrive-hard-delete` (pas de corbeille) et `--onedrive-no-versions` (pas
   d'anciennes versions). Ces options ne sont passées à aucun autre fournisseur.
+  **Limite** : `--onedrive-hard-delete` n'agit que sur OneDrive Entreprise /
+  SharePoint ; sur un OneDrive **personnel**, une suppression passe quand même
+  par la corbeille, qui ne se vide qu'à la main, depuis le site de OneDrive.
 - **Nextcloud / WebDAV** (dont un Nextcloud géré) — aucune option `rclone` n'y
   peut rien : un fichier supprimé part dans la corbeille du serveur, un fichier
   réécrit y garde ses versions. **Action requise en production** : dans
@@ -312,12 +315,16 @@ rclone purge onedrive:BlueGenji --onedrive-hard-delete   # archives et copie chi
 rclone purge onedrive:uploads --onedrive-hard-delete     # anciennes copies en clair,
 rclone purge onedrive:quarantine --onedrive-hard-delete  # si elles existent encore
 rclone purge onedrive:deletions --onedrive-hard-delete
-rclone cleanup onedrive:                                 # vide la corbeille
+rclone cleanup onedrive:                                 # anciennes versions seulement
 rclone config delete onedrive-crypt && rclone config delete onedrive
 ```
 
-Vérifier ensuite dans l'interface du fournisseur que corbeille et historique de
-versions sont vides.
+**Puis, obligatoirement, vider la corbeille à la main** sur le site de OneDrive
+(« Corbeille » → « Vider la corbeille », y compris la corbeille secondaire) :
+sur un compte personnel, ni `--onedrive-hard-delete` ni `rclone cleanup` ne la
+vident, et les copies purgées y resteraient jusqu'à 30 jours de plus. Même
+geste chez tout autre ancien fournisseur : corbeille et historique de versions
+vidés depuis son interface.
 
 ## Restauration
 
