@@ -328,32 +328,53 @@ vidés depuis son interface.
 
 ## Restauration
 
-Récupère et déchiffre l'archive, depuis n'importe quelle machine ayant la clé :
+**Base du bot** — la commande Discord lit l'archive chiffrée **sur la machine
+du bot** et la déchiffre sur place ; aucune base ne transite par Discord.
+Elle se règle dans le `.env` du bot :
+
+```env
+# Dossier local d'archives bluegenji-AAAA-MM-JJ.tar.age (facultatif)
+BACKUP_ARCHIVE_DIR=
+# Remote rclone et dossier des archives (facultatif) — celui du script de sauvegarde
+BACKUP_RCLONE_REMOTE=distant:BlueGenji/backups
+# Clé privée age (défaut : ~/.bluegenji-backup.key), en chmod 600, lisible du seul compte du bot
+BACKUP_AGE_IDENTITY=/home/pi/.bluegenji-backup.key
+```
+
+```
+/restore-backup confirmer:False                     # liste les archives disponibles
+/restore-backup confirmer:True archive:2026-09-08   # restaure cette archive
+```
+
+Une archive présente dans le dossier local est lue là, sinon elle est
+téléchargée (`rclone copyto`) dans un dossier temporaire privé (`mkdtemp`,
+0700). `age` déchiffre dans un tube que `tar` lit, et seul `database.sqlite`
+est extrait : le dump du site (`appbluegenji.sql`) n'est jamais écrit en clair.
+Le dossier temporaire est effacé à la fin, succès ou échec. La saisie ne
+compose jamais un chemin : seule une archive déjà listée peut être désignée.
+
+La commande n'accepte que le propriétaire déclaré dans `OWNER_ID` — aucun rôle
+Discord ne l'ouvre à quelqu'un d'autre. Elle refuse une base corrompue
+(`PRAGMA integrity_check`, en lecture seule), et recopie la base courante en
+`database.sqlite.avant-<date>` avant de l'écraser. La connexion SQLite est
+fermée — et la fermeture attendue, sinon le checkpoint du WAL écrirait
+par-dessus la base restaurée — puis rouverte, sans redémarrage du bot.
+
+Si la copie échoue en cours d'écriture, la base précédente est automatiquement
+remise en place, à condition qu'elle passe elle-même la vérification d'intégrité.
+Une copie de secours est la base d'avant, **en clair** : elle est supprimée à la
+restauration réussie suivante (qui ne garde que la sienne), et au plus tard au
+bout de 30 jours par le ménage de nuit (`ROLLBACK_RETENTION_DAYS`, aligné sur
+`RETENTION_DAYS`). **Attention** : deux restaurations de suite perdent l'état d'avant la première, y compris ce qui a été écrit depuis la dernière sauvegarde. Pour chercher la bonne archive, l'essayer d'abord à la main sur une autre machine (ci-dessous).
+
+À la main, depuis n'importe quelle machine ayant la clé (base du site, ou bot
+arrêté) :
 
 ```bash
 rclone copy distant:BlueGenji/backups/bluegenji-2026-09-08.tar.age .
 age --decrypt -i ~/.bluegenji-backup.key bluegenji-2026-09-08.tar.age | tar -x
 # -> database.sqlite (bot) et appbluegenji.sql (site)
 ```
-
-**Base du bot** — glisse le `database.sqlite` obtenu dans la commande Discord :
-
-```
-/restore-backup fichier:<database.sqlite> confirmer:True
-```
-
-La commande n'accepte que le propriétaire déclaré dans `OWNER_ID` — aucun rôle
-Discord ne l'ouvre à quelqu'un d'autre. Elle refuse un fichier encore chiffré ou
-une base corrompue (`PRAGMA integrity_check`, en lecture seule), et recopie la
-base courante en `database.sqlite.avant-<date>` avant de l'écraser. La connexion
-SQLite est fermée — et la fermeture attendue, sinon le checkpoint du WAL écrirait
-par-dessus la base restaurée — puis rouverte, sans redémarrage du bot.
-
-Si la copie échoue en cours d'écriture, la base précédente est automatiquement
-remise en place, à condition qu'elle passe elle-même la vérification d'intégrité.
-Les trois copies de secours les plus récentes sont conservées, les plus anciennes
-sont purgées : ce sont des copies intégrales de la base, sur la machine dont on
-surveille justement l'espace disque.
 
 **Base du site** — restauration manuelle, le bot n'y touche pas :
 

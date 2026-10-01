@@ -1,7 +1,7 @@
 import {sendLog} from "../safe/sendLog.js";
 import {describeError} from "../safe/errorGuards.js";
 import {manageMsgExpiration} from "./manageMsgExpiration.js";
-import {checkMessageValidity} from "./checkMessageValidity.js";
+import {checkMessageValidity, type BanCheckMemo} from "./checkMessageValidity.js";
 import {getTargetRegions} from "./getTargetRegions.js";
 import {buildServiceMessage} from "./buildServiceMessage.js";
 import {sendServiceMessage} from "./sendServiceMessage.js";
@@ -73,8 +73,10 @@ async function manageDistribution(message: Message,
         let nbPartner: number = 0;
         const hasValidService: {value: boolean} = {value: false};
         let targetedService: Service | null = null;
+        // Un verdict d'exclusion par message, pas par service visé.
+        const banCheck: BanCheckMemo = {verdict: null};
         for (const service of services) {
-            if (await checkMessageValidity(client, service, messageContentLower, message, hasValidService)) {
+            if (await checkMessageValidity(client, service, messageContentLower, message, hasValidService, banCheck)) {
                 if (!targetedService) {
                     targetedService = service;
                 } else {

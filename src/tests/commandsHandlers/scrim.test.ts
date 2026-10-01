@@ -15,6 +15,8 @@ import { scrim, SCRIM_GAME, SCRIM_GAME_LABEL } from "../../commandsHandlers/scri
 import { commands } from "../../config/commands.js";
 import { getBddInstance, closeBddInstance } from "../../bdd/Bdd.js";
 import { setModuleEnabled } from "../../modules/moduleGuard.js";
+import { recrute } from "../../commandsHandlers/recrute.js";
+import { choiceLabel, RECRUIT_ROLE_CHOICES, SCRIM_LEVEL_CHOICES } from "../../config/searchChoices.js";
 
 type Reply = { content: string };
 
@@ -67,7 +69,7 @@ test("/scrim enregistre toujours Marvel Rivals, sans option jeu", async () => {
   assert.deepEqual(rows.map((r) => ({ ...r })), [{ game: SCRIM_GAME, level: "avance" }]);
   assert.equal(SCRIM_GAME, "marvel_rivals");
   assert.equal(replies.length, 1);
-  assert.equal(replies[0].content, `Recherche de scrim publiee : **${SCRIM_GAME_LABEL}** (avance).`);
+  assert.equal(replies[0].content, `Recherche de scrim publiee : **${SCRIM_GAME_LABEL}** (Avancé).`);
 });
 
 test("/scrim ignore une ancienne option jeu envoyee par un client en cache", async () => {
@@ -91,6 +93,44 @@ test("/scrim refuse d'ecrire quand le module scrims est desactive", async () => 
   const rows = await bdd.raw<{ game: string }>("SELECT game FROM Scrim WHERE id_author = ?", [userId]);
   assert.equal(rows.length, 0);
   assert.equal(replies[0].content, "Le module Scrims est desactive sur ce serveur.");
+});
+
+test("/scrim niveau et /recrute role sont des choix fermes", () => {
+  type Opt = { name: string; choices?: { value: string }[] };
+  const niveau = ((commands.scrim.parameters as { options?: Opt[] }).options ?? [])[0];
+  const role = ((commands.recrute.parameters as { options?: Opt[] }).options ?? [])[0];
+  assert.deepEqual(niveau.choices?.map((c) => c.value), SCRIM_LEVEL_CHOICES.map((c) => c.value));
+  assert.deepEqual(role.choices?.map((c) => c.value), RECRUIT_ROLE_CHOICES.map((c) => c.value));
+});
+
+test("choiceLabel rend le libelle d'une valeur de la liste, null sinon", () => {
+  assert.equal(choiceLabel(SCRIM_LEVEL_CHOICES, "intermediaire"), "Intermédiaire");
+  assert.equal(choiceLabel(RECRUIT_ROLE_CHOICES, "Pseudo#1234"), null);
+});
+
+test("/scrim refuse un niveau hors liste (client en cache, texte libre) sans rien ecrire", async () => {
+  const userId = "900000000000000004";
+  const { interaction, replies } = fakeInteraction({ niveau: "cherche MonPseudo" }, userId);
+  await scrim(client, interaction, "910000000000000001");
+  const bdd = await getBddInstance();
+  const rows = await bdd.raw("SELECT 1 FROM Scrim WHERE id_author = ?", [userId]);
+  assert.equal(rows.length, 0);
+  assert.match(replies[0].content, /Niveau inconnu/);
+});
+
+test("/recrute enregistre la valeur et affiche le libelle ; refuse un role hors liste", async () => {
+  const userId = "900000000000000005";
+  const ok = fakeInteraction({ role: "heal" }, userId);
+  await recrute(client, ok.interaction, "910000000000000001");
+  const bdd = await getBddInstance();
+  const rows = await bdd.raw<{ role: string }>("SELECT role FROM Recrute WHERE id_author = ?", [userId]);
+  assert.deepEqual(rows.map((r) => r.role), ["heal"]);
+  assert.equal(ok.replies[0].content, "Recherche publiee : **Heal**.");
+
+  const ko = fakeInteraction({ role: "n'importe quoi" }, userId);
+  await recrute(client, ko.interaction, "910000000000000001");
+  assert.equal((await bdd.raw("SELECT 1 FROM Recrute WHERE id_author = ?", [userId])).length, 1);
+  assert.match(ko.replies[0].content, /Role inconnu/);
 });
 
 test.after(async () => {

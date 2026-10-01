@@ -1,6 +1,7 @@
 import { type Client, type User } from "discord.js";
 import { formatDiskUsage, getDiskUsage } from "@/backup/diskSpace.js";
 import { formatBackupStatus, isBackupFresh, readBackupStatus } from "@/backup/backupStatus.js";
+import { resolveBddPath } from "@/bdd/Bdd.js";
 
 /**
  * Envoie au propriétaire (OWNER_ID) le rapport hebdomadaire de sauvegarde.
@@ -20,7 +21,7 @@ export async function sendDatabaseBackup(client: Client): Promise<boolean> {
     return false;
   }
 
-  const dbPath = process.env.BDD_PATH || "./database.sqlite";
+  const dbPath = resolveBddPath();
   const statusPath = process.env.BACKUP_STATUS_PATH || "/var/lib/bluegenji/backup-status.json";
   const stamp = new Date().toISOString().slice(0, 10);
 

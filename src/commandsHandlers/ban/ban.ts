@@ -8,6 +8,7 @@ import {checkPermissions} from "@/check/checkPermissions.js";
 import {safeReply} from "@/safe/safeReply.js";
 import {sendLog} from "@/safe/sendLog.js";
 import type {idSendLogMsg} from "@/safe/types.js";
+import {deleteBanMessages} from "@/privacy/staffLogRetention.js";
 
 /**
  * Ban un utilisateur des utilisations du bot discord.
@@ -62,13 +63,42 @@ async function ban(client: Client,
     }
     // Identifiants, jamais de pseudos, au journal : un pseudo se change et se
     // lit par quiconque voit le salon, l'identifiant suffit à retrouver le compte.
-    await sendLog(client, `*Un joueur (id ${user.id}) a été exclu par un modérateur (id ${interaction.user.id}).*`);
+    // Les identifiants des messages de l'exclusion (avis au salon, motif au
+    // salon et en message privé au propriétaire) sont gardés avec elle :
+    // `/unban` les efface, et la purge d'un an du journal les épargne tant
+    // qu'elle dure. L'avis ne part qu'au salon, comme avant (`copyToOwner`).
+    const notice: idSendLogMsg = {admin: "", owner: ""};
+    await sendLog(client, `*Un joueur (id ${user.id}) a été exclu par un modérateur (id ${interaction.user.id}).*`, notice, false);
     const ids: idSendLogMsg = {admin: "", owner: ""};
     await sendLog(client, "**Reason:** " + reason, ids);
+    // `set` ne lève pas : il rend son échec (colonne absente si la migration
+    // a échoué, base verrouillée). Sans ce contrôle, l'exclusion n'était pas
+    // écrite alors que le modérateur lisait « banned ».
+    let failure: string | null = null;
     try {
-        await bdd.set('Ban', ['id_user', 'id_moderator', 'id_reason'], [user.id, interaction.user.id, ids.admin]);
+        const status = await bdd.set('Ban',
+            ['id_user', 'id_moderator', 'id_reason', 'id_reason_owner', 'id_notice_admin'],
+            [user.id, interaction.user.id, ids.admin, ids.owner || null, notice.admin || null]);
+        if (!status.success) {
+            failure = status.message;
+        }
     } catch (e) {
-        await sendLog(client, 'Error while register ban : ' + (e as TypeError).message);
+        failure = (e as TypeError).message;
+    }
+    if (failure !== null) {
+        // L'avis et le motif sont déjà publiés : sans exclusion écrite, ils
+        // décriraient une exclusion qui n'existe pas (et chaque nouvel essai
+        // en publierait d'autres).
+        await deleteBanMessages(client, {
+            id_user: user.id,
+            id_moderator: interaction.user.id,
+            id_reason: ids.admin,
+            date: new Date(),
+            id_reason_owner: ids.owner || null,
+            id_notice_admin: notice.admin || null,
+        });
+        await sendLog(client, 'Error while register ban : ' + failure);
+        await safeReply(interaction, "Ban could not be recorded, please try again in a moment.", true, true);
         return false;
     }
     const OGMsgs: {id_msg: string}[] = await bdd.get('OGMsg', ['id_msg'], {}, {query: "id_author = ?", values: [user.id]}) as {id_msg: string}[];

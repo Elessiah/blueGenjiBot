@@ -92,6 +92,9 @@ INTERNAL_API_PORT=4400          # défaut
 INTERNAL_API_TOKEN=             # doit matcher BOT_INTERNAL_TOKEN côté appbluegenji
 GUILD_ID=                       # facultatif — surcharge les serveurs démarchés par /internal/notify/dm
 BACKUP_STATUS_PATH=             # statut de la sauvegarde distante (défaut /var/lib/bluegenji/backup-status.json)
+BACKUP_ARCHIVE_DIR=             # /restore-backup : dossier local d'archives .tar.age (facultatif)
+BACKUP_RCLONE_REMOTE=           # /restore-backup : remote:dossier des archives (facultatif)
+BACKUP_AGE_IDENTITY=            # /restore-backup : clé privée age (défaut ~/.bluegenji-backup.key)
 ```
 
 ## Conventions
@@ -99,7 +102,7 @@ BACKUP_STATUS_PATH=             # statut de la sauvegarde distante (défaut /var
 - **Tout en français** côté UI/messages utilisateur.
 - **Imports ESM** : toujours suffixer `.js` (même pour les fichiers `.ts`), TypeScript ESM l'exige.
 - **Requêtes SQL** : exclusivement paramétrées via `Bdd.get/set/...`. Jamais de concat de strings. Seule exception : un **nom** de table ou de colonne tiré d'une constante du code (`GUILD_CONFIG_TABLES`, `GUILD_CHANNEL_TABLE`), vérifié par `assertSqlIdentifier` au chargement du module — les valeurs, elles, restent toujours bindées.
-- **Flux d'activité** : rien de ce qui entre dans `recordEvent()` ne doit nommer une personne. L'app web republie ce flux sur `/bot`, page de vitrine lue **sans compte**, et la table `FeedEvent` conserve ses lignes sans durée — un identifiant écrit ici repart à chaque rattrapage d'historique. `feed/feedPrivacy.ts` remplace mention et identifiant nu par « un joueur » ; la règle est posée dans `recordEvent`, **unique écrivain**, jamais chez l'appelant. Un évènement dit *ce qui se passe*, jamais *à qui*.
+- **Flux d'activité** : rien de ce qui entre dans `recordEvent()` ne doit nommer une personne. L'app web republie ce flux sur `/bot`, page de vitrine lue **sans compte**, et la table `FeedEvent` conserve ses lignes 30 jours (`FEED_EVENT_RETENTION_DAYS`, purge de `runDataRetention`) — un identifiant écrit ici repart à chaque rattrapage d'historique jusque-là. `feed/feedPrivacy.ts` remplace mention et identifiant nu par « un joueur » ; la règle est posée dans `recordEvent`, **unique écrivain**, jamais chez l'appelant. Un évènement dit *ce qui se passe*, jamais *à qui*.
 - **Erreurs runtime** : try/catch + `sendLog()` ; ne jamais laisser une exception planter le bot.
   `installProcessGuards()` (`safe/processGuards.ts`) capte `unhandledRejection`,
   `uncaughtException` et les événements `error`/`shardError` du client — sans quoi une
