@@ -183,7 +183,7 @@ Une seule commande suffit, avec **les deux** pièces (réservée au dev et au pr
 
 Les autres commandes d'adhésion (`doc/adhesions-commands-user.md`) n'ont rien à refaire : les rappels programmés vivent dans la base, restaurés avec elle.
 
-**Rappels envoyés deux fois.** Un rappel parti entre l'archive et la perte est revenu « dû » avec la base : il **repart une fois** au prochain contrôle — une fois seulement, son échéance suivante étant recalculée à partir de l'envoi. C'est le cas d'un avis de péremption déjà reçu (`/adhesion-valide`) ou d'un rappel récurrent (`/get-adhesion … interval:`) passé dans la semaine. Pour l'éviter, **avant 10 h** : `/show-rappel-adhesion` liste les rappels avec leur prochain envoi ; un envoi daté d'avant la restauration est dû. Un **avis de péremption** (« Peremption - 1 envoi(s) restant(s) ») dont on sait qu'il est déjà parti (salon de logs du bot, message reçu par le membre) se supprime par `/delete-rappel-adhesion` : il n'avait plus rien à envoyer. Un **rappel récurrent**, lui, se laisse partir : le supprimer l'arrêterait pour de bon, et le reposer par `/get-adhesion` enverrait les fichiers sur-le-champ — le doublon qu'on voulait éviter. Dans le doute, laisser partir : un doublon vaut mieux qu'un rappel perdu.
+**Rappels envoyés deux fois.** Un rappel parti entre l'archive et la perte est revenu « dû » avec la base : il **repart une fois** au prochain contrôle — une fois seulement, son échéance suivante étant recalculée à partir de l'envoi. C'est le cas d'un avis de péremption déjà reçu (`/adhesion-valide`) ou d'un rappel récurrent (`/get-adhesion … interval:`) passé dans la semaine. Pour l'éviter, **avant 10 h** : `/show-rappel-adhesion` liste les rappels avec leur prochain envoi ; un envoi daté d'avant la restauration est dû. Un **avis de péremption** (« Péremption — 1 envoi restant ») dont on sait qu'il est déjà parti (salon de logs du bot, message reçu par le membre) se supprime par `/delete-rappel-adhesion` : il n'avait plus rien à envoyer. Un **rappel récurrent**, lui, se laisse partir : le supprimer l'arrêterait pour de bon, et le reposer par `/get-adhesion` enverrait les fichiers sur-le-champ — le doublon qu'on voulait éviter. Dans le doute, laisser partir : un doublon vaut mieux qu'un rappel perdu.
 
 ## 4. Le site : base de données
 
@@ -351,7 +351,13 @@ désigne l'ancienne adresse. Le port 80 doit donc atteindre la machine (et le
 **Le certificat** : l'ancienne machine l'obtenait par **certbot** (paquets
 Debian, avec le greffon nginx), qui gérait aussi le certificat de l'autre site
 hébergé, et le renouvelait par le minuteur systemd `certbot.timer` livré avec
-le paquet — aucun cron à écrire. Une fois le `server` nginx en place :
+le paquet — aucun cron à écrire. **Dans cet ordre** : un `server` nginx
+provisoire en HTTP seul (`listen 80` et `server_name`, sans aucune directive
+`ssl_*`) — une configuration complète désignerait des fichiers de certificat qui
+n'existent pas encore, `nginx -t` la refuserait et certbot ne pourrait pas
+s'exécuter —, puis le certificat, que certbot ajoute lui-même au `server`, puis
+seulement le reste de la configuration ci-dessus (relais, plafonds, en-tête
+`Strict-Transport-Security`) :
 
 ```bash
 sudo apt install -y certbot python3-certbot-nginx
