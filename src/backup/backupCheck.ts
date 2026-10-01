@@ -469,7 +469,10 @@ export function pipelineFailureText(stage: string | undefined): string {
     case "rclone absent":
     case "age absent":
     case "tar absent":
-      return `\`${stage.replace(/ absent$/, "")}\` introuvable sur le serveur`;
+      // Le bot ne cherche ses commandes que dans les dossiers système
+      // (`COMMAND_DIRS`) : un binaire installé ailleurs (snap, ~/.local/bin)
+      // répond à `which` mais reste introuvable pour lui.
+      return `\`${stage.replace(/ absent$/, "")}\` introuvable dans les dossiers système où le bot le cherche`;
     default:
       return "lecture interrompue";
   }
