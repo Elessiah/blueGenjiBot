@@ -5,6 +5,8 @@ import { MessageFlags, type ChatInputCommandInteraction, type Client } from "dis
 
 import {
   archiveSourcesFromEnv,
+  type ArchiveListing,
+  type ArchiveSources,
   decryptDatabase,
   fetchArchive,
   findMissingCommand,
@@ -12,7 +14,7 @@ import {
   missingCommandText,
   pickArchive,
 } from "@/backup/archiveSource.js";
-import { restoreDatabase } from "@/backup/restoreDatabase.js";
+import { restoreDatabase, type RestoreResult } from "@/backup/restoreDatabase.js";
 import { runDataRetention } from "@/privacy/dataRetention.js";
 import { purgeFeedIdentifiers } from "@/feed/feedBus.js";
 import { safeReply } from "@/safe/safeReply.js";
@@ -50,6 +52,92 @@ export function restoreFailureText(error: unknown): string {
 export function failedSourceLabel(failure: string): string {
   const end = failure.indexOf(" : ");
   return end > 0 ? failure.slice(0, end) : "source";
+}
+
+/**
+ * Liste les archives, ou répond à leur place quand aucune source n'a répondu.
+ *
+ * `listArchives` ne lève que si **toutes** les sources configurées ont
+ * échoué : elles sont toutes nommées, sans quoi la panne de l'une (dossier
+ * local) ne se verrait qu'une fois l'autre (commande absente) réparée.
+ * @param interaction Interaction `/restore-backup`, déjà différée.
+ * @param sources Sources configurées (au moins une).
+ * @returns Le listage, ou `null` si la réponse est partie.
+ */
+async function listOrExplain(
+  interaction: ChatInputCommandInteraction,
+  sources: ArchiveSources,
+): Promise<ArchiveListing | null> {
+  try {
+    return await listArchives(sources);
+  } catch (error) {
+    console.error("[restore-backup] Archives illisibles :", (error as Error).message);
+    const failed = [sources.remote && "stockage distant", sources.localDir && "dossier local"].filter(Boolean).join(", ");
+    await safeReply(interaction, `❌ Archives illisibles : ${failed} (${restoreFailureText(error)})`, true, true);
+    return null;
+  }
+}
+
+/**
+ * Ligne qui signale une source muette, sans son détail (journaux pm2).
+ *
+ * Sans elle, « aucune archive » se lirait « aucune sauvegarde ». « Non lue »
+ * plutôt qu'« injoignable » : la cause peut être une commande introuvable,
+ * que le texte nomme alors.
+ * @param failures Échecs partiels rendus par `listArchives`.
+ * @param missingCommand Commande introuvable, ou `null`.
+ * @returns La ligne à ajouter à la réponse, ou une chaîne vide.
+ */
+export function partialFailureText(failures: string[], missingCommand: string | null): string {
+  if (failures.length === 0) {
+    return "";
+  }
+  console.error("[restore-backup] Source non lue :", failures.join(" ; "));
+  const cause = missingCommand ? missingCommandText(missingCommand) : SEE_PM2;
+  return `\n⚠️ Source non lue : ${failures.map(failedSourceLabel).join(", ")} (${cause})`;
+}
+
+/**
+ * Répond, journalise et fait suivre une restauration menée à son terme.
+ *
+ * Une sauvegarde peut ramener au flux d'activité des identifiants Discord que
+ * l'API interne servirait, tels quels, à la page publique `/bot` : la purge
+ * passe avant la réponse et le journal, la base restaurée étant déjà
+ * ouverte. Elle est locale et ne lève pas.
+ *
+ * Un échec porte le message brut du système de fichiers (chemins de la base
+ * et du dossier temporaire) : Discord — réponse comme salon de logs — n'en
+ * reçoit que le résumé, sans chemin, pas même celui de la copie de
+ * l'ancienne base ; le détail va dans les journaux pm2.
+ *
+ * Le reste de ce que la sauvegarde a ramené (auteurs de plus de 30 jours, fil
+ * d'activité ancien, serveurs quittés) n'attend pas la nuit — mais pas la
+ * réponse non plus : le rattrapage des serveurs fait des appels réseau. Il
+ * ne lève jamais.
+ * @param client Client Discord, pour la journalisation.
+ * @param interaction Interaction `/restore-backup` en cours.
+ * @param archiveName Archive restaurée.
+ * @param result Résultat de `restoreDatabase`.
+ */
+async function reportRestore(
+  client: Client,
+  interaction: ChatInputCommandInteraction,
+  archiveName: string,
+  result: RestoreResult,
+): Promise<void> {
+  const who = `Restauration de la base par le compte ${interaction.user.id} (${archiveName}) : `;
+  if (!result.success) {
+    const rollback = result.rollbackPath ? ` (ancienne base : ${result.rollbackPath})` : "";
+    console.error("[restore-backup]", result.message + rollback);
+    await safeReply(interaction, `❌ ${result.summary} (${SEE_PM2})`, true, true);
+    await sendLog(client, `${who}échec — ${SEE_PM2}`);
+    return;
+  }
+  await purgeFeedIdentifiers(client);
+  const rollback = result.rollbackPath ? `\nSauvegarde de l'ancienne base : \`${result.rollbackPath}\`` : "";
+  await safeReply(interaction, `✅ ${result.message}${rollback}`, true, true);
+  await sendLog(client, `${who}succès — ${result.message}`);
+  void runDataRetention(client);
 }
 
 /**
@@ -101,29 +189,12 @@ export async function restoreBackup(
     return;
   }
 
-  let archives;
-  let failures: string[];
-  let listingMissingCommand: string | null;
-  try {
-    ({ archives, failures, missingCommand: listingMissingCommand } = await listArchives(sources));
-  } catch (error) {
-    console.error("[restore-backup] Archives illisibles :", (error as Error).message);
-    // `listArchives` ne lève que si **toutes** les sources configurées ont
-    // échoué : elles sont toutes nommées, sans quoi la panne de l'une (dossier
-    // local) ne se verrait qu'une fois l'autre (commande absente) réparée.
-    const failed = [sources.remote && "stockage distant", sources.localDir && "dossier local"].filter(Boolean).join(", ");
-    await safeReply(interaction, `❌ Archives illisibles : ${failed} (${restoreFailureText(error)})`, true, true);
+  const listing = await listOrExplain(interaction, sources);
+  if (!listing) {
     return;
   }
-  // Une source muette se dit : sans elle, « aucune archive » se lirait
-  // « aucune sauvegarde ». « Non lue » plutôt qu'« injoignable » : la cause
-  // peut être une commande introuvable, que le texte nomme alors.
-  let partial = "";
-  if (failures.length > 0) {
-    console.error("[restore-backup] Source non lue :", failures.join(" ; "));
-    const cause = listingMissingCommand ? missingCommandText(listingMissingCommand) : SEE_PM2;
-    partial = `\n⚠️ Source non lue : ${failures.map(failedSourceLabel).join(", ")} (${cause})`;
-  }
+  const { archives } = listing;
+  const partial = partialFailureText(listing.failures, listing.missingCommand);
 
   if (!query) {
     const lines = archives
@@ -162,37 +233,7 @@ export async function restoreBackup(
     const dbPath = await decryptDatabase(archivePath, sources.identity, tmpDir);
 
     const result = await restoreDatabase(dbPath);
-    // Une sauvegarde peut ramener au flux d'activité des identifiants Discord
-    // que l'API interne servirait, tels quels, à la page publique `/bot` : la
-    // purge passe avant la réponse et le journal, la base restaurée étant
-    // déjà ouverte. Elle est locale et ne lève pas.
-    if (result.success) {
-      await purgeFeedIdentifiers(client);
-    }
-    // Un échec porte le message brut du système de fichiers (chemins de la
-    // base et du dossier temporaire) : Discord — réponse comme salon de logs —
-    // n'en reçoit que le résumé, sans chemin, pas même celui de la copie de
-    // l'ancienne base ; le détail va dans les journaux pm2.
-    if (result.success) {
-      const rollback = result.rollbackPath ? `\nSauvegarde de l'ancienne base : \`${result.rollbackPath}\`` : "";
-      await safeReply(interaction, `✅ ${result.message}${rollback}`, true, true);
-    } else {
-      const rollback = result.rollbackPath ? ` (ancienne base : ${result.rollbackPath})` : "";
-      console.error("[restore-backup]", result.message + rollback);
-      await safeReply(interaction, `❌ ${result.summary} (${SEE_PM2})`, true, true);
-    }
-    await sendLog(
-      client,
-      `Restauration de la base par le compte ${interaction.user.id} (${archive.name}) : ` +
-        (result.success ? `succès — ${result.message}` : `échec — ${SEE_PM2}`),
-    );
-    // Le reste de ce que la sauvegarde a ramené (auteurs de plus de 30 jours,
-    // fil d'activité ancien, serveurs quittés) n'attend pas la nuit — mais pas
-    // la réponse non plus : le rattrapage des serveurs fait des appels réseau.
-    // Il ne lève jamais.
-    if (result.success) {
-      void runDataRetention(client);
-    }
+    await reportRestore(client, interaction, archive.name, result);
   } catch (error) {
     console.error("[restore-backup] Restauration échouée :", (error as Error).message);
     const text = restoreFailureText(error);

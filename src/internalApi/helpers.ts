@@ -2,6 +2,8 @@ import { createHash, timingSafeEqual } from "node:crypto";
 
 /** Adresses d'ecoute sur lesquelles seul un process de la machine peut se connecter. */
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
+/** Adresse d'ecoute par defaut de `startInternalApi`. */
+const DEFAULT_INTERNAL_HOST = "127.0.0.1";
 /** Prefixe d'une adresse IPv4 ecrite en IPv6 (`::ffff:127.0.0.1`). */
 const IPV4_MAPPED_PREFIX = "::ffff:";
 
@@ -19,8 +21,9 @@ const IPV4_MAPPED_PREFIX = "::ffff:";
  * @param host Valeur de `INTERNAL_API_HOST`, absente ou vide comprise.
  * @returns `true` si l'ecoute est confinee a la boucle locale.
  */
-export function isLoopbackHost(host: string | undefined): boolean {
-  const address = host || "127.0.0.1";
+export function isLoopbackHost(host: string = DEFAULT_INTERNAL_HOST): boolean {
+  // Vide vaut absente, comme le `||` de `startInternalApi`.
+  const address = host === "" ? DEFAULT_INTERNAL_HOST : host;
   const ipv4 = address.toLowerCase().startsWith(IPV4_MAPPED_PREFIX) ? address.slice(IPV4_MAPPED_PREFIX.length) : null;
   return LOOPBACK_HOSTS.has(address) || ipv4 === "127.0.0.1";
 }
