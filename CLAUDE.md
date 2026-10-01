@@ -91,7 +91,7 @@ INTERNAL_API_HOST=
 INTERNAL_API_PORT=4400          # défaut
 INTERNAL_API_TOKEN=             # doit matcher BOT_INTERNAL_TOKEN côté appbluegenji
 GUILD_ID=                       # facultatif — surcharge les serveurs démarchés par /internal/notify/dm
-BACKUP_STATUS_PATH=             # statut de la sauvegarde OneDrive (défaut /var/lib/bluegenji/backup-status.json)
+BACKUP_STATUS_PATH=             # statut de la sauvegarde distante (défaut /var/lib/bluegenji/backup-status.json)
 ```
 
 ## Conventions

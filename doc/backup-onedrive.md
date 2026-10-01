@@ -1,4 +1,10 @@
-# Sauvegarde chiffrée vers OneDrive
+# Sauvegarde chiffrée vers un stockage distant
+
+> Le nom de ce fichier, et ceux des scripts (`backup-onedrive.sh`,
+> `sync-uploads-onedrive.sh`, `backup-onedrive.env`), sont **historiques** : le
+> cron de production les appelle sous ces noms. Le stockage distant est celui du
+> remote `rclone` configuré, quel que soit son fournisseur — aujourd'hui un
+> Nextcloud géré (WebDAV), hébergé dans l'Union européenne.
 
 La sauvegarde de référence n'est plus la pièce jointe Discord (plafonnée à 24 Mo,
 sans rétention, et qui ignorait la base MySQL du site). Elle est assurée par
@@ -7,17 +13,46 @@ sans rétention, et qui ignorait la base MySQL du site). Elle est assurée par
 1. snapshot SQLite du bot (`.backup`, sûr pendant les écritures) ;
 2. `mysqldump --single-transaction` de la base du site ;
 3. archive `tar`, chiffrée avec `age` ;
-4. envoi `rclone` vers OneDrive et purge des archives de plus de **30 jours**,
-   durée annoncée par la politique de confidentialité du site — les deux
-   doivent bouger ensemble ;
+4. envoi `rclone` vers le stockage distant et purge des archives de plus de
+   **30 jours**, durée annoncée par la politique de confidentialité du site —
+   les deux doivent bouger ensemble ;
 5. synchronisation des images téléversées du site (voir plus bas) ;
 6. écriture d'un fichier de statut que le bot relit chaque lundi.
 
 Le script est indépendant du bot : la sauvegarde continue même si le process
 Discord est arrêté. Le bot n'envoie plus aucun fichier — les sauvegardes vivent
-uniquement sur OneDrive. Son message hebdomadaire du lundi 4 h se limite au
-statut de la dernière sauvegarde et à l'espace disque restant, et passe en alerte
-dès qu'aucune sauvegarde réussie n'a moins de huit jours.
+uniquement sur le stockage distant. Son message hebdomadaire du lundi 4 h se
+limite au statut de la dernière sauvegarde et à l'espace disque restant, et
+passe en alerte dès qu'aucune sauvegarde réussie n'a moins de huit jours.
+
+**Tout part chiffré depuis le Raspberry** : `age` pour les archives, un remote
+`rclone crypt` pour les images, les logos masqués et le journal des
+suppressions. Les clés restent chez l'hébergeur technique ; le fournisseur du
+stockage ne reçoit que des fichiers qu'il ne peut pas lire.
+
+## Suppression définitive : corbeille et versions
+
+Les durées annoncées par le site (30 jours pour une archive, moins d'une heure
+pour une image supprimée) ne tiennent que si une suppression est **définitive**
+chez le fournisseur. Or la plupart gardent une corbeille et un historique de
+versions :
+
+- **OneDrive** — les scripts le détectent seuls (`scripts/rclone-backend.sh`,
+  qui suit un remote `crypt` jusqu'au remote qu'il enveloppe) et passent alors
+  `--onedrive-hard-delete` (pas de corbeille) et `--onedrive-no-versions` (pas
+  d'anciennes versions). Ces options ne sont passées à aucun autre fournisseur.
+- **Nextcloud / WebDAV** (dont un Nextcloud géré) — aucune option `rclone` n'y
+  peut rien : un fichier supprimé part dans la corbeille du serveur, un fichier
+  réécrit y garde ses versions. **Action requise en production** : dans
+  l'administration du Nextcloud, **désactiver les applications « Deleted files »
+  (corbeille) et « Versions »**, ou, si l'offre ne permet pas de les désactiver,
+  régler leur rétention à zéro (`trashbin_retention_obligation` et
+  `versions_retention_obligation` à `auto, 0` ou équivalent proposé par
+  l'offre), puis vider la corbeille et les versions déjà accumulées. Sans cela,
+  une archive purgée ou un avatar supprimé survit chez le fournisseur — chiffré,
+  mais au-delà de la durée annoncée.
+- **Autre fournisseur** — vérifier de la même façon corbeille, versions et
+  instantanés avant de le mettre en service.
 
 ## Images du site
 
@@ -32,29 +67,28 @@ Ils sont traités à part, par `scripts/sync-uploads-onedrive.sh` :
   modifiés, le script tourne donc chaque heure pour presque rien, et une image
   n'attend pas le lundi suivant sa première copie ;
 - **en miroir strict** — un fichier supprimé du site (avatar changé, compte
-  supprimé, logo retiré) est supprimé de OneDrive au passage suivant, soit en
-  moins d'une heure, et **définitivement** : `--onedrive-hard-delete` évite la
-  corbeille OneDrive, qui l'aurait gardé 30 jours de plus. Garder une copie
-  « au cas où » reviendrait à conserver précisément ce qu'on nous a demandé
-  d'effacer. Contrepartie : une image supprimée par erreur ne se récupère pas
-  ici, et un dump ancien restauré peut désigner des images qui n'existent plus
-  (le site affiche alors l'initiale à la place) ;
+  supprimé, logo retiré) est supprimé du stockage distant au passage suivant,
+  soit en moins d'une heure, et **définitivement** (voir la section précédente).
+  Garder une copie « au cas où » reviendrait à conserver précisément ce qu'on
+  nous a demandé d'effacer. Contrepartie : une image supprimée par erreur ne se
+  récupère pas ici, et un dump ancien restauré peut désigner des images qui
+  n'existent plus (le site affiche alors l'initiale à la place) ;
 - **garde-fou** — si `public/uploads` est vide (mauvais chemin après un
   redéploiement, disque non monté), le script refuse de synchroniser : le miroir
   viderait la sauvegarde ;
 - **chiffré** — un avatar est une donnée personnelle, même masqué sur le site,
-  et un OneDrive personnel n'offre aucun contrat de sous-traitance : les images
-  passent par un remote `crypt` (étape 3 bis ci-dessous), qui chiffre contenu
-  **et** noms de fichiers avant envoi tout en gardant la synchronisation
-  incrémentale. Le script **refuse** un remote qui n'est pas de type `crypt`,
-  sans exception : aucun réglage ne permet d'envoyer les images en clair.
+  et le fournisseur du stockage ne doit pas pouvoir le lire : les images passent
+  par un remote `crypt` (étape 3 bis ci-dessous), qui chiffre contenu **et**
+  noms de fichiers avant envoi tout en gardant la synchronisation incrémentale.
+  Le script **refuse** un remote qui n'est pas de type `crypt`, sans exception :
+  aucun réglage ne permet d'envoyer les images en clair.
 
 Le **journal des suppressions** du site (`<app>/data/account-deletions.jsonl`)
 part avec les images, sur le même remote chiffré. Une ligne par compte supprimé
 (identifiant, date de création, date de suppression) : c'est ce qui permet, après
 la restauration d'une archive, de supprimer à nouveau les comptes supprimés
 depuis (voir « Restauration »). Il est élagué par le site et recopié tel quel,
-sans conserver d'ancienne version (`--onedrive-no-versions`).
+sans conserver d'ancienne version.
 
 Les **logos masqués** après un signalement (`<app>/data/quarantine`) partent
 aussi, sur le même remote chiffré et en miroir : un logo masqué n'est plus servi
@@ -67,11 +101,14 @@ lui, laisse la copie distante intacte : c'est l'état d'une machine reconstruite
 avant la restauration.
 
 ```
-onedrive:BlueGenji/chiffre/      # vu en clair par onedrive-crypt: uniquement
+distant:BlueGenji/chiffre/      # vu en clair par distant-crypt: uniquement
 ├── uploads/     avatars/ teams/ sponsors/ benevoles/ tournaments/
 ├── quarantine/  teams/        (logos masqués, en attente de contestation)
 └── deletions/   account-deletions.jsonl
 ```
+
+(`distant` et `distant-crypt` sont des noms d'exemple : ce sont ceux que
+`RCLONE_REMOTE` et `UPLOADS_RCLONE_REMOTE` désignent dans `backup-onedrive.env`.)
 
 La sauvegarde du lundi lance aussi cette synchronisation : le statut annonce
 alors `sqlite+mysql+images`, et passe en échec si les images n'ont pas pu partir
@@ -85,13 +122,10 @@ alors `sqlite+mysql+images`, et passe en échec si les images n'ont pas pu parti
 sudo apt update && sudo apt install -y age sqlite3 mariadb-client
 ```
 
-**`rclone` ne doit pas venir d'APT.** Sur un OneDrive personnel, Graph redirige
-l'envoi vers `my.microsoftpersonalcontent.com`, un hôte auquel le jeton Graph ne
-doit plus être présenté ; les versions antérieures au correctif l'envoient quand
-même et récoltent un `401 Unauthorized`. La lecture continue de fonctionner, si
-bien que `rclone lsd` réussit et que seul l'envoi échoue — le symptôme est
-trompeur. Debian trixie livre encore une 1.60 de 2022. Installe le binaire
-officiel à côté du paquet :
+**`rclone` ne doit pas venir d'APT** : Debian livre une version de 2022, trop
+ancienne pour certains fournisseurs (sur OneDrive, elle échoue à l'envoi en
+`401 Unauthorized` alors que la lecture fonctionne — symptôme trompeur).
+Installe le binaire officiel à côté du paquet :
 
 ```bash
 cd /tmp
@@ -103,37 +137,37 @@ unzip -q rclone-current-linux-arm64.zip
 sudo install -m 755 rclone-*/rclone /usr/local/bin/rclone
 ```
 
-### 2. Connexion OneDrive
+### 2. Connexion au stockage distant
 
-`rclone` embarque son propre identifiant d'application : **aucune inscription
-Azure n'est nécessaire pour un compte Microsoft personnel**. En revanche la
-connexion demande un navigateur, que le Raspberry n'a pas. Sur un PC ayant
-`rclone` installé :
-
-```bash
-rclone authorize "onedrive"
-```
-
-Connecte-toi dans le navigateur qui s'ouvre, puis recopie le jeton affiché.
-Sur le Raspberry :
+**Nextcloud / WebDAV** (cas actuel) :
 
 ```bash
 rclone config
 ```
 
-`n` (new remote) → nom `onedrive` → type `onedrive` → laisser `client_id` et
-`client_secret` vides → `Use auto config?` **non** → coller le jeton → choisir
-`OneDrive Personal or Business` → valider le compte proposé.
+`n` (new remote) → nom `distant` → type `webdav` → `url` : l'adresse WebDAV du
+compte (`https://<instance>/remote.php/dav/files/<utilisateur>/`) → `vendor` :
+`nextcloud` → `user` : l'identifiant du compte → mot de passe : un **mot de
+passe d'application** créé dans les réglages de sécurité du Nextcloud (jamais le
+mot de passe du compte).
 
-Vérification :
+> L'adresse, l'identifiant et le mot de passe ne s'écrivent nulle part dans ce
+> dépôt : ils ne vivent que dans `rclone.conf` du Raspberry.
+
+Puis désactiver la corbeille et les versions côté serveur (section « Suppression
+définitive » plus haut).
+
+**OneDrive** (ancien fournisseur, toujours pris en charge) : `rclone authorize
+"onedrive"` sur un PC muni d'un navigateur, puis `rclone config` sur le
+Raspberry (type `onedrive`, `client_id` et `client_secret` vides, auto config
+**non**, coller le jeton). Les options de suppression définitive sont alors
+ajoutées d'office par les scripts.
+
+Vérification, quel que soit le fournisseur :
 
 ```bash
-rclone lsd onedrive:
+rclone lsd distant:
 ```
-
-> Le jeton d'un compte personnel se renouvelle à chaque usage. Une exécution
-> hebdomadaire le garde vivant ; si le Raspberry reste éteint plus de trois mois,
-> il faudra refaire `rclone config reconnect onedrive:`.
 
 ### 3. Clé de chiffrement
 
@@ -150,7 +184,8 @@ echo 'age1xxxxxxxxxxxxxxxxxxxxxxxxxxxxx' > scripts/backup-recipients.txt
 
 > **Sans la clé privée, les archives sont irrécupérables.** Garde une copie hors
 > du Raspberry (gestionnaire de mots de passe, clé USB) — sinon la sauvegarde ne
-> sert à rien le jour où la carte SD lâche.
+> sert à rien le jour où la carte SD lâche. La clé n'est jamais envoyée au
+> fournisseur du stockage.
 
 ### 3 bis. Chiffrement des images (remote `crypt`)
 
@@ -162,8 +197,8 @@ le sont par un remote `rclone crypt`, qui garde la synchronisation incrémentale
 rclone config
 ```
 
-`n` (new remote) → nom `onedrive-crypt` → type `crypt` → `remote` :
-`onedrive:BlueGenji/chiffre` → `filename_encryption` : `standard` →
+`n` (new remote) → nom `distant-crypt` → type `crypt` → `remote` :
+`distant:BlueGenji/chiffre` → `filename_encryption` : `standard` →
 `directory_name_encryption` : `true` → mot de passe : **générer** (`g`, 256 bits)
 → second mot de passe (sel) : **générer** aussi.
 
@@ -175,24 +210,8 @@ Vérification — le premier listage montre des noms lisibles, le second des nom
 chiffrés :
 
 ```bash
-rclone lsf onedrive-crypt:
-rclone lsf onedrive:BlueGenji/chiffre
-```
-
-**Machine qui envoyait encore en clair.** Le chiffrement est obligatoire, sans
-réglage pour passer outre (l'ancienne variable `UPLOADS_ALLOW_PLAINTEXT` n'est
-plus lue : la retirer de `backup-onedrive.env`). Tant que `UPLOADS_RCLONE_REMOTE`
-ne désigne pas un remote `crypt`, le miroir horaire échoue — et la copie en clair
-déjà envoyée reste figée, avatars supprimés compris, puisque plus rien ne la
-synchronise. Une fois le remote chiffré créé et renseigné
-(`UPLOADS_RCLONE_REMOTE="onedrive-crypt"`) et un premier passage réussi, effacer
-définitivement l'ancienne copie en clair (dossiers par défaut ci-dessous, à
-adapter si `UPLOADS_REMOTE_DIR` et consorts avaient été changés) :
-
-```bash
-rclone purge onedrive:uploads --onedrive-hard-delete
-rclone purge onedrive:quarantine --onedrive-hard-delete
-rclone purge onedrive:deletions --onedrive-hard-delete
+rclone lsf distant-crypt:
+rclone lsf distant:BlueGenji/chiffre
 ```
 
 ### 4. Accès MySQL en lecture seule
@@ -228,7 +247,9 @@ cp scripts/backup-onedrive.env.example scripts/backup-onedrive.env
 chmod 600 scripts/backup-onedrive.env
 ```
 
-Ajuste les chemins, puis prépare le dossier de statut :
+Renseigne `RCLONE_REMOTE` (remote du stockage, ex. `distant`) et
+`UPLOADS_RCLONE_REMOTE` (remote chiffré, ex. `distant-crypt`), ajuste les
+chemins, puis prépare le dossier de statut :
 
 ```bash
 sudo mkdir -p /var/lib/bluegenji && sudo chown "$USER" /var/lib/bluegenji
@@ -244,8 +265,8 @@ Premier essai à la main :
 
 `crontab -e`, tous les lundis à 3 h (avant le rapport du bot, à 4 h). La ligne
 `PATH` n'est pas décorative : cron ne voit que `/usr/bin:/bin` par défaut, donc
-sans elle c'est la `rclone` d'APT — celle qui ne sait plus écrire — qui serait
-appelée, et l'échec ne se manifesterait qu'en production.
+sans elle c'est la `rclone` d'APT, trop ancienne, qui serait appelée, et l'échec
+ne se manifesterait qu'en production.
 
 ```cron
 PATH=/usr/local/bin:/usr/bin:/bin
@@ -254,12 +275,13 @@ PATH=/usr/local/bin:/usr/bin:/bin
 ```
 
 La seconde ligne synchronise les images et le journal des suppressions chaque
-heure : une image ou un compte supprimé du site quitte OneDrive dans l'heure. Elle
-purge aussi les archives de plus de `RETENTION_DAYS` jours — la purge du lundi
-seule laisserait une archive vivre jusqu'à 35 jours.
+heure : une image ou un compte supprimé du site quitte le stockage distant dans
+l'heure. Elle purge aussi les archives de plus de `RETENTION_DAYS` jours — la
+purge du lundi seule laisserait une archive vivre jusqu'à 35 jours.
 Renseigner d'abord `UPLOADS_DIR` dans `backup-onedrive.env` (chemin absolu de
-`public/uploads` de l'app) et créer le remote chiffré (3 bis), puis faire un premier passage à la main — c'est lui qui envoie tout le
-dossier, les suivants n'envoient que les nouveautés :
+`public/uploads` de l'app) et créer le remote chiffré (3 bis), puis faire un
+premier passage à la main — c'est lui qui envoie tout le dossier, les suivants
+n'envoient que les nouveautés :
 
 ```bash
 ./scripts/sync-uploads-onedrive.sh
@@ -268,12 +290,22 @@ dossier, les suivants n'envoient que les nouveautés :
 Les deux tâches partagent un verrou (`flock`) : si elles se croisent le lundi à
 3 h, la seconde attend la première au lieu de synchroniser en même temps.
 
+### Changement de fournisseur
+
+Pour passer d'un stockage à un autre : créer les deux nouveaux remotes (2 et
+3 bis), les renseigner dans `backup-onedrive.env`, faire un passage complet à la
+main (`backup-onedrive.sh` puis `sync-uploads-onedrive.sh`), vérifier la
+restauration d'une archive et d'une image depuis le nouveau stockage — **puis
+seulement** effacer définitivement les copies laissées chez l'ancien fournisseur
+(corbeille et versions comprises), et retirer ses remotes de `rclone.conf`.
+Le cron n'a pas à changer : les noms des scripts sont restés les mêmes.
+
 ## Restauration
 
 Récupère et déchiffre l'archive, depuis n'importe quelle machine ayant la clé :
 
 ```bash
-rclone copy onedrive:BlueGenji/backups/bluegenji-2026-09-08.tar.age .
+rclone copy distant:BlueGenji/backups/bluegenji-2026-09-08.tar.age .
 age --decrypt -i ~/.bluegenji-backup.key bluegenji-2026-09-08.tar.age | tar -x
 # -> database.sqlite (bot) et appbluegenji.sql (site)
 ```
@@ -306,7 +338,7 @@ mysql -u root appbluegenji < appbluegenji.sql
 **Images du site** — à recopier dans `public/uploads` de l'app :
 
 ```bash
-rclone copy onedrive-crypt:uploads /chemin/vers/appbluegenji/public/uploads
+rclone copy distant-crypt:uploads /chemin/vers/appbluegenji/public/uploads
 ```
 
 C'est l'état **actuel** des images, pas celui de la date du dump : avec un dump
@@ -318,7 +350,7 @@ attente de contestation. Tant que le dossier local n'existe pas, la
 synchronisation horaire ne touche pas à la copie distante.
 
 ```bash
-rclone copy onedrive-crypt:quarantine /chemin/vers/appbluegenji/data/quarantine
+rclone copy distant-crypt:quarantine /chemin/vers/appbluegenji/data/quarantine
 ```
 
 **Suppressions de compte — obligatoire avant de rouvrir le site.** Le dump date
@@ -328,7 +360,7 @@ rejoue depuis son journal (`docs/features/BACKUP_DATA_PROTECTION.md` côté site
 ```bash
 cd /chemin/vers/appbluegenji
 # Si la machine a été perdue, le journal local aussi : on reprend sa copie.
-rclone copy onedrive-crypt:deletions/account-deletions.jsonl data/
+rclone copy distant-crypt:deletions/account-deletions.jsonl data/
 NODE_ENV=production npm run replay:deletions -- --dry-run   # ce qui va être supprimé
 NODE_ENV=production npm run replay:deletions
 ```
