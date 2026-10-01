@@ -209,9 +209,9 @@ test("un membre injoignable : les autres reçoivent, l'auteur reçoit la liste d
   ]);
 });
 
-const NO_RECIPIENT_LOG = "sendAdhesion: aucun destinataire à servir (rôle sans membre ou membres illisibles), envoi annulé.";
-const NO_RECIPIENT_NOTICE = "Echec de l'envoi des adhésions : personne n'a pu être joint (rôle visé sans membre ou illisible). " +
-  "Vérifiez la cible avant de réessayer !";
+const NO_RECIPIENT_LOG = "sendAdhesion: aucun destinataire trouvé pour le rôle visé, envoi annulé.";
+const NO_RECIPIENT_NOTICE = "Echec de l'envoi des adhésions : aucun membre du rôle visé n'a été trouvé, " +
+  "personne n'a reçu les papiers. Réessayez plus tard ou vérifiez la cible !";
 
 test("rôle vide sans membre : l'auteur est avisé, le journal sans nom, échec", async () => {
   validPaths();
