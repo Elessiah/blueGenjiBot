@@ -70,12 +70,23 @@ async function ban(client: Client,
     await sendLog(client, `*Un joueur (id ${user.id}) a été exclu par un modérateur (id ${interaction.user.id}).*`, notice, false);
     const ids: idSendLogMsg = {admin: "", owner: ""};
     await sendLog(client, "**Reason:** " + reason, ids);
+    // `set` ne lève pas : il rend son échec (colonne absente si la migration
+    // a échoué, base verrouillée). Sans ce contrôle, l'exclusion n'était pas
+    // écrite alors que le modérateur lisait « banned ».
+    let failure: string | null = null;
     try {
-        await bdd.set('Ban',
+        const status = await bdd.set('Ban',
             ['id_user', 'id_moderator', 'id_reason', 'id_reason_owner', 'id_notice_admin'],
             [user.id, interaction.user.id, ids.admin, ids.owner || null, notice.admin || null]);
+        if (!status.success) {
+            failure = status.message;
+        }
     } catch (e) {
-        await sendLog(client, 'Error while register ban : ' + (e as TypeError).message);
+        failure = (e as TypeError).message;
+    }
+    if (failure !== null) {
+        await sendLog(client, 'Error while register ban : ' + failure);
+        await safeReply(interaction, "Ban could not be recorded, please try again in a moment.", true, true);
         return false;
     }
     const OGMsgs: {id_msg: string}[] = await bdd.get('OGMsg', ['id_msg'], {}, {query: "id_author = ?", values: [user.id]}) as {id_msg: string}[];
