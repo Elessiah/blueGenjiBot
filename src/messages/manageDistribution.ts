@@ -128,7 +128,13 @@ async function manageDistribution(message: Message,
         // La pile pour pm2 (elle ne porte pas l'annonce), jamais l'objet entier.
         let trace = description;
         try {
-            if (err instanceof Error && typeof err.stack === "string" && err.stack) { trace = err.stack; }
+            // La description (déjà filtrée), puis les seules lignes d'appel de la
+            // pile : sa première ligne recopie le message, quel qu'il soit.
+            if (err instanceof Error && typeof err.stack === "string" && err.stack) {
+                trace = [description, ...err.stack.split("
+").slice(1)].join("
+");
+            }
         } catch { /* valeur illisible : la description suffit */ }
         console.error("manageDistribution error:", trace);
         await sendLog(client, "manageDistribution error : \n" + description);
