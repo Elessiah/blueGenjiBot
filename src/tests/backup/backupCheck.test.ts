@@ -404,6 +404,30 @@ test("checkLatestArchive ne s'annonce pas réussie quand une source n'a pas rép
   }
 });
 
+test("checkLatestArchive nomme la commande manquante quand seule la source locale a répondu", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bg-check-"));
+  try {
+    fs.writeFileSync(path.join(dir, "bluegenji-2026-09-21.tar.age"), "");
+    const local: SpawnFn = (command, _args, options) =>
+      spawn(
+        process.execPath,
+        ["-e", command === "age" ? `process.stdout.write("TAR")` : `process.stdin.resume(); process.stdin.on("end", () => process.stdout.write("database.sqlite\\nappbluegenji.sql\\n"))`],
+        options,
+      );
+    const run: CommandRunner = async () => {
+      throw new MissingCommandError("rclone");
+    };
+    const result = await checkLatestArchive(
+      config({ sources: { localDir: dir, remote: "store:b", identity: "/k/id.key" } }),
+      { run, spawnFn: local, log: () => {} },
+    );
+    assert.equal(result.ok, false);
+    assert.match(result.detail, /^`rclone` introuvable dans les dossiers système où le bot le cherche — seule .*bluegenji-2026-09-21/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("resolveScriptPath suit le script pour $SCRIPT_DIR, ~ et les chemins relatifs, sans rien deviner d'autre", () => {
   const dir = path.resolve("/opt/bot/scripts");
   assert.equal(resolveScriptPath("${SCRIPT_DIR}/k.txt", dir), path.join(dir, "k.txt"));

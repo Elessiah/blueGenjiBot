@@ -221,3 +221,19 @@ test("findMissingCommand ne voit rien dans un échec ordinaire", () => {
   assert.equal(findMissingCommand("pas une erreur"), null);
   assert.equal(findMissingCommand(new MissingCommandError("age")), "age");
 });
+
+test("listArchives signale la commande manquante même quand l'autre source répond", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bg-archives-missing-"));
+  try {
+    fs.writeFileSync(path.join(dir, "bluegenji-2026-09-30.tar.age"), "");
+    const run: CommandRunner = async () => {
+      throw new MissingCommandError("rclone");
+    };
+    const listing = await listArchives({ localDir: dir, remote: "r:b", identity: "/k" }, run);
+    assert.equal(listing.missingCommand, "rclone");
+    assert.equal(listing.archives.length, 1);
+    assert.equal(listing.failures.length, 1);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
