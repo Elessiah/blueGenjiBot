@@ -60,12 +60,20 @@ et ne montre rien.
 Tester aussi les **mots de passe en clair** du remote chiffré, seuls, sans la
 copie de `rclone.conf` pour ce remote — c'est le jour où elle manque qu'ils
 servent, et une faute de frappe ne se découvrirait qu'alors. Ils sont saisis
-sans écho, jamais sur la ligne de commande :
+sans écho et ne passent **jamais en argument** d'une commande (lisible de tout
+compte de la machine par `ps`) : `printf`, intégré au shell, les donne à
+`rclone obscure` par l'entrée standard, et le remote de test `verif` est
+décrit par des variables d'environnement :
 
 ```bash
-read -rs CRYPT_PASS && read -rs CRYPT_SALT
-rclone --config /chemin/vers/copie/rclone.conf lsf ":crypt,remote='distant:BlueGenji/chiffre',password='$(rclone obscure "$CRYPT_PASS")',password2='$(rclone obscure "$CRYPT_SALT")':"
-unset CRYPT_PASS CRYPT_SALT
+read -rsp 'Mot de passe du remote crypt : ' CRYPT_PASS; echo
+read -rsp 'Sel du remote crypt : ' CRYPT_SALT; echo
+export RCLONE_CONFIG_VERIF_TYPE=crypt
+export RCLONE_CONFIG_VERIF_REMOTE=distant:BlueGenji/chiffre
+export RCLONE_CONFIG_VERIF_PASSWORD="$(printf '%s' "$CRYPT_PASS" | rclone obscure -)"
+export RCLONE_CONFIG_VERIF_PASSWORD2="$(printf '%s' "$CRYPT_SALT" | rclone obscure -)"
+rclone --config /chemin/vers/copie/rclone.conf lsf verif:
+unset CRYPT_PASS CRYPT_SALT RCLONE_CONFIG_VERIF_TYPE RCLONE_CONFIG_VERIF_REMOTE RCLONE_CONFIG_VERIF_PASSWORD RCLONE_CONFIG_VERIF_PASSWORD2
 # -> la même liste lisible qu'au-dessus
 ```
 
