@@ -93,15 +93,27 @@ export function pickArchive(available: ArchiveRef[], query: string): ArchiveRef 
   return available.find((archive) => archive.name === name) ?? null;
 }
 
+/** Résultat d'un listage : les archives, et les sources qui n'ont pas répondu. */
+export interface ArchiveListing {
+  /** Archives trouvées, de la plus récente à la plus ancienne. */
+  archives: ArchiveRef[];
+  /**
+   * Échecs des sources qui n'ont pas répondu alors qu'une autre l'a fait :
+   * « aucune archive » ne doit pas se lire « aucune sauvegarde » quand le
+   * stockage distant est simplement injoignable.
+   */
+  failures: string[];
+}
+
 /**
  * Liste les archives des deux sources. Une archive présente aux deux endroits
  * est lue en local (pas de téléchargement).
  * @param sources Sources configurées.
  * @param run Exécuteur de commandes.
- * @returns Les archives, de la plus récente à la plus ancienne.
+ * @returns Les archives, et les échecs partiels.
  * @throws Si aucune source n'est configurée, ou si toutes ont échoué.
  */
-export async function listArchives(sources: ArchiveSources, run: CommandRunner = defaultRunner): Promise<ArchiveRef[]> {
+export async function listArchives(sources: ArchiveSources, run: CommandRunner = defaultRunner): Promise<ArchiveListing> {
   if (!sources.localDir && !sources.remote) {
     throw new Error("aucune source d'archives configurée (BACKUP_ARCHIVE_DIR ou BACKUP_RCLONE_REMOTE)");
   }
@@ -131,7 +143,10 @@ export async function listArchives(sources: ArchiveSources, run: CommandRunner =
   if (failures.length === configured) {
     throw new Error(failures.join(" ; "));
   }
-  return [...found.values()].sort((a, b) => (a.name < b.name ? 1 : a.name > b.name ? -1 : 0));
+  return {
+    archives: [...found.values()].sort((a, b) => (a.name < b.name ? 1 : a.name > b.name ? -1 : 0)),
+    failures,
+  };
 }
 
 /**

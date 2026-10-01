@@ -8,6 +8,7 @@ import {checkPermissions} from "@/check/checkPermissions.js";
 import {safeReply} from "@/safe/safeReply.js";
 import {sendLog} from "@/safe/sendLog.js";
 import type {idSendLogMsg} from "@/safe/types.js";
+import {deleteBanMessages} from "@/privacy/staffLogRetention.js";
 
 /**
  * Ban un utilisateur des utilisations du bot discord.
@@ -85,6 +86,17 @@ async function ban(client: Client,
         failure = (e as TypeError).message;
     }
     if (failure !== null) {
+        // L'avis et le motif sont déjà publiés : sans exclusion écrite, ils
+        // décriraient une exclusion qui n'existe pas (et chaque nouvel essai
+        // en publierait d'autres).
+        await deleteBanMessages(client, {
+            id_user: user.id,
+            id_moderator: interaction.user.id,
+            id_reason: ids.admin,
+            date: new Date(),
+            id_reason_owner: ids.owner || null,
+            id_notice_admin: notice.admin || null,
+        });
         await sendLog(client, 'Error while register ban : ' + failure);
         await safeReply(interaction, "Ban could not be recorded, please try again in a moment.", true, true);
         return false;

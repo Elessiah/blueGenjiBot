@@ -58,12 +58,16 @@ export async function restoreBackup(
   const sources = archiveSourcesFromEnv();
 
   let archives;
+  let failures: string[];
   try {
-    archives = await listArchives(sources);
+    ({ archives, failures } = await listArchives(sources));
   } catch (error) {
     await safeReply(interaction, `❌ Archives illisibles : ${(error as Error).message}`, true, true);
     return;
   }
+  // Une source muette se dit : sans elle, « aucune archive » se lirait
+  // « aucune sauvegarde ».
+  const partial = failures.length > 0 ? `\n⚠️ Source injoignable : ${failures.join(" ; ")}` : "";
 
   if (!query) {
     const lines = archives
@@ -71,9 +75,9 @@ export async function restoreBackup(
       .map((archive) => `- \`${archive.name}\` (${archive.location === "local" ? "locale" : "distante"})`);
     await safeReply(
       interaction,
-      lines.length > 0
+      (lines.length > 0
         ? `Archives disponibles :\n${lines.join("\n")}\nRelance avec \`archive: AAAA-MM-JJ\` et \`confirmer: true\`.`
-        : "Aucune archive disponible.",
+        : "Aucune archive disponible.") + partial,
       true,
       true,
     );
@@ -82,7 +86,12 @@ export async function restoreBackup(
 
   const archive = pickArchive(archives, query);
   if (!archive) {
-    await safeReply(interaction, "❌ Archive introuvable. Lance la commande sans `archive` pour voir la liste.", true, true);
+    await safeReply(
+      interaction,
+      `❌ Archive introuvable. Lance la commande sans \`archive\` pour voir la liste.${partial}`,
+      true,
+      true,
+    );
     return;
   }
 

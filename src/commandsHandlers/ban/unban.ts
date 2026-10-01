@@ -40,13 +40,15 @@ async function unban(client: Client,
         await safeReply(interaction, "Unknown ID ban !");
     } else {
         await bdd.rm("Ban", {}, {query: "id_user = ?", values: [target]});
+        // Réponse d'abord : Discord n'attend que 3 s, et les suppressions
+        // ci-dessous font plusieurs appels.
+        await safeReply(interaction, "User successfully unbanned.");
         // Le motif et l'avis de l'exclusion n'ont plus d'objet : effacés du
         // salon du staff et des messages privés du propriétaire. Au mieux — ce
         // qui resterait n'est plus protégé de la purge d'un an du journal.
         for (const ban of user) {
             await deleteBanMessages(client, ban);
         }
-        await safeReply(interaction, "User successfully unbanned.");
     }
     return true;
 }
