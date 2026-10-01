@@ -1,13 +1,21 @@
-import {AttachmentBuilder, Client, GuildMember, type Role, TextChannel, User} from "discord.js";
-import {sendLog} from "@/safe/sendLog.js";
-import {safeUser} from "@/safe/safeUser.js";
-import {safeChannel} from "@/safe/safeChannel.js";
-import {PathsAdhesions} from "@/adhesion/types.js";
-import {loadAdhesionPaths} from "@/adhesion/loadAdhesionPaths.js";
+import type {AttachmentBuilder, Client, GuildMember, Role, TextChannel, User} from "discord.js";
+import {loadAdhesionAttachments} from "@/adhesion/adhesionAttachments.js";
+import {collectRecipients} from "@/adhesion/adhesionRecipients.js";
+import {deliverToAuthor, deliverToChannel, deliverToMembers} from "@/adhesion/adhesionDelivery.js";
+import {DEFAULT_ADHESION_MESSAGE, PERMISSION_WARNING} from "@/adhesion/adhesionNotices.js";
+
+/** Cibles d'un envoi ; `null` pour une cible non demandée. */
+type AdhesionTargets = {
+    channel: TextChannel | null,
+    member: GuildMember | null,
+    role: Role | null,
+};
 
 /**
  * Envoie les fichiers d'adhésion (et message associé) vers les cibles fournies.
  * Peut envoyer dans un canal, en MP à un membre, ou à tous les membres d'un rôle.
+ * Sans cible, ou si l'auteur n'a pas le droit d'envoyer ailleurs qu'en MP, les
+ * papiers partent en MP à l'auteur lui-même.
  * @param client Client Discord utilisé pour les envois et logs.
  * @param message Message personnalisé à joindre; un message par défaut est utilisé si `null`.
  * @param channel Canal cible, ou `null` si aucun envoi en canal n'est prévu.
@@ -24,179 +32,68 @@ async function sendAdhesion(client: Client,
                             role: Role | null,
                             memberPermMissing: boolean,
                             author: User): Promise<boolean> {
-    let success: boolean = true;
-    let status: AttachmentBuilder;
-    let adhesion: AttachmentBuilder;
-
-    let paths: PathsAdhesions | null;
-    try {
-        paths = await loadAdhesionPaths(undefined, client);
-    } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        try {
-            await sendLog(client, "sendAdhesion loadAdhesionPaths: " + msg);
-        } catch { /* ignore */ }
+    const files = await loadAdhesionAttachments(client, author);
+    if (files === null) {
         return false;
     }
-    if (!paths) {
-        try {
-            await safeUser(
-                client,
-                author,
-                undefined,
-                [],
-                "Echec de l'envoie des adhésions, impossible de récupérer les fichiers. Admin en cours de contact..."
-            );
-        } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            try {
-                await sendLog(client, "sendAdhesion safeUser (no paths): " + msg);
-            } catch { /* ignore */ }
-        }
-        try {
-            await sendLog(client, "Echec de l'envoi d'adhésion car non récupération des chemins");
-        } catch { /* ignore */ }
-        return false;
-    }
+    // `||` et non `??` : un message vide prend lui aussi le texte par défaut.
+    const content = message || DEFAULT_ADHESION_MESSAGE;
+    const targets: AdhesionTargets = {channel, member, role};
 
-    try {
-        status = new AttachmentBuilder(
-            paths.adhesion,
-            {name: paths.adhesionName},
-        );
-        adhesion = new AttachmentBuilder(
-            paths.status,
-            {name: paths.statusName}
-        );
-    } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        try {
-            await sendLog(client, "Failed to fetch adhesion and/or status: " + msg);
-        } catch { /* ignore */ }
-        return false;
-    }
-
-    if (!message) {
-        message = "Voici les papiers pour l'adhésion à l'association BlueGenji :"
-    }
-
+    let delivered = true;
     if (!memberPermMissing) {
-        if (channel !== null) {
-            let channelOk: boolean;
-            try {
-                channelOk = (await safeChannel(client, channel, undefined, [status, adhesion], message)) !== null;
-            } catch (err) {
-                const msg = err instanceof Error ? err.message : String(err);
-                try {
-                    await sendLog(client, "sendAdhesion safeChannel: " + msg);
-                } catch { /* ignore */ }
-                channelOk = false;
-            }
-            if (!channelOk) {
-                try {
-                    await safeUser(
-                        client,
-                        author,
-                        undefined,
-                        [],
-                        "Echec de l'envoie des adhésions, vérifiez les permissions, avant de réessayer !"
-                    );
-                } catch (err) {
-                    const msg = err instanceof Error ? err.message : String(err);
-                    try {
-                        await sendLog(client, "sendAdhesion safeUser (channel fail): " + msg);
-                    } catch { /* ignore */ }
-                }
-                success = false;
-            } else {
-                try {
-                    await safeUser(
-                        client,
-                        author,
-                        undefined,
-                        [],
-                        "Adhésion envoyé avec succès dans le channel " + channel.name + " !"
-                    );
-                } catch (err) {
-                    const msg = err instanceof Error ? err.message : String(err);
-                    try {
-                        await sendLog(client, "sendAdhesion safeUser (channel ok): " + msg);
-                    } catch { /* ignore */ }
-                }
-            }
-        }
-
-        if (role !== null || member !== null) {
-            let targets: User[] = [];
-            try {
-                if (role !== null) {
-                    targets = role.members.map(m => m.user);
-                }
-                if (member) {
-                    targets.push(member.user);
-                }
-            } catch (err) {
-                const msg = err instanceof Error ? err.message : String(err);
-                try {
-                    await sendLog(client, "sendAdhesion targets: " + msg);
-                } catch { /* ignore */ }
-            }
-            let errMsg: string = "";
-            for (const target of targets) {
-                let ok: boolean;
-                try {
-                    ok = (await safeUser(client, target, undefined, [status, adhesion], message)) !== null;
-                } catch (err) {
-                    const msg = err instanceof Error ? err.message : String(err);
-                    try {
-                        await sendLog(client, "sendAdhesion safeUser target: " + msg);
-                    } catch { /* ignore */ }
-                    ok = false;
-                }
-                if (!ok) {
-                    errMsg += "Echec de l'envoi pour " + target.globalName + "\n";
-                }
-            }
-            if (errMsg.length > 0) {
-                try {
-                    await safeUser(client, author, undefined, [], errMsg);
-                } catch (err) {
-                    const msg = err instanceof Error ? err.message : String(err);
-                    try {
-                        await sendLog(client, "sendAdhesion safeUser author errMsg: " + msg);
-                    } catch { /* ignore */ }
-                }
-                success = false;
-            } else {
-                try {
-                    if (targets.length > 1) {
-                        await safeUser(client, author, undefined, [], "Adhésions envoyés avec succès à plusieurs membres !");
-                    } else {
-                        await safeUser(client, author, undefined, [], "Adhésion envoyée avec succès à " + targets[0].globalName + " !");
-                    }
-                } catch (err) {
-                    const msg = err instanceof Error ? err.message : String(err);
-                    try {
-                        await sendLog(client, "sendAdhesion safeUser author success: " + msg);
-                    } catch { /* ignore */ }
-                }
-            }
-        }
+        delivered = await deliverToTargets(client, targets, files, content, author);
     }
-
-    if (memberPermMissing || (channel === null && role === null && member === null)) {
-        if (memberPermMissing && (channel || role || member))
-            message += "\nVous n'avez pas les permissions pour envoyer un message ailleurs que dans vos MP !";
-        try {
-            await safeUser(client, author, undefined, [status, adhesion], message);
-        } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-            try {
-                await sendLog(client, "sendAdhesion safeUser (memberPermMissing): " + msg);
-            } catch { /* ignore */ }
-        }
+    if (memberPermMissing || !hasTarget(targets)) {
+        await deliverToAuthor(client, author, files, authorCopy(content, targets, memberPermMissing));
     }
-    return success;
+    return delivered;
+}
+
+/**
+ * Remet les papiers au salon, puis aux membres (rôle et membre désigné).
+ * @param client Client Discord utilisé pour les envois et le journal.
+ * @param targets Cibles demandées.
+ * @param files Pièces jointes.
+ * @param content Message joint.
+ * @param author Auteur de l'envoi, avisé du résultat de chaque remise.
+ * @returns `true` si chaque cible demandée a reçu les papiers.
+ */
+async function deliverToTargets(client: Client,
+                                targets: AdhesionTargets,
+                                files: AttachmentBuilder[],
+                                content: string,
+                                author: User): Promise<boolean> {
+    let delivered = true;
+    if (targets.channel !== null) {
+        delivered = await deliverToChannel(client, targets.channel, files, content, author);
+    }
+    if (targets.role !== null || targets.member !== null) {
+        const recipients = await collectRecipients(client, targets.role, targets.member);
+        delivered = (await deliverToMembers(client, recipients, files, content, author)) && delivered;
+    }
+    return delivered;
+}
+
+/**
+ * @param targets Cibles demandées.
+ * @returns `true` si au moins une cible est demandée.
+ */
+function hasTarget(targets: AdhesionTargets): boolean {
+    return targets.channel !== null || targets.role !== null || targets.member !== null;
+}
+
+/**
+ * Message de la copie envoyée à l'auteur : celui des papiers, suivi d'un
+ * avertissement si des cibles lui ont été refusées faute de permission.
+ * @param content Message joint aux papiers.
+ * @param targets Cibles demandées.
+ * @param memberPermMissing L'auteur ne peut envoyer qu'en MP.
+ * @returns Le texte à envoyer à l'auteur.
+ */
+function authorCopy(content: string, targets: AdhesionTargets, memberPermMissing: boolean): string {
+    const refused = memberPermMissing && Boolean(targets.channel || targets.role || targets.member);
+    return refused ? content + PERMISSION_WARNING : content;
 }
 
 export {sendAdhesion};
