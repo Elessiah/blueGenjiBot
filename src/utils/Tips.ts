@@ -121,6 +121,9 @@ const messages = [
 ];
 
 
+/** Une astuce toutes les `TIPS_EVERY` annonces d'un même service dans une même région. */
+const TIPS_EVERY = 15;
+
 let tips: Tips;
 
 /**
@@ -169,7 +172,9 @@ class Tips {
     }
 
     /**
-     * Prépare l'astuce suivante et met à jour l'index de rotation.
+     * Compte une annonce et, toutes les `TIPS_EVERY` annonces d'un même service
+     * dans une même région, poste l'astuce suivante dans les salons relayés
+     * de cette région, puis avance la rotation.
      * @param client Client Discord utilisé pour les appels API.
      * @param service Information de service à traiter.
      * @param region Index numérique de région (table `regions`).
@@ -177,49 +182,64 @@ class Tips {
     async nextTips(client: Client,
                    service: string,
                    region: number): Promise<void> {
+        const count = this.countAnnouncement(service, region);
+        const bdd: Bdd = await getBddInstance();
+        if (count % TIPS_EVERY !== 0) {
+            return;
+        }
+        const targets: ChannelPartnerService[] = await bdd.get(
+            "ChannelPartnerService",
+            ["*"],
+            {
+                "Service": "ChannelPartnerService.id_service = Service.id_service",
+                "ChannelPartner": "ChannelPartnerService.id_channel = ChannelPartner.id_channel",
+            },
+            {query: "Service.name = ? AND ChannelPartner.region = ?", values: [service, region]}
+        ) as ChannelPartnerService[];
+        for (const target of targets) {
+            await this.postTip(client, target.id_channel);
+        }
+        this.tipsRoller = (this.tipsRoller + 1) % messages.length;
+    }
+
+    /**
+     * Compte une annonce de `service` dans `region`.
+     * @returns Le nombre d'annonces comptées, celle-ci comprise.
+     */
+    private countAnnouncement(service: string, region: number): number {
         let counters = this.messageCounter.get(regions[region]);
         if (!counters) {
             counters = new Map();
             this.messageCounter.set(regions[region], counters);
         }
-        const bdd: Bdd = await getBddInstance();
         const count: number = (counters.get(service) ?? 0) + 1;
         counters.set(service, count);
-        if (count % 15 === 0) {
-                const targets: ChannelPartnerService[] = await bdd.get(
-                    "ChannelPartnerService",
-                    ["*"],
-                    {
-                        "Service": "ChannelPartnerService.id_service = Service.id_service",
-                        "ChannelPartner": "ChannelPartnerService.id_channel = ChannelPartner.id_channel",
-                    },
-                    {query: "Service.name = ? AND ChannelPartner.region = ?", values: [service, region]}
-                ) as ChannelPartnerService[];
-                for (const target of targets) {
-                    const channel: TextChannel = await client.channels.fetch(target.id_channel) as TextChannel;
-                    if (channel == null) {
-                        await sendLog(client, "Un channel a été perdu !");
-                        await _resetChannel(client, target.id_channel);
-                        continue;
-                    }
-                    if (!channel.messages)
-                        continue;
-                    const options: FetchMessagesOptions = {limit: 1};
-                    // Force comme un gros bourin parce que TypeScript ne voit pas la deuxième surchargé de channel.messages.fetch();
-                    const fetchedMessages: Collection<unknown, Message<true>> = await channel.messages.fetch(options as FetchMessagesOptions) as unknown as Collection<unknown, Message<true>>;
-                    const lastMessage = fetchedMessages.first();
-                    if (lastMessage == undefined || !(lastMessage.author.id === client.user?.id && lastMessage.content.startsWith("# Tips:"))) {
-                        await safeChannel(client, channel, undefined, [], messages[this.tipsRoller]);
-                    }
-                }
-            this.tipsRoller++;
-            if (this.tipsRoller === messages.length) {
-                this.tipsRoller = 0;
-            }
+        return count;
+    }
+
+    /**
+     * Poste l'astuce courante dans un salon, sauf si son dernier message est
+     * déjà une astuce du bot. Un salon disparu est retiré de la base.
+     * @param client Client Discord utilisé pour les appels API.
+     * @param channelId Salon relayé.
+     */
+    private async postTip(client: Client, channelId: string): Promise<void> {
+        const channel: TextChannel = await client.channels.fetch(channelId) as TextChannel;
+        if (channel == null) {
+            await sendLog(client, "Un channel a été perdu !");
+            await _resetChannel(client, channelId);
+            return;
+        }
+        if (!channel.messages)
+            return;
+        const options: FetchMessagesOptions = {limit: 1};
+        // Force comme un gros bourin parce que TypeScript ne voit pas la deuxième surchargé de channel.messages.fetch();
+        const fetchedMessages: Collection<unknown, Message<true>> = await channel.messages.fetch(options as FetchMessagesOptions) as unknown as Collection<unknown, Message<true>>;
+        const lastMessage = fetchedMessages.first();
+        if (lastMessage == undefined || !(lastMessage.author.id === client.user?.id && lastMessage.content.startsWith("# Tips:"))) {
+            await safeChannel(client, channel, undefined, [], messages[this.tipsRoller]);
         }
     }
 }
 
 export {getTips, nextTips};
-
-

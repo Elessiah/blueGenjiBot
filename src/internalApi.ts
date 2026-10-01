@@ -21,7 +21,16 @@ import { describeError } from "@/safe/errorGuards.js";
 import { recordEvent, getBacklog, subscribe } from "@/feed/feedBus.js";
 import { getSnapshotsBetween } from "@/snapshots/dailySnapshot.js";
 import { listModules, isValidModule, setModuleEnabled, MODULE_KEYS, type ModuleKey } from "@/modules/moduleGuard.js";
-import { absDelta, deterministicColor, isLoopbackHost, matchesToken } from "@/internalApi/helpers.js";
+import {
+  absDelta,
+  deterministicColor,
+  isLoopbackHost,
+  matchesToken,
+  relayStatus,
+  sparklineFromBuckets,
+  SPARKLINE_POINTS,
+  type RelayStatus,
+} from "@/internalApi/helpers.js";
 import { parseSiteVisitStats, saveSiteVisitStats } from "@/siteVisits/siteVisits.js";
 import { parseDirectMessageRequest, parseRefereeAlert } from "@/notifications/notifications.js";
 import { deliverDirectMessages, alertLeadership, alertReferees, HomeGuildUnavailableError } from "@/notifications/deliver.js";
@@ -565,7 +574,7 @@ export function startInternalApi(client: Client) {
         name: string;
         memberCount: number;
         relays7j: number;
-        status: "ok" | "lag" | "off";
+        status: RelayStatus;
         sparkline: number[];
         accentColor: string;
         sigil: string;
@@ -582,26 +591,13 @@ export function startInternalApi(client: Client) {
           "SELECT MAX(d.date) AS last_ts, (julianday('now') - julianday(MAX(d.date))) * 24 AS hours_ago FROM DPMsg d JOIN ChannelPartner c ON d.id_channel = c.id_channel WHERE c.id_guild = ?",
           [g.id]
         );
-        let status: "ok" | "lag" | "off" = "off";
-        const hoursAgo = lastRows[0]?.hours_ago;
-        if (hoursAgo !== null && hoursAgo !== undefined) {
-          if (hoursAgo < 24) {
-            status = "ok";
-          } else if (hoursAgo < 24 * 7) {
-            status = "lag";
-          }
-        }
+        const status = relayStatus(lastRows[0]?.hours_ago);
 
         const sparkRows = await bdd.raw<{ bucket: number; count: number }>(
           `SELECT CAST((julianday('now') - julianday(d.date)) / ? AS INTEGER) AS bucket, COUNT(*) AS count FROM DPMsg d JOIN ChannelPartner c ON d.id_channel = c.id_channel WHERE c.id_guild = ? AND d.${MESSAGE_WINDOW_SQL} GROUP BY bucket ORDER BY bucket DESC`,
-          [MESSAGE_WINDOW_DAYS / 10, g.id]
+          [MESSAGE_WINDOW_DAYS / SPARKLINE_POINTS, g.id]
         );
-        const sparkline = new Array(10).fill(0);
-        for (const r of sparkRows) {
-          if (r.bucket >= 0 && r.bucket < 10) {
-            sparkline[9 - r.bucket] = Number(r.count);
-          }
-        }
+        const sparkline = sparklineFromBuckets(sparkRows);
 
         const memberCount = typeof g.memberCount === "number" ? g.memberCount : 0;
         enriched.push({

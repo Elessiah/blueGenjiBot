@@ -2,8 +2,11 @@
 import {checkPermissions} from "@/check/checkPermissions.js";
 import {sendLog} from "@/safe/sendLog.js";
 import {safeReply} from "@/safe/safeReply.js";
-import {type ChatInputCommandInteraction, type Client, type Guild, MessageFlags, type TextChannel} from "discord.js";
+import {type ChatInputCommandInteraction, type Client, MessageFlags, type TextChannel} from "discord.js";
 import {status} from "@/types.js";
+
+/** Essais de la suppression avant d'abandonner (base occupée, par exemple). */
+const MAX_ATTEMPTS = 10;
 
 /**
  * Réinitialise en base la configuration d'un salon cible.
@@ -15,9 +18,7 @@ import {status} from "@/types.js";
 async function _resetChannel(client: Client, channel_id: string, guildName?: string): Promise<status> {
     const bdd: Bdd = await getBddInstance();
     let err_msg: string = "";
-    const success: boolean = false;
-    let nTry: number = 0;
-    while (nTry < 10 && !success) {
+    for (let nTry = 0; nTry < MAX_ATTEMPTS; nTry++) {
         try {
             // `channelDelete` arrive pour tout salon supprimé de tout serveur :
             // un salon jamais relayé n'a rien à annoncer au journal. Le retrait
@@ -31,39 +32,43 @@ async function _resetChannel(client: Client, channel_id: string, guildName?: str
                 return {success: true, message: "Ce salon n'est pas relayé."};
             }
             if (ret.success) {
-                // Le nom du serveur ne sert qu'au journal. Sur `channelDelete`
-                // le salon n'existe plus chez Discord : la relecture échoue, et
-                // la suppression, faite, reste un succès — la retenter dix
-                // fois ne la rendrait pas plus faite.
-                // `channelDelete` passe le nom, qu'il tient déjà : relire un
-                // salon supprimé coûterait un appel REST voué au 404.
-                let where = guildName ?? `channel ${channel_id}`;
-                if (guildName === undefined) {
-                    try {
-                        const channel = await client.channels.fetch(channel_id) as TextChannel | null;
-                        if (channel) {
-                            const guild: Guild = channel.guild;
-                            where = guild.name;
-                        }
-                    } catch { /* salon introuvable : on journalise son identifiant */ }
-                }
-                await sendLog(client, 'A service has been unlinked from a channel of ' + where + '.');
+                await sendLog(client, 'A service has been unlinked from a channel of ' + await unlinkedFrom(client, channel_id, guildName) + '.');
                 return {success: true, message: `Channel reseted`};
-            } else {
-                // `deleteChannel` rend son échec au lieu de lever (base
-                // occupée, par exemple) : il se retente comme une exception.
-                err_msg = ret.message;
-                nTry++;
             }
+            // `deleteChannel` rend son échec au lieu de lever (base
+            // occupée, par exemple) : il se retente comme une exception.
+            err_msg = ret.message;
         } catch (err) {
             err_msg = (err as TypeError).message;
-            nTry++;
         }
     }
-    if (nTry === 10) {
-        return { success: false, message: err_msg + "\n Please contact elessiah" };
+    return { success: false, message: err_msg + "\n Please contact elessiah" };
+}
+
+/**
+ * Désigne, pour le journal, le serveur du salon retiré.
+ *
+ * Le nom ne sert qu'au journal. Sur `channelDelete` le salon n'existe plus
+ * chez Discord : la relecture échoue, et la suppression, faite, reste un
+ * succès — la retenter ne la rendrait pas plus faite. `channelDelete` passe
+ * donc le nom, qu'il tient déjà : relire un salon supprimé coûterait un appel
+ * REST voué au 404.
+ * @param client Client Discord utilisé pour relire le salon.
+ * @param channel_id Identifiant du salon retiré.
+ * @param guildName Nom du serveur, s'il est déjà connu.
+ * @returns Le nom du serveur, ou `channel <id>` s'il est illisible.
+ */
+async function unlinkedFrom(client: Client, channel_id: string, guildName?: string): Promise<string> {
+    if (guildName !== undefined) {
+        return guildName;
     }
-    return {success: true, message: ""};
+    try {
+        const channel = await client.channels.fetch(channel_id) as TextChannel | null;
+        if (channel) {
+            return channel.guild.name;
+        }
+    } catch { /* salon introuvable : on journalise son identifiant */ }
+    return `channel ${channel_id}`;
 }
 
 /**

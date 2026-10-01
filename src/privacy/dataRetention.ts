@@ -28,10 +28,10 @@
  *   `ROLLBACK_RETENTION_DAYS` (`backup/restoreDatabase.ts`).
  */
 
-import { DiscordAPIError, type Client } from "discord.js";
+import { DiscordAPIError, type Client, type Guild } from "discord.js";
 import { RESTJSONErrorCodes } from "discord-api-types/v10";
 
-import { getBddInstance } from "@/bdd/Bdd.js";
+import { getBddInstance, type Bdd } from "@/bdd/Bdd.js";
 import { manageMsgExpiration } from "@/messages/manageMsgExpiration.js";
 import { reportError } from "@/safe/processGuards.js";
 import { sendLog } from "@/safe/sendLog.js";
@@ -229,26 +229,40 @@ export async function forgetDeletedChannels(client: Client): Promise<string[] | 
   const removed: string[] = [];
   for (const guild of client.guilds.cache.values()) {
     if (!guild.available) { continue; }
-    const rows = await bdd.get(
-      "ChannelPartner",
-      ["id_channel"],
-      {},
-      { query: "id_guild = ? AND id_channel IS NOT NULL", values: [guild.id] },
-    ) as { id_channel: string }[];
-    for (const { id_channel: channelId } of rows) {
-      if (guild.channels.cache.has(channelId)) { continue; }
-      if (!(await channelIsGone(client, channelId))) { continue; }
-      // `deleteChannel` ne lève pas : son échec se lit sur `success`.
-      const ret = await bdd.deleteChannel(channelId);
-      if (ret.success) {
-        removed.push(channelId);
-      } else {
-        await sendLog(client, `forgetDeletedChannels: retrait du salon ${channelId} échoué : ${ret.message}`);
-      }
-    }
+    removed.push(...await forgetGuildDeletedChannels(client, bdd, guild));
   }
   if (removed.length > 0) {
     await sendLog(client, `${removed.length} salon(s) relayé(s) supprimé(s) pendant un arrêt : retiré(s) de la base.`);
+  }
+  return removed;
+}
+
+/**
+ * Retire les salons relayés d'un serveur rejoint que Discord ne connaît plus
+ * (voir `forgetDeletedChannels`). Un retrait en échec est journalisé.
+ * @param client Client Discord connecté.
+ * @param bdd Base du bot.
+ * @param guild Serveur disponible.
+ * @returns Identifiants des salons retirés.
+ */
+async function forgetGuildDeletedChannels(client: Client, bdd: Bdd, guild: Guild): Promise<string[]> {
+  const rows = await bdd.get(
+    "ChannelPartner",
+    ["id_channel"],
+    {},
+    { query: "id_guild = ? AND id_channel IS NOT NULL", values: [guild.id] },
+  ) as { id_channel: string }[];
+  const removed: string[] = [];
+  for (const { id_channel: channelId } of rows) {
+    if (guild.channels.cache.has(channelId)) { continue; }
+    if (!(await channelIsGone(client, channelId))) { continue; }
+    // `deleteChannel` ne lève pas : son échec se lit sur `success`.
+    const ret = await bdd.deleteChannel(channelId);
+    if (ret.success) {
+      removed.push(channelId);
+    } else {
+      await sendLog(client, `forgetDeletedChannels: retrait du salon ${channelId} échoué : ${ret.message}`);
+    }
   }
   return removed;
 }
