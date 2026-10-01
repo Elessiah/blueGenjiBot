@@ -252,8 +252,8 @@ export function runPipeline(
     const children: ChildProcess[] = [];
     const diagnostics: string[] = [];
     // Étapes en échec **par elles-mêmes** (code de sortie, binaire absent) ;
-    // celles que l'on arrête ensuite sortent sur un signal (`code === null`)
-    // et ne comptent pas. L'étape nommée est la **première** du tube : quand
+    // celles que l'on arrête ensuite ne comptent pas, quel que soit leur code
+    // (`rclone` intercepte SIGTERM et sort en 143). L'étape nommée est la **première** du tube : quand
     // `rclone` échoue, `age` échoue aussi faute d'entrée, et c'est le stockage
     // qu'il faut mettre en cause, pas la clé.
     const failed = new Set<number>();
@@ -262,17 +262,21 @@ export function runPipeline(
     let pending = stages.length;
     let output = "";
     let truncated = false;
+    const settled = new Set<number>();
+    const killed = new Set<number>();
     const killAll = (): void => {
-      for (const child of children) {
+      children.forEach((child, index) => {
+        if (!settled.has(index)) {
+          killed.add(index);
+        }
         child.kill();
-      }
+      });
     };
     const timer = setTimeout(() => {
       timedOut = true;
       killAll();
     }, timeoutMs);
 
-    const settled = new Set<number>();
     const done = (index: number, code: number | null): void => {
       if (settled.has(index)) {
         return;
@@ -280,7 +284,7 @@ export function runPipeline(
       settled.add(index);
       if (code !== 0) {
         interrupted = true;
-        if (code !== null) {
+        if (code !== null && !killed.has(index)) {
           failed.add(index);
         }
         killAll();

@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
+import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -108,6 +110,30 @@ test("runPipeline échoue sur un code de sortie non nul sans recopier la sortie 
 test("runPipeline échoue quand un binaire manque", async () => {
   const missing: SpawnFn = (_command, args, options) => spawn("binaire-inexistant-bluegenji", args, options);
   await assert.rejects(runPipeline([{ command: "age", args: [] }], missing), /étape age/);
+});
+
+test("runPipeline ne met pas en cause une étape arrêtée, même sortie avec un code (rclone : 143)", async () => {
+  // `rclone` intercepte SIGTERM et sort en 143 ; `age` échoue seule (mauvaise clé).
+  const fake: SpawnFn = (command) => {
+    const child = new EventEmitter() as unknown as ChildProcess & EventEmitter;
+    Object.assign(child, {
+      stdin: new PassThrough(),
+      stdout: new PassThrough(),
+      stderr: new PassThrough(),
+      kill: () => {
+        setImmediate(() => child.emit("close", 143));
+        return true;
+      },
+    });
+    if (command === "age") {
+      setTimeout(() => child.emit("close", 1), 20);
+    }
+    return child;
+  };
+  await assert.rejects(
+    runPipeline([{ command: "rclone", args: [] }, { command: "age", args: [] }], fake),
+    /étape age/,
+  );
 });
 
 test("runPipeline arrête le tube au-delà du délai", async () => {
