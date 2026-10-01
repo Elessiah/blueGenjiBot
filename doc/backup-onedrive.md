@@ -328,6 +328,11 @@ vidés depuis son interface.
 
 ## Restauration
 
+> **Machine perdue** (carte SD morte, vol, panne matérielle) : suivre
+> `doc/disaster-recovery.md`, qui reprend les étapes ci-dessous dans l'ordre
+> d'une reconstruction complète — secrets à garder hors de la machine, bot,
+> base et images du site, rejeu des suppressions, crons remis **en dernier**.
+
 **Base du bot** — la commande Discord lit l'archive chiffrée **sur la machine
 du bot** et la déchiffre sur place ; aucune base ne transite par Discord.
 Elle se règle dans le `.env` du bot :
