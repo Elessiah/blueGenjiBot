@@ -17,6 +17,7 @@ import {areaFilter} from "../utils/globals.js";
 
 import {rankChoices} from "./rankChoices.js";
 import {servicesChoices} from "./servicesChoices.js";
+import {RECRUIT_ROLE_CHOICES, SCRIM_LEVEL_CHOICES} from "./searchChoices.js";
 import {setBotAdminRole} from "@/commandsHandlers/admin/setBotAdminRole.js";
 import {showBotAdminRole} from "@/commandsHandlers/admin/showBotAdminRole.js";
 import {setServerInvite} from "@/commandsHandlers/admin/setServerInvite.js";
@@ -409,9 +410,10 @@ const commands = {
             options: [
                 {
                     name: "niveau",
-                    description: "Niveau (debutant, intermediaire, avance...)",
+                    description: "Niveau de l'equipe",
                     type: ApplicationCommandOptionType.String,
-                    required: true
+                    required: true,
+                    choices: [...SCRIM_LEVEL_CHOICES]
                 }
             ]
         }
@@ -425,7 +427,8 @@ const commands = {
                     name: "role",
                     description: "Role recherche",
                     type: ApplicationCommandOptionType.String,
-                    required: true
+                    required: true,
+                    choices: [...RECRUIT_ROLE_CHOICES]
                 }
             ]
         }
@@ -478,19 +481,20 @@ const commands = {
     "restore-backup": {
         handler: restoreBackup,
         parameters: {
-            description: "Restaure la base du bot depuis une sauvegarde (PROPRIETAIRE UNIQUEMENT)",
+            description: "Restaure la base du bot depuis une sauvegarde chiffree (PROPRIETAIRE UNIQUEMENT)",
+            // Discord exige les options obligatoires avant les facultatives.
             options: [
-                {
-                    name: "fichier",
-                    description: "Fichier database.sqlite dechiffre a restaurer",
-                    type: ApplicationCommandOptionType.Attachment,
-                    required: true
-                },
                 {
                     name: "confirmer",
                     description: "Confirme l'ecrasement de la base de production",
                     type: ApplicationCommandOptionType.Boolean,
                     required: true
+                },
+                {
+                    name: "archive",
+                    description: "Date (AAAA-MM-JJ) ou nom de l'archive ; vide = liste des archives disponibles",
+                    type: ApplicationCommandOptionType.String,
+                    required: false
                 }
             ]
         }

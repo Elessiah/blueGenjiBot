@@ -7,18 +7,23 @@ import {describeError, errorCode} from "./errorGuards.js";
  * @param client Client Discord utilisé pour les appels API.
  * @param message Contenu du log à envoyer aux canaux owner/admin.
  * @param idMsg Objet optionnel recevant les IDs des messages de log envoyés (owner/admin).
+ * @param copyToOwner Envoyer aussi le message en privé au titulaire (`OWNER_ID`) ; par défaut, seulement quand `idMsg` est fourni (comportement d'origine).
  * @returns `true` dès qu'un envoi de log aboutit; `false` si les tentatives échouent ou si le canal admin est inaccessible.
  */
 async function sendLog(client: Client,
                        message: string = "Error",
-                       idMsg?: idSendLogMsg) : Promise<boolean> {
+                       idMsg?: idSendLogMsg,
+                       copyToOwner: boolean = idMsg !== undefined) : Promise<boolean> {
     let nTry: number = 0;
     let success: boolean = false;
     while (nTry < 3 && !success) {
         try {
             const owner: User = await client.users.fetch(process.env.OWNER_ID as string);
-            if (idMsg) {
-                idMsg.owner = (await owner.send(message)).id;
+            if (copyToOwner) {
+                const sent = await owner.send(message);
+                if (idMsg) {
+                    idMsg.owner = sent.id;
+                }
             }
             try {
                 const admin_channel: TextChannel | null = await client.channels.fetch(process.env.INFO_SERV as string) as TextChannel;

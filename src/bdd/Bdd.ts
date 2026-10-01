@@ -36,6 +36,17 @@ let bdd: Bdd;
 const DEFAULT_BDD_PATH = './data/database.sqlite';
 
 /**
+ * Chemin absolu de la base que le bot ouvre : `BDD_PATH`, sinon le repli.
+ * Partagé avec la restauration et sa purge des copies de secours, qui
+ * viseraient sinon un autre fichier que la base réelle.
+ * @returns Le chemin absolu de la base.
+ */
+function resolveBddPath(): string {
+  const configured = process.env.BDD_PATH?.trim();
+  return path.resolve(configured && configured.length > 0 ? configured : DEFAULT_BDD_PATH);
+}
+
+/**
  * Retourne l'instance singleton de la base de données.
  * Crée et initialise la connexion SQLite si nécessaire.
  *
@@ -48,8 +59,7 @@ const DEFAULT_BDD_PATH = './data/database.sqlite';
 async function getBddInstance(): Promise<Bdd> {
   if (!bdd) {
     const configured = process.env.BDD_PATH?.trim();
-    const target = configured && configured.length > 0 ? configured : DEFAULT_BDD_PATH;
-    const absolute = path.resolve(target);
+    const absolute = resolveBddPath();
     if (!fs.existsSync(absolute)) {
       // Pas un refus : une première installation doit pouvoir démarrer. Mais on
       // le **dit**, parce que c'est indiscernable d'une base perdue.
@@ -410,9 +420,25 @@ class Bdd {
              date
                DATETIME
                DEFAULT
-                 CURRENT_TIMESTAMP
+                 CURRENT_TIMESTAMP,
+             id_reason_owner TEXT,
+             id_notice_admin TEXT
            );`
       );
+      // Messages du journal qui décrivent l'exclusion, effacés à sa levée
+      // (`/unban`) : le motif en message privé au propriétaire, et l'avis
+      // « un joueur a été exclu » au salon. `NULL` pour une exclusion
+      // antérieure à ces colonnes — seul son motif au salon (`id_reason`)
+      // peut alors être effacé.
+      for (const column of ["id_reason_owner", "id_notice_admin"]) {
+        const exists = await this.Database?.get(
+          "SELECT 1 FROM pragma_table_info('Ban') WHERE name = ?",
+          [column],
+        );
+        if (!exists) {
+          await this.Database?.exec(`ALTER TABLE Ban ADD COLUMN ${column} TEXT`);
+        }
+      }
     } catch (e) {
       console.error("Ban : ", (e as TypeError).message);
     }
@@ -1239,6 +1265,6 @@ class Bdd {
   }
 }
 
-export { Bdd, getBddInstance, closeBddInstance, resetBddInstance };
+export { Bdd, getBddInstance, closeBddInstance, resetBddInstance, resolveBddPath };
 
 

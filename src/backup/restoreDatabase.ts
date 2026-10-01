@@ -3,13 +3,11 @@ import path from "node:path";
 import sqlite3 from "sqlite3";
 import { open } from "sqlite";
 
-import { getBddInstance, resetBddInstance } from "@/bdd/Bdd.js";
+import { getBddInstance, resetBddInstance, resolveBddPath } from "@/bdd/Bdd.js";
+import { ROLLBACK_RETENTION_DAYS } from "@/privacy/retentionPeriods.js";
 
 /** En-tête que tout fichier SQLite valide porte sur ses seize premiers octets. */
 const SQLITE_MAGIC = "SQLite format 3\0";
-
-/** Nombre de copies de secours conservées après une restauration réussie. */
-export const KEPT_ROLLBACKS = 3;
 
 /** Résultat d'une tentative de restauration. */
 export interface RestoreResult {
@@ -73,27 +71,97 @@ export async function validateSqliteFile(candidatePath: string): Promise<string 
   return null;
 }
 
+/** Suffixe horodaté d'une copie de secours : `toISOString()` dont `:` et `.` sont devenus `-`. */
+const ROLLBACK_STAMP = /^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z$/;
+
 /**
- * Supprime les copies de secours les plus anciennes, au-delà de `KEPT_ROLLBACKS`.
+ * Relit la date d'écriture d'une copie de secours dans son nom.
+ * @param name Nom de fichier (`database.sqlite.avant-<horodatage>`).
+ * @param prefix Préfixe attendu (`database.sqlite.avant-`).
+ * @returns L'instant en millisecondes, ou `null` si le nom ne porte pas d'horodatage lisible.
+ */
+export function rollbackTimestamp(name: string, prefix: string): number | null {
+  if (!name.startsWith(prefix)) {
+    return null;
+  }
+  const match = ROLLBACK_STAMP.exec(name.slice(prefix.length));
+  if (!match) {
+    return null;
+  }
+  const [, day, h, m, sec, ms] = match;
+  const time = Date.parse(`${day}T${h}:${m}:${sec}.${ms}Z`);
+  return Number.isNaN(time) ? null : time;
+}
+
+/**
+ * Choisit les copies de secours à supprimer.
  *
- * Chaque restauration recopie intégralement la base : sans purge, chercher la
- * bonne sauvegarde parmi plusieurs remplit le disque du Raspberry — celui-là
- * même que le rapport hebdomadaire surveille.
+ * Une copie est la base d'avant restauration, **en clair** : auteurs de scrims
+ * non anonymisés, `UserLink`, configuration de serveurs quittés — tout ce que
+ * les durées de conservation du bot n'atteignent pas dans ce fichier. Deux
+ * règles, cumulées :
+ *
+ * - au-delà de `ROLLBACK_RETENTION_DAYS`, une copie part, quoi qu'il arrive ;
+ * - après une restauration réussie (`keep` renseigné), toutes les copies
+ *   précédentes partent. **Décision assumée** (minimisation, RGPD art. 5.1.e) :
+ *   deux restaurations de suite perdent localement l'état d'avant la première,
+ *   y compris ce qui a été écrit depuis la dernière sauvegarde chiffrée. Pour
+ *   chercher la bonne archive sans ce risque, restaurer d'abord à la main sur
+ *   une autre machine (`doc/backup-onedrive.md`, « À la main »).
+ *
+ * Un nom illisible n'est jamais retenu par la règle d'âge (on ne supprime pas
+ * ce qu'on ne sait pas dater) — mais il l'est après une restauration réussie.
+ * @param names Noms des fichiers du dossier de la base.
+ * @param prefix Préfixe des copies (`database.sqlite.avant-`).
+ * @param now Instant de référence, en millisecondes.
+ * @param keep Nom de la copie à garder (celle de la restauration qui vient de réussir), ou `null` pour le seul ménage d'âge.
+ * @returns Les noms à supprimer.
+ */
+export function selectExpiredRollbacks(
+  names: string[],
+  prefix: string,
+  now: number,
+  keep: string | null,
+): string[] {
+  const maxAge = ROLLBACK_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  return names.filter((name) => {
+    if (!name.startsWith(prefix) || name === keep) {
+      return false;
+    }
+    if (keep !== null) {
+      return true;
+    }
+    const time = rollbackTimestamp(name, prefix);
+    return time !== null && now - time > maxAge;
+  });
+}
+
+/**
+ * Supprime les copies de secours périmées (voir `selectExpiredRollbacks`).
+ *
+ * Jouée après chaque restauration réussie (toutes les copies précédentes
+ * partent) et chaque nuit par `runDataRetention` (seules les copies de plus de
+ * `ROLLBACK_RETENTION_DAYS` partent). Ne lève jamais : une purge partielle
+ * vaut mieux qu'un échec.
  * @param dbPath Chemin de la base de production.
+ * @param keepPath Copie à garder (restauration qui vient de réussir) ; absente pour le seul ménage d'âge.
+ * @param now Instant de référence, en millisecondes.
  * @returns Le nombre de copies supprimées.
  */
-export async function purgeOldRollbacks(dbPath: string): Promise<number> {
+export async function purgeOldRollbacks(
+  dbPath: string = resolveBddPath(),
+  keepPath?: string,
+  now: number = Date.now(),
+): Promise<number> {
   const dir = path.dirname(dbPath);
   const prefix = `${path.basename(dbPath)}.avant-`;
 
   try {
-    const entries = (await fs.promises.readdir(dir)).filter((name) => name.startsWith(prefix));
-    // L'horodatage ISO du suffixe est trié lexicographiquement comme chronologiquement.
-    const obsolete = entries.sort().slice(0, Math.max(0, entries.length - KEPT_ROLLBACKS));
+    const names = await fs.promises.readdir(dir);
+    const obsolete = selectExpiredRollbacks(names, prefix, now, keepPath ? path.basename(keepPath) : null);
 
     let removed = 0;
     for (const name of obsolete) {
-      // Une purge partielle vaut mieux qu'un échec : la restauration, elle, a réussi.
       const deleted = await fs.promises
         .unlink(path.join(dir, name))
         .then(() => true)
@@ -112,14 +180,15 @@ export async function purgeOldRollbacks(dbPath: string): Promise<number> {
  * Remplace la base SQLite du bot par une sauvegarde téléversée.
  *
  * La base courante est d'abord recopiée à côté : une restauration ratée reste
- * réversible, et le fichier de secours n'est jamais supprimé automatiquement.
+ * réversible. Cette copie est supprimée à la restauration réussie suivante, ou
+ * au plus tard après `ROLLBACK_RETENTION_DAYS` (voir `purgeOldRollbacks`).
  * @param candidatePath Fichier de sauvegarde déjà validé et téléchargé.
  * @param dbPath Chemin de la base de production à remplacer.
  * @returns Le résultat de la restauration, message compris.
  */
 export async function restoreDatabase(
   candidatePath: string,
-  dbPath: string = process.env.BDD_PATH || "./database.sqlite",
+  dbPath: string = resolveBddPath(),
 ): Promise<RestoreResult> {
   const invalid = await validateSqliteFile(candidatePath);
   if (invalid) {
@@ -160,12 +229,14 @@ export async function restoreDatabase(
     // base inutilisable est détectée ici plutôt qu'à la première commande.
     await getBddInstance();
 
-    const purged = await purgeOldRollbacks(dbPath);
-    const purgedLine = purged > 0 ? ` ${purged} copie(s) plus ancienne(s) supprimée(s).` : "";
+    const purged = await purgeOldRollbacks(dbPath, rollbackPath);
+    const purgedLine = purged > 0 ? ` ${purged} copie(s) précédente(s) supprimée(s).` : "";
 
     return {
       success: true,
-      message: `Base restaurée. L'ancienne version est conservée à côté du fichier.${purgedLine}`,
+      message:
+        `Base restaurée. L'ancienne version est conservée à côté du fichier ` +
+        `(${ROLLBACK_RETENTION_DAYS} jours au plus, ou jusqu'à la prochaine restauration).${purgedLine}`,
       rollbackPath,
     };
   } catch (error) {

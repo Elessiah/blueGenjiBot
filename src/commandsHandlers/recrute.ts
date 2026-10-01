@@ -14,6 +14,7 @@ import { sendLog } from "@/safe/sendLog.js";
 import { getBddInstance } from "@/bdd/Bdd.js";
 import { recordEvent } from "@/feed/feedBus.js";
 import { isModuleEnabled } from "@/modules/moduleGuard.js";
+import { choiceLabel, RECRUIT_ROLE_CHOICES } from "@/config/searchChoices.js";
 
 /**
  * @param client Client Discord, utilise pour le feed d'evenements et les logs.
@@ -23,6 +24,12 @@ import { isModuleEnabled } from "@/modules/moduleGuard.js";
 export async function recrute(client: Client, interaction: ChatInputCommandInteraction, guildId: string | null): Promise<void> {
   try {
     const role = interaction.options.getString("role", true);
+    const label = choiceLabel(RECRUIT_ROLE_CHOICES, role);
+    if (label === null) {
+      // Client resté sur l'ancienne définition (texte libre) : rien n'est écrit.
+      await safeReply(interaction, "Role inconnu : choisis-le dans la liste proposee par la commande.", true, false);
+      return;
+    }
     if (guildId && !(await isModuleEnabled(guildId, "recrutement"))) {
       await safeReply(interaction, "Le module Recrutement est desactive sur ce serveur.", true, false);
       return;
@@ -33,8 +40,8 @@ export async function recrute(client: Client, interaction: ChatInputCommandInter
       await safeReply(interaction, "Erreur lors de l'enregistrement de la recherche.", true, false);
       return;
     }
-    await recordEvent(client, "recr", `Recherche ${role}`, interaction.guild?.name ?? null, null);
-    await safeReply(interaction, `Recherche publiee : **${role}**.`, false, false);
+    await recordEvent(client, "recr", `Recherche ${label}`, interaction.guild?.name ?? null, null);
+    await safeReply(interaction, `Recherche publiee : **${label}**.`, false, false);
   } catch (err) {
     await sendLog(client, `recrute handler error: ${(err as Error).message}`);
   }

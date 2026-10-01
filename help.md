@@ -48,8 +48,8 @@ Everyone:
 - `/display-channel-filter-region channel:<channel>`
 - `/display-channel-filter-rank channel:<channel>`
 - `/show-bot-admin`
-- `/scrim <level>`: posts a scrim search, **Marvel Rivals only**.
-- `/recrute <role>`: posts a player or staff search, **Marvel Rivals only**.
+- `/scrim <level>`: posts a scrim search, **Marvel Rivals only** — level chosen from a list (Débutant, Intermédiaire, Avancé).
+- `/recrute <role>`: posts a player or staff search, **Marvel Rivals only** — role chosen from a list (Tank, DPS, Heal, Coach, Manager).
 - `/stats`: shows **your own** recent activity (only you see the reply): partner messages from the last 7 days, scrims and searches from the last 30 days. Nobody can look up another player's activity.
 - `/stats-site`: shows BlueGenji website traffic (total visits, and unique visitors over the last 25 months).
 
@@ -57,7 +57,7 @@ Bans are **network-wide**: this is community moderation, decided by the admins o
 
 To link your Discord account to the BlueGenji website, sign in to the website with Discord, or use « Applications connectées » on your profile (the former `/link` command is gone).
 
-Retention: tracking of relayed messages (IDs, date) 7 days, erased at the latest during the following night — the copies posted in partner channels then stay on Discord; `/scrim` and `/recrute` posts 30 days with their author, then folded during the following night into plain counts per day, server and level (or role) — no author, time or order remains; network bans until they are lifted (the ban notices in the staff's private log channel are not deleted automatically); a server's configuration is erased when the bot leaves it — including when it left while the bot was offline, at the next startup.
+Retention: tracking of relayed messages (IDs, date) 7 days, erased at the latest during the following night — the copies posted in partner channels then stay on Discord; `/scrim` and `/recrute` posts 30 days with their author, then folded during the following night into plain counts per day, server and level (or role) — no author, time or order remains; the public activity feed (time, server, level or role of each post) 30 days, deleted during the following night; network bans until they are lifted — their notice and reason (staff's private log channel; the reason also in a private message to the bot owner) are deleted when the ban is lifted (for a ban issued before this rule, only the reason posted in the channel; the rest after one year); the other messages of the staff's private log channel 1 year; a server's configuration is erased when the bot leaves it — including when it left while the bot was offline, at the next startup.
 
 Server admins:
 - `/ban-list` (network-wide list, see above)

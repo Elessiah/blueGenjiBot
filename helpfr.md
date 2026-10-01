@@ -71,8 +71,8 @@ Modération (serveurs de 50+ membres) :
 
 Publiques :
 - `/ping` : vérifie la latence du bot.
-- `/scrim <niveau>` : publie une recherche de scrim, **Marvel Rivals uniquement**.
-- `/recrute <role>` : publie une recherche de joueurs ou staff, **Marvel Rivals uniquement**.
+- `/scrim <niveau>` : publie une recherche de scrim, **Marvel Rivals uniquement** — niveau choisi dans une liste (Débutant, Intermédiaire, Avancé).
+- `/recrute <role>` : publie une recherche de joueurs ou staff, **Marvel Rivals uniquement** — rôle choisi dans une liste (Tank, DPS, Heal, Coach, Manager).
 - `/stats` : affiche **votre propre** activité récente (réponse visible de vous seul) : messages partenaires des 7 derniers jours, scrims et recherches des 30 derniers jours. On ne consulte pas l'activité d'un autre joueur.
 - `/stats-site` : affiche la fréquentation du site BlueGenji (visites totales, et visiteurs uniques des 25 derniers mois).
 
@@ -85,7 +85,9 @@ Admin :
 ## Durées de conservation
 - Suivi des messages relayés (identifiants, date) : 7 jours, effacé au plus tard dans la nuit qui suit. Les copies publiées dans les salons partenaires restent ensuite sur Discord (voir « Effacer un message retransmis »).
 - Scrims et recherches (`/scrim`, `/recrute`) : 30 jours avec leur auteur. Dans la nuit qui suit, ils sont repliés en simples nombres par jour, serveur et niveau (ou rôle) : ni auteur, ni heure, ni ordre ne restent.
-- Exclusions du réseau : jusqu'à leur levée (les avis d'exclusion du salon de journal privé du staff ne sont pas supprimés automatiquement).
+- Fil d'activité public (heure, serveur, niveau ou rôle de chaque annonce) : 30 jours, supprimé dans la nuit qui suit.
+- Exclusions du réseau : jusqu'à leur levée. Leur avis et leur motif (salon de journal privé du staff ; le motif aussi en message privé au titulaire du bot) sont supprimés à la levée (pour une exclusion prononcée avant cette règle, seul le motif publié au salon : le reste l'est au bout d'un an).
+- Autres messages du salon de journal privé du staff : 1 an.
 - Configuration d'un serveur : effacée quand le bot le quitte — y compris s'il l'a quitté pendant un arrêt du bot, au démarrage suivant.
 
 ## `/ban-list` et exclusions du réseau

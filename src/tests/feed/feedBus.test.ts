@@ -8,7 +8,7 @@ import fs from "node:fs";
 const TMP_DB = path.join(os.tmpdir(), `bgenji-feed-${randomUUID()}.sqlite`);
 process.env.BDD_PATH = TMP_DB;
 
-import { recordEvent, getBacklog, purgeFeedIdentifiers, subscribe, type FeedEventRow } from "../../feed/feedBus.js";
+import { recordEvent, getBacklog, purgeFeedIdentifiers, purgeOldFeedEvents, subscribe, type FeedEventRow } from "../../feed/feedBus.js";
 import { closeBddInstance, getBddInstance } from "../../bdd/Bdd.js";
 
 test("recordEvent insere une ligne et getBacklog la retrouve", async () => {
@@ -125,6 +125,21 @@ test("purgeFeedIdentifiers est idempotente", async () => {
   // Rejouee a chaque demarrage : une base deja propre ne doit rien reecrire.
   await purgeFeedIdentifiers(null);
   assert.equal(await purgeFeedIdentifiers(null), 0);
+});
+
+test("purgeOldFeedEvents supprime les evenements de plus de N jours, et eux seuls", async () => {
+  const bdd = await getBddInstance();
+  await bdd.raw(
+    "INSERT INTO FeedEvent (ts, type, summary) VALUES (DATETIME('now', '-31 days'), 'scrim', 'ancien-31j')"
+  );
+  await bdd.raw(
+    "INSERT INTO FeedEvent (ts, type, summary) VALUES (DATETIME('now', '-29 days'), 'scrim', 'recent-29j')"
+  );
+  assert.equal(await purgeOldFeedEvents(30), 1);
+  const summaries = (await bdd.raw<{ summary: string }>("SELECT summary FROM FeedEvent")).map((r) => r.summary);
+  assert.ok(!summaries.includes("ancien-31j"));
+  assert.ok(summaries.includes("recent-29j"));
+  assert.equal(await purgeOldFeedEvents(30), 0);
 });
 
 test.after(async () => {
