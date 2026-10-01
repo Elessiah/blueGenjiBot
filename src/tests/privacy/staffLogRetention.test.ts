@@ -60,10 +60,10 @@ test("banMessageIds rend les identifiants renseignés d'une exclusion", () => {
     id_reason: "10",
     date: new Date(),
     id_reason_owner: "11",
-    id_notice_admin: null,
-    id_notice_owner: "13",
+    id_notice_admin: "12",
   };
-  assert.deepEqual(banMessageIds(ban), ["10", "11", "13"]);
+  assert.deepEqual(banMessageIds(ban), ["10", "11", "12"]);
+  assert.deepEqual(banMessageIds({ ...ban, id_reason_owner: null }), ["10", "12"]);
   // Exclusion antérieure aux colonnes : seul le motif au salon.
   assert.deepEqual(banMessageIds({ id_user: "1", id_moderator: "2", id_reason: "10", date: new Date() }), ["10"]);
 });
