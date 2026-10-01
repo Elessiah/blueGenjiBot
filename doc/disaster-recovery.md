@@ -16,7 +16,8 @@ Ce que la reprise rend, et ce qu'elle perd :
 - **les deux bases** reviennent à l'état de la **dernière archive** (le lundi précédent au plus tard) — tout ce qui a été écrit depuis est perdu ;
 - **les images**, les **logos en quarantaine** et le **journal des suppressions** reviennent à leur état d'**une heure au plus** avant la perte ;
 - une suppression de compte faite dans l'heure qui a précédé la perte n'a pas encore été copiée : elle ne sera pas rejouée.
-- **les deux ne coïncident pas** : une image remplacée ou supprimée après l'archive n'existe plus sur le stockage (le miroir horaire l'a effacée), si bien que la base restaurée peut désigner un fichier absent — le site affiche alors l'initiale ; de même, un logo masqué après l'archive est rendu dans `data/quarantine` alors que la base restaurée l'attend dans `public/uploads`, et s'affiche absent. Rien ne se répare automatiquement : l'équipe ou le joueur concerné renvoie son image.
+- **les deux ne coïncident pas** : une image remplacée ou supprimée après l'archive n'existe plus sur le stockage (le miroir horaire l'a effacée), si bien que la base restaurée peut désigner un fichier absent — le site affiche alors l'initiale ; de même, un logo masqué après l'archive est rendu dans `data/quarantine` alors que la base restaurée l'attend dans `public/uploads`, et s'affiche absent. Rien ne se répare automatiquement : l'équipe ou le joueur concerné renvoie son image. Un tel logo, que la base restaurée ne connaît pas comme masqué, ne serait jamais purgé au bout des six mois et resterait copié chaque heure : à l'étape 5, le **supprimer** de `data/quarantine` (à vérifier : le repérer en confrontant les fichiers du dossier aux logos masqués que la base restaurée connaît).
+- **les fichiers d'adhésion du bot sont perdus** : `paths.json` et les fichiers chargés par les commandes d'adhésion vivent sur disque, dans le dossier `ADHESIONS_PATH`, hors de la base SQLite — aucune sauvegarde ne les couvre. Ils sont à recharger par les commandes d'adhésion (`doc/adhesions-commands-user.md`) une fois le bot restauré ; à vérifier : la liste exacte des commandes à relancer.
 
 ## 0. À garder hors de la machine — avant la panne
 
@@ -32,8 +33,7 @@ hors ligne), **jamais dans un dépôt git** :
 - **`.env.production` du site** (`<app>/.env.production`) : accès à la base, secrets OAuth, `BOT_INTERNAL_TOKEN`, clés VAPID, sel des visites.
 - **`scripts/backup-onedrive.env`** (`<bot>/scripts/backup-onedrive.env`) : configuration des scripts de sauvegarde — aucun secret, mais des chemins et des noms de remotes à reproduire.
 
-La clé **publique** (`scripts/backup-recipients.txt`) n'a pas besoin d'être
-gardée : elle se recalcule depuis la clé privée (`age-keygen -y`).
+Garder aussi une copie de `scripts/backup-recipients.txt` (clés **publiques**, aucun secret) : la clé publique de `~/.bluegenji-backup.key` se recalcule (`age-keygen -y`), mais le fichier peut en lister plusieurs — une par ligne —, et le reconstruire avec une seule rendrait les archives suivantes illisibles par les autres clés, sans aucun avertissement.
 
 Deux pièges à connaître :
 
@@ -61,14 +61,17 @@ sauvegarde ne sert à rien : c'est maintenant qu'il faut le découvrir.
 - **Système** : un Debian (ou Raspberry Pi OS) 64 bits. Les commandes de `backup-onedrive.md` visent `arm64` ; sur une machine x86, prendre les binaires `amd64`.
 - **Node.js** : le CI des deux dépôts tourne en **Node 20** ; aucun des deux ne fixe de version (`engines`, `.nvmrc`). À vérifier : la version exacte que faisait tourner l'ancienne machine — à défaut, une version LTS au moins égale à 20.
 - **npm 12**, comme l'ancienne machine : les deux `package.json` déclarent `allowScripts`, que npm 12 applique (le bot en dépend pour la liaison native de `sqlite3`).
-- **MariaDB 11.8** — la production tourne sous MariaDB, pas sous MySQL.
-- **pm2**, installé globalement (`npm install -g pm2`), puis `pm2 startup` pour qu'il redémarre avec la machine, et **`pm2 install pm2-logrotate`** : sans lui, les journaux pm2 grossissent jusqu'à remplir le disque (ne jamais les effacer à la main : `pm2 flush`, voir `docs/DEPLOYMENT.md` du site).
+- **MariaDB 11.8** — la production tourne sous MariaDB, pas sous MySQL. **Pas une version plus ancienne** : un dump de MariaDB 11.8 nomme par défaut la collation `utf8mb4_uca1400_ai_ci`, que MariaDB 10.11 (Debian 12 / Raspberry Pi OS Bookworm) ne connaît pas — l'import de l'étape 4 échouerait en `Unknown collation`. Debian 13 livre la 11.8 ; sur une version plus ancienne, passer par le dépôt officiel de MariaDB.
+- **pm2**, installé globalement (`npm install -g pm2`), puis `pm2 startup` pour qu'il redémarre avec la machine — lancé sans `sudo`, il n'installe rien et **affiche** une commande `sudo …` qu'il faut copier et exécuter —, et **`pm2 install pm2-logrotate`** : sans lui, les journaux pm2 grossissent jusqu'à remplir le disque (ne jamais les effacer à la main : `pm2 flush`, voir `docs/DEPLOYMENT.md` du site).
 - **nginx** (reverse proxy du site).
 - **`age`**, **`sqlite3`** et **`mariadb-client`** depuis APT, **`rclone` depuis le binaire officiel** (pas d'APT, trop ancien) : section « 1. Outils » de `backup-onedrive.md`, commandes comprises.
 
 ```bash
 sudo apt update && sudo apt install -y age sqlite3 mariadb-client mariadb-server nginx
+command -v mysqldump    # le script de sauvegarde appelle ce nom
 ```
+
+Si `mysqldump` est introuvable, installer le paquet de compatibilité qui fournit les anciens noms `mysql*` (`mariadb-client-compat` sur les versions récentes de Debian — à vérifier selon la distribution) : sans lui, la sauvegarde du lundi échoue sur un `mysqldump: command not found`.
 
 Créer aussi le **dossier des journaux** que nomment l'entrée pm2 du site (`--output`, `--error`) et les lignes de cron (`>> …/bluegenji-backup.log`) — même emplacement que sur l'ancienne machine. Absent, `pm2 start` échoue en `ENOENT`, et le shell du cron refuse la redirection **sans lancer le script** : aucune sauvegarde, et aucune trace de l'échec.
 
@@ -267,7 +270,9 @@ supprimé du stockage quand il manque sur la machine). Une fois les étapes 5 et
 ```bash
 cd <bot>
 install -m 600 /chemin/vers/copie/backup-onedrive.env scripts/backup-onedrive.env
-age-keygen -y ~/.bluegenji-backup.key > scripts/backup-recipients.txt
+install -m 644 /chemin/vers/copie/backup-recipients.txt scripts/backup-recipients.txt
+# à défaut de copie, et seulement si l'ancien fichier ne listait que cette clé :
+# age-keygen -y ~/.bluegenji-backup.key > scripts/backup-recipients.txt
 sudo mkdir -p /var/lib/bluegenji && sudo chown "$USER" /var/lib/bluegenji
 ```
 
