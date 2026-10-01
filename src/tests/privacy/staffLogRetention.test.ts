@@ -90,7 +90,7 @@ test("purgeLogChannel parcourt les pages et s'arrête au premier message récent
   ];
   const { channel, deleted, fetches } = fakeChannel(specs, 2);
   const removed = await purgeLogChannel(channel, CUTOFF, BOT, new Set(["4"]));
-  assert.equal(removed, 2);
+  assert.deepEqual(removed, { deleted: 2, resumeAfter: "0" });
   assert.deepEqual(deleted, ["1", "3"]);
   // Pages [1,2], [3,4], [5,6] : la troisième contient un message récent, fin.
   assert.equal(fetches(), 3);
@@ -99,8 +99,14 @@ test("purgeLogChannel parcourt les pages et s'arrête au premier message récent
 test("purgeLogChannel respecte le budget de suppressions", async () => {
   const specs = Array.from({ length: 10 }, (_, i) => ({ id: i + 1, author: BOT, ageDays: 400 }));
   const { channel, deleted } = fakeChannel(specs, 4);
-  assert.equal(await purgeLogChannel(channel, CUTOFF, BOT, new Set(), 3), 3);
+  // Budget épuisé dans la première page : la reprendre en entier.
+  assert.deepEqual(await purgeLogChannel(channel, CUTOFF, BOT, new Set(), 3), { deleted: 3, resumeAfter: "0" });
   assert.deepEqual(deleted, ["1", "2", "3"]);
+  // Budget épuisé pile en fin de page : reprendre après elle.
+  const second = fakeChannel(specs, 4);
+  assert.deepEqual(await purgeLogChannel(second.channel, CUTOFF, BOT, new Set(), 4), { deleted: 4, resumeAfter: "4" });
+  assert.deepEqual(await purgeLogChannel(second.channel, CUTOFF, BOT, new Set(), 4, "4"), { deleted: 4, resumeAfter: "8" });
+  assert.deepEqual(second.deleted, ["1", "2", "3", "4", "5", "6", "7", "8"]);
 });
 
 test("purgeLogChannel : une suppression refusée n'interrompt pas la passe", async () => {
@@ -116,7 +122,7 @@ test("purgeLogChannel : une suppression refusée n'interrompt pas la passe", asy
       return page;
     },
   };
-  assert.equal(await purgeLogChannel(channel, CUTOFF, BOT, new Set()), 1);
+  assert.equal((await purgeLogChannel(channel, CUTOFF, BOT, new Set())).deleted, 1);
 });
 
 test("purgeStaffLogs : un salon du staff injoignable n'empêche pas la purge des messages privés", async () => {
@@ -168,8 +174,11 @@ test("purgeLogChannel s'arrête au plafond de pages sur un historique sans fin",
       return [{ id: String(next++), authorId: STAFF, createdTimestamp: CUTOFF - DAY, delete: async () => {} }];
     },
   };
-  assert.equal(await purgeLogChannel(channel, CUTOFF, BOT, new Set()), 0);
+  const result = await purgeLogChannel(channel, CUTOFF, BOT, new Set());
+  assert.equal(result.deleted, 0);
   assert.equal(fetches, MAX_LOG_PAGES_PER_RUN);
+  // La passe suivante reprend là où celle-ci s'est arrêtée, pas au début.
+  assert.equal(result.resumeAfter, String(MAX_LOG_PAGES_PER_RUN));
 });
 
 test.after(async () => {
