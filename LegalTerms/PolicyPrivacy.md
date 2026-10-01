@@ -63,9 +63,9 @@ This processing is based on the association's **legitimate interest** (Article 6
 - **Public activity feed** (time, server, level or role of each event): 30 days, deleted at the clean-up of the following night.
 - **Server configuration** (relayed channels and their rank filters, the invite and the referee role with the ID of whoever set them, the Bot administration role, enabled modules): until the administrators remove it, and at the latest until the Bot leaves the server, which erases it. A departure while the Bot is down, which Discord does not notify, is caught up when it restarts.
 - **Memberships and scheduled reminders**: until the reminder's last sending (for a membership, its expiry date) or its deletion, and at the latest until the Bot leaves the server where they were recorded, which erases them — including a departure while the Bot is down, caught up when it restarts.
-- **Staff private log channel** (and the Bot's direct messages to its owner): one year (365 days); older messages from the Bot are deleted at the nightly clean-up, except the notice and reason of an exclusion still in force, deleted when it is lifted.
+- **Staff private log channel** (and the Bot's direct messages to its owner): one year (365 days); older messages from the Bot are deleted by the nightly clean-up, in batches (several nights for a large backlog), except the notice and reason of an exclusion still in force, deleted when it is lifted.
 - **Server logs**: according to their automatic rotation.
-- **Backups**: the Bot's database is backed up weekly, encrypted, and each copy is permanently deleted after 30 days at most. A restore is made from these archives, on the Bot's machine, without going through Discord; the copy of the previous database it leaves alongside is deleted at the next successful restore, and at the latest during the night after it turns 30 days old.
+- **Backups**: the Bot's database is backed up weekly, encrypted, and each copy is permanently deleted after 30 days at most. A restore is made from these archives, decrypted on the Bot's machine: the database no longer travels through Discord; the copy of the previous database it leaves alongside is deleted at the next successful restore, and at the latest during the night after it turns 30 days old.
 
 ---
 
