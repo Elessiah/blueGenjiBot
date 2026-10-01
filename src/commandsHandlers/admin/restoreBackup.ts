@@ -165,14 +165,17 @@ export async function restoreBackup(
     if (result.success) {
       await purgeFeedIdentifiers(client);
     }
-    const rollback = result.rollbackPath ? `\nSauvegarde de l'ancienne base : \`${result.rollbackPath}\`` : "";
-
-    await safeReply(interaction, `${result.success ? "✅" : "❌"} ${result.message}${rollback}`, true, true);
     // Un échec porte le message brut du système de fichiers (chemins de la
-    // base et du dossier temporaire) : le salon de logs n'en reçoit qu'un
-    // renvoi, le détail va dans les journaux pm2.
-    if (!result.success) {
-      console.error("[restore-backup]", result.message);
+    // base et du dossier temporaire) : Discord — réponse comme salon de logs —
+    // n'en reçoit que le résumé, sans chemin, pas même celui de la copie de
+    // l'ancienne base ; le détail va dans les journaux pm2.
+    if (result.success) {
+      const rollback = result.rollbackPath ? `\nSauvegarde de l'ancienne base : \`${result.rollbackPath}\`` : "";
+      await safeReply(interaction, `✅ ${result.message}${rollback}`, true, true);
+    } else {
+      const rollback = result.rollbackPath ? ` (ancienne base : ${result.rollbackPath})` : "";
+      console.error("[restore-backup]", result.message + rollback);
+      await safeReply(interaction, `❌ ${result.summary} (${SEE_PM2})`, true, true);
     }
     await sendLog(
       client,
