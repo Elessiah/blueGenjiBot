@@ -641,8 +641,9 @@ export function startInternalApi(client: Client) {
       const bdd = await getBddInstance();
 
       const relayDays = Math.min(days, MESSAGE_WINDOW_DAYS);
+      // Jours calendaires entiers (J-6 … J) : même somme quelle que soit la plage.
       const relayRows = await bdd.raw<{ day: string; count: number }>(
-        "SELECT date(date) AS day, COUNT(*) AS count FROM DPMsg WHERE date >= datetime('now', ?) GROUP BY day ORDER BY day ASC",
+        "SELECT date(date) AS day, COUNT(*) AS count FROM DPMsg WHERE date(date) > date('now', ?) GROUP BY day ORDER BY day ASC",
         [`-${relayDays} day`]
       );
       // Au-delà de 30 jours, les scrims ne sont plus des lignes mais des
