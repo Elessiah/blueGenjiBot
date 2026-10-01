@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
 # Miroir chiffré des images téléversées du site, et de son journal des
-# suppressions, vers OneDrive.
+# suppressions, vers le stockage distant (nom de fichier historique, appelé
+# ainsi par le cron de production ; le fournisseur est celui du remote rclone).
 #
 # Couvre `public/uploads` d'appbluegenji : avatars, logos d'équipe, logos de
 # partenaires, photos de bénévoles, illustrations de tournoi. Ces fichiers ne
@@ -15,16 +16,18 @@
 #   - archiver le dossier entier chaque semaine dupliquerait les mêmes fichiers
 #     pendant toute la rétention.
 #
-# **Un miroir, pas un historique** : un fichier supprimé du site l'est aussi de
-# OneDrive au passage suivant, et définitivement (`--onedrive-hard-delete`,
-# sans détour par la corbeille OneDrive, qui le garderait encore 30 jours ;
-# `--onedrive-no-versions`, sans quoi un fichier réécrit garde ses anciennes
-# versions). C'est ce qui rend effective la suppression d'un avatar ou d'un
-# compte. Contrepartie assumée : une image supprimée par erreur ne se récupère
+# **Un miroir, pas un historique** : un fichier supprimé du site l'est aussi du
+# stockage distant au passage suivant, et définitivement. Sur OneDrive, les
+# options `--onedrive-hard-delete` (sans détour par la corbeille, qui le
+# garderait encore 30 jours) et `--onedrive-no-versions` (sans quoi un fichier
+# réécrit garde ses anciennes versions) ne sont passées que si le remote y mène
+# (`provider_delete_flags`) ; sur Nextcloud/WebDAV, corbeille et versions se
+# coupent côté serveur (doc/backup-onedrive.md). C'est ce qui rend effective la
+# suppression d'un avatar ou d'un compte. Contrepartie assumée : une image supprimée par erreur ne se récupère
 # pas ici, et un dump ancien restauré peut désigner des images parties.
 #
 # **Chiffré** : un avatar est une donnée personnelle — masqué ou non sur le site —
-# et un OneDrive personnel n'offre aucun contrat de sous-traitance. Le remote des
+# et le fournisseur du stockage ne doit pas pouvoir le lire. Le remote des
 # images doit donc être un remote `crypt` ; le script refuse d'envoyer en clair,
 # sans exception ni réglage pour passer outre.
 #
@@ -52,8 +55,10 @@ if [[ -f "$CONFIG_FILE" ]]; then
   # shellcheck disable=SC1090
   source "$CONFIG_FILE"
 fi
+# shellcheck source=rclone-backend.sh
+source "$SCRIPT_DIR/rclone-backend.sh"
 
-: "${RCLONE_REMOTE:=onedrive}"
+: "${RCLONE_REMOTE:=onedrive}" # défaut historique ; la configuration le fixe
 : "${UPLOADS_RCLONE_REMOTE:=$RCLONE_REMOTE}"
 : "${UPLOADS_DIR:=}"
 : "${UPLOADS_REMOTE_DIR:=uploads}"
@@ -91,9 +96,10 @@ flock -w 600 9 || die "une autre synchronisation tient le verrou depuis plus de 
 # dossier vide) : elle ne touche que les archives, et un miroir refusé ne doit pas
 # prolonger la conservation annoncée. Un échec de purge ne fait pas échouer la
 # synchronisation.
+mapfile -t ARCHIVE_DELETE_FLAGS < <(provider_delete_flags "$RCLONE_REMOTE")
 rclone delete "$RCLONE_REMOTE:$REMOTE_DIR" \
   --min-age "${RETENTION_DAYS}d" --include "bluegenji-*.tar.age" \
-  --onedrive-hard-delete \
+  "${ARCHIVE_DELETE_FLAGS[@]}" \
   || echo "[uploads] purge des anciennes archives incomplète." >&2
 
 [[ -d "$UPLOADS_DIR" ]] || die "dossier des images introuvable ($UPLOADS_DIR)"
@@ -120,7 +126,9 @@ if [[ -z "$(find "$UPLOADS_DIR" -type f -print -quit)" ]]; then
   die "aucun fichier dans $UPLOADS_DIR — synchronisation refusée, elle viderait la sauvegarde"
 fi
 
-ONEDRIVE_FLAGS=(--onedrive-hard-delete --onedrive-no-versions)
+# Options de suppression définitive du fournisseur réel (OneDrive seulement),
+# lu à travers l'enveloppe `crypt`.
+mapfile -t PROVIDER_FLAGS < <(provider_delete_flags "$UPLOADS_RCLONE_REMOTE")
 DEST="$UPLOADS_RCLONE_REMOTE:$UPLOADS_REMOTE_DIR"
 
 # --min-age 1m : le site écrit ses images sans renommage atomique, un fichier en
@@ -128,7 +136,7 @@ DEST="$UPLOADS_RCLONE_REMOTE:$UPLOADS_REMOTE_DIR"
 # — et un fichier exclu par filtre n'est jamais supprimé du distant.
 rclone sync "$UPLOADS_DIR" "$DEST" \
   --min-age 1m \
-  "${ONEDRIVE_FLAGS[@]}" \
+  "${PROVIDER_FLAGS[@]}" \
   --transfers 4 --retries 3 --low-level-retries 10 \
   || die "synchronisation vers $DEST impossible"
 
@@ -147,7 +155,7 @@ QUARANTINE_DEST="$UPLOADS_RCLONE_REMOTE:$QUARANTINE_REMOTE_DIR"
 if [[ -d "$QUARANTINE_DIR" ]]; then
   rclone sync "$QUARANTINE_DIR" "$QUARANTINE_DEST" \
     --min-age 1m \
-    "${ONEDRIVE_FLAGS[@]}" \
+    "${PROVIDER_FLAGS[@]}" \
     --retries 3 --low-level-retries 10 \
     || die "synchronisation des logos en quarantaine impossible ($QUARANTINE_DEST)"
 fi
@@ -158,11 +166,11 @@ fi
 JOURNAL_DEST="$UPLOADS_RCLONE_REMOTE:$DELETION_JOURNAL_REMOTE_DIR/account-deletions.jsonl"
 if [[ -f "$DELETION_JOURNAL_PATH" ]]; then
   rclone copyto "$DELETION_JOURNAL_PATH" "$JOURNAL_DEST" \
-    "${ONEDRIVE_FLAGS[@]}" --retries 3 \
+    "${PROVIDER_FLAGS[@]}" --retries 3 \
     || die "envoi du journal des suppressions impossible ($JOURNAL_DEST)"
 else
   # Aucune suppression consignée (ou journal retiré) : rien ne doit rester en face.
-  rclone deletefile "$JOURNAL_DEST" "${ONEDRIVE_FLAGS[@]}" >/dev/null 2>&1 || true
+  rclone deletefile "$JOURNAL_DEST" "${PROVIDER_FLAGS[@]}" >/dev/null 2>&1 || true
 fi
 
 log "Images et journal des suppressions synchronisés vers $UPLOADS_RCLONE_REMOTE."
