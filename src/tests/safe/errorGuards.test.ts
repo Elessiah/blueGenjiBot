@@ -142,6 +142,9 @@ test("describeError ne serialise jamais une valeur non-Error", () => {
   const { proxy, revoke } = Proxy.revocable({}, {});
   revoke();
   assert.equal(describeError(proxy), "valeur levée illisible");
+  const odd = new Error("x");
+  (odd as unknown as { message: unknown }).message = { content: "pseudo" };
+  assert.equal(describeError(odd), "(message non textuel)");
   assert.equal(errorCode(proxy), null);
 });
 

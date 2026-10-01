@@ -124,8 +124,11 @@ function describeError(error: unknown): string {
         // un champ « code » en texte libre pourrait porter n'importe quoi.
         const shownCode = typeof code === "number" || (typeof code === "string" && /^[A-Za-z0-9_]{1,40}$/.test(code)) ? code : null;
         if (error instanceof Error) {
-            return shownCode === null ? error.message : `${error.message} [${shownCode}]`;
+            const message = typeof error.message === "string" ? error.message : "(message non textuel)";
+            return shownCode === null ? message : `${message} [${shownCode}]`;
         }
+        // Une chaîne levée est rendue telle quelle : aucun code du bot ne lève
+        // le texte d'une annonce (règle à garder : lever une `Error`).
         if (typeof error === "string") return error;
         // Un scalaire ne porte rien d'autre que lui-même : il est rendu tel quel.
         if (error === null || error === undefined || typeof error === "number" || typeof error === "boolean") {

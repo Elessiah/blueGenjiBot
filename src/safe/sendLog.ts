@@ -1,6 +1,6 @@
 import type {Client, TextChannel, User} from "discord.js";
 import {idSendLogMsg} from "./types.js";
-import {describeError} from "./errorGuards.js";
+import {describeError, errorCode} from "./errorGuards.js";
 
 /**
  * Envoie un log technique vers le canal de supervision.
@@ -33,7 +33,7 @@ async function sendLog(client: Client,
                 // `await` obligatoire : un envoi flottant qui échoue devient un
                 // rejet non capturé, donc un arrêt du process. Et l'échec est
                 // sans issue ici — on est déjà dans la voie de secours.
-                if (describeError(error).startsWith("Missing Access")) {
+                if (errorCode(error) === 50001) {
                     try {
                         await owner.send("Missing Access to admin channel");
                     } catch { /* le canal de secours est lui aussi injoignable */ }
