@@ -24,7 +24,7 @@ Options:
 Comportement:
 - Si aucune cible n'est fournie, le bot envoie les fichiers en message prive a l'auteur de la commande.
 - Si l'auteur n'a pas les permissions admin du bot, les envois vers `channel`/`membre`/`role` sont ignores et le bot envoie en prive a l'auteur.
-- Si le `role` vise n'a aucun membre (et qu'aucun `membre` n'est designe), rien n'est envoye: l'auteur recoit en prive un avis "personne n'a pu etre joint" et la commande repond "Echec de l'envoi !". Un rappel automatique vers ce role previent l'auteur de la meme facon a chaque echeance.
+- Si le bot ne trouve aucun membre dans le `role` vise (et qu'aucun `membre` n'est designe), personne ne recoit les papiers en prive: l'auteur recoit un avis "aucun membre du role vise n'a ete trouve" et la commande repond "Echec de l'envoi !". Un `channel` demande en meme temps recoit quand meme les papiers (et l'auteur en est avise): ne pas relancer la commande pour lui. Un rappel automatique vers ce role previent l'auteur de la meme facon a chaque echeance.
 - Si `interval` est defini a une valeur > 0 et que l'auteur n'a pas les permissions, la programmation est refusee.
 - En cas de programmation, le prochain envoi est prevu a 10:00 (heure Europe/Paris) apres le nombre de jours indique.
 - L'intervalle est un nombre de jours, **sans plafond**: le rappel se repete
