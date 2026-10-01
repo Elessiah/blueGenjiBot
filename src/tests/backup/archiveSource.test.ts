@@ -10,7 +10,10 @@ import {
   COMMAND_PATH,
   commandEnv,
   compareNewestFirst,
+  execCommand,
   fetchArchive,
+  findMissingCommand,
+  MissingCommandError,
   filterArchiveNames,
   listArchives,
   pickArchive,
@@ -187,4 +190,34 @@ test("commandEnv fige le PATH et garde le reste de l'environnement", () => {
   assert.equal(env.PATH, COMMAND_PATH);
   assert.equal(env.PATH, "/usr/local/bin:/usr/bin:/bin");
   assert.equal(env.HOME, "/home/bot");
+});
+
+test("execCommand traduit un binaire absent en MissingCommandError, dossiers fouillés compris", async () => {
+  await assert.rejects(execCommand("bluegenji-binaire-inexistant", []), (error: unknown) => {
+    assert.ok(error instanceof MissingCommandError);
+    assert.equal(error.command, "bluegenji-binaire-inexistant");
+    assert.equal(
+      error.message,
+      "`bluegenji-binaire-inexistant` introuvable dans les dossiers système (/usr/local/bin, /usr/bin, /bin)",
+    );
+    return true;
+  });
+});
+
+test("listArchives garde la commande manquante en cause et dans son message", async () => {
+  const run: CommandRunner = async () => {
+    throw new MissingCommandError("rclone");
+  };
+  await assert.rejects(listArchives({ localDir: null, remote: "r:b", identity: "/k" }, run), (error: unknown) => {
+    assert.ok(error instanceof Error);
+    assert.match(error.message, /^stockage distant : `rclone` introuvable dans les dossiers système/);
+    assert.equal(findMissingCommand(error), "rclone");
+    return true;
+  });
+});
+
+test("findMissingCommand ne voit rien dans un échec ordinaire", () => {
+  assert.equal(findMissingCommand(new Error("dial tcp", { cause: new Error("ECONNREFUSED") })), null);
+  assert.equal(findMissingCommand("pas une erreur"), null);
+  assert.equal(findMissingCommand(new MissingCommandError("age")), "age");
 });

@@ -24,7 +24,7 @@ import {
   type SpawnFn,
 } from "../../backup/backupCheck.js";
 import { answerBackupCheck } from "../../commandsHandlers/admin/backupCheck.js";
-import type { CommandRunner } from "../../backup/archiveSource.js";
+import { MissingCommandError, type CommandRunner } from "../../backup/archiveSource.js";
 
 const KEY = "age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqs3290gq";
 
@@ -536,4 +536,36 @@ test("/backup-check diffère sa réponse puis rend le rapport, et tait une erreu
     if (previous === undefined) delete process.env.OWNER_ID;
     else process.env.OWNER_ID = previous;
   }
+});
+
+test("une commande hors des dossiers système est nommée comme telle, pas comme une panne du stockage ou de la clé", async () => {
+  const missing = (command: string): CommandRunner => async () => {
+    throw new MissingCommandError(command);
+  };
+  const expected = /^`rclone` introuvable dans les dossiers système où le bot le cherche$/;
+
+  const archive = await checkLatestArchive(config(), { run: missing("rclone"), log: () => {} });
+  assert.equal(archive.ok, false);
+  assert.match(archive.detail, expected);
+
+  const mirror = await checkUploadsMirror(config(), { run: missing("rclone"), log: () => {} });
+  assert.equal(mirror.ok, false);
+  assert.match(mirror.detail, expected);
+
+  const key = await checkRecipientKey(config(), { run: missing("age-keygen"), readFile: () => "", log: () => {} });
+  assert.equal(key.result.ok, false);
+  assert.equal(key.result.detail, "`age-keygen` introuvable dans les dossiers système où le bot le cherche");
+  assert.equal(key.publicKey, null);
+  // Aucun chemin dans ce qui part sur Discord.
+  assert.doesNotMatch(`${archive.detail} ${mirror.detail} ${key.result.detail}`, /\//);
+});
+
+test("un autre échec garde la phrase d'origine", async () => {
+  const failing: CommandRunner = async () => {
+    throw new Error("dial tcp");
+  };
+  const mirror = await checkUploadsMirror(config(), { run: failing, log: () => {} });
+  assert.equal(mirror.detail, "remote chiffré illisible");
+  const key = await checkRecipientKey(config(), { run: failing, readFile: () => "", log: () => {} });
+  assert.equal(key.result.detail, "clé privée du bot illisible");
 });
