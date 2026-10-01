@@ -74,8 +74,9 @@ async function deliverToChannel(client: Client,
  * Envoie les papiers en MP à chaque destinataire, puis avise l'auteur : la
  * liste des échecs s'il y en a, une confirmation sinon.
  *
- * Sans destinataire (rôle sans membre, membres illisibles), rien n'est
- * envoyé : l'auteur en est avisé, le journal le note, et l'envoi échoue.
+ * Sans destinataire (aucun membre du rôle trouvé, ou membres illisibles), rien
+ * n'est envoyé en MP : l'auteur en est avisé, le journal le note, et l'envoi
+ * échoue.
  * @param client Client Discord utilisé pour les envois et le journal.
  * @param recipients Destinataires, dans l'ordre d'envoi.
  * @param files Pièces jointes.
@@ -90,7 +91,7 @@ async function deliverToMembers(client: Client,
                                 author: User): Promise<boolean> {
     if (recipients.length === 0) {
         // Ni pseudo ni identifiant : la ligne dit seulement que rien n'est parti.
-        await logAdhesion(client, "sendAdhesion: aucun destinataire à servir (rôle sans membre ou membres illisibles), envoi annulé.");
+        await logAdhesion(client, "sendAdhesion: aucun destinataire trouvé pour le rôle visé, envoi annulé.");
         await sendPrivately(client, author, [], NO_RECIPIENT_NOTICE, "sendAdhesion safeUser (no recipient)");
         return false;
     }

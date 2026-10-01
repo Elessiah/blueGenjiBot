@@ -21,10 +21,12 @@ const MISSING_FILES_NOTICE = "Echec de l'envoie des adhésions, impossible de r�
 const CHANNEL_FAILED_NOTICE = "Echec de l'envoie des adhésions, vérifiez les permissions, avant de réessayer !";
 
 /**
- * Avis à l'auteur quand aucun membre n'est à servir : rôle sans membre (et
- * aucun membre désigné), ou membres du rôle illisibles.
+ * Avis à l'auteur quand aucun membre n'est à servir (aucun membre désigné, et
+ * aucun membre du rôle trouvé). Le texte dit ce que le bot a constaté, pas que
+ * le rôle est vide : les membres d'un rôle se lisent dans le cache du bot,
+ * qui peut être incomplet.
  */
-const NO_RECIPIENT_NOTICE = "Echec de l'envoi des adhésions : personne n'a pu être joint (rôle visé sans membre ou illisible). Vérifiez la cible avant de réessayer !";
+const NO_RECIPIENT_NOTICE = "Echec de l'envoi des adhésions : aucun membre du rôle visé n'a été trouvé, personne n'a reçu les papiers. Réessayez plus tard ou vérifiez la cible !";
 
 /** Avis à l'auteur quand plusieurs membres ont tous reçu les papiers. */
 const MEMBERS_DELIVERED_NOTICE = "Adhésions envoyés avec succès à plusieurs membres !";
