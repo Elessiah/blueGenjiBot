@@ -187,12 +187,15 @@ rm -rf ~/restauration
 ```
 
 Le dump est fait sans `--databases` : il ne crée pas la base, d'où le
-`CREATE DATABASE` préalable. Il est fait avec `--routines --events` ; si un
-import échoue sur un `DEFINER` inconnu, recréer d'abord le compte qu'il nomme.
+`CREATE DATABASE` préalable.
 
 Recréer aussi le compte **en lecture seule** de la sauvegarde
 (`backup-onedrive.md`, « 4. Accès MySQL en lecture seule »), et le fichier
-`~/.mysql-backup.cnf` qui va avec.
+`~/.mysql-backup.cnf` qui va avec. Ce compte porte le nom du **compte système**
+et s'authentifie par socket : il doit être **distinct** du `DB_USER` du site.
+S'ils portaient le même nom, le `CREATE USER IF NOT EXISTS` de la sauvegarde
+ne ferait rien, le compte resterait à mot de passe seul, et le `mysqldump` du
+lundi échouerait en `Access denied`.
 
 **Ne pas encore démarrer le site** : la base restaurée contient des comptes
 supprimés depuis l'archive (étape 6).
