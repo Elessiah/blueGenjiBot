@@ -20,14 +20,15 @@ test("restoreFailureText ne rend rien du message brut d'une commande", () => {
   assert.doesNotMatch(text, /onedrive|\/tmp|rclone|BlueGenji/);
 });
 
-test("restoreFailureText nomme une commande introuvable, sans chemin", () => {
-  assert.equal(restoreFailureText(new MissingCommandError("age")), missingCommandText("age"));
-  assert.doesNotMatch(restoreFailureText(new MissingCommandError("age")), /\/usr|\/bin/);
+test("restoreFailureText nomme une commande introuvable, sans chemin, et renvoie aux journaux", () => {
+  const text = restoreFailureText(new MissingCommandError("age"));
+  assert.equal(text, `${missingCommandText("age")} (détail dans les journaux pm2)`);
+  assert.doesNotMatch(text, /\/usr|\/bin/);
 });
 
 test("restoreFailureText trouve la commande introuvable dans la chaîne des causes", () => {
   const wrapped = new Error("stockage distant : `rclone` introuvable", { cause: new MissingCommandError("rclone") });
-  assert.equal(restoreFailureText(wrapped), missingCommandText("rclone"));
+  assert.ok(restoreFailureText(wrapped).startsWith(missingCommandText("rclone")));
 });
 
 test("restoreFailureText accepte une valeur levée qui n'est pas une Error", () => {
