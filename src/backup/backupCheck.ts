@@ -26,13 +26,13 @@
  *
  * Configuration (`.env` du bot), toutes facultatives :
  * - archives : `BACKUP_ARCHIVE_DIR` / `BACKUP_RCLONE_REMOTE` (ceux de
- *   `/restore-backup`) ; à défaut, `RCLONE_REMOTE:REMOTE_DIR` du fichier du
- *   script de sauvegarde ;
+ *   `/restore-backup`) ; sans distant réglé, `RCLONE_REMOTE:REMOTE_DIR` du
+ *   fichier du script de sauvegarde s'y ajoute ;
  * - `BACKUP_UPLOADS_REMOTE` : remote `crypt` et dossier des images
  *   (`nom-crypt:uploads`) ; à défaut, `UPLOADS_RCLONE_REMOTE` et
  *   `UPLOADS_REMOTE_DIR` du même fichier ;
  * - `BACKUP_RECIPIENTS_FILE` : fichier des clés publiques ; à défaut,
- *   `AGE_RECIPIENTS_FILE` du même fichier, puis `backup-recipients.txt` à côté ;
+ *   `AGE_RECIPIENTS_FILE` du même fichier, puis `scripts/backup-recipients.txt` ;
  * - `BACKUP_ONEDRIVE_ENV` (ou `BACKUP_CONFIG`, celle du script) : chemin de ce
  *   fichier (défaut `scripts/backup-onedrive.env`, relatif au dossier du bot).
  *
@@ -155,7 +155,9 @@ export function backupCheckConfigFromEnv(
   const scriptEnvPath = path.resolve(
     env.BACKUP_ONEDRIVE_ENV?.trim() || env.BACKUP_CONFIG?.trim() || "scripts/backup-onedrive.env",
   );
-  const scriptDir = path.dirname(scriptEnvPath);
+  // `$SCRIPT_DIR` est le dossier du script (`scripts/` du bot), pas celui de
+  // sa configuration : `BACKUP_CONFIG` peut la placer ailleurs.
+  const scriptDir = path.resolve("scripts");
   const content = readFile(scriptEnvPath);
   const scriptEnv = parseEnvFile(content ?? "");
   const scriptPath = (key: string): string | null => resolveScriptPath(scriptEnv[key], scriptDir);
@@ -175,11 +177,11 @@ export function backupCheckConfigFromEnv(
     ? path.resolve(env.BACKUP_RECIPIENTS_FILE.trim())
     : scriptPath("AGE_RECIPIENTS_FILE") ?? path.join(scriptDir, "backup-recipients.txt");
 
-  // Les archives : celles de `/restore-backup` si elles sont réglées, sinon
-  // celles qu'écrit le script — un rapport ne doit pas accuser le stockage
-  // d'une variable que seule la restauration lisait.
+  // Les archives : celles de `/restore-backup`, plus le stockage où écrit le
+  // script quand aucun distant n'est réglé — le script ne garde aucune archive
+  // en local, un vieux dossier de restauration masquerait sinon les nouvelles.
   const sources = archiveSourcesFromEnv(env);
-  if (!sources.localDir && !sources.remote && scriptRemote) {
+  if (!sources.remote && scriptRemote) {
     sources.remote = `${scriptRemote}:${scriptEnv.REMOTE_DIR || "BlueGenji/backups"}`;
   }
   // Le script n'ajoute le dump du site que si MySQL est configuré : sans lui,

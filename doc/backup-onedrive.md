@@ -458,12 +458,13 @@ du bot, et la clé privée lisible par son compte (c'est déjà le cas pour
 | Variable | Défaut | Rôle |
 | --- | --- | --- |
 | `BACKUP_STATUS_PATH` | `/var/lib/bluegenji/backup-status.json` | Fichier de statut relu pour le rapport hebdomadaire. |
-| `BACKUP_UPLOADS_REMOTE` | `UPLOADS_RCLONE_REMOTE:UPLOADS_REMOTE_DIR` de `scripts/backup-onedrive.env` | Remote `crypt` et dossier des images, lu par la vérification. |
-| `BACKUP_RECIPIENTS_FILE` | `AGE_RECIPIENTS_FILE` du même fichier (`$SCRIPT_DIR`, `~` et `$HOME` compris), sinon `backup-recipients.txt` à côté de lui | Clés publiques autorisées, comparées à la clé du bot. |
+| `BACKUP_UPLOADS_REMOTE` | `UPLOADS_RCLONE_REMOTE:UPLOADS_REMOTE_DIR` de `scripts/backup-onedrive.env` (défauts du script compris) ; sans objet si `UPLOADS_DIR` est vide | Remote `crypt` et dossier des images, lu par la vérification. |
+| `BACKUP_RECIPIENTS_FILE` | `AGE_RECIPIENTS_FILE` du même fichier (`$SCRIPT_DIR`, `~` et `$HOME` compris), sinon `scripts/backup-recipients.txt` (`$SCRIPT_DIR` est le dossier du script, même si sa configuration vit ailleurs) | Clés publiques autorisées, comparées à la clé du bot. |
 | `BACKUP_ONEDRIVE_ENV` (ou `BACKUP_CONFIG`) | `scripts/backup-onedrive.env` | Fichier de configuration du script, relu (jamais exécuté) pour les défauts ci-dessus. |
 
-Sans `BACKUP_ARCHIVE_DIR` ni `BACKUP_RCLONE_REMOTE`, la vérification lit les
-archives là où le script les écrit (`RCLONE_REMOTE:REMOTE_DIR`). Elle n'exige
+Sans `BACKUP_RCLONE_REMOTE`, la vérification lit aussi les archives là où le
+script les écrit (`RCLONE_REMOTE:REMOTE_DIR`, défaut du script compris), en plus
+d'un éventuel `BACKUP_ARCHIVE_DIR` : la plus récente des deux est déchiffrée. Elle n'exige
 `appbluegenji.sql` que si le script a MySQL à sauvegarder (`MYSQL_DEFAULTS_FILE`
 et `DB_DATABASE`), comme le script lui-même. Les trois contrôles tournent en
 parallèle, chaque commande bornée à 6 minutes : la réponse de `/backup-check`

@@ -272,7 +272,8 @@ test("backupCheckConfigFromEnv prend l'environnement du bot, puis le fichier du 
 });
 
 test("backupCheckConfigFromEnv retombe sur les archives et les chemins du script", () => {
-  const scriptDir = path.resolve("/opt/bot/scripts");
+  // `$SCRIPT_DIR` est le dossier du script, même quand sa configuration vit ailleurs.
+  const scriptDir = path.resolve("scripts");
   const scriptEnv = [
     "RCLONE_REMOTE=store",
     "REMOTE_DIR=BG/backups",
@@ -280,7 +281,7 @@ test("backupCheckConfigFromEnv retombe sur les archives et les chemins du script
     "MYSQL_DEFAULTS_FILE=/home/x/.cnf",
     "DB_DATABASE=site",
   ].join("\n");
-  const config = backupCheckConfigFromEnv({ BACKUP_CONFIG: path.join(scriptDir, "backup-onedrive.env") }, () => scriptEnv);
+  const config = backupCheckConfigFromEnv({ BACKUP_CONFIG: "/etc/bluegenji/backup-onedrive.env" }, () => scriptEnv);
   assert.equal(config.sources.remote, "store:BG/backups");
   assert.equal(config.recipientsFile, path.join(scriptDir, "keys.txt"));
   assert.deepEqual(config.expectedEntries, ["database.sqlite", "appbluegenji.sql"]);
@@ -288,6 +289,11 @@ test("backupCheckConfigFromEnv retombe sur les archives et les chemins du script
   // Les réglages de /restore-backup l'emportent.
   const own = backupCheckConfigFromEnv({ BACKUP_RCLONE_REMOTE: "other:x" }, () => scriptEnv);
   assert.equal(own.sources.remote, "other:x");
+
+  // Un dossier local de restauration ne masque pas le stockage du script.
+  const local = backupCheckConfigFromEnv({ BACKUP_ARCHIVE_DIR: "/srv/restore" }, () => scriptEnv);
+  assert.ok(local.sources.localDir);
+  assert.equal(local.sources.remote, "store:BG/backups");
 
   // Sans MySQL, le script n'archive que la base du bot : ne pas exiger le dump.
   const botOnly = backupCheckConfigFromEnv({}, () => "RCLONE_REMOTE=store\nDB_DATABASE=\n");
