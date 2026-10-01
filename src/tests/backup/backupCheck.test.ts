@@ -584,6 +584,22 @@ test("une commande hors des dossiers système est nommée comme telle, pas comme
   assert.doesNotMatch(`${archive.detail} ${mirror.detail} ${key.result.detail}`, /\//);
 });
 
+test("checkLatestArchive ne tait pas le dossier local quand la commande manque et que tout a échoué", async () => {
+  const run: CommandRunner = async () => {
+    throw new MissingCommandError("rclone");
+  };
+  const unreadable = path.join(os.tmpdir(), "bg-check-absent-" + process.pid);
+  const result = await checkLatestArchive(
+    config({ sources: { localDir: unreadable, remote: "store:b", identity: "/k/id.key" } }),
+    { run, log: () => {} },
+  );
+  assert.equal(result.ok, false);
+  assert.equal(
+    result.detail,
+    "`rclone` introuvable dans les dossiers système où le bot le cherche, et le dossier local d'archives est illisible",
+  );
+});
+
 test("un autre échec garde la phrase d'origine", async () => {
   const failing: CommandRunner = async () => {
     throw new Error("dial tcp");
