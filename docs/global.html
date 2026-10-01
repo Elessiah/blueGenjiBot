@@ -2561,7 +2561,7 @@ suffisent largement à une équipe d'arbitrage.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="adhesion_adhesionNotices.js.html">adhesion/adhesionNotices.js</a>, <a href="adhesion_adhesionNotices.js.html#line22">line 22</a>
+        <a href="adhesion_adhesionNotices.js.html">adhesion/adhesionNotices.js</a>, <a href="adhesion_adhesionNotices.js.html#line24">line 24</a>
     </li></ul></dd>
     
 
@@ -2968,8 +2968,10 @@ base (`Bdd.initDatabase`) — un module nouveau ne doit pas reprendre ces noms.
 
 
 <div class="description">
-    Avis à l'auteur quand aucun membre n'est à servir : rôle sans membre (et
-aucun membre désigné), ou membres du rôle illisibles.
+    Avis à l'auteur quand aucun membre n'est à servir (aucun membre désigné, et
+aucun membre du rôle trouvé). Le texte dit ce que le bot a constaté, pas que
+le rôle est vide : les membres d'un rôle se lisent dans le cache du bot,
+qui peut être incomplet.
 </div>
 
 
@@ -3007,7 +3009,7 @@ aucun membre désigné), ou membres du rôle illisibles.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="adhesion_adhesionNotices.js.html">adhesion/adhesionNotices.js</a>, <a href="adhesion_adhesionNotices.js.html#line20">line 20</a>
+        <a href="adhesion_adhesionNotices.js.html">adhesion/adhesionNotices.js</a>, <a href="adhesion_adhesionNotices.js.html#line22">line 22</a>
     </li></ul></dd>
     
 
@@ -11024,7 +11026,7 @@ traite comme du spam.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="adhesion_adhesionNotices.js.html">adhesion/adhesionNotices.js</a>, <a href="adhesion_adhesionNotices.js.html#line28">line 28</a>
+        <a href="adhesion_adhesionNotices.js.html">adhesion/adhesionNotices.js</a>, <a href="adhesion_adhesionNotices.js.html#line30">line 30</a>
     </li></ul></dd>
     
 
@@ -14513,7 +14515,7 @@ est l'ordre chronologique.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="adhesion_adhesionDelivery.js.html">adhesion/adhesionDelivery.js</a>, <a href="adhesion_adhesionDelivery.js.html#line96">line 96</a>
+        <a href="adhesion_adhesionDelivery.js.html">adhesion/adhesionDelivery.js</a>, <a href="adhesion_adhesionDelivery.js.html#line97">line 97</a>
     </li></ul></dd>
     
 
@@ -16681,7 +16683,7 @@ BlueGenji.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="adhesion_adhesionDelivery.js.html">adhesion/adhesionDelivery.js</a>, <a href="adhesion_adhesionDelivery.js.html#line113">line 113</a>
+        <a href="adhesion_adhesionDelivery.js.html">adhesion/adhesionDelivery.js</a>, <a href="adhesion_adhesionDelivery.js.html#line114">line 114</a>
     </li></ul></dd>
     
 
@@ -16952,8 +16954,9 @@ BlueGenji.
     Envoie les papiers en MP à chaque destinataire, puis avise l'auteur : la
 liste des échecs s'il y en a, une confirmation sinon.
 
-Sans destinataire (rôle sans membre, membres illisibles), rien n'est
-envoyé : l'auteur en est avisé, le journal le note, et l'envoi échoue.
+Sans destinataire (aucun membre du rôle trouvé, ou membres illisibles), rien
+n'est envoyé en MP : l'auteur en est avisé, le journal le note, et l'envoi
+échoue.
 </div>
 
 
@@ -17113,7 +17116,7 @@ envoyé : l'auteur en est avisé, le journal le note, et l'envoi échoue.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="adhesion_adhesionDelivery.js.html">adhesion/adhesionDelivery.js</a>, <a href="adhesion_adhesionDelivery.js.html#line69">line 69</a>
+        <a href="adhesion_adhesionDelivery.js.html">adhesion/adhesionDelivery.js</a>, <a href="adhesion_adhesionDelivery.js.html#line70">line 70</a>
     </li></ul></dd>
     
 
@@ -30851,7 +30854,7 @@ tailles differentes, et cette levee serait elle-meme un canal.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="adhesion_adhesionNotices.js.html">adhesion/adhesionNotices.js</a>, <a href="adhesion_adhesionNotices.js.html#line36">line 36</a>
+        <a href="adhesion_adhesionNotices.js.html">adhesion/adhesionNotices.js</a>, <a href="adhesion_adhesionNotices.js.html#line38">line 38</a>
     </li></ul></dd>
     
 
@@ -30993,7 +30996,7 @@ tailles differentes, et cette levee serait elle-meme un canal.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="adhesion_adhesionNotices.js.html">adhesion/adhesionNotices.js</a>, <a href="adhesion_adhesionNotices.js.html#line44">line 44</a>
+        <a href="adhesion_adhesionNotices.js.html">adhesion/adhesionNotices.js</a>, <a href="adhesion_adhesionNotices.js.html#line46">line 46</a>
     </li></ul></dd>
     
 
@@ -51374,7 +51377,7 @@ production avec un fichier corrompu serait pire que l'absence de restauration.
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Fri Oct 02 2026 01:44:41 GMT+0200 (heure d’été d’Europe centrale)
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Fri Oct 02 2026 01:50:27 GMT+0200 (heure d’été d’Europe centrale)
 </footer>
 
 <script> prettyPrint(); </script>
