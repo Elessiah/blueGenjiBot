@@ -1,6 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { absDelta, deterministicColor, isLoopbackHost, matchesToken } from "../../internalApi/helpers.js";
+import {
+  absDelta,
+  deterministicColor,
+  isLoopbackHost,
+  matchesToken,
+  relayStatus,
+  sparklineFromBuckets,
+  SPARKLINE_POINTS,
+} from "../../internalApi/helpers.js";
 
 test("absDelta formate le signe correctement", () => {
   assert.equal(absDelta(15, 12), "+3");
@@ -81,4 +89,30 @@ test("matchesToken supporte des longueurs differentes sans lever", () => {
   // sur deux tampons de tailles differentes, et cette levee serait un canal.
   assert.equal(matchesToken("court", "un jeton nettement plus long"), false);
   assert.equal(matchesToken("un jeton nettement plus long", "court"), false);
+});
+
+test("relayStatus : ok sous 24 h, lag sous 7 jours, off au-delà ou sans relais", () => {
+  assert.equal(relayStatus(null), "off");
+  assert.equal(relayStatus(undefined), "off");
+  assert.equal(relayStatus(0), "ok");
+  assert.equal(relayStatus(23.99), "ok");
+  assert.equal(relayStatus(24), "lag");
+  assert.equal(relayStatus(24 * 7 - 0.01), "lag");
+  assert.equal(relayStatus(24 * 7), "off");
+  assert.equal(relayStatus(Number.NaN), "off");
+});
+
+test("sparklineFromBuckets range la tranche la plus récente en dernier et ignore les tranches hors courbe", () => {
+  assert.equal(SPARKLINE_POINTS, 10);
+  assert.deepEqual(sparklineFromBuckets([]), new Array(10).fill(0));
+  assert.deepEqual(
+    sparklineFromBuckets([
+      { bucket: 0, count: 5 },
+      { bucket: 9, count: 1 },
+      { bucket: 3, count: "7" as unknown as number },
+      { bucket: 10, count: 99 },
+      { bucket: -1, count: 99 },
+    ]),
+    [1, 0, 0, 0, 0, 0, 7, 0, 0, 5],
+  );
 });
