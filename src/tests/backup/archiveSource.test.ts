@@ -192,14 +192,16 @@ test("commandEnv fige le PATH et garde le reste de l'environnement", () => {
   assert.equal(env.HOME, "/home/bot");
 });
 
-test("execCommand traduit un binaire absent en MissingCommandError, dossiers fouillés compris", async () => {
+test("execCommand traduit un binaire absent en MissingCommandError, sans chemin dans le message", async () => {
   await assert.rejects(execCommand("bluegenji-binaire-inexistant", []), (error: unknown) => {
     assert.ok(error instanceof MissingCommandError);
     assert.equal(error.command, "bluegenji-binaire-inexistant");
+    // Le message part sur Discord (`/restore-backup`, salon de logs) : aucun chemin.
     assert.equal(
       error.message,
-      "`bluegenji-binaire-inexistant` introuvable dans les dossiers système (/usr/local/bin, /usr/bin, /bin)",
+      "`bluegenji-binaire-inexistant` introuvable dans les dossiers système où le bot le cherche",
     );
+    assert.doesNotMatch(error.message, /\//);
     return true;
   });
 });
