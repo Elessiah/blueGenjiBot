@@ -120,6 +120,20 @@ function describeError(error: unknown): string {
     }
 }
 
+/**
+ * Comme `describeError`, sans jamais sérialiser une valeur qui n'est pas une
+ * `Error` : sur le chemin d'une annonce, un objet levé peut porter son texte
+ * et le pseudo de son auteur, que les journaux ne reçoivent pas.
+ * @param error Valeur capturée.
+ * @returns Message d'une `Error` (suffixé de son code), sinon le seul type de la valeur.
+ */
+function describeErrorWithoutPayload(error: unknown): string {
+    if (error instanceof Error) {
+        return describeError(error);
+    }
+    return `valeur levée non standard (${error === null ? "null" : typeof error})`;
+}
+
 /** Gravité retenue pour une erreur, qui décide de sa destination. */
 type ErrorSeverity = "transient" | "ignorable" | "fatal";
 
@@ -138,6 +152,7 @@ export {
     classifyError,
     MAX_CAUSE_DEPTH,
     describeError,
+    describeErrorWithoutPayload,
     errorCode,
     isIgnorableDiscordError,
     isTransientNetworkError,

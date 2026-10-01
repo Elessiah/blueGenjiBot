@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   classifyError,
   describeError,
+  describeErrorWithoutPayload,
   errorCode,
   isIgnorableDiscordError,
   isTransientNetworkError,
@@ -129,6 +130,12 @@ test("describeError suffixe le code et supporte les valeurs non-Error", () => {
   assert.equal(describeError(new Error("nu")), "nu");
   assert.equal(describeError("chaine brute"), "chaine brute");
   assert.equal(describeError({ a: 1 }), '{"a":1}');
+});
+
+test("describeErrorWithoutPayload ne serialise jamais une valeur non-Error", () => {
+  assert.equal(describeErrorWithoutPayload(withCode("Missing Access", 50001)), "Missing Access [50001]");
+  assert.equal(describeErrorWithoutPayload({ content: "LFT pseudo#1234" }), "valeur levée non standard (object)");
+  assert.equal(describeErrorWithoutPayload(null), "valeur levée non standard (null)");
 });
 
 test("describeError ne leve pas sur une valeur non serialisable", () => {

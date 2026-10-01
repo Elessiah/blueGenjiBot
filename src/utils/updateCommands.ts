@@ -2,7 +2,8 @@ import {Client, REST, Routes} from 'discord.js';
 import 'dotenv/config';
 import {commands} from '../config/commands.js';
 import {fillBlueCommands} from '../config/fillBlueCommands.js';
-import {reportError} from "../safe/processGuards.js";
+import {sendLog} from "../safe/sendLog.js";
+import {describeErrorWithoutPayload} from "../safe/errorGuards.js";
 
 /**
  * Synchronise les commandes slash de l'application auprès de Discord.
@@ -36,9 +37,9 @@ async function updateCommands(client: Client,
             }
         );
     } catch (error) {
-        // `reportError` trie pannes réseau, erreurs Discord sans gravité et
-        // vraies fautes, et ne lève jamais.
-        await reportError(client, `updateCommands (${guildId})`, error);
+        // Toujours au journal (un 50001 dit une invitation sans le droit
+        // `applications.commands`, à corriger) ; `sendLog` ne lève pas.
+        await sendLog(client, `Update Commands (${guildId}) : \n ${describeErrorWithoutPayload(error)}`);
     }
 }
 
