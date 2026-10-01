@@ -181,7 +181,10 @@ Une seule commande suffit, avec **les deux** pièces (réservée au dev et au pr
 /load-adhesion-files adhesion:<bulletin d'adhésion> status:<statuts de l'association>
 ```
 
-Les autres commandes d'adhésion (`doc/adhesions-commands-user.md`) n'ont rien à refaire : les rappels programmés vivent dans la base, restaurés avec elle.
+Les rappels programmés vivent dans la base : ils reviennent **tels qu'à la date de l'archive**. Ce qui a changé depuis est à refaire à la main. Le bot ne journalise ni la programmation d'un rappel ni sa suppression par commande : confronter `/show-rappel-adhesion` à ce que se rappellent ceux qui gèrent les adhésions (validations et suppressions de la semaine) :
+
+- un rappel **créé** après l'archive est perdu — notamment l'avis de péremption d'une adhésion validée dans la semaine. Le reposer : `/get-adhesion … interval:` pour un rappel récurrent (qui envoie aussi les fichiers sur-le-champ), `/adhesion-valide` pour un avis de péremption (qui renvoie aussi le message de validation au membre — le prévenir) ;
+- un rappel **supprimé** après l'archive est revenu, et repartirait indéfiniment s'il est récurrent : le supprimer de nouveau par `/delete-rappel-adhesion`, avant 10 h.
 
 **Rappels envoyés deux fois.** Un rappel parti entre l'archive et la perte est revenu « dû » avec la base : il **repart une fois** au prochain contrôle — une fois seulement, son échéance suivante étant recalculée à partir de l'envoi. C'est le cas d'un avis de péremption déjà reçu (`/adhesion-valide`) ou d'un rappel récurrent (`/get-adhesion … interval:`) passé dans la semaine. Pour l'éviter, **avant 10 h** : `/show-rappel-adhesion` liste les rappels avec leur prochain envoi ; un envoi daté d'avant la restauration est dû. Un **avis de péremption** (« Péremption — 1 envoi restant ») dont on sait qu'il est déjà parti (salon de logs du bot, message reçu par le membre) se supprime par `/delete-rappel-adhesion` : il n'avait plus rien à envoyer. Un **rappel récurrent**, lui, se laisse partir : le supprimer l'arrêterait pour de bon, et le reposer par `/get-adhesion` enverrait les fichiers sur-le-champ — le doublon qu'on voulait éviter. Dans le doute, laisser partir : un doublon vaut mieux qu'un rappel perdu.
 
