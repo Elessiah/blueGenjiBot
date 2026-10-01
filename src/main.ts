@@ -333,16 +333,24 @@ async function shutdown(): Promise<void> {
     console.log('Arrêt du bot...');
     try {
         await client.destroy();
+    } catch (error) {
+        console.error('[shutdown] déconnexion Discord', error);
+    }
+    try {
         await closeBddInstance();
     } catch (error) {
-        console.error('[shutdown]', error);
-    } finally {
-        process.exit(0);
+        console.error('[shutdown] fermeture de la base', error);
     }
+    process.exit(0);
 }
 
-process.on('SIGINT', () => void shutdown());
-process.on('SIGTERM', () => void shutdown());
+/** Arrêt en cours : un second signal (Ctrl+C répété, SIGINT puis SIGTERM) attend le premier. */
+let shuttingDown: Promise<void> | null = null;
+const onSignal = (): void => {
+    shuttingDown ??= shutdown();
+};
+process.on('SIGINT', onSignal);
+process.on('SIGTERM', onSignal);
 
 // Contrairement aux erreurs de runtime, un échec de connexion laisse un process
 // vivant mais inutile : on journalise puis on sort en erreur pour que pm2
