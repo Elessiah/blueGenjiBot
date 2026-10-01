@@ -3,7 +3,7 @@
  * (la purge des messages relayés elle-même vit dans
  * `messages/manageMsgExpiration.ts` ; ce module ne fait que la rattraper).
  *
- * Trois ménages, joués au démarrage, chaque nuit par la tâche `cron`
+ * Quatre ménages, joués au démarrage, chaque nuit par la tâche `cron`
  * existante et après une restauration de la base — aucun ordonnanceur de plus :
  *
  * - **messages relayés** : la purge à 7 jours (`manageMsgExpiration`) n'était
@@ -14,10 +14,14 @@
  * - **serveurs quittés pendant un arrêt** : Discord n'envoie `guildDelete` qu'à
  *   un bot connecté. Un serveur quitté pendant que le bot était arrêté — ou
  *   dont l'oubli a échoué à mi-chemin — garderait sinon sa configuration sans
- *   limite, alors que plus personne sur ce serveur ne peut la retirer.
+ *   limite, alors que plus personne sur ce serveur ne peut la retirer ;
+ * - **salons relayés supprimés pendant un arrêt** : même raison pour
+ *   `channelDelete`. Le salon restait relayé en base et chaque relais vers lui
+ *   échouait.
  */
 
-import type { Client } from "discord.js";
+import { DiscordAPIError, type Client } from "discord.js";
+import { RESTJSONErrorCodes } from "discord-api-types/v10";
 
 import { getBddInstance } from "@/bdd/Bdd.js";
 import { manageMsgExpiration } from "@/messages/manageMsgExpiration.js";
@@ -174,7 +178,72 @@ export async function forgetDepartedGuilds(client: Client): Promise<string[] | n
 }
 
 /**
- * Les trois ménages, dans l'ordre. Chacun signale son propre échec sans priver
+ * Discord a-t-il dit que ce salon **n'existe plus** ?
+ *
+ * Seul `UnknownChannel` autorise l'effacement : un accès retiré (`MissingAccess`),
+ * une limite de débit ou une coupure réseau lèvent aussi, et ne disent rien de
+ * l'existence du salon — dans le doute, la ligne reste.
+ * @param client Client Discord connecté.
+ * @param channelId Salon absent du cache.
+ * @returns `true` seulement sur un refus explicite « salon inconnu ».
+ */
+async function channelIsGone(client: Client, channelId: string): Promise<boolean> {
+  try {
+    await client.channels.fetch(channelId);
+    return false;
+  } catch (error) {
+    return error instanceof DiscordAPIError && Number(error.code) === RESTJSONErrorCodes.UnknownChannel;
+  }
+}
+
+/**
+ * Retire les salons relayés des serveurs **rejoints** que Discord ne connaît
+ * plus : supprimés pendant que le bot était arrêté, ils n'ont déclenché aucun
+ * `channelDelete`. Les serveurs quittés relèvent de `forgetDepartedGuilds`.
+ *
+ * Mêmes gardes que lui : client prêt (c'est `clientReady` qui remplit les
+ * caches de salons) et base appartenant à l'application connectée. Un serveur
+ * marqué indisponible est sauté (son cache de salons ne le décrit pas), et un
+ * salon absent du cache n'est effacé qu'après une relecture chez Discord qui
+ * répond « salon inconnu » (`channelIsGone`) — le cache ne garde pas les fils
+ * archivés, et toute autre erreur laisse la ligne en place.
+ * @param client Client Discord connecté.
+ * @returns Identifiants des salons retirés, ou `null` si le rattrapage n'a pas
+ *          été joué (client pas prêt, application inconnue, autre application).
+ */
+export async function forgetDeletedChannels(client: Client): Promise<string[] | null> {
+  if (!client.isReady()) { return null; }
+  if ((await ownsDatabase(client)) !== true) { return null; }
+  const bdd = await getBddInstance();
+  const removed: string[] = [];
+  for (const guild of client.guilds.cache.values()) {
+    if (!guild.available) { continue; }
+    const rows = await bdd.get(
+      "ChannelPartner",
+      ["id_channel"],
+      {},
+      { query: "id_guild = ? AND id_channel IS NOT NULL", values: [guild.id] },
+    ) as { id_channel: string }[];
+    for (const { id_channel: channelId } of rows) {
+      if (guild.channels.cache.has(channelId)) { continue; }
+      if (!(await channelIsGone(client, channelId))) { continue; }
+      // `deleteChannel` ne lève pas : son échec se lit sur `success`.
+      const ret = await bdd.deleteChannel(channelId);
+      if (ret.success) {
+        removed.push(channelId);
+      } else {
+        await sendLog(client, `forgetDeletedChannels: retrait du salon ${channelId} échoué : ${ret.message}`);
+      }
+    }
+  }
+  if (removed.length > 0) {
+    await sendLog(client, `${removed.length} salon(s) relayé(s) supprimé(s) pendant un arrêt : retiré(s) de la base.`);
+  }
+  return removed;
+}
+
+/**
+ * Les quatre ménages, dans l'ordre. Chacun signale son propre échec sans priver
  * les autres de passer ; la fonction ne lève jamais.
  * @param client Client Discord connecté.
  */
@@ -203,7 +272,7 @@ let running: Promise<void> | null = null;
 let rerunRequested = false;
 
 /**
- * Une passe des trois ménages (voir `runDataRetention`).
+ * Une passe des quatre ménages (voir `runDataRetention`).
  * @param client Client Discord connecté.
  */
 async function runDataRetentionOnce(client: Client): Promise<void> {
@@ -222,10 +291,17 @@ async function runDataRetentionOnce(client: Client): Promise<void> {
   } catch (error) {
     await reportError(client, "forgetDepartedGuilds", error);
   }
+  let channels: string = "échec";
+  try {
+    const result = await forgetDeletedChannels(client);
+    channels = result === null ? "non joué" : String(result.length);
+  } catch (error) {
+    await reportError(client, "forgetDeletedChannels", error);
+  }
   // Une ligne par passage dans les journaux du serveur (pm2) : une nuit à
   // zéro se distingue ainsi d'un ménage qui n'a pas tourné. Aucun identifiant.
   console.log(
     `[data-retention] purge des relais : ${relays}, auteurs anonymisés : ${anonymized ?? "échec"}, ` +
-      `serveurs oubliés : ${forgotten}`,
+      `serveurs oubliés : ${forgotten}, salons retirés : ${channels}`,
   );
 }

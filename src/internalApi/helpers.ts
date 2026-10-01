@@ -43,18 +43,6 @@ export function matchesToken(provided: string | undefined, expected: string): bo
   return timingSafeEqual(providedDigest, expectedDigest);
 }
 
-/**
- * Pourcentage de variation entre curr et prev, formate '+12 %' / '-5 %'.
- * Si prev=0 et curr>0 renvoie '+100 %' ; si prev=0 et curr=0 renvoie '+0 %'.
- */
-export function pctDelta(curr: number, prev: number): string {
-  if (prev === 0) {
-    return curr > 0 ? "+100 %" : "+0 %";
-  }
-  const pct = Math.round(((curr - prev) / prev) * 100);
-  return (pct >= 0 ? "+" : "") + pct + " %";
-}
-
 /** Difference absolue formatee '+3' / '-2'. */
 export function absDelta(curr: number, prev: number): string {
   const d = curr - prev;
