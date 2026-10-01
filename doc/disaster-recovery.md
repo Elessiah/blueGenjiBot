@@ -280,7 +280,7 @@ Chaque ligne désigne un fichier attendu : `data/quarantine/teams/team-<team_id>
 pour un logo, `data/quarantine/players/user-<user_id>-<nom>` pour un avatar, où
 `<nom>` est le dernier segment de `logo_url`. Les écarts se règlent dans cet ordre :
 
-- **Logo partagé** — d'abord vérifier, pour chaque ligne d'équipe sans fichier, qu'aucune autre équipe ne désigne le même logo (`SELECT id FROM bg_teams WHERE logo_url = '<logo_url>'`). S'il y en a une, le fichier en ligne est resté présent quoi qu'il soit arrivé (le masquage d'un logo partagé copie au lieu de déplacer) : on ne peut plus savoir s'il avait été rétabli. Clore la ligne comme supprimée (cas suivant) — l'équipe signalée pourra renvoyer son logo —, **jamais** la rétablir sur la seule présence du fichier.
+- **Logo partagé** — d'abord vérifier, pour chaque ligne d'équipe sans fichier, qu'aucune autre équipe ne désigne le même logo (`SELECT id FROM bg_teams WHERE logo_url = '<logo_url>'`). S'il y en a une, le fichier en ligne est resté présent quoi qu'il soit arrivé (le masquage d'un logo partagé copie au lieu de déplacer) : on ne peut plus savoir s'il avait été rétabli. Clore la ligne comme supprimée (geste de « Ligne sans fichier nulle part », plus bas) — l'équipe signalée pourra renvoyer son logo —, **jamais** la rétablir sur la seule présence du fichier.
 - **Ligne sans fichier, logo non partagé, et `<nom>` présent dans `public/uploads/teams` (ou `avatars`)** : l'image a été rétablie après l'archive. Rejouer le rétablissement :
 
   ```sql
@@ -290,7 +290,7 @@ pour un logo, `data/quarantine/players/user-<user_id>-<nom>` pour un avatar, où
   ```
 
   Le logo d'entrée solo d'un joueur dont l'avatar est ainsi rétabli se recale à sa prochaine modification de profil ou inscription.
-- **Ligne sans fichier nulle part** : l'image a été supprimée après l'archive. Clore la ligne : `UPDATE bg_logo_quarantines SET status = 'PURGED', closed_at = NOW() WHERE id = <id>;`. Même geste pour un logo partagé (cas précédent).
+- **Ligne sans fichier nulle part** : l'image a été supprimée après l'archive. Clore la ligne : `UPDATE bg_logo_quarantines SET status = 'PURGED', closed_at = NOW() WHERE id = <id>;`. Même geste pour un logo partagé (« Logo partagé », premier cas). Pour un **avatar** dont le joueur a masqué l'image (`bg_users.visible_avatar = 0`), l'absence ne prouve pas la suppression : rétabli après l'archive, l'avatar a été renommé sous un nom aléatoire (le site le fait à chaque masquage par le joueur), que rien dans la base restaurée ne désigne. Clore la ligne de la même façon — le joueur renverra son avatar — en sachant que le fichier renommé reste orphelin dans `public/uploads/avatars`.
 - **Fichier sans ligne `HIDDEN`** : l'image a été masquée après l'archive, et la base restaurée l'affiche toujours. Si `bg_teams.logo_url` (ou `bg_users.avatar_url`) de l'équipe ou du joueur indiqué par le nom du fichier désigne encore `<nom>`, remettre le fichier en ligne (`mv data/quarantine/teams/team-<team_id>-<nom> public/uploads/teams/<nom>`, ou `players/user-<user_id>-<nom>` vers `public/uploads/avatars/<nom>`) puis **rejuger** : masquer ou retirer de nouveau depuis le panneau des signalements si le signalement figure dans la base restaurée, sinon depuis la fiche de l'équipe. Si plus rien ne le désigne, supprimer le fichier : il serait recopié chaque heure sans jamais être purgé.
 
 ## 6. Le site : rejouer les suppressions de compte
