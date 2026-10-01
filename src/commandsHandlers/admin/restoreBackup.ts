@@ -38,7 +38,7 @@ const SEE_PM2 = "détail dans les journaux pm2";
  */
 export function restoreFailureText(error: unknown): string {
   const missing = findMissingCommand(error);
-  return missing ? missingCommandText(missing) : SEE_PM2;
+  return missing ? `${missingCommandText(missing)} (${SEE_PM2})` : SEE_PM2;
 }
 
 /**
@@ -108,7 +108,11 @@ export async function restoreBackup(
     ({ archives, failures, missingCommand: listingMissingCommand } = await listArchives(sources));
   } catch (error) {
     console.error("[restore-backup] Archives illisibles :", (error as Error).message);
-    await safeReply(interaction, `❌ Archives illisibles : ${restoreFailureText(error)}`, true, true);
+    // Seul le stockage distant lance une commande : si elle manque alors que
+    // tout a échoué, le dossier local configuré a échoué lui aussi — le taire
+    // ne laisserait voir sa panne qu'une fois la commande remise en place.
+    const local = sources.localDir && findMissingCommand(error) ? " Le dossier local d'archives est illisible lui aussi." : "";
+    await safeReply(interaction, `❌ Archives illisibles : ${restoreFailureText(error)}.${local}`, true, true);
     return;
   }
   // Une source muette se dit : sans elle, « aucune archive » se lirait

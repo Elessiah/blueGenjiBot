@@ -9,12 +9,12 @@
  */
 
 import { safeUser } from "@/safe/safeUser.js";
-import { sendLog } from "@/safe/sendLog.js";
+import { safeReply } from "@/safe/safeReply.js";
 import type { ChatInputCommandInteraction, Client } from "discord.js";
 
 /**
  * @param client Client Discord, transmis a `safeUser` pour l'envoi du DM.
- * @param interaction Interaction de la commande (typee `any` : options lues au vol, sans type Discord.js dedie).
+ * @param interaction Interaction de la commande `/adhesion-perimee`.
  */
 async function adhesionPerimee(client: Client,
                                 interaction: ChatInputCommandInteraction): Promise<void> {
@@ -23,10 +23,7 @@ async function adhesionPerimee(client: Client,
     let message = interaction.options.getString("message");
 
     if (!user) {
-        await interaction.reply({
-            content: "Utilisateur non trouvé dans les options !",
-            ephemeral: true
-        });
+        await safeReply(interaction, "Utilisateur non trouvé dans les options !", true);
         return;
     }
 
@@ -34,18 +31,13 @@ async function adhesionPerimee(client: Client,
         message = "Votre adhésion à l'association est à présent périmée. Pour la renouveler, veuillez contacter le bureau ou utiliser la commande dédiée.";
     }
 
-    try {
-        await safeUser(client, user, undefined, [], message);
-        await interaction.reply({
-            content: `Message d'adhésion périmée envoyé à ${user.toString()} !`,
-            ephemeral: true
-        });
-    } catch (err) {
-        await sendLog(client, `Adhésion périmée : message non remis au compte ${user.id} — ${(err as Error).message}`);
-        await interaction.reply({
-            content: "Erreur lors de l'envoi du message à l'utilisateur.",
-            ephemeral: true
-        });
+    // `safeUser` ne lève pas : un message non remis se lit à son `null`, et
+    // `safeUser` l'a déjà journalisé. `safeReply` ne lève pas non plus.
+    const sent = await safeUser(client, user, undefined, [], message);
+    if (sent) {
+        await safeReply(interaction, `Message d'adhésion périmée envoyé à ${user.toString()} !`, true);
+    } else {
+        await safeReply(interaction, "Erreur lors de l'envoi du message à l'utilisateur.", true);
     }
 }
 
