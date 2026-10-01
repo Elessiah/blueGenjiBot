@@ -42,8 +42,9 @@ function memberDeliveredNotice(recipient: User): string {
 }
 
 /**
- * Avis à l'auteur quand aucun membre n'est à servir en MP (aucun membre
- * désigné, et aucun membre du rôle trouvé). Le texte dit ce que le bot a
+ * Avis à l'auteur quand personne n'est à servir en MP : aucun membre du rôle
+ * trouvé (si les membres du rôle sont illisibles, un membre désigné en même
+ * temps n'est pas servi non plus). Le texte dit ce que le bot a
  * constaté, pas que le rôle est vide : les membres d'un rôle se lisent dans le
  * cache du bot, qui peut être incomplet. Il ne parle que des MP : un salon visé
  * en même temps a son propre avis. Le rôle est nommé pour que l'auteur de
@@ -53,7 +54,7 @@ function memberDeliveredNotice(recipient: User): string {
  */
 function noRecipientNotice(roleName: string | null): string {
     const role = roleName === null ? "du rôle visé" : "du rôle « " + escapeMarkdown(roleName) + " »";
-    return "Echec de l'envoi des adhésions en message privé : aucun membre " + role + " n'a été trouvé. Vérifiez la cible !";
+    return "Echec de l'envoi des adhésions en message privé : aucun membre " + role + " n'a été trouvé, personne ne les a reçus. Vérifiez la cible !";
 }
 
 /**
