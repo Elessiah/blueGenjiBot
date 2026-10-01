@@ -25,17 +25,24 @@
  * libellé et un verdict. Le détail va au journal du processus (pm2).
  *
  * Configuration (`.env` du bot), toutes facultatives :
+ * - archives : `BACKUP_ARCHIVE_DIR` / `BACKUP_RCLONE_REMOTE` (ceux de
+ *   `/restore-backup`) ; à défaut, `RCLONE_REMOTE:REMOTE_DIR` du fichier du
+ *   script de sauvegarde ;
  * - `BACKUP_UPLOADS_REMOTE` : remote `crypt` et dossier des images
  *   (`nom-crypt:uploads`) ; à défaut, `UPLOADS_RCLONE_REMOTE` et
- *   `UPLOADS_REMOTE_DIR` de `scripts/backup-onedrive.env` ;
+ *   `UPLOADS_REMOTE_DIR` du même fichier ;
  * - `BACKUP_RECIPIENTS_FILE` : fichier des clés publiques ; à défaut,
- *   `AGE_RECIPIENTS_FILE` du même fichier, puis `scripts/backup-recipients.txt` ;
- * - `BACKUP_ONEDRIVE_ENV` : chemin de ce fichier (défaut
- *   `scripts/backup-onedrive.env`, relatif au dossier du bot).
+ *   `AGE_RECIPIENTS_FILE` du même fichier, puis `backup-recipients.txt` à côté ;
+ * - `BACKUP_ONEDRIVE_ENV` (ou `BACKUP_CONFIG`, celle du script) : chemin de ce
+ *   fichier (défaut `scripts/backup-onedrive.env`, relatif au dossier du bot).
+ *
+ * `appbluegenji.sql` n'est attendu que si le script a MySQL à sauvegarder
+ * (`MYSQL_DEFAULTS_FILE` et `DB_DATABASE`), comme le script lui-même.
  */
 
 import { execFile, spawn, type ChildProcess, type SpawnOptions } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -50,13 +57,19 @@ const execFileAsync = promisify(execFile);
 
 /** Fichiers qu'une archive complète doit contenir. */
 export const EXPECTED_ARCHIVE_ENTRIES = ["database.sqlite", "appbluegenji.sql"] as const;
-/** Délai maximal d'un contrôle (le déchiffrement lit toute l'archive). */
-const CHECK_TIMEOUT_MS = 10 * 60 * 1000;
+/**
+ * Délai maximal d'une commande. Listage puis déchiffrement se suivent : deux
+ * délais doivent tenir sous les 15 min d'une réponse différée de Discord.
+ */
+const CHECK_TIMEOUT_MS = 6 * 60 * 1000;
 /** Plafond de la sortie lue au bout du tube : une liste de fichiers, rien de plus. */
 const MAX_LISTING_BYTES = 64 * 1024;
 
 /** Lance un processus ; injectable pour les tests. */
 export type SpawnFn = (command: string, args: string[], options: SpawnOptions) => ChildProcess;
+
+/** Échec d'un tube : l'étape fautive, et ses sorties d'erreur (journal seulement). */
+export type PipelineError = Error & { stage?: string; diagnostics?: string };
 
 /** Une étape d'un tube. */
 export interface PipelineStage {
@@ -87,6 +100,8 @@ export interface BackupCheckConfig {
   uploadsRemote: string | null;
   /** Fichier des clés publiques autorisées. */
   recipientsFile: string;
+  /** Fichiers que la dernière archive doit contenir. */
+  expectedEntries: string[];
 }
 
 /** Exécuteur par défaut : `execFile`, sans shell. */
@@ -132,18 +147,58 @@ export function backupCheckConfigFromEnv(
   env: NodeJS.ProcessEnv = process.env,
   readFile: (file: string) => string | null = readOptionalFile,
 ): BackupCheckConfig {
-  const scriptEnvPath = path.resolve(env.BACKUP_ONEDRIVE_ENV?.trim() || "scripts/backup-onedrive.env");
-  const scriptEnv = parseEnvFile(readFile(scriptEnvPath) ?? "");
+  const scriptEnvPath = path.resolve(
+    env.BACKUP_ONEDRIVE_ENV?.trim() || env.BACKUP_CONFIG?.trim() || "scripts/backup-onedrive.env",
+  );
+  const scriptDir = path.dirname(scriptEnvPath);
+  const content = readFile(scriptEnvPath);
+  const scriptEnv = parseEnvFile(content ?? "");
+  const scriptPath = (key: string): string | null => resolveScriptPath(scriptEnv[key], scriptDir);
 
   let uploadsRemote = env.BACKUP_UPLOADS_REMOTE?.trim() || null;
   if (!uploadsRemote && scriptEnv.UPLOADS_RCLONE_REMOTE) {
     const name = scriptEnv.UPLOADS_RCLONE_REMOTE.replace(/:$/, "");
     uploadsRemote = `${name}:${scriptEnv.UPLOADS_REMOTE_DIR || "uploads"}`;
   }
-  const recipientsFile = path.resolve(
-    env.BACKUP_RECIPIENTS_FILE?.trim() || scriptEnv.AGE_RECIPIENTS_FILE || "scripts/backup-recipients.txt",
-  );
-  return { sources: archiveSourcesFromEnv(env), uploadsRemote, recipientsFile };
+  const recipientsFile = env.BACKUP_RECIPIENTS_FILE?.trim()
+    ? path.resolve(env.BACKUP_RECIPIENTS_FILE.trim())
+    : scriptPath("AGE_RECIPIENTS_FILE") ?? path.join(scriptDir, "backup-recipients.txt");
+
+  // Les archives : celles de `/restore-backup` si elles sont réglées, sinon
+  // celles qu'écrit le script — un rapport ne doit pas accuser le stockage
+  // d'une variable que seule la restauration lisait.
+  const sources = archiveSourcesFromEnv(env);
+  if (!sources.localDir && !sources.remote && scriptEnv.RCLONE_REMOTE) {
+    sources.remote = `${scriptEnv.RCLONE_REMOTE.replace(/:$/, "")}:${scriptEnv.REMOTE_DIR || "BlueGenji/backups"}`;
+  }
+  // Le script n'ajoute le dump du site que si MySQL est configuré : sans lui,
+  // l'exiger ferait du rapport une fausse alerte permanente. Fichier du script
+  // illisible : on attend l'archive complète, celle de la production.
+  const siteDumpConfigured = content === null || Boolean(scriptEnv.MYSQL_DEFAULTS_FILE && scriptEnv.DB_DATABASE);
+  const expectedEntries = siteDumpConfigured ? [...EXPECTED_ARCHIVE_ENTRIES] : ["database.sqlite"];
+  return { sources, uploadsRemote, recipientsFile, expectedEntries };
+}
+
+/**
+ * Résout un chemin lu dans le fichier du script, comme bash l'aurait fait pour
+ * les seules formes que ce fichier emploie : `$SCRIPT_DIR` / `${SCRIPT_DIR}`,
+ * `~` et `$HOME` en tête, chemin relatif rapporté au dossier du script. Toute
+ * autre substitution n'est pas devinée : la valeur est écartée (défaut).
+ * @param value Valeur brute, ou `undefined`.
+ * @param scriptDir Dossier du script de sauvegarde.
+ * @returns Le chemin absolu, ou `null`.
+ */
+export function resolveScriptPath(value: string | undefined, scriptDir: string): string | null {
+  if (!value) {
+    return null;
+  }
+  const expanded = value
+    .replace(/^(\$\{SCRIPT_DIR\}|\$SCRIPT_DIR)(?=\/|$)/, scriptDir)
+    .replace(/^(~|\$\{HOME\}|\$HOME)(?=\/|$)/, os.homedir());
+  if (expanded.includes("$")) {
+    return null;
+  }
+  return path.resolve(scriptDir, expanded);
 }
 
 /**
@@ -180,7 +235,14 @@ export function runPipeline(
   return new Promise((resolve, reject) => {
     const children: ChildProcess[] = [];
     const diagnostics: string[] = [];
-    let failedStage: string | null = null;
+    // Étapes en échec **par elles-mêmes** (code de sortie, binaire absent) ;
+    // celles que l'on arrête ensuite sortent sur un signal (`code === null`)
+    // et ne comptent pas. L'étape nommée est la **première** du tube : quand
+    // `rclone` échoue, `age` échoue aussi faute d'entrée, et c'est le stockage
+    // qu'il faut mettre en cause, pas la clé.
+    const failed = new Set<number>();
+    let timedOut = false;
+    let interrupted = false;
     let pending = stages.length;
     let output = "";
     let truncated = false;
@@ -190,7 +252,7 @@ export function runPipeline(
       }
     };
     const timer = setTimeout(() => {
-      failedStage ??= "délai dépassé";
+      timedOut = true;
       killAll();
     }, timeoutMs);
 
@@ -201,7 +263,10 @@ export function runPipeline(
       }
       settled.add(index);
       if (code !== 0) {
-        failedStage ??= stages[index].command;
+        interrupted = true;
+        if (code !== null) {
+          failed.add(index);
+        }
         killAll();
       }
       pending--;
@@ -209,8 +274,17 @@ export function runPipeline(
         return;
       }
       clearTimeout(timer);
+      let failedStage: string | null = null;
+      if (timedOut) {
+        failedStage = "délai dépassé";
+      } else if (failed.size > 0) {
+        failedStage = stages[Math.min(...failed)].command;
+      } else if (interrupted) {
+        failedStage = "interrompue";
+      }
       if (failedStage) {
-        const error = new Error(`échec de l'étape ${failedStage}`) as Error & { diagnostics?: string };
+        const error = new Error(`échec de l'étape ${failedStage}`) as PipelineError;
+        error.stage = failedStage;
         error.diagnostics = diagnostics.join(" ; ");
         reject(error);
       } else {
@@ -326,13 +400,35 @@ export async function checkLatestArchive(config: BackupCheckConfig, deps: Backup
     entries = parseTarListing(await runPipeline(stages, deps.spawnFn));
   } catch (error) {
     logFailure(log, label, error);
-    return { label, ok: false, detail: `\`${latest.name}\` ne se déchiffre pas avec la clé du bot` };
+    return { label, ok: false, detail: `\`${latest.name}\` : ${pipelineFailureText((error as PipelineError).stage)}` };
   }
-  const missing = EXPECTED_ARCHIVE_ENTRIES.filter((name) => !entries.includes(name));
+  const missing = config.expectedEntries.filter((name) => !entries.includes(name));
   if (missing.length > 0) {
     return { label, ok: false, detail: `\`${latest.name}\` déchiffrée mais incomplète — manque ${missing.join(", ")}` };
   }
-  return { label, ok: true, detail: `\`${latest.name}\` déchiffrée, ${EXPECTED_ARCHIVE_ENTRIES.join(" et ")} présents` };
+  const site = config.expectedEntries.includes("appbluegenji.sql") ? "" : " (dump du site non configuré)";
+  return { label, ok: true, detail: `\`${latest.name}\` déchiffrée, ${config.expectedEntries.join(" et ")} présents${site}` };
+}
+
+/**
+ * Phrase d'un échec du tube de déchiffrement, d'après l'étape qui a cédé :
+ * une panne du stockage ne doit pas se lire comme une clé perdue.
+ * @param stage Étape fautive (`rclone`, `age`, `tar`, `délai dépassé`…).
+ * @returns La phrase montrable.
+ */
+export function pipelineFailureText(stage: string | undefined): string {
+  switch (stage) {
+    case "rclone":
+      return "lecture sur le stockage distant impossible (stockage injoignable ?)";
+    case "age":
+      return "ne se déchiffre pas avec la clé du bot (ou `age` absent)";
+    case "tar":
+      return "déchiffrée, mais illisible comme archive tar";
+    case "délai dépassé":
+      return "délai dépassé pendant la lecture";
+    default:
+      return "lecture interrompue";
+  }
 }
 
 /**
@@ -433,9 +529,14 @@ export async function runBackupChecks(
   config: BackupCheckConfig = backupCheckConfigFromEnv(),
   deps: BackupCheckDeps = {},
 ): Promise<BackupCheckReport> {
-  const key = await checkRecipientKey(config, deps);
-  const archive = await checkLatestArchive(config, deps);
-  const mirror = await checkUploadsMirror(config, deps);
+  // En parallèle : la durée totale est celle du plus long (listage puis
+  // déchiffrement de l'archive), qui tient sous les 15 min d'une réponse
+  // différée de Discord.
+  const [key, archive, mirror] = await Promise.all([
+    checkRecipientKey(config, deps),
+    checkLatestArchive(config, deps),
+    checkUploadsMirror(config, deps),
+  ]);
   return { checks: [archive, mirror, key.result], publicKey: key.publicKey };
 }
 

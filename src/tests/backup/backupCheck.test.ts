@@ -15,6 +15,8 @@ import {
   parseEnvFile,
   parseRecipients,
   parseTarListing,
+  pipelineFailureText,
+  resolveScriptPath,
   runPipeline,
   type BackupCheckConfig,
   type SpawnFn,
@@ -52,6 +54,7 @@ const config = (overrides: Partial<BackupCheckConfig> = {}): BackupCheckConfig =
   sources: { localDir: null, remote: "store:BlueGenji/backups", identity: "/k/id.key" },
   uploadsRemote: "store-crypt:uploads",
   recipientsFile: "/k/recipients.txt",
+  expectedEntries: ["database.sqlite", "appbluegenji.sql"],
   ...overrides,
 });
 
@@ -262,6 +265,75 @@ test("backupCheckConfigFromEnv prend l'environnement du bot, puis le fichier du 
   const nothing = backupCheckConfigFromEnv({}, () => null);
   assert.equal(nothing.uploadsRemote, null);
   assert.equal(nothing.recipientsFile, path.resolve("scripts/backup-recipients.txt"));
+  // Fichier du script illisible : l'archive complète de la production est attendue.
+  assert.deepEqual(nothing.expectedEntries, ["database.sqlite", "appbluegenji.sql"]);
+});
+
+test("backupCheckConfigFromEnv retombe sur les archives et les chemins du script", () => {
+  const scriptDir = path.resolve("/opt/bot/scripts");
+  const scriptEnv = [
+    "RCLONE_REMOTE=store",
+    "REMOTE_DIR=BG/backups",
+    "AGE_RECIPIENTS_FILE=$SCRIPT_DIR/keys.txt",
+    "MYSQL_DEFAULTS_FILE=/home/x/.cnf",
+    "DB_DATABASE=site",
+  ].join("\n");
+  const config = backupCheckConfigFromEnv({ BACKUP_CONFIG: path.join(scriptDir, "backup-onedrive.env") }, () => scriptEnv);
+  assert.equal(config.sources.remote, "store:BG/backups");
+  assert.equal(config.recipientsFile, path.join(scriptDir, "keys.txt"));
+  assert.deepEqual(config.expectedEntries, ["database.sqlite", "appbluegenji.sql"]);
+
+  // Les réglages de /restore-backup l'emportent.
+  const own = backupCheckConfigFromEnv({ BACKUP_RCLONE_REMOTE: "other:x" }, () => scriptEnv);
+  assert.equal(own.sources.remote, "other:x");
+
+  // Sans MySQL, le script n'archive que la base du bot : ne pas exiger le dump.
+  const botOnly = backupCheckConfigFromEnv({}, () => "RCLONE_REMOTE=store\nDB_DATABASE=\n");
+  assert.deepEqual(botOnly.expectedEntries, ["database.sqlite"]);
+  assert.equal(botOnly.recipientsFile, path.resolve("scripts/backup-recipients.txt"));
+});
+
+test("resolveScriptPath suit le script pour $SCRIPT_DIR, ~ et les chemins relatifs, sans rien deviner d'autre", () => {
+  const dir = path.resolve("/opt/bot/scripts");
+  assert.equal(resolveScriptPath("${SCRIPT_DIR}/k.txt", dir), path.join(dir, "k.txt"));
+  assert.equal(resolveScriptPath("~/k.txt", dir), path.join(os.homedir(), "k.txt"));
+  assert.equal(resolveScriptPath("$HOME/k.txt", dir), path.join(os.homedir(), "k.txt"));
+  assert.equal(resolveScriptPath("k.txt", dir), path.join(dir, "k.txt"));
+  assert.equal(resolveScriptPath("$OTHER/k.txt", dir), null);
+  assert.equal(resolveScriptPath(undefined, dir), null);
+});
+
+test("checkLatestArchive met en cause le stockage, pas la clé, quand rclone échoue", async () => {
+  const failing: SpawnFn = (command, _args, options) =>
+    spawn(
+      process.execPath,
+      ["-e", command === "rclone" ? "process.exit(3)" : "process.stdin.resume(); process.stdin.on('end', () => process.exit(1))"],
+      options,
+    );
+  const result = await checkLatestArchive(config(), {
+    run: fakeRun({ "rclone lsf": archiveListing }),
+    spawnFn: failing,
+    log: () => {},
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.detail, /stockage distant/);
+  assert.doesNotMatch(result.detail, /clé/);
+});
+
+test("checkLatestArchive n'exige pas le dump du site quand le script ne le fait pas", async () => {
+  const result = await checkLatestArchive(config({ expectedEntries: ["database.sqlite"] }), {
+    run: fakeRun({ "rclone lsf": archiveListing }),
+    spawnFn: fakeSpawn({ tarEntries: ["database.sqlite"] }),
+  });
+  assert.equal(result.ok, true);
+  assert.match(result.detail, /dump du site non configuré/);
+});
+
+test("pipelineFailureText nomme l'étape qui a cédé", () => {
+  assert.match(pipelineFailureText("age"), /clé du bot/);
+  assert.match(pipelineFailureText("tar"), /tar/);
+  assert.match(pipelineFailureText("délai dépassé"), /délai/);
+  assert.match(pipelineFailureText(undefined), /interrompue/);
 });
 
 test("formatBackupChecks met les échecs en rouge et montre la clé publique", () => {
