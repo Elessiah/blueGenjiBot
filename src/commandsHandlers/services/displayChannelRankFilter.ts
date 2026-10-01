@@ -33,7 +33,7 @@ async function displayChannelRankFilter(client: Client,
         if (!result_request || result_request.length === 0) {
             await safeReply(interaction, "This channel is not connected to any services ! ", true, true);
         } else {
-            const covered_ranks: string[] = result_request.map(obj => Object.values(obj)).flat();
+            const covered_ranks: string[] = result_request.flatMap(obj => Object.values(obj));
             const formated_ranks = await formatRawRanks(covered_ranks);
             await safeReply(interaction, "This channel will receive ads concerning these ranks :\n" + formated_ranks, true, true);
         }

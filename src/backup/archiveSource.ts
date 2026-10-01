@@ -98,13 +98,42 @@ export function resolveCommand(
 }
 
 /**
- * Environnement d'un processus enfant : celui du bot (`HOME` mène à la
- * configuration rclone), au `PATH` près, figé.
+ * Variables reprises telles quelles de l'environnement du bot : de quoi
+ * trouver la configuration rclone (`HOME`, `XDG_CONFIG_HOME`), un dossier
+ * temporaire, la langue et le fuseau des sorties lues (`tar -tv`).
+ */
+const INHERITED_ENV_KEYS: readonly string[] = [
+  "HOME", "USER", "LOGNAME", "TMPDIR", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "LANG", "LANGUAGE", "TZ",
+];
+
+/**
+ * Teste qu'une variable passe aux processus enfants : la liste ci-dessus,
+ * les `LC_*` (langue) et les `RCLONE_*` (`RCLONE_CONFIG`,
+ * `RCLONE_CONFIG_PASS`… — réglages propres à rclone).
+ * @param key Nom de la variable.
+ * @returns `true` si elle est transmise.
+ */
+function isInheritedEnvKey(key: string): boolean {
+  return INHERITED_ENV_KEYS.includes(key) || key.startsWith("LC_") || key.startsWith("RCLONE_");
+}
+
+/**
+ * Environnement d'un processus enfant : **minimal**, jamais celui du bot en
+ * entier. `rclone`, `age` et `tar` n'ont que faire du jeton Discord, du jeton
+ * de l'API interne ni des autres secrets du `.env` ; un processus enfant les
+ * lirait sinon dans `/proc/<pid>/environ`, ou les écrirait dans un journal
+ * de débogage. N'y passent que les variables d'`isInheritedEnvKey`, et un
+ * `PATH` figé.
  * @param env Environnement de départ (par défaut `process.env`).
- * @returns Une copie, `PATH` remplacé.
+ * @returns Un nouvel environnement, `PATH` remplacé.
  */
 export function commandEnv(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
-  return { ...env, PATH: COMMAND_PATH };
+  const child: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(env)) {
+    if (value !== undefined && isInheritedEnvKey(key)) child[key] = value;
+  }
+  child.PATH = COMMAND_PATH;
+  return child;
 }
 
 /**

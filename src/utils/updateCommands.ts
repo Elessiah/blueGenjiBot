@@ -21,7 +21,7 @@ async function updateCommands(client: Client,
         const rest = new REST({ version: "10" }).setToken(TOKEN!);
         let installCommands = {};
         if (guildId === SERV_GENJI || guildId === SERV_RIVALS) {
-            installCommands = Object.assign({}, commands, await fillBlueCommands(client));
+            installCommands = { ...commands, ...(await fillBlueCommands(client)) };
         } else {
             installCommands = commands;
         }

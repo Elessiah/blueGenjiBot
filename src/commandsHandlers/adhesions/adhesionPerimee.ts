@@ -9,14 +9,15 @@
  */
 
 import { safeUser } from "@/safe/safeUser.js";
-import { Client } from "discord.js";
+import { sendLog } from "@/safe/sendLog.js";
+import type { ChatInputCommandInteraction, Client } from "discord.js";
 
 /**
  * @param client Client Discord, transmis a `safeUser` pour l'envoi du DM.
  * @param interaction Interaction de la commande (typee `any` : options lues au vol, sans type Discord.js dedie).
  */
 async function adhesionPerimee(client: Client,
-                                interaction: any): Promise<void> {
+                                interaction: ChatInputCommandInteraction): Promise<void> {
     // Récupère l'utilisateur et le message depuis les options de la commande
     const user = interaction.options.getUser("user");
     let message = interaction.options.getString("message");
@@ -40,6 +41,7 @@ async function adhesionPerimee(client: Client,
             ephemeral: true
         });
     } catch (err) {
+        await sendLog(client, `Adhésion périmée : message non remis au compte ${user.id} — ${(err as Error).message}`);
         await interaction.reply({
             content: "Erreur lors de l'envoi du message à l'utilisateur.",
             ephemeral: true

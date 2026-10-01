@@ -1,6 +1,6 @@
 import {ChatInputCommandInteraction, Client} from "discord.js";
 import {PathsAdhesions} from "@/adhesion/types.js";
-import {readFile} from "fs/promises";
+import {readFile} from "node:fs/promises";
 import {adhesionFilePath} from "@/adhesion/adhesionPath.js";
 import {safeFollowUp} from "@/safe/safeFollowUp.js";
 import {sendLog} from "@/safe/sendLog.js";

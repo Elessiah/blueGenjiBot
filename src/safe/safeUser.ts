@@ -16,7 +16,7 @@ async function safeUser(client: Client,
                         attachements: Array<AttachmentBuilder> = [],
                         content: string =""): Promise<Message | null> {
     if ((embed === null && content === "") || user === null || user === undefined) {
-        await sendLog(client, "Wrong parameter for safeChannel : \nUser : " + user + "\nEmbed : " + embed);
+        await sendLog(client, "Wrong parameter for safeChannel : \nUser : " + user + "\nEmbed : " + (embed ? "fourni" : "absent"));
     }
     let nTry = 0;
     let err_msg = "";

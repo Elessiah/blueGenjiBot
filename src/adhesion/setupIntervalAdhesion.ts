@@ -6,29 +6,43 @@ import type { status } from "@/types.js";
 import { toSQLiteDate } from "@/utils/toSQLiteDatetime.js";
 import { ITERATION_UNLIMITED, initialIteration } from "@/adhesion/iteration.js";
 
+/** Destinataires d'un rappel : au moins l'un des trois, ou un message seul. */
+export interface ReminderTarget {
+    /** Message personnalisé à joindre aux adhésions. */
+    message: string | null;
+    /** Canal cible, ou null. */
+    channel: TextChannel | null;
+    /** Membre cible, ou null. */
+    member: GuildMember | null;
+    /** Rôle cible, ou null. */
+    role: Role | null;
+}
+
+/** Cadence d'un rappel. */
+export interface ReminderSchedule {
+    /** Intervalle en jours. */
+    intInterval: number;
+    /** Date du premier envoi. */
+    nextTransmission: Date;
+    /** Nombre d'envois à faire, ou `undefined` pour un rappel sans terme. */
+    iteration?: number;
+}
+
 /**
  * Programme un rappel d'adhésion à intervalle régulier dans la base de données.
  * @param client Client Discord utilisé pour les logs.
  * @param interaction Interaction utilisateur pour les réponses.
- * @param message Message personnalisé à joindre aux adhésions.
- * @param channel Canal cible, ou null.
- * @param member Membre cible, ou null.
- * @param role Rôle cible, ou null.
- * @param intInterval Intervalle en jours.
- * @param nextTransmission Date du premier envoi.
- * @param iteration Nombre d'envois à faire, ou `undefined` pour un rappel sans terme.
+ * @param target Message et destinataires du rappel.
+ * @param schedule Intervalle, premier envoi et nombre d'envois.
  */
 export async function setupIntervalAdhesion(
     client: Client,
     interaction: ChatInputCommandInteraction,
-    message: string | null,
-    channel: TextChannel | null,
-    member: GuildMember | null,
-    role: Role | null,
-    intInterval: number,
-    nextTransmission: Date,
-    iteration?: number
+    target: ReminderTarget,
+    schedule: ReminderSchedule
 ): Promise<void> {
+    const { message, channel, member, role } = target;
+    const { intInterval, nextTransmission, iteration } = schedule;
     if (!interaction.guild) return;
 
     // Un rappel qui n'a aucun envoi à faire n'est pas un rappel : on refuse de
@@ -123,9 +137,9 @@ export async function setupIntervalAdhesion(
     // `<t:...:F>` et `<t:...:R>` sont rendus par Discord dans le fuseau du
     // lecteur, comme le fait déjà `/show-rappel-adhesion`.
     const quand: number = Math.floor(nextTransmission.getTime() / 1000);
-    const suite: string = storedIteration === ITERATION_UNLIMITED
-        ? `, puis tous les **${intInterval} jours**`
-        : storedIteration > 1 ? `, ${storedIteration} envois au total` : "";
+    let suite: string = "";
+    if (storedIteration === ITERATION_UNLIMITED) suite = `, puis tous les **${intInterval} jours**`;
+    else if (storedIteration > 1) suite = `, ${storedIteration} envois au total`;
     await safeFollowUp(
         interaction,
         `Rappel programmé. Prochain envoi <t:${quand}:F> (**<t:${quand}:R>**)${suite}.`,

@@ -61,15 +61,13 @@ async function resetServer(client: Client,
         else
             await safeReply(interaction, "Server reseted", true, true);
         return true;
+    } else if (ret.message !== "Server already reseted") {
+        await sendLog(interaction.client, "ResetServer has failed :\n" + ret.message);
+        await safeReply(interaction, "Reset has failed. Please try again.", true, true);
+        return true;
     } else {
-        if (ret.message !== "Server already reseted") {
-            await sendLog(interaction.client, "ResetServer has failed :\n" + ret.message);
-            await safeReply(interaction, "Reset has failed. Please try again.", true, true);
-            return true;
-        } else {
-            await safeReply(interaction, ret.message, true, true);
-            return true;
-        }
+        await safeReply(interaction, ret.message, true, true);
+        return true;
     }
 }
 

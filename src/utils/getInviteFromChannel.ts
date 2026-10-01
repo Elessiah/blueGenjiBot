@@ -25,13 +25,11 @@ async function getInviteFromChannel(client: Client, channel: TextChannel): Promi
             inv.maxUses === 0
         );
 
-        if (!existing) {
-            existing = await channel.createInvite({
-                maxAge: 0,
-                maxUses: 0,
-                unique: false
-            });
-        }
+        existing ??= await channel.createInvite({
+            maxAge: 0,
+            maxUses: 0,
+            unique: false
+        });
 
         return existing.url;
     } catch (error) {

@@ -1,4 +1,4 @@
-const INVITE_REGEX = /^(?:https?:\/\/)?(?:www\.)?(?:discord\.gg|discord(?:app)?\.com\/invite)\/[A-Za-z0-9-]+\/?$/i;
+const INVITE_REGEX = /^(?:https?:\/\/)?(?:www\.)?(?:discord\.gg|discord(?:app)?\.com\/invite)\/[a-z0-9-]+\/?$/i;
 
 /**
  * Vérifie qu'une chaîne est un lien d'invitation Discord valide.

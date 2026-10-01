@@ -18,7 +18,6 @@
  * Tout le reste est un vrai défaut : console **et** canal de logs Discord.
  */
 
-import {types} from "node:util";
 
 /** Codes système/undici signalant une indisponibilité réseau passagère. */
 const TRANSIENT_NETWORK_CODES: ReadonlySet<string> = new Set([
@@ -108,6 +107,22 @@ function isIgnorableDiscordError(error: unknown): boolean {
     return typeof code === "number" && IGNORABLE_DISCORD_CODES.has(code);
 }
 
+/** `Error.isError` (Node 24 et plus), absent des versions antérieures. */
+const errorIsError = (Error as unknown as {isError?: (value: unknown) => boolean}).isError;
+
+/**
+ * Reconnaît une `Error`, y compris venue d'un autre contexte (vm, worker), où
+ * `instanceof` échoue. Remplace `util.types.isNativeError`, déprécié, par sa
+ * relève `Error.isError`. Celle-ci absente, une `Error` d'un autre contexte
+ * est traitée comme un objet quelconque : décrite par son seul type, jamais
+ * par un `message` qu'un objet déguisé (`Symbol.toStringTag`) pourrait porter.
+ * @param value Valeur capturée.
+ * @returns `true` pour une `Error` native.
+ */
+function isNativeError(value: unknown): value is Error {
+    return value instanceof Error || errorIsError?.(value) === true;
+}
+
 /**
  * Produit une description lisible d'une valeur levée, quelle que soit sa forme.
  *
@@ -122,7 +137,7 @@ function isIgnorableDiscordError(error: unknown): boolean {
 function describeError(error: unknown): string {
     try {
         // `isNativeError` reconnaît aussi une `Error` venue d'un autre contexte (vm, worker).
-        if (error instanceof Error || types.isNativeError(error)) {
+        if (isNativeError(error)) {
             const message = typeof error.message === "string" ? error.message : "(message non textuel)";
             // Une vraie `Error` garde son code (« auth/invalid-token »…) : son
             // message est déjà rendu, filtrer le code ne protégerait rien.
@@ -141,7 +156,7 @@ function describeError(error: unknown): string {
         // Un objet : son seul code, et seulement s'il en a la forme (nombre, ou
         // jeton court) — un champ « code » en texte libre pourrait porter n'importe quoi.
         const code = errorCode(error);
-        const shown = typeof code === "number" || (typeof code === "string" && /^[A-Za-z0-9_]{1,40}$/.test(code)) ? `, code ${code}` : "";
+        const shown = typeof code === "number" || (typeof code === "string" && /^\w{1,40}$/.test(code)) ? `, code ${code}` : "";
         return `valeur levée non standard (${typeof error}${shown})`;
     } catch {
         // Proxy révoqué, accesseur `message` hostile… : la description ne lève jamais.

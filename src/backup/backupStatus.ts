@@ -60,7 +60,7 @@ export async function readBackupStatus(statusPath: string): Promise<BackupStatus
  * @returns `true` si le stockage distant couvre déjà la sauvegarde de la semaine.
  */
 export function isBackupFresh(status: BackupStatus | null, now: number = Date.now()): boolean {
-  if (!status || !status.ok) {
+  if (!status?.ok) {
     return false;
   }
 
