@@ -111,17 +111,12 @@ function isIgnorableDiscordError(error: unknown): boolean {
  * du titulaire (`reportError`, `sendLog`). Seul son type est dit. Le message
  * d'une `Error`, lui, est rendu tel quel.
  * @param error Valeur capturée.
- * @param depth Profondeur dans la chaîne des causes (usage interne).
- * @returns Message d'erreur (suffixé du code et de sa cause), la chaîne levée, ou le type de la valeur.
+ * @returns Message d'erreur (suffixé du code), la chaîne levée, ou le type de la valeur.
  */
-function describeError(error: unknown, depth = 0): string {
+function describeError(error: unknown): string {
     if (error instanceof Error) {
         const code = errorCode(error);
-        const own = code === null ? error.message : `${error.message} [${code}]`;
-        // La cause (undici « fetch failed » → EAI_AGAIN…) est souvent la seule
-        // partie utile ; chaîne bornée, décrite par les mêmes règles.
-        const hasCause = error.cause !== undefined && error.cause !== error && depth < 2;
-        return hasCause ? `${own} (cause : ${describeError(error.cause, depth + 1)})` : own;
+        return code === null ? error.message : `${error.message} [${code}]`;
     }
     if (typeof error === "string") return error;
     // Un scalaire ne porte rien d'autre que lui-même : il est rendu tel quel.

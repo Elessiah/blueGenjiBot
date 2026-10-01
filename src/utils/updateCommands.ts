@@ -2,7 +2,8 @@ import {Client, REST, Routes} from 'discord.js';
 import 'dotenv/config';
 import {commands} from '../config/commands.js';
 import {fillBlueCommands} from '../config/fillBlueCommands.js';
-import {reportError} from "../safe/processGuards.js";
+import {sendLog} from "../safe/sendLog.js";
+import {describeError} from "../safe/errorGuards.js";
 
 /**
  * Synchronise les commandes slash de l'application auprès de Discord.
@@ -38,10 +39,9 @@ async function updateCommands(client: Client,
     } catch (error) {
         // `reportError` trie pannes réseau, erreurs Discord sans gravité (sur la
         // console pm2) et vraies fautes (au journal), et ne lève jamais.
-        // Contexte fixe : une panne commune à tous les serveurs (jeton, corps
-        // refusé) se dédoublonne en un seul signalement ; le serveur va à pm2.
-        console.warn(`updateCommands: échec pour le serveur ${guildId}`);
-        await reportError(client, "updateCommands", error);
+        // Comme avant, au journal (un 50001 dit une invitation sans le droit
+        // `applications.commands`, à corriger) ; `sendLog` ne lève pas.
+        await sendLog(client, "Update Commands : \n " + describeError(error));
     }
 }
 

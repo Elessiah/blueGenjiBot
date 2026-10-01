@@ -37,9 +37,7 @@ async function getInviteFromMessage(client: Client,
         }
         return await getInviteFromChannel(client, channel);
     } catch (e) {
-        // L'identifiant du message, jamais son texte : une annonce cite des
-        // pseudos, que le journal ne reçoit pas.
-        // Ni le texte de l'annonce ni de quoi la retrouver : `reportError` trie
+        // Jamais le texte de l'annonce (elle cite des pseudos), ni de quoi la retrouver : `reportError` trie
         // et dédoublonne (une permission manquante ne réécrit pas à chaque annonce).
         await reportError(client, "getInviteFromMessage", e);
         return ("");
