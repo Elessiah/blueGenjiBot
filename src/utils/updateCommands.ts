@@ -37,8 +37,6 @@ async function updateCommands(client: Client,
             }
         );
     } catch (error) {
-        // `reportError` trie pannes réseau, erreurs Discord sans gravité (sur la
-        // console pm2) et vraies fautes (au journal), et ne lève jamais.
         // Comme avant, au journal (un 50001 dit une invitation sans le droit
         // `applications.commands`, à corriger) ; `sendLog` ne lève pas.
         await sendLog(client, "Update Commands : \n " + describeError(error));
