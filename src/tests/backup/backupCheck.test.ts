@@ -53,6 +53,7 @@ function fakeSpawn(options: { tarEntries?: string[]; ageFails?: boolean; log?: s
 const config = (overrides: Partial<BackupCheckConfig> = {}): BackupCheckConfig => ({
   sources: { localDir: null, remote: "store:BlueGenji/backups", identity: "/k/id.key" },
   uploadsRemote: "store-crypt:uploads",
+  uploadsExpected: true,
   recipientsFile: "/k/recipients.txt",
   expectedEntries: ["database.sqlite", "appbluegenji.sql"],
   ...overrides,
@@ -250,7 +251,8 @@ test("parseRecipients et parseEnvFile ignorent commentaires et lignes vides", ()
 });
 
 test("backupCheckConfigFromEnv prend l'environnement du bot, puis le fichier du script", () => {
-  const scriptEnv = "UPLOADS_RCLONE_REMOTE=store-crypt\nUPLOADS_REMOTE_DIR=images\nAGE_RECIPIENTS_FILE=/etc/bg/recipients.txt\n";
+  const scriptEnv =
+    "UPLOADS_DIR=/srv/uploads\nUPLOADS_RCLONE_REMOTE=store-crypt\nUPLOADS_REMOTE_DIR=images\nAGE_RECIPIENTS_FILE=/etc/bg/recipients.txt\n";
   const fromScript = backupCheckConfigFromEnv({ BACKUP_RCLONE_REMOTE: "store:b" }, () => scriptEnv);
   assert.equal(fromScript.uploadsRemote, "store-crypt:images");
   assert.equal(fromScript.recipientsFile, path.resolve("/etc/bg/recipients.txt"));
@@ -291,6 +293,54 @@ test("backupCheckConfigFromEnv retombe sur les archives et les chemins du script
   const botOnly = backupCheckConfigFromEnv({}, () => "RCLONE_REMOTE=store\nDB_DATABASE=\n");
   assert.deepEqual(botOnly.expectedEntries, ["database.sqlite"]);
   assert.equal(botOnly.recipientsFile, path.resolve("scripts/backup-recipients.txt"));
+  // Sans UPLOADS_DIR, le script ne copie aucune image : le miroir est sans objet.
+  assert.equal(botOnly.uploadsExpected, false);
+  assert.equal(botOnly.uploadsRemote, null);
+});
+
+test("backupCheckConfigFromEnv reprend les défauts des scripts (onedrive, images vers RCLONE_REMOTE)", () => {
+  const defaults = backupCheckConfigFromEnv({}, () => "UPLOADS_DIR=/srv/uploads\n");
+  assert.equal(defaults.sources.remote, "onedrive:BlueGenji/backups");
+  assert.equal(defaults.uploadsRemote, "onedrive:uploads");
+  assert.equal(defaults.uploadsExpected, true);
+
+  const shared = backupCheckConfigFromEnv({}, () => "RCLONE_REMOTE=store-crypt\nUPLOADS_DIR=/srv/uploads\n");
+  assert.equal(shared.uploadsRemote, "store-crypt:uploads");
+
+  // Fichier illisible : rien n'est deviné, le miroir reste attendu (production).
+  const unknown = backupCheckConfigFromEnv({}, () => null);
+  assert.equal(unknown.sources.remote, null);
+  assert.equal(unknown.uploadsExpected, true);
+});
+
+test("checkUploadsMirror est sans objet quand aucune image n'est sauvegardée", async () => {
+  const result = await checkUploadsMirror(config({ uploadsRemote: null, uploadsExpected: false }));
+  assert.equal(result.ok, true);
+  assert.match(result.detail, /sans objet/);
+});
+
+test("checkLatestArchive ne s'annonce pas réussie quand une source n'a pas répondu", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bg-check-"));
+  try {
+    fs.writeFileSync(path.join(dir, "bluegenji-2026-09-21.tar.age"), "");
+    const logged: string[] = [];
+    const local: SpawnFn = (command, _args, options) =>
+      spawn(
+        process.execPath,
+        ["-e", command === "age" ? `process.stdout.write("TAR")` : `process.stdin.resume(); process.stdin.on("end", () => process.stdout.write("database.sqlite\\nappbluegenji.sql\\n"))`],
+        options,
+      );
+    const result = await checkLatestArchive(
+      config({ sources: { localDir: dir, remote: "store:b", identity: "/k/id.key" } }),
+      { run: fakeRun({ "rclone lsf": new Error("dial tcp host.example.invalid") }), spawnFn: local, log: (l) => logged.push(l) },
+    );
+    assert.equal(result.ok, false);
+    assert.match(result.detail, /n'a pas répondu.*bluegenji-2026-09-21/);
+    assert.doesNotMatch(result.detail, /example/);
+    assert.match(logged.join("\n"), /example/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("resolveScriptPath suit le script pour $SCRIPT_DIR, ~ et les chemins relatifs, sans rien deviner d'autre", () => {

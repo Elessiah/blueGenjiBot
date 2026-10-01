@@ -98,6 +98,11 @@ export interface BackupCheckConfig {
   sources: ArchiveSources;
   /** Remote `crypt` et dossier des images, ou `null` s'il n'est pas configuré. */
   uploadsRemote: string | null;
+  /**
+   * `false` quand le script ne sauvegarde aucune image (`UPLOADS_DIR` vide) :
+   * le contrôle du miroir est alors sans objet, et non en échec.
+   */
+  uploadsExpected: boolean;
   /** Fichier des clés publiques autorisées. */
   recipientsFile: string;
   /** Fichiers que la dernière archive doit contenir. */
@@ -155,10 +160,16 @@ export function backupCheckConfigFromEnv(
   const scriptEnv = parseEnvFile(content ?? "");
   const scriptPath = (key: string): string | null => resolveScriptPath(scriptEnv[key], scriptDir);
 
+  // Défauts du script lui-même (`backup-onedrive.sh`,
+  // `sync-uploads-onedrive.sh`), seulement quand son fichier a pu être lu.
+  const scriptRemote = content === null ? null : (scriptEnv.RCLONE_REMOTE || "onedrive").replace(/:$/, "");
+
   let uploadsRemote = env.BACKUP_UPLOADS_REMOTE?.trim() || null;
-  if (!uploadsRemote && scriptEnv.UPLOADS_RCLONE_REMOTE) {
-    const name = scriptEnv.UPLOADS_RCLONE_REMOTE.replace(/:$/, "");
-    uploadsRemote = `${name}:${scriptEnv.UPLOADS_REMOTE_DIR || "uploads"}`;
+  // Le miroir des images n'existe que si le script a un dossier à copier.
+  const uploadsExpected = Boolean(uploadsRemote) || content === null || Boolean(scriptEnv.UPLOADS_DIR);
+  if (!uploadsRemote && content !== null && scriptEnv.UPLOADS_DIR) {
+    const name = (scriptEnv.UPLOADS_RCLONE_REMOTE || scriptRemote || "").replace(/:$/, "");
+    uploadsRemote = name ? `${name}:${scriptEnv.UPLOADS_REMOTE_DIR || "uploads"}` : null;
   }
   const recipientsFile = env.BACKUP_RECIPIENTS_FILE?.trim()
     ? path.resolve(env.BACKUP_RECIPIENTS_FILE.trim())
@@ -168,15 +179,15 @@ export function backupCheckConfigFromEnv(
   // celles qu'écrit le script — un rapport ne doit pas accuser le stockage
   // d'une variable que seule la restauration lisait.
   const sources = archiveSourcesFromEnv(env);
-  if (!sources.localDir && !sources.remote && scriptEnv.RCLONE_REMOTE) {
-    sources.remote = `${scriptEnv.RCLONE_REMOTE.replace(/:$/, "")}:${scriptEnv.REMOTE_DIR || "BlueGenji/backups"}`;
+  if (!sources.localDir && !sources.remote && scriptRemote) {
+    sources.remote = `${scriptRemote}:${scriptEnv.REMOTE_DIR || "BlueGenji/backups"}`;
   }
   // Le script n'ajoute le dump du site que si MySQL est configuré : sans lui,
   // l'exiger ferait du rapport une fausse alerte permanente. Fichier du script
   // illisible : on attend l'archive complète, celle de la production.
   const siteDumpConfigured = content === null || Boolean(scriptEnv.MYSQL_DEFAULTS_FILE && scriptEnv.DB_DATABASE);
   const expectedEntries = siteDumpConfigured ? [...EXPECTED_ARCHIVE_ENTRIES] : ["database.sqlite"];
-  return { sources, uploadsRemote, recipientsFile, expectedEntries };
+  return { sources, uploadsRemote, uploadsExpected, recipientsFile, expectedEntries };
 }
 
 /**
@@ -378,8 +389,9 @@ export async function checkLatestArchive(config: BackupCheckConfig, deps: Backup
   const label = "Archive la plus récente";
   const log = deps.log ?? console.error;
   let archives;
+  let failures: string[];
   try {
-    ({ archives } = await listArchives(config.sources, deps.run ?? defaultRunner));
+    ({ archives, failures } = await listArchives(config.sources, deps.run ?? defaultRunner));
   } catch (error) {
     logFailure(log, label, error);
     return { label, ok: false, detail: "stockage des archives illisible" };
@@ -407,7 +419,17 @@ export async function checkLatestArchive(config: BackupCheckConfig, deps: Backup
     return { label, ok: false, detail: `\`${latest.name}\` déchiffrée mais incomplète — manque ${missing.join(", ")}` };
   }
   const site = config.expectedEntries.includes("appbluegenji.sql") ? "" : " (dump du site non configuré)";
-  return { label, ok: true, detail: `\`${latest.name}\` déchiffrée, ${config.expectedEntries.join(" et ")} présents${site}` };
+  const verified = `\`${latest.name}\` déchiffrée, ${config.expectedEntries.join(" et ")} présents${site}`;
+  // Une source muette (stockage distant injoignable, dossier local illisible) :
+  // l'archive lue n'est peut-être pas la plus récente — le contrôle ne peut
+  // pas s'annoncer réussi sur ce qu'il n'a pas vu.
+  if (failures.length > 0) {
+    for (const failure of failures) {
+      log(`[backup-check] ${label} : ${failure}`);
+    }
+    return { label, ok: false, detail: `une source d'archives n'a pas répondu — seule ${verified}, peut-être pas la plus récente` };
+  }
+  return { label, ok: true, detail: verified };
 }
 
 /**
@@ -441,6 +463,10 @@ export async function checkUploadsMirror(config: BackupCheckConfig, deps: Backup
   const label = "Miroir des images";
   const log = deps.log ?? console.error;
   const run = deps.run ?? defaultRunner;
+  if (!config.uploadsExpected) {
+    // Le script ne copie aucune image (`UPLOADS_DIR` vide) : rien à vérifier.
+    return { label, ok: true, detail: "sans objet — aucune image sauvegardée (UPLOADS_DIR vide)" };
+  }
   if (!config.uploadsRemote) {
     return { label, ok: false, detail: "non configuré (BACKUP_UPLOADS_REMOTE)" };
   }
