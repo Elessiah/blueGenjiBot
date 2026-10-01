@@ -16,6 +16,7 @@ Ce que la reprise rend, et ce qu'elle perd :
 - **les deux bases** reviennent à l'état de la **dernière archive** (le lundi précédent au plus tard) — tout ce qui a été écrit depuis est perdu ;
 - **les images**, les **logos en quarantaine** et le **journal des suppressions** reviennent à leur état d'**une heure au plus** avant la perte ;
 - une suppression de compte faite dans l'heure qui a précédé la perte n'a pas encore été copiée : elle ne sera pas rejouée.
+- **les deux ne coïncident pas** : une image remplacée ou supprimée après l'archive n'existe plus sur le stockage (le miroir horaire l'a effacée), si bien que la base restaurée peut désigner un fichier absent — le site affiche alors l'initiale ; de même, un logo masqué après l'archive est rendu dans `data/quarantine` alors que la base restaurée l'attend dans `public/uploads`, et s'affiche absent. Rien ne se répare automatiquement : l'équipe ou le joueur concerné renvoie son image.
 
 ## 0. À garder hors de la machine — avant la panne
 
@@ -61,12 +62,18 @@ sauvegarde ne sert à rien : c'est maintenant qu'il faut le découvrir.
 - **Node.js** : le CI des deux dépôts tourne en **Node 20** ; aucun des deux ne fixe de version (`engines`, `.nvmrc`). À vérifier : la version exacte que faisait tourner l'ancienne machine — à défaut, une version LTS au moins égale à 20.
 - **npm 12**, comme l'ancienne machine : les deux `package.json` déclarent `allowScripts`, que npm 12 applique (le bot en dépend pour la liaison native de `sqlite3`).
 - **MariaDB 11.8** — la production tourne sous MariaDB, pas sous MySQL.
-- **pm2**, installé globalement (`npm install -g pm2`), puis `pm2 startup` pour qu'il redémarre avec la machine.
+- **pm2**, installé globalement (`npm install -g pm2`), puis `pm2 startup` pour qu'il redémarre avec la machine, et **`pm2 install pm2-logrotate`** : sans lui, les journaux pm2 grossissent jusqu'à remplir le disque (ne jamais les effacer à la main : `pm2 flush`, voir `docs/DEPLOYMENT.md` du site).
 - **nginx** (reverse proxy du site).
 - **`age`**, **`sqlite3`** et **`mariadb-client`** depuis APT, **`rclone` depuis le binaire officiel** (pas d'APT, trop ancien) : section « 1. Outils » de `backup-onedrive.md`, commandes comprises.
 
 ```bash
 sudo apt update && sudo apt install -y age sqlite3 mariadb-client mariadb-server nginx
+```
+
+Créer aussi le **dossier des journaux** que nomment l'entrée pm2 du site (`--output`, `--error`) et les lignes de cron (`>> …/bluegenji-backup.log`) — même emplacement que sur l'ancienne machine. Absent, `pm2 start` échoue en `ENOENT`, et le shell du cron refuse la redirection **sans lancer le script** : aucune sauvegarde, et aucune trace de l'échec.
+
+```bash
+mkdir -p <dossier des journaux>
 ```
 
 ## 2. Remettre les secrets en place
@@ -244,6 +251,8 @@ ce qu'en dit `docs/DEPLOYMENT.md` du site —
 - les deux zones de plafond de débit des pages ;
 - l'en-tête `Strict-Transport-Security`, que le site ne pose pas lui-même ;
 - les journaux d'accès gardés **14 jours** au plus (`logrotate` : `daily`, `rotate 13`) — durée annoncée par le registre des traitements.
+
+**Si la machine neuve n'est pas hébergée au même endroit** que l'ancienne, mettre d'abord à jour `lib/shared/site-host.ts` du site (puis déployer) : les mentions légales et le registre des traitements y lisent l'hébergement annoncé.
 
 À vérifier : la façon dont le certificat TLS était obtenu et renouvelé sur
 l'ancienne machine (les dépôts ne le disent pas), et l'enregistrement DNS du
