@@ -109,7 +109,17 @@ test("runPipeline échoue sur un code de sortie non nul sans recopier la sortie 
 
 test("runPipeline échoue quand un binaire manque", async () => {
   const missing: SpawnFn = (_command, args, options) => spawn("binaire-inexistant-bluegenji", args, options);
-  await assert.rejects(runPipeline([{ command: "age", args: [] }], missing), /étape age/);
+  await assert.rejects(runPipeline([{ command: "age", args: [] }], missing), /étape age absent/);
+  // Un `tar` absent en fin de tube : ni le stockage ni la clé ne sont en cause.
+  const tarMissing: SpawnFn = (command, args, options) =>
+    command === "tar"
+      ? spawn("binaire-inexistant-bluegenji", args, options)
+      : spawn(process.execPath, ["-e", "setTimeout(() => process.exit(1), 2000)"], options);
+  await assert.rejects(
+    runPipeline([{ command: "rclone", args: [] }, { command: "age", args: [] }, { command: "tar", args: [] }], tarMissing),
+    /étape tar absent/,
+  );
+  assert.match(pipelineFailureText("tar absent"), /`tar` introuvable/);
 });
 
 test("runPipeline ne met pas en cause une étape arrêtée, même sortie avec un code (rclone : 143)", async () => {
@@ -259,6 +269,10 @@ test("checkRecipientKey compare la clé dérivée au fichier des destinataires",
   const absent = await checkRecipientKey(config(), { run, readFile: () => null });
   assert.equal(absent.result.ok, false);
 
+  const unresolved = await checkRecipientKey(config({ recipientsFile: null }), { run, readFile: () => `${KEY}\n` });
+  assert.equal(unresolved.result.ok, false);
+  assert.match(unresolved.result.detail, /BACKUP_RECIPIENTS_FILE/);
+
   const unreadable = await checkRecipientKey(config(), {
     run: fakeRun({ "age-keygen -y": new Error("open /k/id.key: permission denied") }),
     readFile: () => KEY,
@@ -312,6 +326,10 @@ test("backupCheckConfigFromEnv retombe sur les archives et les chemins du script
   assert.equal(config.sources.remote, "store:BG/backups");
   assert.equal(config.recipientsFile, path.join(scriptDir, "keys.txt"));
   assert.deepEqual(config.expectedEntries, ["database.sqlite", "appbluegenji.sql"]);
+
+  // Un AGE_RECIPIENTS_FILE irrésoluble n'est pas remplacé par le défaut.
+  const relative = backupCheckConfigFromEnv({}, () => "AGE_RECIPIENTS_FILE=keys/recipients.txt\n");
+  assert.equal(relative.recipientsFile, null);
 
   // Les réglages de /restore-backup l'emportent.
   const own = backupCheckConfigFromEnv({ BACKUP_RCLONE_REMOTE: "other:x" }, () => scriptEnv);
@@ -381,7 +399,8 @@ test("resolveScriptPath suit le script pour $SCRIPT_DIR, ~ et les chemins relati
   assert.equal(resolveScriptPath("${SCRIPT_DIR}/k.txt", dir), path.join(dir, "k.txt"));
   assert.equal(resolveScriptPath("~/k.txt", dir), path.join(os.homedir(), "k.txt"));
   assert.equal(resolveScriptPath("$HOME/k.txt", dir), path.join(os.homedir(), "k.txt"));
-  assert.equal(resolveScriptPath("k.txt", dir), path.join(dir, "k.txt"));
+  // Relatif : bash le lirait depuis le répertoire de cron, inconnu du bot.
+  assert.equal(resolveScriptPath("k.txt", dir), null);
   assert.equal(resolveScriptPath("$OTHER/k.txt", dir), null);
   assert.equal(resolveScriptPath(undefined, dir), null);
 });

@@ -32,7 +32,8 @@
  *   (`nom-crypt:uploads`) ; à défaut, `UPLOADS_RCLONE_REMOTE` et
  *   `UPLOADS_REMOTE_DIR` du même fichier ;
  * - `BACKUP_RECIPIENTS_FILE` : fichier des clés publiques ; à défaut,
- *   `AGE_RECIPIENTS_FILE` du même fichier, puis `scripts/backup-recipients.txt` ;
+ *   `AGE_RECIPIENTS_FILE` du même fichier (chemin relatif non deviné), puis
+ *   `scripts/backup-recipients.txt` ;
  * - `BACKUP_ONEDRIVE_ENV` (ou `BACKUP_CONFIG`, celle du script) : chemin de ce
  *   fichier (défaut `scripts/backup-onedrive.env`, relatif au dossier du bot).
  *
@@ -103,8 +104,8 @@ export interface BackupCheckConfig {
    * le contrôle du miroir est alors sans objet, et non en échec.
    */
   uploadsExpected: boolean;
-  /** Fichier des clés publiques autorisées. */
-  recipientsFile: string;
+  /** Fichier des clés publiques autorisées, `null` s'il n'a pas pu être résolu. */
+  recipientsFile: string | null;
   /** Fichiers que la dernière archive doit contenir. */
   expectedEntries: string[];
 }
@@ -176,9 +177,14 @@ export function backupCheckConfigFromEnv(
     const name = (scriptEnv.UPLOADS_RCLONE_REMOTE || scriptRemote || "").replace(/:$/, "");
     uploadsRemote = name ? `${name}:${scriptEnv.UPLOADS_REMOTE_DIR || "uploads"}` : null;
   }
+  // Un `AGE_RECIPIENTS_FILE` que l'on ne sait pas résoudre comme bash (chemin
+  // relatif au répertoire de cron, autre variable) n'est pas remplacé par le
+  // défaut : on vérifierait un autre fichier que celui qui chiffre.
   const recipientsFile = env.BACKUP_RECIPIENTS_FILE?.trim()
     ? path.resolve(env.BACKUP_RECIPIENTS_FILE.trim())
-    : scriptPath("AGE_RECIPIENTS_FILE") ?? path.join(scriptDir, "backup-recipients.txt");
+    : scriptEnv.AGE_RECIPIENTS_FILE
+      ? scriptPath("AGE_RECIPIENTS_FILE")
+      : path.join(scriptDir, "backup-recipients.txt");
 
   // Les archives : celles de `/restore-backup`, plus le stockage où écrit le
   // script quand aucun distant n'est réglé — le script ne garde aucune archive
@@ -198,8 +204,9 @@ export function backupCheckConfigFromEnv(
 /**
  * Résout un chemin lu dans le fichier du script, comme bash l'aurait fait pour
  * les seules formes que ce fichier emploie : `$SCRIPT_DIR` / `${SCRIPT_DIR}`,
- * `~` et `$HOME` en tête, chemin relatif rapporté au dossier du script. Toute
- * autre substitution n'est pas devinée : la valeur est écartée (défaut).
+ * `~` et `$HOME` en tête, chemin absolu. Ni une autre substitution ni un
+ * chemin relatif (bash le lirait depuis le répertoire de cron, que le bot ne
+ * connaît pas) ne sont devinés : la valeur est écartée.
  * @param value Valeur brute, ou `undefined`.
  * @param scriptDir Dossier du script de sauvegarde.
  * @returns Le chemin absolu, ou `null`.
@@ -211,10 +218,10 @@ export function resolveScriptPath(value: string | undefined, scriptDir: string):
   const expanded = value
     .replace(/^(\$\{SCRIPT_DIR\}|\$SCRIPT_DIR)(?=\/|$)/, scriptDir)
     .replace(/^(~|\$\{HOME\}|\$HOME)(?=\/|$)/, os.homedir());
-  if (expanded.includes("$")) {
+  if (expanded.includes("$") || !path.isAbsolute(expanded)) {
     return null;
   }
-  return path.resolve(scriptDir, expanded);
+  return path.resolve(expanded);
 }
 
 /**
@@ -257,6 +264,9 @@ export function runPipeline(
     // `rclone` échoue, `age` échoue aussi faute d'entrée, et c'est le stockage
     // qu'il faut mettre en cause, pas la clé.
     const failed = new Set<number>();
+    // Binaire introuvable : le défaut est certain, il l'emporte sur tout code
+    // de sortie (les autres étapes, arrêtées aussitôt, ne disent rien).
+    const missing = new Set<number>();
     let timedOut = false;
     let interrupted = false;
     let pending = stages.length;
@@ -297,6 +307,8 @@ export function runPipeline(
       let failedStage: string | null = null;
       if (timedOut) {
         failedStage = "délai dépassé";
+      } else if (missing.size > 0) {
+        failedStage = `${stages[Math.min(...missing)].command} absent`;
       } else if (failed.size > 0) {
         failedStage = stages[Math.min(...failed)].command;
       } else if (interrupted) {
@@ -321,6 +333,7 @@ export function runPipeline(
       child.stdin?.on("error", () => {});
       child.on("error", (error) => {
         diagnostics.push(`${stage.command}: ${error.message}`);
+        missing.add(index);
         done(index, 1);
       });
       child.on("close", (code) => done(index, code));
@@ -452,11 +465,15 @@ export function pipelineFailureText(stage: string | undefined): string {
     case "rclone":
       return "lecture sur le stockage distant impossible (stockage injoignable ?)";
     case "age":
-      return "ne se déchiffre pas avec la clé du bot (ou `age` absent)";
+      return "ne se déchiffre pas avec la clé du bot";
     case "tar":
       return "déchiffrée, mais illisible comme archive tar";
     case "délai dépassé":
       return "délai dépassé pendant la lecture";
+    case "rclone absent":
+    case "age absent":
+    case "tar absent":
+      return `\`${stage.replace(/ absent$/, "")}\` introuvable sur le serveur`;
     default:
       return "lecture interrompue";
   }
@@ -536,6 +553,12 @@ export async function checkRecipientKey(
   }
   if (!publicKey) {
     return { result: { label, ok: false, detail: "clé privée du bot illisible" }, publicKey: null };
+  }
+  if (!config.recipientsFile) {
+    return {
+      result: { label, ok: false, detail: "fichier des clés publiques non résolu (AGE_RECIPIENTS_FILE) — régler BACKUP_RECIPIENTS_FILE" },
+      publicKey,
+    };
   }
   const content = (deps.readFile ?? readOptionalFile)(config.recipientsFile);
   if (content === null) {
