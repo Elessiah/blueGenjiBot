@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 #
-# Sauvegarde chiffrée des bases BlueGenji vers OneDrive.
+# Sauvegarde chiffrée des bases BlueGenji vers le stockage distant.
+#
+# Le nom du fichier est historique (le cron de production l'appelle ainsi) : le
+# stockage est celui du remote rclone configuré, quel que soit son fournisseur.
 #
 # Couvre les deux bases — le SQLite du bot et le MySQL du site — puis, si
 # UPLOADS_DIR est renseigné, les images téléversées du site (miroir incrémental,
@@ -20,6 +23,8 @@ if [[ -f "$CONFIG_FILE" ]]; then
   # shellcheck disable=SC1090
   source "$CONFIG_FILE"
 fi
+# shellcheck source=rclone-backend.sh
+source "$SCRIPT_DIR/rclone-backend.sh"
 
 # Repli aligné sur celui du bot (`src/bdd/Bdd.ts`) : un chemin de secours qui
 # désigne une autre base que celle qui tourne sauvegarderait le mauvais
@@ -27,7 +32,7 @@ fi
 # en dur d'une ancienne installation : le bot et le site tournent toujours sur
 # un Raspberry Pi (à Caen), mais rien ne garantit ce chemin-là.
 : "${BDD_PATH:=./data/database.sqlite}"
-: "${RCLONE_REMOTE:=onedrive}"
+: "${RCLONE_REMOTE:=onedrive}" # défaut historique ; la configuration le fixe
 : "${REMOTE_DIR:=BlueGenji/backups}"
 : "${AGE_RECIPIENTS_FILE:=$SCRIPT_DIR/backup-recipients.txt}"
 # 30 jours : c'est la durée que la politique de confidentialité du site annonce
@@ -116,22 +121,25 @@ rm -f "$ARCHIVE"
 
 STATUS_SIZE="$(stat -c %s "$ARCHIVE.age")"
 
-# --- 4. Envoi vers OneDrive ---------------------------------------------------
+# --- 4. Envoi vers le stockage distant ---------------------------------------
 rclone copy "$ARCHIVE.age" "$RCLONE_REMOTE:$REMOTE_DIR" \
   --transfers 1 --retries 3 --low-level-retries 10 \
   || fail "envoi rclone vers $RCLONE_REMOTE:$REMOTE_DIR impossible"
 
 # --- 5. Rétention -------------------------------------------------------------
 # Un échec de purge ne doit pas invalider une sauvegarde déjà envoyée.
-# --onedrive-hard-delete : sans lui, l'archive purgée passe par la corbeille
-# OneDrive et y reste encore 30 jours — la durée annoncée serait fausse d'autant.
+# Suppression définitive : sur OneDrive, `--onedrive-hard-delete` évite la
+# corbeille, qui garderait l'archive purgée 30 jours de plus — la durée annoncée
+# serait fausse d'autant. Ailleurs (Nextcloud/WebDAV), aucune option n'y peut
+# rien : corbeille et versions se coupent côté serveur (doc/backup-onedrive.md).
+mapfile -t DELETE_FLAGS < <(provider_delete_flags "$RCLONE_REMOTE")
 rclone delete "$RCLONE_REMOTE:$REMOTE_DIR" \
   --min-age "${RETENTION_DAYS}d" --include "bluegenji-*.tar.age" \
-  --onedrive-hard-delete \
+  "${DELETE_FLAGS[@]}" \
   || echo "[backup] purge des anciennes sauvegardes incomplète." >&2
 
 # --- 6. Images du site --------------------------------------------------------
-# Après l'archive, et non avant : une panne OneDrive côté images ne doit pas
+# Après l'archive, et non avant : une panne du stockage côté images ne doit pas
 # priver la semaine de sa sauvegarde des bases. L'échec est tout de même porté
 # au statut — le cron horaire qui fait le gros du travail n'a, lui, aucun autre
 # moyen d'être remarqué que ce rapport du lundi.

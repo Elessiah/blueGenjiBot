@@ -6,7 +6,7 @@ import { formatBackupStatus, isBackupFresh, readBackupStatus } from "@/backup/ba
  * Envoie au propriétaire (OWNER_ID) le rapport hebdomadaire de sauvegarde.
  *
  * La sauvegarde elle-même est faite par `scripts/backup-onedrive.sh`, en cron
- * système : les fichiers vivent sur OneDrive, chiffrés, et ne transitent plus
+ * système : les fichiers vivent sur le stockage distant, chiffrés, et ne transitent plus
  * par Discord — la pièce jointe plafonnait à 24 Mo et ne couvrait pas le MySQL
  * du site. Le bot se contente de relire le statut laissé par le script et
  * d'alerter si la sauvegarde manque ou date.

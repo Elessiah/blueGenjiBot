@@ -26,7 +26,7 @@ test("un dossier de quarantaine absent ne purge jamais la copie distante", () =>
 
 test("un remote non chiffré est refusé, sans réglage pour passer outre", () => {
   // Un avatar est une donnée personnelle : aucune variable ne doit rouvrir
-  // l'envoi en clair vers un OneDrive personnel.
+  // l'envoi en clair vers le stockage distant.
   assert.match(SCRIPT, /if \[\[ "\$REMOTE_TYPE" != "crypt" \]\]; then\s+die /);
   assert.doesNotMatch(SCRIPT, /PLAINTEXT/);
 });
