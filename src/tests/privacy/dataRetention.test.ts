@@ -348,6 +348,46 @@ test("rien n'est retiré d'un serveur indisponible, d'un client pas prêt ou d'u
   assert.equal(await partnerChannelCount("c-guarded"), 1);
 });
 
+test("les niveaux et rôles en texte libre sont ramenés aux choix fermés, ou à « non précisé »", async () => {
+  const bdd = await getBddInstance();
+  await bdd.raw("DELETE FROM ActivityDaily");
+  await bdd.raw("DELETE FROM Scrim");
+  await bdd.raw("DELETE FROM Recrute");
+  await bdd.raw("INSERT INTO Scrim (id_author, game, level, id_guild) VALUES ('u1', 'MR', ' Avancé ', 'g-n'), ('u2', 'MR', 'PseudoDeQuelquun', 'g-n'), ('u3', 'MR', 'intermediaire', 'g-n')");
+  await bdd.raw("INSERT INTO Recrute (id_author, role, id_guild) VALUES ('u1', 'TANK', 'g-n'), ('u2', 'cherche un main heal', 'g-n')");
+  await bdd.raw(
+    `INSERT INTO ActivityDaily (kind, day, id_guild, detail, count) VALUES
+       ('scrim', '2026-01-01', 'g-n', 'AVANCE', 2),
+       ('scrim', '2026-01-01', 'g-n', 'avance', 3),
+       ('scrim', '2026-01-01', 'g-n', 'Gold 3', 4),
+       ('scrim', '2026-01-01', 'g-n', '', 1),
+       ('recrute', '2026-01-01', 'g-n', 'Dps', 5),
+       ('recrute', '2026-01-01', 'g-n', 'Débutant', 6)`,
+  );
+
+  // Scrim : 2 valeurs, Recrute : 2, ActivityDaily : AVANCE, Gold 3, Dps, Débutant (rôle hors liste).
+  assert.equal(await bdd.normalizeLegacyActivityDetails(), 8);
+  const scrimLevels = await bdd.raw<{ level: string }>("SELECT level FROM Scrim ORDER BY id_author");
+  assert.deepEqual(scrimLevels.map((r) => r.level), ["avance", "", "intermediaire"]);
+  const roles = await bdd.raw<{ role: string }>("SELECT role FROM Recrute ORDER BY id_author");
+  assert.deepEqual(roles.map((r) => r.role), ["tank", ""]);
+  const daily = await bdd.raw<{ kind: string; detail: string; count: number }>(
+    "SELECT kind, detail, count FROM ActivityDaily WHERE id_guild = 'g-n' ORDER BY kind, detail",
+  );
+  // Fusion sans perte : 2 + 3 sous « avance », 4 + 1 sous « non précisé ».
+  assert.deepEqual(daily.map((r) => [r.kind, r.detail, Number(r.count)]), [
+    ["recrute", "", 6],
+    ["recrute", "dps", 5],
+    ["scrim", "", 5],
+    ["scrim", "avance", 5],
+  ]);
+  // Idempotent.
+  assert.equal(await bdd.normalizeLegacyActivityDetails(), 0);
+  await bdd.raw("DELETE FROM ActivityDaily");
+  await bdd.raw("DELETE FROM Scrim");
+  await bdd.raw("DELETE FROM Recrute");
+});
+
 test.after(async () => {
   await closeBddInstance();
   fs.rmSync(TMP_DB, { force: true });
