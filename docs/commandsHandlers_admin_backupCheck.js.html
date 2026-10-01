@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>JSDoc: Source: utils/setRankFilter.js</title>
+    <title>JSDoc: Source: commandsHandlers/admin/backupCheck.js</title>
 
     <script src="scripts/prettify/prettify.js"> </script>
     <script src="scripts/prettify/lang-css.js"> </script>
@@ -17,7 +17,7 @@
 
 <div id="main">
 
-    <h1 class="page-title">Source: utils/setRankFilter.js</h1>
+    <h1 class="page-title">Source: commandsHandlers/admin/backupCheck.js</h1>
 
     
 
@@ -26,24 +26,52 @@
     
     <section>
         <article>
-            <pre class="prettyprint source linenums"><code>/**
- * Applique le filtre de rangs demandé sur un salon/service.
- * @param bdd Instance de base de données.
- * @param channel_id Identifiant du salon cible.
- * @param rank_range Liste des IDs de rang à associer au salon.
+            <pre class="prettyprint source linenums"><code>import { MessageFlags } from "discord.js";
+import { formatBackupChecks, runBackupChecks } from "../../backup/backupCheck.js";
+import { safeReply } from "../../safe/safeReply.js";
+/**
+ * Joue à la demande les contrôles du rapport hebdomadaire de sauvegarde
+ * (`backup/backupCheck.ts`) : déchiffrement en flux de la dernière archive,
+ * lecture du miroir chiffré des images, clé publique à comparer à la copie
+ * hors ligne.
+ *
+ * Réservée au propriétaire déclaré dans `OWNER_ID`, comme `/restore-backup` :
+ * elle manipule la clé privée des sauvegardes, aucun rôle Discord ne suffit.
+ * Réponse éphémère, différée — le déchiffrement d'une archive dépasse les
+ * 3 s d'une interaction.
+ * @param _client Client Discord (inutilisé, signature commune des commandes).
+ * @param interaction Interaction `/backup-check` en cours.
+ * @returns Rien ; la réponse part par `safeReply`.
  */
-async function setRankFilter(bdd, channel_id, rank_range) {
-    try {
-        for (const rank of rank_range) {
-            await bdd.set("ChannelPartnerRank", ["id_channel", "id_rank"], [channel_id, rank]);
-        }
+export async function backupCheck(_client, interaction) {
+    await answerBackupCheck(interaction, () => runBackupChecks());
+}
+/**
+ * Corps de `/backup-check`, contrôles injectés. Séparé du gestionnaire : le
+ * registre des commandes passe un troisième argument (l'identifiant du
+ * serveur), qui ne doit pas tomber dans un paramètre facultatif.
+ * @param interaction Interaction en cours.
+ * @param run Contrôles à jouer.
+ * @returns Rien ; la réponse part par `safeReply`.
+ */
+export async function answerBackupCheck(interaction, run) {
+    const ownerId = process.env.OWNER_ID;
+    if (!ownerId || interaction.user.id !== ownerId) {
+        await safeReply(interaction, "❌ Commande réservée au propriétaire du bot.");
+        return;
     }
-    catch (e) {
-        console.error("Error while setting rank filter : ", e);
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    try {
+        await safeReply(interaction, formatBackupChecks(await run()), true, true);
+    }
+    catch (error) {
+        // Les contrôles rendent leurs échecs ; une exception ici est imprévue, et
+        // son message peut nommer un chemin : il reste au journal.
+        console.error("[backup-check] Échec imprévu :", error.message);
+        await safeReply(interaction, "❌ Vérification impossible — voir le journal du bot.", true, true);
     }
 }
-export { setRankFilter };
-//# sourceMappingURL=setRankFilter.js.map</code></pre>
+//# sourceMappingURL=backupCheck.js.map</code></pre>
         </article>
     </section>
 

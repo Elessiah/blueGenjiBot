@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>JSDoc: Source: utils/setRankFilter.js</title>
+    <title>JSDoc: Source: backup/backupCheck.js</title>
 
     <script src="scripts/prettify/prettify.js"> </script>
     <script src="scripts/prettify/lang-css.js"> </script>
@@ -17,7 +17,7 @@
 
 <div id="main">
 
-    <h1 class="page-title">Source: utils/setRankFilter.js</h1>
+    <h1 class="page-title">Source: backup/backupCheck.js</h1>
 
     
 
@@ -27,23 +27,394 @@
     <section>
         <article>
             <pre class="prettyprint source linenums"><code>/**
- * Applique le filtre de rangs demandé sur un salon/service.
- * @param bdd Instance de base de données.
- * @param channel_id Identifiant du salon cible.
- * @param rank_range Liste des IDs de rang à associer au salon.
+ * Vérification que les sauvegardes **se relisent**, jouée dans le rapport
+ * hebdomadaire et par `/backup-check`.
+ *
+ * Le statut laissé par `scripts/backup-onedrive.sh` dit qu'une archive est
+ * partie ; il ne dit pas qu'on saura l'ouvrir le jour où il le faudra. Trois
+ * contrôles, aucun n'écrivant de donnée déchiffrée sur disque :
+ *
+ * 1. **Archive** — la plus récente (`archiveSource.ts`) est déchiffrée **en
+ *    flux** (`rclone cat` | `age --decrypt` | `tar -t`) : seule la liste des
+ *    fichiers qu'elle contient sort du tube, et l'on y attend
+ *    `database.sqlite` et `appbluegenji.sql`.
+ * 2. **Miroir des images** — le remote `crypt` des images se liste
+ *    (`rclone lsf`, un niveau) : des noms déchiffrables prouvent que le mot de
+ *    passe du remote est le bon. Rien n'est téléchargé, aucun nom n'est
+ *    montré.
+ * 3. **Clé** — la clé publique tirée de la clé privée (`age-keygen -y`) doit
+ *    figurer dans `backup-recipients.txt`, sans quoi les sauvegardes sont
+ *    chiffrées pour une clé que le bot ne détient pas. Elle est **montrée**
+ *    (une clé publique n'est pas un secret) pour que le propriétaire la
+ *    compare à sa copie hors ligne.
+ *
+ * Ce qui part sur Discord ne contient ni chemin, ni nom d'hôte, ni nom de
+ * remote, ni sortie d'erreur d'une commande (qui en porterait) : seulement un
+ * libellé et un verdict. Le détail va au journal du processus (pm2).
+ *
+ * Configuration (`.env` du bot), toutes facultatives :
+ * - `BACKUP_UPLOADS_REMOTE` : remote `crypt` et dossier des images
+ *   (`nom-crypt:uploads`) ; à défaut, `UPLOADS_RCLONE_REMOTE` et
+ *   `UPLOADS_REMOTE_DIR` de `scripts/backup-onedrive.env` ;
+ * - `BACKUP_RECIPIENTS_FILE` : fichier des clés publiques ; à défaut,
+ *   `AGE_RECIPIENTS_FILE` du même fichier, puis `scripts/backup-recipients.txt` ;
+ * - `BACKUP_ONEDRIVE_ENV` : chemin de ce fichier (défaut
+ *   `scripts/backup-onedrive.env`, relatif au dossier du bot).
  */
-async function setRankFilter(bdd, channel_id, rank_range) {
-    try {
-        for (const rank of rank_range) {
-            await bdd.set("ChannelPartnerRank", ["id_channel", "id_rank"], [channel_id, rank]);
+import { execFile, spawn } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+import { promisify } from "node:util";
+import { archiveSourcesFromEnv, listArchives, } from "../backup/archiveSource.js";
+const execFileAsync = promisify(execFile);
+/** Fichiers qu'une archive complète doit contenir. */
+export const EXPECTED_ARCHIVE_ENTRIES = ["database.sqlite", "appbluegenji.sql"];
+/** Délai maximal d'un contrôle (le déchiffrement lit toute l'archive). */
+const CHECK_TIMEOUT_MS = 10 * 60 * 1000;
+/** Plafond de la sortie lue au bout du tube : une liste de fichiers, rien de plus. */
+const MAX_LISTING_BYTES = 64 * 1024;
+/** Exécuteur par défaut : `execFile`, sans shell. */
+const defaultRunner = async (command, args) => {
+    const { stdout } = await execFileAsync(command, args, { timeout: CHECK_TIMEOUT_MS, maxBuffer: 1024 * 1024 });
+    return stdout;
+};
+/**
+ * Lit un fichier `KEY=VALUE` (celui de `scripts/backup-onedrive.sh`), sans
+ * l'exécuter : ni substitution, ni commande. Guillemets simples ou doubles
+ * retirés, commentaires et lignes vides ignorés.
+ * @param content Contenu du fichier.
+ * @returns Les couples lus.
+ */
+export function parseEnvFile(content) {
+    const values = {};
+    for (const raw of content.split(/\r?\n/)) {
+        const line = raw.trim();
+        const match = /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$/.exec(line);
+        if (!match) {
+            continue;
         }
+        let value = match[2].trim();
+        if (value.length >= 2 &amp;&amp; (value[0] === '"' || value[0] === "'") &amp;&amp; value.at(-1) === value[0]) {
+            value = value.slice(1, -1);
+        }
+        else {
+            value = value.replace(/\s+#.*$/, "");
+        }
+        values[match[1]] = value;
     }
-    catch (e) {
-        console.error("Error while setting rank filter : ", e);
+    return values;
+}
+/**
+ * Compose la configuration des contrôles depuis l'environnement du bot et,
+ * à défaut, depuis le fichier de configuration du script de sauvegarde.
+ * @param env Environnement (par défaut `process.env`).
+ * @param readFile Lecture d'un fichier ; `null` s'il est absent.
+ * @returns La configuration.
+ */
+export function backupCheckConfigFromEnv(env = process.env, readFile = readOptionalFile) {
+    const scriptEnvPath = path.resolve(env.BACKUP_ONEDRIVE_ENV?.trim() || "scripts/backup-onedrive.env");
+    const scriptEnv = parseEnvFile(readFile(scriptEnvPath) ?? "");
+    let uploadsRemote = env.BACKUP_UPLOADS_REMOTE?.trim() || null;
+    if (!uploadsRemote &amp;&amp; scriptEnv.UPLOADS_RCLONE_REMOTE) {
+        const name = scriptEnv.UPLOADS_RCLONE_REMOTE.replace(/:$/, "");
+        uploadsRemote = `${name}:${scriptEnv.UPLOADS_REMOTE_DIR || "uploads"}`;
+    }
+    const recipientsFile = path.resolve(env.BACKUP_RECIPIENTS_FILE?.trim() || scriptEnv.AGE_RECIPIENTS_FILE || "scripts/backup-recipients.txt");
+    return { sources: archiveSourcesFromEnv(env), uploadsRemote, recipientsFile };
+}
+/**
+ * Lit un fichier qui peut ne pas exister.
+ * @param file Chemin.
+ * @returns Son contenu, ou `null`.
+ */
+function readOptionalFile(file) {
+    try {
+        return fs.readFileSync(file, "utf8");
+    }
+    catch {
+        return null;
     }
 }
-export { setRankFilter };
-//# sourceMappingURL=setRankFilter.js.map</code></pre>
+/**
+ * Enchaîne des processus par leurs tubes et rend la sortie du dernier.
+ *
+ * Rien ne touche le disque : chaque étape lit la sortie de la précédente. Un
+ * code de sortie non nul, un binaire absent ou le délai dépassé font échouer
+ * l'ensemble, et tous les processus sont arrêtés. Le message d'échec ne nomme
+ * que l'étape (`age`, `tar`…), jamais sa sortie d'erreur, qui peut porter un
+ * chemin ou un hôte : celle-ci est rendue à part, pour le journal.
+ * @param stages Étapes, dans l'ordre du tube.
+ * @param spawnFn Lanceur de processus.
+ * @param timeoutMs Délai maximal.
+ * @returns La sortie du dernier processus.
+ */
+export function runPipeline(stages, spawnFn = spawn, timeoutMs = CHECK_TIMEOUT_MS) {
+    return new Promise((resolve, reject) => {
+        const children = [];
+        const diagnostics = [];
+        let failedStage = null;
+        let pending = stages.length;
+        let output = "";
+        let truncated = false;
+        const killAll = () => {
+            for (const child of children) {
+                child.kill();
+            }
+        };
+        const timer = setTimeout(() => {
+            failedStage ??= "délai dépassé";
+            killAll();
+        }, timeoutMs);
+        const settled = new Set();
+        const done = (index, code) => {
+            if (settled.has(index)) {
+                return;
+            }
+            settled.add(index);
+            if (code !== 0) {
+                failedStage ??= stages[index].command;
+                killAll();
+            }
+            pending--;
+            if (pending > 0) {
+                return;
+            }
+            clearTimeout(timer);
+            if (failedStage) {
+                const error = new Error(`échec de l'étape ${failedStage}`);
+                error.diagnostics = diagnostics.join(" ; ");
+                reject(error);
+            }
+            else {
+                resolve(output);
+            }
+        };
+        stages.forEach((stage, index) => {
+            const first = index === 0;
+            const child = spawnFn(stage.command, stage.args, { stdio: [first ? "ignore" : "pipe", "pipe", "pipe"] });
+            children.push(child);
+            child.stderr?.on("data", (chunk) => diagnostics.push(`${stage.command}: ${chunk.toString().trim()}`));
+            // Un tube rompu (l'étape suivante a échoué) ne doit pas faire lever le bot.
+            child.stdin?.on("error", () => { });
+            child.on("error", (error) => {
+                diagnostics.push(`${stage.command}: ${error.message}`);
+                done(index, 1);
+            });
+            child.on("close", (code) => done(index, code));
+            if (!first) {
+                children[index - 1].stdout?.pipe(child.stdin);
+            }
+        });
+        const last = children[children.length - 1];
+        last.stdout?.on("data", (chunk) => {
+            if (output.length + chunk.length > MAX_LISTING_BYTES) {
+                truncated = true;
+                return;
+            }
+            output += chunk.toString();
+        });
+        last.stdout?.on("end", () => {
+            if (truncated) {
+                diagnostics.push("sortie tronquée");
+            }
+        });
+    });
+}
+/**
+ * Noms de fichiers d'une sortie `tar -t`, `./` de tête retiré.
+ * @param listing Sortie brute.
+ * @returns Les noms.
+ */
+export function parseTarListing(listing) {
+    return listing
+        .split(/\r?\n/)
+        .map((line) => line.trim().replace(/^\.\//, ""))
+        .filter((line) => line.length > 0);
+}
+/**
+ * Désigne un fichier d'un remote rclone (`nom:dossier` + nom).
+ * @param remote Remote et dossier.
+ * @param name Nom du fichier.
+ * @returns Le chemin rclone.
+ */
+function remotePath(remote, name) {
+    return remote.endsWith("/") || remote.endsWith(":") ? `${remote}${name}` : `${remote}/${name}`;
+}
+/**
+ * Journalise un échec sans le montrer : le message d'une commande peut nommer
+ * un chemin, un remote ou un hôte.
+ * @param log Journal.
+ * @param label Contrôle concerné.
+ * @param error Erreur levée.
+ */
+function logFailure(log, label, error) {
+    const err = error;
+    log(`[backup-check] ${label} : ${err.message}${err.diagnostics ? ` — ${err.diagnostics}` : ""}`);
+}
+/**
+ * Contrôle 1 : la plus récente archive se déchiffre et contient les deux bases.
+ * @param config Configuration.
+ * @param deps Dépendances.
+ * @returns Le verdict.
+ */
+export async function checkLatestArchive(config, deps = {}) {
+    const label = "Archive la plus récente";
+    const log = deps.log ?? console.error;
+    let archives;
+    try {
+        ({ archives } = await listArchives(config.sources, deps.run ?? defaultRunner));
+    }
+    catch (error) {
+        logFailure(log, label, error);
+        return { label, ok: false, detail: "stockage des archives illisible" };
+    }
+    const latest = archives[0];
+    if (!latest) {
+        return { label, ok: false, detail: "aucune archive trouvée" };
+    }
+    const decrypt = { command: "age", args: ["--decrypt", "-i", config.sources.identity] };
+    const stages = latest.location === "local" &amp;&amp; config.sources.localDir
+        ? [{ command: "age", args: [...decrypt.args, path.join(config.sources.localDir, latest.name)] }]
+        : [{ command: "rclone", args: ["cat", remotePath(config.sources.remote ?? "", latest.name)] }, decrypt];
+    stages.push({ command: "tar", args: ["-t", "-f", "-"] });
+    let entries;
+    try {
+        entries = parseTarListing(await runPipeline(stages, deps.spawnFn));
+    }
+    catch (error) {
+        logFailure(log, label, error);
+        return { label, ok: false, detail: `\`${latest.name}\` ne se déchiffre pas avec la clé du bot` };
+    }
+    const missing = EXPECTED_ARCHIVE_ENTRIES.filter((name) => !entries.includes(name));
+    if (missing.length > 0) {
+        return { label, ok: false, detail: `\`${latest.name}\` déchiffrée mais incomplète — manque ${missing.join(", ")}` };
+    }
+    return { label, ok: true, detail: `\`${latest.name}\` déchiffrée, ${EXPECTED_ARCHIVE_ENTRIES.join(" et ")} présents` };
+}
+/**
+ * Contrôle 2 : le miroir chiffré des images se lit.
+ * @param config Configuration.
+ * @param deps Dépendances.
+ * @returns Le verdict.
+ */
+export async function checkUploadsMirror(config, deps = {}) {
+    const label = "Miroir des images";
+    const log = deps.log ?? console.error;
+    const run = deps.run ?? defaultRunner;
+    if (!config.uploadsRemote) {
+        return { label, ok: false, detail: "non configuré (BACKUP_UPLOADS_REMOTE)" };
+    }
+    const name = config.uploadsRemote.split(":")[0];
+    try {
+        const remotes = await run("rclone", ["listremotes", "--long"]);
+        const type = remotes
+            .split(/\r?\n/)
+            .map((line) => line.trim().split(/\s+/))
+            .find(([remote]) => remote === `${name}:`)?.[1];
+        if (!type) {
+            return { label, ok: false, detail: "remote introuvable dans la configuration rclone" };
+        }
+        if (type !== "crypt") {
+            return { label, ok: false, detail: "le remote des images n'est pas chiffré (type autre que crypt)" };
+        }
+        const listing = await run("rclone", ["lsf", config.uploadsRemote, "--max-depth", "1"]);
+        if (listing.split(/\r?\n/).every((line) => line.trim().length === 0)) {
+            return { label, ok: false, detail: "aucune entrée lisible (miroir vide ou mot de passe du remote faux)" };
+        }
+    }
+    catch (error) {
+        logFailure(log, label, error);
+        return { label, ok: false, detail: "remote chiffré illisible" };
+    }
+    return { label, ok: true, detail: "remote chiffré lisible" };
+}
+/**
+ * Clés publiques d'un fichier de destinataires age.
+ * @param content Contenu du fichier.
+ * @returns Les clés `age1…`.
+ */
+export function parseRecipients(content) {
+    return content
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => /^age1[0-9a-z]+$/.test(line));
+}
+/**
+ * Contrôle 3 : la clé privée du bot correspond à une clé de chiffrement.
+ * @param config Configuration.
+ * @param deps Dépendances.
+ * @returns Le verdict et la clé publique dérivée.
+ */
+export async function checkRecipientKey(config, deps = {}) {
+    const label = "Clé de déchiffrement";
+    const log = deps.log ?? console.error;
+    let publicKey;
+    try {
+        publicKey = parseRecipients(await (deps.run ?? defaultRunner)("age-keygen", ["-y", config.sources.identity]))[0] ?? null;
+    }
+    catch (error) {
+        logFailure(log, label, error);
+        publicKey = null;
+    }
+    if (!publicKey) {
+        return { result: { label, ok: false, detail: "clé privée du bot illisible" }, publicKey: null };
+    }
+    const content = (deps.readFile ?? readOptionalFile)(config.recipientsFile);
+    if (content === null) {
+        return { result: { label, ok: false, detail: "fichier des clés publiques (backup-recipients.txt) introuvable" }, publicKey };
+    }
+    if (!parseRecipients(content).includes(publicKey)) {
+        return {
+            result: {
+                label,
+                ok: false,
+                detail: "🚨 la clé du bot n'est PAS dans backup-recipients.txt : les sauvegardes sont chiffrées pour une autre clé",
+            },
+            publicKey,
+        };
+    }
+    return { result: { label, ok: true, detail: "correspond à backup-recipients.txt" }, publicKey };
+}
+/**
+ * Joue les trois contrôles.
+ * @param config Configuration (par défaut, lue dans l'environnement).
+ * @param deps Dépendances.
+ * @returns Les verdicts et la clé publique.
+ */
+export async function runBackupChecks(config = backupCheckConfigFromEnv(), deps = {}) {
+    const key = await checkRecipientKey(config, deps);
+    const archive = await checkLatestArchive(config, deps);
+    const mirror = await checkUploadsMirror(config, deps);
+    return { checks: [archive, mirror, key.result], publicKey: key.publicKey };
+}
+/**
+ * `true` si tous les contrôles ont réussi.
+ * @param report Rapport.
+ * @returns Le verdict global.
+ */
+export function backupChecksPassed(report) {
+    return report.checks.every((check) => check.ok);
+}
+/**
+ * Met le rapport en forme pour Discord. Les échecs sont dans un bloc `diff`,
+ * où Discord rend en **rouge** les lignes qui commencent par `-` : un échec
+ * doit se voir sans lire.
+ * @param report Rapport.
+ * @returns Le texte du message.
+ */
+export function formatBackupChecks(report) {
+    const lines = report.checks.map((check) => `${check.ok ? "✅" : "❌"} ${check.label} : ${check.detail}`);
+    const failures = report.checks.filter((check) => !check.ok);
+    const keyLine = report.publicKey
+        ? `🔑 Clé publique des sauvegardes : \`${report.publicKey}\`\n` +
+            "Compare-la à ta copie hors ligne : `age-keygen -y &lt;copie>` doit afficher exactement cette clé."
+        : "🔑 Clé publique des sauvegardes : indisponible.";
+    const block = failures.length > 0
+        ? `\n\`\`\`diff\n${failures.map((check) => `- ÉCHEC ${check.label.toUpperCase()}`).join("\n")}\n\`\`\``
+        : "";
+    return `Vérification de restauration :\n${lines.join("\n")}${block}\n${keyLine}`;
+}
+//# sourceMappingURL=backupCheck.js.map</code></pre>
         </article>
     </section>
 
