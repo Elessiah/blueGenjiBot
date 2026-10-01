@@ -65,7 +65,8 @@ test("listArchives réunit dossier local et remote, la copie locale l'emporte", 
     calls.push([command, ...args]);
     return "bluegenji-2026-09-03.tar.age\nbluegenji-2026-09-02.tar.age\n";
   };
-  const archives = await listArchives({ localDir: dir, remote: "hetzner:backups", identity: "/k" }, run);
+  const { archives, failures } = await listArchives({ localDir: dir, remote: "hetzner:backups", identity: "/k" }, run);
+  assert.deepEqual(failures, []);
   assert.deepEqual(archives, [
     { name: "bluegenji-2026-09-03.tar.age", location: "remote" },
     { name: "bluegenji-2026-09-02.tar.age", location: "local" },
@@ -80,7 +81,11 @@ test("listArchives tolère une source en panne tant que l'autre répond, pas les
   };
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bluegenji-archives-"));
   fs.writeFileSync(path.join(dir, "bluegenji-2026-09-02.tar.age"), "x");
-  assert.equal((await listArchives({ localDir: dir, remote: "r:b", identity: "/k" }, failing)).length, 1);
+  const partial = await listArchives({ localDir: dir, remote: "r:b", identity: "/k" }, failing);
+  assert.equal(partial.archives.length, 1);
+  // L'échec du distant est rendu, pas avalé.
+  assert.equal(partial.failures.length, 1);
+  assert.match(partial.failures[0], /stockage distant : remote injoignable/);
   await assert.rejects(
     listArchives({ localDir: path.join(dir, "absent"), remote: "r:b", identity: "/k" }, failing),
     /remote injoignable.*dossier local/,
