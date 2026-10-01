@@ -2,6 +2,7 @@ import { type Client, type User } from "discord.js";
 import { formatDiskUsage, getDiskUsage } from "@/backup/diskSpace.js";
 import { formatBackupStatus, isBackupFresh, readBackupStatus } from "@/backup/backupStatus.js";
 import { resolveBddPath } from "@/bdd/Bdd.js";
+import { backupChecksPassed, formatBackupChecks, runBackupChecks } from "@/backup/backupCheck.js";
 
 /**
  * Envoie au propriétaire (OWNER_ID) le rapport hebdomadaire de sauvegarde.
@@ -10,7 +11,9 @@ import { resolveBddPath } from "@/bdd/Bdd.js";
  * système : les fichiers vivent sur le stockage distant, chiffrés, et ne transitent plus
  * par Discord — la pièce jointe plafonnait à 24 Mo et ne couvrait pas le MySQL
  * du site. Le bot se contente de relire le statut laissé par le script et
- * d'alerter si la sauvegarde manque ou date.
+ * d'alerter si la sauvegarde manque ou date — puis de vérifier qu'elle **se
+ * relit** (`backupCheck.ts` : déchiffrement en flux de la dernière archive,
+ * miroir chiffré des images, clé publique à comparer à la copie hors ligne).
  * @param client Client Discord utilisé pour joindre le propriétaire.
  * @returns `true` si le rapport a été envoyé, `false` sinon.
  */
@@ -30,15 +33,17 @@ export async function sendDatabaseBackup(client: Client): Promise<boolean> {
     const cloudLine = formatBackupStatus(status);
     // L'état du disque intéresse surtout quand la place manque : on le joint dans les deux cas.
     const diskLine = formatDiskUsage(await getDiskUsage(dbPath));
+    // Une archive présente mais illisible ne vaut pas mieux qu'une absente.
+    const checks = await runBackupChecks();
 
     // Une sauvegarde absente ou périmée est la seule situation qui demande une
     // action : elle mérite d'être annoncée dès la première ligne du message.
-    const header = isBackupFresh(status)
+    const header = isBackupFresh(status) && backupChecksPassed(checks)
       ? `🗄️ Rapport de sauvegarde BlueGenji — ${stamp}`
       : `🚨 Sauvegarde BlueGenji à vérifier — ${stamp}`;
 
     const owner: User = await client.users.fetch(ownerId);
-    await owner.send(`${header}\n${cloudLine}\n${diskLine}`);
+    await owner.send(`${header}\n${cloudLine}\n${diskLine}\n\n${formatBackupChecks(checks)}`);
 
     console.log(`[backup] Rapport hebdomadaire envoyé (${stamp}).`);
     return true;

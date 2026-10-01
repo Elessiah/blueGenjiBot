@@ -34,6 +34,7 @@ import {statsSite} from "../commandsHandlers/statsSite.js";
 import {relay} from "../commandsHandlers/admin/relay.js";
 import {configModule} from "../commandsHandlers/admin/configModule.js";
 import {restoreBackup} from "@/commandsHandlers/admin/restoreBackup.js";
+import {backupCheck} from "@/commandsHandlers/admin/backupCheck.js";
 
 /**
  * Registre statique des commandes slash : handler, description et options de chacune.
@@ -476,6 +477,12 @@ const commands = {
                     ]
                 }
             ]
+        }
+    },
+    "backup-check": {
+        handler: backupCheck,
+        parameters: {
+            description: "Verifie que la derniere sauvegarde se dechiffre (PROPRIETAIRE UNIQUEMENT)"
         }
     },
     "restore-backup": {

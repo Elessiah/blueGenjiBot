@@ -7,6 +7,7 @@ import sqlite3 from 'sqlite3';
 import type {status, Query} from "../types.js";
 import {ranks, services} from '../utils/globals.js';
 import {toSQLiteDate} from '../utils/toSQLiteDatetime.js';
+import {RECRUIT_ROLE_CHOICES, SCRIM_LEVEL_CHOICES, normalizeLegacyChoice} from '../config/searchChoices.js';
 
 import type {
     Ranks,
@@ -1250,6 +1251,80 @@ class Bdd {
       }
     } finally {
       await fold.close();
+    }
+  }
+
+  /**
+   * Ramène aux choix fermés les niveaux et rôles saisis en texte libre avant
+   * blueGenjiBot#37, dans `Scrim.level`, `Recrute.role` et les nombres par
+   * jour (`ActivityDaily.detail`, où ils survivaient sans limite).
+   *
+   * Une valeur qui désigne exactement un choix (casse et accents mis à part)
+   * le devient ; toute autre — un pseudo, une phrase — rejoint la catégorie
+   * « non précisé » (`''`), celle que le repli donne déjà à une ligne sans
+   * valeur (`normalizeLegacyChoice`). Dans `ActivityDaily`, deux lignes qui
+   * tombent sur la même clé sont **fusionnées** (comptes additionnés) : rien
+   * ne se perd du total. Idempotent — une fois tout ramené, la passe ne
+   * trouve plus rien —, d'où sa place dans le ménage de chaque nuit, qui
+   * rattrape aussi une base restaurée d'avant la règle.
+   *
+   * Une transaction sur une connexion à part, comme le repli, et
+   * `secure_delete` : le texte libre ne doit pas survivre dans les pages
+   * libérées du fichier.
+   * @returns Nombre de valeurs distinctes réécrites, toutes tables confondues.
+   */
+  async normalizeLegacyActivityDetails(): Promise<number> {
+    if (!this.Database) { throw new Error("Base fermée : normalisation non jouée."); }
+    const targets = [
+      { kind: 'scrim', table: 'Scrim', column: 'level', choices: SCRIM_LEVEL_CHOICES },
+      { kind: 'recrute', table: 'Recrute', column: 'role', choices: RECRUIT_ROLE_CHOICES },
+    ] as const;
+    const db = await open({ filename: this.name, driver: sqlite3.Database });
+    try {
+      await db.exec("PRAGMA busy_timeout = 5000");
+      await db.exec("PRAGMA secure_delete = ON");
+      await db.exec("BEGIN IMMEDIATE");
+      try {
+        let rewritten = 0;
+        for (const target of targets) {
+          // Table et colonne viennent de la liste ci-dessus, jamais d'une saisie.
+          const rows = await db.all(
+            `SELECT DISTINCT ${target.column} AS value FROM ${target.table}`,
+          ) as { value: string | null }[];
+          for (const { value } of rows) {
+            const next = normalizeLegacyChoice(target.choices, value);
+            if (value === next) { continue; }
+            await db.run(
+              `UPDATE ${target.table} SET ${target.column} = ? WHERE ${target.column} IS ?`,
+              [next, value],
+            );
+            rewritten++;
+          }
+          const details = await db.all(
+            "SELECT DISTINCT detail FROM ActivityDaily WHERE kind = ?",
+            [target.kind],
+          ) as { detail: string }[];
+          for (const { detail } of details) {
+            const next = normalizeLegacyChoice(target.choices, detail);
+            if (detail === next) { continue; }
+            await db.run(
+              `INSERT INTO ActivityDaily (kind, day, id_guild, detail, count)
+                 SELECT kind, day, id_guild, ?, count FROM ActivityDaily WHERE kind = ? AND detail = ?
+                 ON CONFLICT(kind, day, id_guild, detail) DO UPDATE SET count = count + excluded.count`,
+              [next, target.kind, detail],
+            );
+            await db.run("DELETE FROM ActivityDaily WHERE kind = ? AND detail = ?", [target.kind, detail]);
+            rewritten++;
+          }
+        }
+        await db.exec("COMMIT");
+        return rewritten;
+      } catch (error) {
+        await db.exec("ROLLBACK").catch(() => {});
+        throw error;
+      }
+    } finally {
+      await db.close();
     }
   }
 
