@@ -223,9 +223,12 @@ MariaDB sait authentifier par socket Unix : l'utilisateur système est reconnu
 sans mot de passe, et il n'y a donc aucun secret à poser sur le disque. C'est
 strictement préférable à un mot de passe dans un fichier de configuration.
 
+Remplacer `<compte_systeme>` par le compte Unix qui lance le cron de
+sauvegarde, et `<base_site>` par la base du site (`DB_DATABASE` de son `.env`).
+
 ```sql
-CREATE USER IF NOT EXISTS 'elessiah'@'localhost' IDENTIFIED VIA unix_socket;
-GRANT SELECT, SHOW VIEW, EVENT, TRIGGER ON bluegenji_arena.* TO 'elessiah'@'localhost';
+CREATE USER IF NOT EXISTS '<compte_systeme>'@'localhost' IDENTIFIED VIA unix_socket;
+GRANT SELECT, SHOW VIEW, EVENT, TRIGGER ON <base_site>.* TO '<compte_systeme>'@'localhost';
 FLUSH PRIVILEGES;
 ```
 
@@ -234,7 +237,7 @@ est inutile avec `--single-transaction`, et rien n'autorise l'écriture.
 
 ```bash
 printf '[client]
-user=elessiah
+user=<compte_systeme>
 ' > ~/.mysql-backup.cnf
 chmod 600 ~/.mysql-backup.cnf
 ```
@@ -273,8 +276,8 @@ ne se manifesterait qu'en production.
 
 ```cron
 PATH=/usr/local/bin:/usr/bin:/bin
-0 3 * * 1 /home/elessiah/apps/blueGenjiBot/scripts/backup-onedrive.sh >> /home/elessiah/apps/logs/bluegenji-backup.log 2>&1
-17 * * * * /home/elessiah/apps/blueGenjiBot/scripts/sync-uploads-onedrive.sh >> /home/elessiah/apps/logs/bluegenji-uploads.log 2>&1
+0 3 * * 1 /home/<compte_systeme>/apps/blueGenjiBot/scripts/backup-onedrive.sh >> /home/<compte_systeme>/apps/logs/bluegenji-backup.log 2>&1
+17 * * * * /home/<compte_systeme>/apps/blueGenjiBot/scripts/sync-uploads-onedrive.sh >> /home/<compte_systeme>/apps/logs/bluegenji-uploads.log 2>&1
 ```
 
 La seconde ligne synchronise les images et le journal des suppressions chaque
@@ -384,7 +387,7 @@ age --decrypt -i ~/.bluegenji-backup.key bluegenji-2026-09-08.tar.age | tar -x
 **Base du site** — restauration manuelle, le bot n'y touche pas :
 
 ```bash
-mysql -u root appbluegenji < appbluegenji.sql
+mysql -u root <base_site> < appbluegenji.sql
 ```
 
 **Images du site** — à recopier dans `public/uploads` de l'app :
@@ -420,8 +423,41 @@ NODE_ENV=production npm run replay:deletions
 Sans cette étape, restaurer ferait revenir les pseudos, identités de connexion et
 tags Discord de joueurs qui avaient demandé leur suppression.
 
-## Variable côté bot
+## Vérification de restauration (rapport hebdomadaire et `/backup-check`)
+
+Le rapport du lundi (4 h, en message privé à `OWNER_ID`) ne se contente plus de
+dire qu'une archive est partie : il vérifie qu'elle **se relit**. La même
+vérification se lance à la demande par `/backup-check` (propriétaire seul,
+réponse éphémère). Trois contrôles, chacun « ✅ » ou « ❌ », les échecs repris
+en rouge dans un bloc `diff` en fin de message :
+
+- **Archive la plus récente** — `rclone cat` | `age --decrypt` | `tar -t` :
+  l'archive est déchiffrée **en flux**, seule la liste de ses fichiers sort du
+  tube, et rien n'est écrit en clair sur le disque. `database.sqlite` et
+  `appbluegenji.sql` doivent y figurer ;
+- **Miroir des images** — le remote des images doit être de type `crypt` et
+  lister au moins une entrée (`rclone lsf`, un niveau) : des noms déchiffrables
+  prouvent que son mot de passe est le bon. Rien n'est téléchargé ni affiché ;
+- **Clé de déchiffrement** — `age-keygen -y` tire la clé publique de la clé
+  privée du bot, qui doit figurer dans `scripts/backup-recipients.txt` ; sinon
+  « 🚨 la clé du bot n'est PAS dans backup-recipients.txt » : les archives
+  sont chiffrées pour une clé que le bot ne détient pas.
+
+La clé publique (`age1…`, pas un secret) est affichée pour que tu la compares à
+ta copie hors ligne : `age-keygen -y <copie>` doit afficher exactement la même
+(voir `doc/disaster-recovery.md`, contrôle périodique). Le message ne contient
+ni chemin, ni nom de remote, ni nom d'hôte, ni sortie d'erreur d'une commande :
+le détail d'un échec va au journal du bot (`pm2 logs`, préfixe `[backup-check]`).
+
+`age`, `age-keygen`, `rclone` et `tar` doivent être dans le `PATH` du processus
+du bot, et la clé privée lisible par son compte (c'est déjà le cas pour
+`/restore-backup`).
+
+## Variables côté bot
 
 | Variable | Défaut | Rôle |
 | --- | --- | --- |
 | `BACKUP_STATUS_PATH` | `/var/lib/bluegenji/backup-status.json` | Fichier de statut relu pour le rapport hebdomadaire. |
+| `BACKUP_UPLOADS_REMOTE` | `UPLOADS_RCLONE_REMOTE:UPLOADS_REMOTE_DIR` de `scripts/backup-onedrive.env` | Remote `crypt` et dossier des images, lu par la vérification. |
+| `BACKUP_RECIPIENTS_FILE` | `AGE_RECIPIENTS_FILE` du même fichier, sinon `scripts/backup-recipients.txt` | Clés publiques autorisées, comparées à la clé du bot. |
+| `BACKUP_ONEDRIVE_ENV` | `scripts/backup-onedrive.env` | Fichier de configuration du script, relu (jamais exécuté) pour les deux défauts ci-dessus. |
