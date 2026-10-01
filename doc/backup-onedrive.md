@@ -376,6 +376,12 @@ est extrait : le dump du site (`appbluegenji.sql`) n'est jamais écrit en clair.
 Le dossier temporaire est effacé à la fin, succès ou échec. La saisie ne
 compose jamais un chemin : seule une archive déjà listée peut être désignée.
 
+Un échec ne montre sur Discord — réponse comme salon de logs — ni la sortie de
+`rclone`, `age` ou `tar`, ni un chemin, ni le nom du remote : seulement la
+source en cause (« stockage distant », « dossier local ») et un renvoi au
+journal du bot (`pm2 logs`, préfixe `[restore-backup]`), où se lit le détail.
+Seule une commande introuvable est nommée, sans chemin.
+
 La commande n'accepte que le propriétaire déclaré dans `OWNER_ID` — aucun rôle
 Discord ne l'ouvre à quelqu'un d'autre. Elle refuse une base corrompue
 (`PRAGMA integrity_check`, en lecture seule), et recopie la base courante en
@@ -472,6 +478,13 @@ bot : le rapport le dit « introuvable dans les dossiers système où le bot le
 cherche », `/restore-backup` aussi. La clé
 privée doit être lisible par son compte (c'est déjà le cas pour
 `/restore-backup`).
+
+Ces commandes ne reçoivent pas l'environnement du bot (jeton Discord, jeton de
+l'API interne…) : seulement `HOME`, `USER`, `LOGNAME`, `TMPDIR`,
+`XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, la langue (`LANG`, `LANGUAGE`, `LC_*`),
+`TZ`, les variables `RCLONE_*` et le `PATH` figé ci-dessus. rclone y trouve sa
+configuration comme en ligne de commande : `~/.config/rclone/rclone.conf` du
+compte du bot, ou le fichier que désigne `RCLONE_CONFIG`.
 
 ## Variables côté bot
 
