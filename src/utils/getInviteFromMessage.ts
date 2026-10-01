@@ -38,9 +38,9 @@ async function getInviteFromMessage(client: Client,
         }
         return await getInviteFromChannel(client, channel);
     } catch (e) {
-        // Au journal comme avant (une permission manquante prive les annonces de
-        // leur lien), mais jamais le texte de l'annonce : elle cite des pseudos.
-        await sendLog(client, "(getInviteFromMessage) Erreur : \n" + describeError(e));
+        // Au journal comme avant (base occupée, permissions illisibles…), avec le
+        // serveur pour s'y retrouver, mais jamais le texte de l'annonce : il cite des pseudos.
+        await sendLog(client, `(getInviteFromMessage) Erreur (serveur ${message.guildId}) : \n${describeError(e)}`);
         return ("");
     }
 }

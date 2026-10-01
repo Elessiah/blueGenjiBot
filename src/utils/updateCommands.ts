@@ -39,7 +39,7 @@ async function updateCommands(client: Client,
     } catch (error) {
         // Comme avant, au journal (un 50001 dit une invitation sans le droit
         // `applications.commands`, à corriger) ; `sendLog` ne lève pas.
-        await sendLog(client, "Update Commands : \n " + describeError(error));
+        await sendLog(client, `Update Commands (serveur ${guildId}) : \n ${describeError(error)}`);
     }
 }
 
