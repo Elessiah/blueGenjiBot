@@ -120,6 +120,8 @@ test("runPipeline échoue quand un binaire manque", async () => {
     /étape tar absent/,
   );
   assert.match(pipelineFailureText("tar absent"), /`tar` introuvable/);
+  // Pointe vers les dossiers fouillés, pas vers une absence pure et simple.
+  assert.match(pipelineFailureText("age absent"), /`age` introuvable dans les dossiers système/);
 });
 
 test("runPipeline ne met pas en cause une étape arrêtée, même sortie avec un code (rclone : 143)", async () => {
