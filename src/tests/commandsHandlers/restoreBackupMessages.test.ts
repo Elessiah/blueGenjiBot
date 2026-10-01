@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import { MissingCommandError, missingCommandText } from "../../backup/archiveSource.js";
-import { failedSourceLabel, restoreFailureText } from "../../commandsHandlers/admin/restoreBackup.js";
+import { failedSourceLabel, partialFailureText, restoreFailureText } from "../../commandsHandlers/admin/restoreBackup.js";
 
 /**
  * `/restore-backup` ne relaie plus sur Discord le message brut de `rclone`,
@@ -46,4 +46,18 @@ test("failedSourceLabel replie sur un libellé neutre sans préfixe reconnu", ()
   assert.equal(failedSourceLabel("ENOENT /srv/archives"), "source");
   assert.equal(failedSourceLabel(" : /srv/archives"), "source");
   assert.equal(failedSourceLabel(""), "source");
+});
+
+test("partialFailureText ne dit rien quand toutes les sources ont répondu", () => {
+  assert.equal(partialFailureText([], null), "");
+});
+
+test("partialFailureText nomme la source muette, sans son détail", () => {
+  const text = partialFailureText([`stockage distant : ${RAW_RCLONE}`], null);
+  assert.equal(text, "\n⚠️ Source non lue : stockage distant (détail dans les journaux pm2)");
+});
+
+test("partialFailureText nomme la commande introuvable plutôt que de renvoyer aux journaux", () => {
+  const text = partialFailureText(["stockage distant : `rclone` introuvable"], "rclone");
+  assert.equal(text, `\n⚠️ Source non lue : stockage distant (${missingCommandText("rclone")})`);
 });
