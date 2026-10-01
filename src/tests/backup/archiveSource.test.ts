@@ -6,10 +6,15 @@ import path from "node:path";
 
 import {
   archiveSourcesFromEnv,
+  COMMAND_DIRS,
+  COMMAND_PATH,
+  commandEnv,
+  compareNewestFirst,
   fetchArchive,
   filterArchiveNames,
   listArchives,
   pickArchive,
+  resolveCommand,
   type ArchiveRef,
   type CommandRunner,
 } from "../../backup/archiveSource.js";
@@ -121,4 +126,65 @@ test("fetchArchive copie une archive locale et télécharge une archive distante
   assert.deepEqual(calls, [["rclone", "copyto", "hetzner:backups/bluegenji-2026-09-03.tar.age", remote]]);
   fs.rmSync(src, { recursive: true, force: true });
   fs.rmSync(work, { recursive: true, force: true });
+});
+
+test("compareNewestFirst range les archives de la plus récente à la plus ancienne, années et mois compris", () => {
+  const names = [
+    "bluegenji-2025-12-31.tar.age",
+    "bluegenji-2026-10-01.tar.age",
+    "bluegenji-2026-09-30.tar.age",
+    "bluegenji-2026-01-02.tar.age",
+  ];
+  assert.deepEqual([...names].sort(compareNewestFirst), [
+    "bluegenji-2026-10-01.tar.age",
+    "bluegenji-2026-09-30.tar.age",
+    "bluegenji-2026-01-02.tar.age",
+    "bluegenji-2025-12-31.tar.age",
+  ]);
+  assert.equal(compareNewestFirst("bluegenji-2026-10-01.tar.age", "bluegenji-2026-10-01.tar.age"), 0);
+});
+
+test("filterArchiveNames met la dernière archive en tête quel que soit l'ordre du listage", () => {
+  const listed = ["bluegenji-2026-09-09.tar.age", "bluegenji-2026-10-01.tar.age", "bluegenji-2026-09-10.tar.age"];
+  assert.equal(filterArchiveNames(listed)[0], "bluegenji-2026-10-01.tar.age");
+  assert.equal(filterArchiveNames([...listed].reverse())[0], "bluegenji-2026-10-01.tar.age");
+});
+
+test("listArchives rend l'archive la plus récente en premier, toutes sources confondues", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bg-archives-order-"));
+  try {
+    fs.writeFileSync(path.join(dir, "bluegenji-2026-09-30.tar.age"), "");
+    const run: CommandRunner = async () => "bluegenji-2026-10-01.tar.age\nbluegenji-2026-09-29.tar.age\n";
+    const { archives } = await listArchives({ localDir: dir, remote: "r:b", identity: "/k" }, run);
+    assert.deepEqual(
+      archives.map((archive) => archive.name),
+      ["bluegenji-2026-10-01.tar.age", "bluegenji-2026-09-30.tar.age", "bluegenji-2026-09-29.tar.age"],
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("resolveCommand ne cherche une commande que dans les dossiers figés, dans leur ordre", () => {
+  const present = new Set(["/usr/bin/age", "/usr/local/bin/rclone", "/usr/bin/rclone"]);
+  const canRun = (file: string): boolean => present.has(file);
+  assert.equal(resolveCommand("age", COMMAND_DIRS, canRun), "/usr/bin/age");
+  assert.equal(resolveCommand("rclone", COMMAND_DIRS, canRun), "/usr/local/bin/rclone");
+});
+
+test("resolveCommand rend un chemin absolu même pour une commande absente, jamais un nom nu", () => {
+  assert.equal(resolveCommand("tar", COMMAND_DIRS, () => false), "/usr/local/bin/tar");
+});
+
+test("resolveCommand refuse tout ce qui n'est pas un nom nu", () => {
+  for (const name of ["../age", "/tmp/age", "./age", "age;rm", "-age", ""]) {
+    assert.throws(() => resolveCommand(name, COMMAND_DIRS, () => true), /nom de commande invalide/, name);
+  }
+});
+
+test("commandEnv fige le PATH et garde le reste de l'environnement", () => {
+  const env = commandEnv({ PATH: "/home/bot/.local/bin:.:/usr/bin", HOME: "/home/bot" });
+  assert.equal(env.PATH, COMMAND_PATH);
+  assert.equal(env.PATH, "/usr/local/bin:/usr/bin:/bin");
+  assert.equal(env.HOME, "/home/bot");
 });

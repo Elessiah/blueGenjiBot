@@ -86,3 +86,8 @@ test("auth/resolve répond 504 BOT_RESOLVE_TIMEOUT, jamais 404, quand la recherc
     /error instanceof HandleResolutionTimeoutError\)\s*\{[^}]*res\.status\(504\)\.json\(\{ error: "BOT_RESOLVE_TIMEOUT" \}\)/,
   );
 });
+
+test("l'API interne n'annonce pas la version de son framework", () => {
+  // Express pose `X-Powered-By: Express` par défaut sur chaque réponse.
+  assert.match(SOURCE, /app\.disable\("x-powered-by"\)/);
+});

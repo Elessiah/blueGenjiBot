@@ -13,7 +13,7 @@ process.env.BDD_PATH = path.join(TMP_DIR, "bot.sqlite");
 process.env.OWNER_ID = "owner-1";
 process.env.INFO_SERV = "admin-channel-1";
 
-import { getBddInstance, closeBddInstance } from "../../bdd/Bdd.js";
+import { getBddInstance, resetBddInstance } from "../../bdd/Bdd.js";
 import { setupIntervalAdhesion } from "../../adhesion/setupIntervalAdhesion.js";
 import { ITERATION_UNLIMITED } from "../../adhesion/iteration.js";
 import { nextTransmissionAfter } from "../../adhesion/nextTransmission.js";
@@ -153,6 +153,9 @@ test("un rappel sans terme annonce sa cadence", async () => {
 });
 
 test("ferme la base a la fin de la suite", async () => {
-  await closeBddInstance();
+  // `resetBddInstance` attend que SQLite relâche le fichier : le dossier
+  // temporaire peut alors être effacé, y compris sous Windows.
+  assert.equal(await resetBddInstance(), true);
   fs.rmSync(TMP_DIR, { recursive: true, force: true });
+  assert.equal(fs.existsSync(TMP_DIR), false);
 });
