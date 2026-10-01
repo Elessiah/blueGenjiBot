@@ -328,8 +328,7 @@ elles sont données dans `backup-onedrive.md`, « 6. Cron ».
 Le site répond en local (`200` attendu), puis en HTTPS depuis l'extérieur :
 
 ```bash
-curl -s -o /dev/null -w '%{http_code}
-' http://127.0.0.1:3000/
+curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/
 ```
 
 Premier passage des images à la main, sans attendre le cron — il doit finir par `Images et journal des suppressions synchronisés…` :
