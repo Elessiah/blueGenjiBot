@@ -5,10 +5,10 @@ import {logAdhesion, logAdhesionError} from "@/adhesion/adhesionLog.js";
 import {
     CHANNEL_FAILED_NOTICE,
     MEMBERS_DELIVERED_NOTICE,
-    NO_RECIPIENT_NOTICE,
     channelDeliveredNotice,
     memberDeliveredNotice,
     memberFailedLine,
+    noRecipientNotice,
 } from "@/adhesion/adhesionNotices.js";
 
 /**
@@ -82,17 +82,19 @@ async function deliverToChannel(client: Client,
  * @param files Pièces jointes.
  * @param content Message joint.
  * @param author Auteur de l'envoi.
+ * @param roleName Nom du rôle visé, repris dans l'avis sans destinataire.
  * @returns `true` si tous les destinataires ont reçu les papiers.
  */
 async function deliverToMembers(client: Client,
                                 recipients: User[],
                                 files: AttachmentBuilder[],
                                 content: string,
-                                author: User): Promise<boolean> {
+                                author: User,
+                                roleName: string | null): Promise<boolean> {
     if (recipients.length === 0) {
         // Ni pseudo ni identifiant : la ligne dit seulement que rien n'est parti.
         await logAdhesion(client, "sendAdhesion: aucun destinataire trouvé pour le rôle visé, envoi annulé.");
-        await sendPrivately(client, author, [], NO_RECIPIENT_NOTICE, "sendAdhesion safeUser (no recipient)");
+        await sendPrivately(client, author, [], noRecipientNotice(roleName), "sendAdhesion safeUser (no recipient)");
         return false;
     }
     let failures = "";
