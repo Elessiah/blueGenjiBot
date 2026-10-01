@@ -860,7 +860,7 @@ serveur).
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="safe_errorGuards.js.html">safe/errorGuards.js</a>, <a href="safe_errorGuards.js.html#line48">line 48</a>
+        <a href="safe_errorGuards.js.html">safe/errorGuards.js</a>, <a href="safe_errorGuards.js.html#line49">line 49</a>
     </li></ul></dd>
     
 
@@ -1170,7 +1170,7 @@ serveur).
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="safe_errorGuards.js.html">safe/errorGuards.js</a>, <a href="safe_errorGuards.js.html#line65">line 65</a>
+        <a href="safe_errorGuards.js.html">safe/errorGuards.js</a>, <a href="safe_errorGuards.js.html#line71">line 71</a>
     </li></ul></dd>
     
 
@@ -2385,7 +2385,7 @@ horodatage, un compteur de salons, un niveau.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="safe_errorGuards.js.html">safe/errorGuards.js</a>, <a href="safe_errorGuards.js.html#line21">line 21</a>
+        <a href="safe_errorGuards.js.html">safe/errorGuards.js</a>, <a href="safe_errorGuards.js.html#line22">line 22</a>
     </li></ul></dd>
     
 
@@ -7869,7 +7869,7 @@ Supprime l'intervalle de la base si toutes les cibles sont absentes.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="safe_errorGuards.js.html">safe/errorGuards.js</a>, <a href="safe_errorGuards.js.html#line126">line 126</a>
+        <a href="safe_errorGuards.js.html">safe/errorGuards.js</a>, <a href="safe_errorGuards.js.html#line155">line 155</a>
     </li></ul></dd>
     
 
@@ -9637,6 +9637,12 @@ BlueGenji.
 
 <div class="description">
     Produit une description lisible d'une valeur levée, quelle que soit sa forme.
+
+Un objet qui n'est pas une `Error` n'est **jamais sérialisé** : levé sur le
+chemin d'une annonce, il peut porter son texte et le pseudo de son auteur,
+et cette description part au journal Discord et dans les messages privés
+du titulaire (`reportError`, `sendLog`). Seul son type est dit. Le message
+d'une `Error`, lui, est rendu tel quel.
 </div>
 
 
@@ -9724,7 +9730,7 @@ BlueGenji.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="safe_errorGuards.js.html">safe/errorGuards.js</a>, <a href="safe_errorGuards.js.html#line107">line 107</a>
+        <a href="safe_errorGuards.js.html">safe/errorGuards.js</a>, <a href="safe_errorGuards.js.html#line119">line 119</a>
     </li></ul></dd>
     
 
@@ -9753,7 +9759,7 @@ BlueGenji.
 
         
 <div class="param-desc">
-    Message d'erreur, éventuellement suffixé du code.
+    Message d'erreur (suffixé du code), la chaîne levée, ou le type de la valeur.
 </div>
 
 
@@ -10922,7 +10928,7 @@ par serveur, pas par application.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="safe_errorGuards.js.html">safe/errorGuards.js</a>, <a href="safe_errorGuards.js.html#line56">line 56</a>
+        <a href="safe_errorGuards.js.html">safe/errorGuards.js</a>, <a href="safe_errorGuards.js.html#line57">line 57</a>
     </li></ul></dd>
     
 
@@ -14642,7 +14648,7 @@ il court-circuite la vérification de permission `CreateInstantInvite` de l'aute
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="utils_getInviteFromMessage.js.html">utils/getInviteFromMessage.js</a>, <a href="utils_getInviteFromMessage.js.html#line13">line 13</a>
+        <a href="utils_getInviteFromMessage.js.html">utils/getInviteFromMessage.js</a>, <a href="utils_getInviteFromMessage.js.html#line14">line 14</a>
     </li></ul></dd>
     
 
@@ -16345,7 +16351,7 @@ effacée à tort ne se retrouve pas.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="safe_errorGuards.js.html">safe/errorGuards.js</a>, <a href="safe_errorGuards.js.html#line98">line 98</a>
+        <a href="safe_errorGuards.js.html">safe/errorGuards.js</a>, <a href="safe_errorGuards.js.html#line104">line 104</a>
     </li></ul></dd>
     
 
@@ -16924,7 +16930,7 @@ gestionnaire d'`unhandledRejection`.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="safe_errorGuards.js.html">safe/errorGuards.js</a>, <a href="safe_errorGuards.js.html#line78">line 78</a>
+        <a href="safe_errorGuards.js.html">safe/errorGuards.js</a>, <a href="safe_errorGuards.js.html#line84">line 84</a>
     </li></ul></dd>
     
 
@@ -18034,7 +18040,7 @@ Si le fichier est absent/invalide, tente de créer une configuration vide par d�
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="messages_manageDistribution.js.html">messages/manageDistribution.js</a>, <a href="messages_manageDistribution.js.html#line25">line 25</a>
+        <a href="messages_manageDistribution.js.html">messages/manageDistribution.js</a>, <a href="messages_manageDistribution.js.html#line26">line 26</a>
     </li></ul></dd>
     
 
@@ -28510,7 +28516,7 @@ d'alerter si la sauvegarde manque ou date.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="safe_sendLog.js.html">safe/sendLog.js</a>, <a href="safe_sendLog.js.html#line8">line 8</a>
+        <a href="safe_sendLog.js.html">safe/sendLog.js</a>, <a href="safe_sendLog.js.html#line9">line 9</a>
     </li></ul></dd>
     
 
@@ -32151,7 +32157,7 @@ l'intégralité de la description du tournoi.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="utils_updateCommands.js.html">utils/updateCommands.js</a>, <a href="utils_updateCommands.js.html#line11">line 11</a>
+        <a href="utils_updateCommands.js.html">utils/updateCommands.js</a>, <a href="utils_updateCommands.js.html#line12">line 12</a>
     </li></ul></dd>
     
 
@@ -32350,7 +32356,7 @@ production avec un fichier corrompu serait pire que l'absence de restauration.
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Wed Sep 30 2026 20:13:58 GMT+0200 (heure d’été d’Europe centrale)
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Thu Oct 01 2026 05:29:04 GMT+0200 (heure d’été d’Europe centrale)
 </footer>
 
 <script> prettyPrint(); </script>

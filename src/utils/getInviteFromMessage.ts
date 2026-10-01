@@ -1,8 +1,9 @@
-﻿import type {Client, Message, TextChannel} from "discord.js";
+﻿import {describeError} from "@/safe/errorGuards.js";
+import {sendLog} from "@/safe/sendLog.js";
+import type {Client, Message, TextChannel} from "discord.js";
 import {PermissionsBitField} from "discord.js";
 import {getInviteFromChannel} from "./getInviteFromChannel.js";
 import {getBddInstance} from "../bdd/Bdd.js";
-import {sendLog} from "@/safe/sendLog.js";
 
 /**
  * Extrait un lien d'invitation à partir d'un message.
@@ -37,7 +38,9 @@ async function getInviteFromMessage(client: Client,
         }
         return await getInviteFromChannel(client, channel);
     } catch (e) {
-        await sendLog(client, "(getInviteFromMessage)Erreur pour : " + message.content + "\nMessage d'erreur : \n" + (e as TypeError).message);
+        // Au journal comme avant (base occupée, permissions illisibles…), avec le
+        // serveur pour s'y retrouver, mais jamais le texte de l'annonce : il cite des pseudos.
+        await sendLog(client, `(getInviteFromMessage) Erreur (serveur ${message.guildId}) : \n${describeError(e)}`);
         return ("");
     }
 }

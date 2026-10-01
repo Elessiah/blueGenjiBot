@@ -40,7 +40,7 @@ Chacun reste responsable des annonces qu'il publie : le Bot les recopie telles q
 
 ## 04. Modération du relais
 
-Les administrateurs des serveurs partenaires d'au moins 50 membres (ou les titulaires du rôle d'administration du Bot que ces serveurs désignent) et le staff de l'association peuvent **exclure un utilisateur du relais** en cas de manquement à ces conditions : il ne peut plus utiliser les commandes du Bot, ses annonces ne sont plus relayées et les copies de celles que le Bot suit encore (au moins les 7 derniers jours) sont retirées. L'exclusion vaut pour tout le réseau de serveurs partenaires ; son motif est obligatoire et consigné au journal de modération.
+Les administrateurs de tout serveur où le Bot est installé et qui compte au moins 50 membres, comptes de bots compris — seuil dont les serveurs de l'association sont dispensés — (ou les titulaires du rôle d'administration du Bot que ces serveurs désignent), ainsi que le titulaire du Bot et la présidence de l'association depuis ces mêmes serveurs, peuvent **exclure un utilisateur du relais** en cas de manquement à ces conditions : il ne peut plus utiliser les commandes du Bot, ses annonces ne sont plus relayées et les copies de celles que le Bot suit encore (au moins les 7 derniers jours) sont retirées. L'exclusion vaut pour tout le réseau de serveurs partenaires ; son motif est obligatoire et consigné au journal de modération.
 
 L'association peut aussi restreindre ou suspendre l'accès au Bot en cas de manquement. Une exclusion se conteste par les moyens indiqués à la section Contact.
 

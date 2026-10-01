@@ -22,15 +22,15 @@ Le Bot est réservé aux personnes d'au moins 15 ans ([Conditions d'Utilisation]
 
 ### Annonces relayées
 
-Identifiant du message d'origine et de son auteur, date, identifiants des copies relayées et de leurs salons : ils servent à relayer l'annonce, à répercuter sa modification ou sa suppression et à appliquer le temps de recharge entre deux annonces. **Le contenu du message n'est pas enregistré dans la base du Bot** : il est recopié, avec le nom de son auteur, dans les salons des serveurs partenaires, où leurs membres le lisent. Ces copies sont des messages Discord : supprimer l'annonce d'origine dans les 7 jours supprime aussi ses copies ; passé ce délai, elles restent jusqu'à leur suppression par les administrateurs du serveur qui les porte.
+Identifiant du message d'origine et de son auteur, date, identifiants des copies relayées et de leurs salons : ils servent à relayer l'annonce, à répercuter sa modification ou sa suppression, à appliquer le temps de recharge entre deux annonces, au compteur de messages de **/stats**, aux statistiques du tableau de bord du bot et, en cas d'exclusion, à retrouver et retirer les copies des annonces de l'exclu. **Le contenu du message n'est pas enregistré dans la base du Bot** : il est recopié, avec le nom de son auteur, dans les salons des serveurs partenaires, où leurs membres le lisent. Ces copies sont des messages Discord : supprimer l'annonce d'origine dans les 7 jours supprime aussi ses copies ; passé ce délai, elles restent jusqu'à leur suppression par les administrateurs du serveur qui les porte.
 
 ### Scrims et recrutement
 
-Pour les commandes **/scrim** et **/recrute** : identifiant de l'auteur, jeu, niveau ou rôle recherché, serveur et date, qui alimentent les statistiques d'activité (commande **/stats**, qui ne montre à chacun que sa propre activité, et tableau de bord du bot). Au-delà de 30 jours, ces lignes sont repliées en simples nombres par jour, serveur et niveau (ou rôle)  : ni auteur, ni heure, ni ordre ne restent.
+Pour les commandes **/scrim** et **/recrute** : identifiant de l'auteur, jeu, niveau ou rôle recherché, serveur et date, qui alimentent les statistiques d'activité (commande **/stats**, qui ne montre à chacun que sa propre activité, et tableau de bord du bot). Au-delà de 30 jours, ces lignes sont repliées en simples nombres par jour, serveur et niveau (ou rôle), sans l'identifiant de l'auteur ; ces nombres sont conservés sans limite de durée, comme historique de l'activité du Bot. Le niveau et le rôle sont un texte libre, repris tel que l'auteur l'a saisi : n'y écrivez pas le pseudo de quelqu'un.
 
 ### Exclusions du relais
 
-Identifiants de l'utilisateur exclu et du modérateur, date, et référence du message de journal qui porte le motif. Les identifiants de l'exclu et du modérateur et le motif sont publiés dans le salon de journal privé du staff. Une exclusion vaut pour **tout le réseau** de serveurs partenaires : c'est une modération communautaire, prononcée par la modération des serveurs partenaires dans les conditions de la section « Modération du relais » des Conditions d'Utilisation. La commande **/ban-list** affiche donc la liste complète des exclusions du réseau (pseudos, motif, date, identifiant) aux administrateurs de tout serveur où le Bot est installé et aux titulaires du rôle d'administration du Bot, pour qu'ils sachent qui ne peut plus publier par le Bot et pourquoi.
+Identifiants de l'utilisateur exclu et du modérateur, date, et référence du message de journal qui porte le motif. Les identifiants de l'exclu et du modérateur et le motif sont publiés dans le salon de journal privé du staff ; le motif part aussi en message privé au titulaire du Bot, où il reste sans limite de durée. Une exclusion vaut pour **tout le réseau** de serveurs partenaires : c'est une modération communautaire, prononcée (**/ban-user-of-this-server**, **/ban-user-of-another-server**) et levée (**/unban**) par les administrateurs — et les titulaires du rôle d'administration du Bot — de tout serveur d'au moins 50 membres (comptes de bots compris) où le Bot est installé, ainsi que, depuis ces mêmes serveurs, par le titulaire du Bot et la présidence de l'association ; les serveurs de l'association sont dispensés de ce seuil (section « Modération du relais » des Conditions d'Utilisation). La commande **/ban-list** affiche donc la liste complète des exclusions du réseau (pseudos, motif, date, identifiant) aux administrateurs de tout serveur où le Bot est installé — y compris un serveur que l'on crée soi-même pour l'y inviter — et aux titulaires du rôle d'administration du Bot, pour qu'ils sachent qui ne peut plus publier par le Bot et pourquoi.
 
 ### Adhésions et rappels programmés
 
@@ -47,7 +47,7 @@ Le site transmet au Bot un identifiant ou un pseudo Discord et le message à rem
 
 ### Journaux
 
-Le fil d'activité public de la page du bot ne contient aucun identifiant de personne. Le salon de journal privé du staff (dont chaque ligne part aussi en message privé au titulaire du Bot) et les journaux du serveur reçoivent le nom des serveurs qui ajoutent ou retirent le Bot, les erreurs de fonctionnement, qui peuvent citer un identifiant Discord, et le journal d'activité du site (inscriptions, matchs, tournois), rédigé par le site sans pseudo de joueur. Le Bot n'y écrit aucun pseudo — seul le motif d'une exclusion, texte libre du modérateur, peut en citer un.
+Le fil d'activité public de la page du bot ne contient aucun identifiant Discord ; il reprend le niveau ou le rôle saisi avec **/scrim** ou **/recrute**. Le salon de journal privé du staff et les journaux du serveur reçoivent le nom des serveurs qui ajoutent ou retirent le Bot, les erreurs de fonctionnement, qui peuvent citer un identifiant Discord, et le journal d'activité du site (inscriptions, matchs, tournois), rédigé par le site sans pseudo de joueur. Le Bot n'y écrit plus de pseudo de lui-même (les messages antérieurs à cette règle peuvent en citer) : le motif d'une exclusion, texte libre du modérateur, peut en citer un, et une erreur de remise d'un message privé peut mentionner le compte visé.
 
 ### Base légale
 
@@ -58,8 +58,8 @@ Ces traitements reposent sur l'**intérêt légitime** de l'association (article
 ## 03. Durées de conservation
 
 - **Suivi des annonces relayées** (identifiants, date) : 7 jours ; il est effacé au premier relais qui suit cette échéance, et au plus tard dans la nuit ou au redémarrage du Bot. Les copies publiées dans les salons partenaires restent sur Discord (section 02).
-- **Scrims et recrutement** : 30 jours avec l'identifiant de l'auteur ; lors du ménage de la nuit qui suit (ou d'un redémarrage du Bot), l'identifiant de l'auteur est effacé et les lignes sont repliées en nombres par jour, serveur et niveau (ou rôle), gardés pour les compteurs d'activité.
-- **Exclusions** : jusqu'à la levée de l'exclusion.
+- **Scrims et recrutement** : 30 jours avec l'identifiant de l'auteur ; lors du ménage de la nuit qui suit (ou d'un redémarrage du Bot), l'identifiant de l'auteur est effacé et les lignes sont repliées en nombres par jour, serveur et niveau (ou rôle), gardés sans limite de durée comme historique de l'activité du Bot.
+- **Exclusions** : l'enregistrement de l'exclusion, jusqu'à sa levée ; les avis publiés au salon de journal privé du staff et le motif copié en message privé au titulaire du Bot restent après la levée, sans suppression automatique à ce jour.
 - **Configuration des serveurs** (salons relayés et leurs filtres de rang, invitation et rôle d'arbitrage avec l'identifiant de qui les a posés, rôle d'administration du Bot, modules activés) : jusqu'à son retrait par les administrateurs, au plus tard jusqu'au départ du Bot du serveur, qui l'efface. Un départ survenu pendant une interruption du Bot, que Discord ne lui signale pas, est rattrapé à son redémarrage.
 - **Adhésions et rappels programmés** : jusqu'au dernier envoi du rappel (pour une adhésion, sa date de péremption) ou sa suppression, au plus tard jusqu'au départ du Bot du serveur où ils ont été enregistrés, qui les efface — départ survenu pendant une interruption compris, rattrapé au redémarrage.
 - **Salon de journal privé du staff** : aucune suppression automatique à ce jour.
@@ -71,6 +71,9 @@ Ces traitements reposent sur l'**intérêt légitime** de l'association (article
 ## 04. Destinataires
 
 - Le staff de l'association, pour la modération et l'administration du Bot.
+- Le titulaire du Bot (son hébergeur technique), qui reçoit en message privé les motifs d'exclusion.
+- L'utilisateur exclu, à qui le Bot remet le motif de son exclusion en message privé quand il publie une annonce (message portant un service) dans un salon relayé.
+- Les membres du salon où **/scrim** ou **/recrute** est utilisée : la commande y répond publiquement, et Discord y affiche qui l'a utilisée.
 - Les membres des serveurs partenaires, qui lisent les annonces relayées.
 - Les membres du rôle d'arbitrage de chaque serveur qui en a défini un, pour les alertes d'arbitrage du site.
 - Les administrateurs de tout serveur où le Bot est installé, et les titulaires du rôle d'administration du Bot que chaque serveur désigne (**/set-bot-admin**), qui peuvent lire la liste des exclusions (commande **/ban-list**, réponse visible du seul demandeur).

@@ -204,6 +204,8 @@ client.on("clientReady", async () => {
     // échec ne peut pas le priver de passer.
     void runDataRetention(client);
 
+    // `updateCommands` ne lève pas : un serveur en échec ne bloque ni les
+    // suivants ni la pose des tâches cron plus bas.
     for (const guild of client.guilds.cache.values()) {
       console.log("Server ready : ", guild.name);
       await updateCommands(client, guild.id);

@@ -1,4 +1,5 @@
 import {sendLog} from "../safe/sendLog.js";
+import {describeError} from "../safe/errorGuards.js";
 import {manageMsgExpiration} from "./manageMsgExpiration.js";
 import {checkMessageValidity} from "./checkMessageValidity.js";
 import {getTargetRegions} from "./getTargetRegions.js";
@@ -121,8 +122,20 @@ async function manageDistribution(message: Message,
         await manageMsgExpiration(client);
         return true
     } catch (err) {
-        console.error(err);
-        await sendLog(client, "manageDistribution error : \n" + (err as TypeError).message);
+        // Le message seul : l'objet d'erreur d'une requête Discord porte
+        // l'annonce (pseudo de l'auteur, texte), que les journaux ne gardent pas.
+        const description = describeError(err);
+        // La pile pour pm2 (elle ne porte pas l'annonce), jamais l'objet entier.
+        let trace = description;
+        try {
+            // La description (déjà filtrée), puis les seules lignes d'appel de la
+            // pile : sa première ligne recopie le message, quel qu'il soit.
+            if (err instanceof Error && typeof err.stack === "string" && err.stack) {
+                trace = [description, ...err.stack.split("\n").filter((line) => /^\s+at\s/.test(line))].join("\n");
+            }
+        } catch { /* valeur illisible : la description suffit */ }
+        console.error("manageDistribution error:", trace);
+        await sendLog(client, "manageDistribution error : \n" + description);
         return false;
     }
 }

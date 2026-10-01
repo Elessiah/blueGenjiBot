@@ -51,3 +51,20 @@ test("guildDelete passe par eraseGuild, le chemin du rattrapage", () => {
   assert.ok(handler.includes("eraseLeftGuild(client, guild.id)"));
   assert.ok(!handler.includes("_resetServer"));
 });
+
+test("la synchronisation des commandes ne lève jamais : la préparation est sous la garde", () => {
+  const source = read("utils", "updateCommands.ts");
+  const body = source.slice(source.indexOf("async function updateCommands"));
+  const tryAt = body.indexOf("try {");
+  const catchAt = body.indexOf("} catch (error) {");
+  const call = body.indexOf("fillBlueCommands(client)");
+  assert.ok(tryAt > 0 && tryAt < call && call < catchAt, "la préparation doit être dans le try");
+  const handler = body.slice(catchAt, body.indexOf("\n    }", catchAt));
+  assert.ok(!/\bthrow\b/.test(handler), "le catch ne relance pas");
+});
+
+test("aucun journal ne reçoit le texte d'une annonce", () => {
+  assert.ok(!read("utils", "getInviteFromMessage.ts").includes("message.content"));
+  // Aucun objet d'erreur brut vers la console : il porterait le corps de la requête Discord.
+  assert.ok(!/console\.(error|log|warn)\((?:[^)]*,\s*)?err(or)?\s*\)/.test(read("messages", "manageDistribution.ts")));
+});

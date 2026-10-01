@@ -18,6 +18,8 @@
  * Tout le reste est un vrai défaut : console **et** canal de logs Discord.
  */
 
+import {types} from "node:util";
+
 /** Codes système/undici signalant une indisponibilité réseau passagère. */
 const TRANSIENT_NETWORK_CODES: ReadonlySet<string> = new Set([
     "EAI_AGAIN",
@@ -57,9 +59,13 @@ const IGNORABLE_DISCORD_CODES: ReadonlySet<number> = new Set([
  * @returns Le champ `code` s'il est une chaîne ou un nombre, sinon `null`.
  */
 function errorCode(error: unknown): string | number | null {
-    if (typeof error !== "object" || error === null) return null;
-    const code = (error as { code?: unknown }).code;
-    if (typeof code === "string" || typeof code === "number") return code;
+    // Lire un objet inconnu peut lever (accesseur, Proxy révoqué) : un code
+    // illisible vaut « pas de code », jamais une exception dans un gardien.
+    try {
+        if (typeof error !== "object" || error === null) return null;
+        const code = (error as { code?: unknown }).code;
+        if (typeof code === "string" || typeof code === "number") return code;
+    } catch { /* illisible */ }
     return null;
 }
 
@@ -104,19 +110,42 @@ function isIgnorableDiscordError(error: unknown): boolean {
 
 /**
  * Produit une description lisible d'une valeur levée, quelle que soit sa forme.
+ *
+ * Un objet qui n'est pas une `Error` n'est **jamais sérialisé** : levé sur le
+ * chemin d'une annonce, il peut porter son texte et le pseudo de son auteur,
+ * et cette description part au journal Discord et dans les messages privés
+ * du titulaire (`reportError`, `sendLog`). Seul son type est dit. Le message
+ * d'une `Error`, lui, est rendu tel quel.
  * @param error Valeur capturée.
- * @returns Message d'erreur, éventuellement suffixé du code.
+ * @returns Message d'erreur (suffixé du code), la chaîne levée, ou le type de la valeur.
  */
 function describeError(error: unknown): string {
-    if (error instanceof Error) {
-        const code = errorCode(error);
-        return code === null ? error.message : `${error.message} [${code}]`;
-    }
-    if (typeof error === "string") return error;
     try {
-        return JSON.stringify(error);
+        // `isNativeError` reconnaît aussi une `Error` venue d'un autre contexte (vm, worker).
+        if (error instanceof Error || types.isNativeError(error)) {
+            const message = typeof error.message === "string" ? error.message : "(message non textuel)";
+            // Une vraie `Error` garde son code (« auth/invalid-token »…) : son
+            // message est déjà rendu, filtrer le code ne protégerait rien.
+            const code = errorCode(error);
+            const shown = typeof code === "number" || (typeof code === "string" && /^\S{1,80}$/.test(code)) ? code : null;
+            return shown === null ? message : `${message} [${shown}]`;
+        }
+        // Une chaîne levée est rendue telle quelle : aucun code du bot ne lève
+        // le texte d'une annonce (règle à garder : lever une `Error`).
+        if (typeof error === "string") return error;
+        // Un scalaire (null, undefined, nombre, booléen, bigint, symbole) ne porte
+        // rien d'autre que lui-même : il est rendu tel quel.
+        if (error === null || (typeof error !== "object" && typeof error !== "function")) {
+            return `valeur levée non standard (${String(error)})`;
+        }
+        // Un objet : son seul code, et seulement s'il en a la forme (nombre, ou
+        // jeton court) — un champ « code » en texte libre pourrait porter n'importe quoi.
+        const code = errorCode(error);
+        const shown = typeof code === "number" || (typeof code === "string" && /^[A-Za-z0-9_]{1,40}$/.test(code)) ? `, code ${code}` : "";
+        return `valeur levée non standard (${typeof error}${shown})`;
     } catch {
-        return String(error);
+        // Proxy révoqué, accesseur `message` hostile… : la description ne lève jamais.
+        return "valeur levée illisible";
     }
 }
 

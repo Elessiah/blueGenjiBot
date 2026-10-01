@@ -40,7 +40,7 @@ Everyone remains responsible for the advertisements they publish: the Bot copies
 
 ## 04. Relay moderation
 
-The administrators of partner servers with at least 50 members (or the holders of the Bot administration role those servers designate) and the association's staff may **exclude a user from the relay** for breaching these terms: they can no longer use the Bot's commands, their advertisements are no longer relayed and the copies of those the Bot still tracks (at least the last 7 days) are removed. The exclusion applies to the whole network of partner servers; a reason is mandatory and recorded in the moderation log.
+The administrators of any server where the Bot is installed and which has at least 50 members, bot accounts included — a threshold the association's servers are exempt from — (or the holders of the Bot administration role those servers designate), as well as the Bot's owner and the association's presidency from those same servers, may **exclude a user from the relay** for breaching these terms: they can no longer use the Bot's commands, their advertisements are no longer relayed and the copies of those the Bot still tracks (at least the last 7 days) are removed. The exclusion applies to the whole network of partner servers; a reason is mandatory and recorded in the moderation log.
 
 The association may also restrict or suspend access to the Bot in the event of a breach. An exclusion can be contested through the means listed in the Contact section.
 

@@ -128,7 +128,25 @@ test("describeError suffixe le code et supporte les valeurs non-Error", () => {
   assert.equal(describeError(withCode("Unknown Message", 10008)), "Unknown Message [10008]");
   assert.equal(describeError(new Error("nu")), "nu");
   assert.equal(describeError("chaine brute"), "chaine brute");
-  assert.equal(describeError({ a: 1 }), '{"a":1}');
+  assert.equal(describeError({ a: 1 }), "valeur levée non standard (object)");
+});
+
+test("describeError ne serialise jamais une valeur non-Error", () => {
+  assert.equal(describeError({ content: "LFT pseudo#1234" }), "valeur levée non standard (object)");
+  assert.equal(describeError(null), "valeur levée non standard (null)");
+  assert.equal(describeError(42), "valeur levée non standard (42)");
+  assert.equal(describeError(10n), "valeur levée non standard (10)");
+  assert.equal(describeError({ code: 50013, content: "pseudo" }), "valeur levée non standard (object, code 50013)");
+  assert.equal(describeError({ code: "LFT pseudo#1234" }), "valeur levée non standard (object)");
+  const hostile = { get code(): string { throw new Error("boom"); } };
+  assert.equal(describeError(hostile), "valeur levée non standard (object)");
+  const { proxy, revoke } = Proxy.revocable({}, {});
+  revoke();
+  assert.equal(describeError(proxy), "valeur levée illisible");
+  const odd = new Error("x");
+  (odd as unknown as { message: unknown }).message = { content: "pseudo" };
+  assert.equal(describeError(odd), "(message non textuel)");
+  assert.equal(errorCode(proxy), null);
 });
 
 test("describeError ne leve pas sur une valeur non serialisable", () => {
