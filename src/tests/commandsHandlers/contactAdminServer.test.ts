@@ -34,6 +34,12 @@ type ServerSetup = {
   configured?: { id: string; members?: string[]; fetch?: "ok" | "missing" | "throw" };
   /** Comptes dont les messages privés sont fermés. */
   closedDms?: string[];
+  /**
+   * Cache incomplet (après redémarrage) : les rôles paraissent vides tant que
+   * les membres du serveur n'ont pas été récupérés. `"throw"` : la
+   * récupération échoue.
+   */
+  memberFetch?: "ok" | "throw";
 };
 
 function fakeClient(trace: string[], setup: ServerSetup): Client {
@@ -46,10 +52,18 @@ function fakeClient(trace: string[], setup: ServerSetup): Client {
       return { id: "dm-" + trace.length };
     },
   });
+  // Sans `memberFetch`, le cache est complet : rien n'est récupéré.
+  let fetched = setup.memberFetch === undefined;
+  const memberCache = new Map<string, unknown>();
   const asRole = (role: { id: string; admin?: boolean; members?: string[] }) => ({
     id: role.id,
     permissions: { has: (flag: bigint) => flag === PermissionsBitField.Flags.Administrator && Boolean(role.admin) },
-    members: new Map((role.members ?? []).map((id) => [id, { user: user(id) }])),
+    // Le cache ne contient que les administrateurs « connus » (préfixe k) tant
+    // que le serveur n'a pas été récupéré.
+    get members() {
+      const ids = (role.members ?? []).filter((id) => fetched || id.startsWith("k"));
+      return new Map(ids.map((id) => [id, { user: user(id) }]));
+    },
   });
   const roles = (setup.roles ?? []).map(asRole);
   return {
@@ -69,6 +83,16 @@ function fakeClient(trace: string[], setup: ServerSetup): Client {
         return {
           id,
           ownerId: "proprio",
+          memberCount: setup.memberFetch === undefined ? 0 : 10,
+          members: {
+            cache: memberCache,
+            fetch: async () => {
+              trace.push("members.fetch *");
+              if (setup.memberFetch === "throw") throw new Error("Members didn't arrive in time.");
+              fetched = true;
+              for (let i = 0; i < 10; i++) memberCache.set("m" + i, {});
+            },
+          },
           roles: {
             cache: { filter: (fn: (r: ReturnType<typeof asRole>) => boolean) => ({ values: () => roles.filter(fn).values() }) },
             fetch: async (roleId: string) => {
@@ -187,6 +211,53 @@ test("rôle configuré introuvable ou illisible : journalisé, les autres servis
     "guilds.fetch g1", "roles.fetch staff",
     "log Failed to fetch configured admin role : Missing Access",
     "dm:a1 m",
+  ]);
+});
+
+test("cache vide après redémarrage : les membres du serveur sont récupérés une fois, tous servis", async () => {
+  await setAdminRole("g9", "staff");
+  const trace: string[] = [];
+  const client = fakeClient(trace, {
+    roles: [{ id: "admin", admin: true, members: ["a1"] }, { id: "admin2", admin: true, members: ["a2"] }],
+    configured: { id: "staff", members: ["s1"] },
+    memberFetch: "ok",
+  });
+  assert.equal(await contactAdminServer(client, fakeInteraction(trace, client, { server: "g9", message: "Bonjour" })), true);
+  assert.deepEqual(trace, [
+    DEFER, "guilds.fetch g9", "members.fetch *", "roles.fetch staff",
+    "dm:a1 Bonjour", "dm:a2 Bonjour", "dm:s1 Bonjour",
+    "editReply Message successfully sent to 3 admin(s) !",
+  ]);
+});
+
+test("membres illisibles : une seule tentative, journal sans nom, les connus servis, l'auteur averti", async () => {
+  await setAdminRole("g9", "staff");
+  const trace: string[] = [];
+  const client = fakeClient(trace, {
+    roles: [{ id: "admin", admin: true, members: ["k1", "a1"] }, { id: "admin2", admin: true, members: ["a2"] }],
+    configured: { id: "staff", members: ["k2", "s1"] },
+    memberFetch: "throw",
+  });
+  assert.equal(await contactAdminServer(client, fakeInteraction(trace, client, { server: "g9", message: "Bonjour" })), true);
+  assert.deepEqual(trace, [
+    DEFER, "guilds.fetch g9", "members.fetch *",
+    "log Failed to read admin role members on guild 'g9' (role 'admin'), cache used : Members didn't arrive in time.",
+    "roles.fetch staff",
+    "dm:k1 Bonjour", "dm:k2 Bonjour",
+    "editReply Message successfully sent to 2 admin(s) !\nWarning: Discord did not let the bot read every admin role, " +
+      "so only the admins already known to the bot received it. Please try again later if needed.",
+  ]);
+});
+
+test("membres illisibles en appel interne, aucun connu : journalisé, le propriétaire prévenu", async () => {
+  await setAdminRole("g9", null);
+  const trace: string[] = [];
+  const client = fakeClient(trace, { roles: [{ id: "admin", admin: true, members: ["a1"] }], memberFetch: "throw" });
+  assert.equal(await contactAdminServer(client, undefined, "g9", "Alerte"), true);
+  assert.deepEqual(trace, [
+    "guilds.fetch g9", "members.fetch *",
+    "log Failed to read admin role members on guild 'g9' (role 'admin'), cache used : Members didn't arrive in time.",
+    "users.fetch proprio", "dm:proprio Alerte",
   ]);
 });
 

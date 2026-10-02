@@ -230,11 +230,31 @@ test("rôle introuvable, seule cible : retiré, puis rappel supprimé", async ()
   assert.equal(r.kept, false);
 });
 
-test("rôle illisible : l'erreur remonte à l'appelant", async () => {
-  const interval = await seed({ role: "r1" });
-  const trace: string[] = [];
-  await assert.rejects(fetchTargets(fakeClient(trace, { role: "flaky" }), await getBddInstance(), interval), /Service Unavailable/);
-  assert.deepEqual(trace, ["users.fetch auteur-1", "guilds.fetch guild-1", "roles.fetch r1"]);
+test("rôle en panne passagère : report journalisé sans nom, l'auteur prévenu, rien d'écrit ni consommé", async () => {
+  const r = await run({ role: "flaky" }, { channel: "c1", role: "r1", member: "m1" });
+  assert.equal(r.result, null);
+  assert.deepEqual(r.trace, [
+    "users.fetch auteur-1", "guilds.fetch guild-1", "channels.fetch c1", "roles.fetch r1",
+    `log Interval n°${r.id} : rôle injoignable pour l'instant, report (Service Unavailable).`,
+    `dm:auteur-1 Rappel d'adhésion n°${r.id} reporté : Discord n'a pas permis de lire les membres du rôle visé. ` +
+      "Rien n'est parti, nouvel essai à la prochaine vérification (/delete-rappel-adhesion pour l'arrêter).",
+  ]);
+  assert.equal(r.interval.role_id, "r1");
+  assert.equal(r.kept, true);
+});
+
+test("rôle disparu (Discord le dit inconnu) : cible retirée comme un rôle introuvable", async () => {
+  const r = await run({ role: "gone" }, { role: "r1", member: "m1" });
+  assert.deepEqual(r.trace, [
+    "users.fetch auteur-1", "guilds.fetch guild-1", "roles.fetch r1",
+    `dm:auteur-1 Le role n'est plus valide pour l'interval ${r.id}, suppression de la cible.`,
+    "members.fetch m1",
+  ]);
+  assert.deepEqual(summary(r.result), {
+    guild: "guild-1", channel: null, role: null, member: "m1", author: "auteur-1", message: "Rappel", iteration: 3, interval_days: 7,
+  });
+  assert.equal(r.interval.role_id, null);
+  assert.equal(r.kept, true);
 });
 
 test("membre disparu à côté d'un rôle : membre retiré, l'auteur prévenu, rappel gardé", async () => {

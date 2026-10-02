@@ -251,6 +251,33 @@ test("un membre injoignable : les autres reçoivent, l'auteur reçoit la liste d
   ]);
 });
 
+test("noms d'affichage : mise en forme et mentions neutralisées, libellé neutre sans nom", async () => {
+  validPaths();
+  const rec = recorder();
+  const named = (id: string, globalName: string | null, username: string) =>
+    ({ id, globalName, username, send: rec.sender("dm:" + id, true) }) as unknown as User;
+  const role = fakeRole([
+    named("u1", "**Gras** @everyone", "u1"),
+    named("u2", null, "pseudo_x"),
+    named("u3", "  ", ""),
+  ]);
+  const ok = await sendAdhesion(fakeClient(rec), null, null, null, role, false, author(rec));
+  assert.equal(ok, false);
+  assert.deepEqual(rec.trace.at(-1), dm("author",
+    "Echec de l'envoi pour \\*\\*Gras\\*\\* @\u200beveryone\n" +
+    "Echec de l'envoi pour pseudo\\_x\n" +
+    "Echec de l'envoi pour membre sans pseudo\n"));
+});
+
+test("un membre servi sans nom d'affichage : confirmé sous son nom d'utilisateur", async () => {
+  validPaths();
+  const rec = recorder();
+  const user = { id: "u4", globalName: null, username: "zoe", send: rec.sender("dm:u4") } as unknown as User;
+  const ok = await sendAdhesion(fakeClient(rec), null, null, fakeMember(user), null, false, author(rec));
+  assert.equal(ok, true);
+  assert.deepEqual(rec.trace.at(-1), dm("author", "Adhésion envoyée avec succès à zoe !"));
+});
+
 const NO_RECIPIENT_LOG = "sendAdhesion: aucun destinataire trouvé pour le rôle visé, envoi annulé.";
 const NO_RECIPIENT_NOTICE = "Echec de l'envoi des adhésions en message privé : aucun membre du rôle visé n'a été trouvé, " +
   "personne ne les a reçus. Vérifiez la cible !";
