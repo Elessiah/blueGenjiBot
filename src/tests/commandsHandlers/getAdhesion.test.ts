@@ -123,7 +123,8 @@ test("intervalle illisible : aucun rappel, l'envoi immédiat suit son cours sans
   assert.equal(trace.some((t) => t.includes("Aucun rappel")), false);
   assert.equal(trace.some((t) => t.startsWith("dm:u")), false);
   assert.ok(trace.some((t) => t.startsWith("dm:author Envoi en message privé refusé")));
-  assert.equal(trace.at(-1), "followUp Echec de l'envoi !");
+  // La réponse à la commande répète le refus : l'auteur aux MP fermés le voit.
+  assert.ok((trace.at(-1) ?? "").startsWith("followUp Echec de l'envoi !\nEnvoi en message privé refusé : Le rôle « Membres » compte 51 membres"));
 });
 
 test("rappel vers un rôle illisible : refusé, rien n'est enregistré ni envoyé", async () => {

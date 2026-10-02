@@ -421,6 +421,21 @@ test("plafond : un membre désigné déjà du rôle n'est compté et servi qu'un
   assert.equal(rec.trace.filter((t) => t.to.startsWith("dm:M")).length, 50);
 });
 
+test("plafond dans un rappel : refusé, l'avis dit que seules les échéances encore au-delà le seront", async () => {
+  validPaths();
+  const rec = recorder();
+  const members = users(rec, 51);
+  const interval = {
+    id: 8, message: "", channel: null, member: null, role: Object.assign(fakeRole(members), { name: "Membres" }),
+    roleMembers: members.map(fakeMember), author: author(rec),
+  } as unknown as adhesionIntervalObj;
+  const ok = await sendAdhesionReminder(fakeClient(rec), interval);
+  assert.equal(ok, false);
+  assert.deepEqual(rec.trace.at(-1), dm("author", capNotice("51 membres") +
+    " (Rappel n°8 : chaque échéance où le rôle dépasse encore la limite sera refusée de même, " +
+    "et comptée comme un envoi du rappel ; /delete-rappel-adhesion pour l'arrêter.)"));
+});
+
 test("plafond : 49 membres du rôle plus un membre désigné restent servis", async () => {
   validPaths();
   const rec = recorder();
