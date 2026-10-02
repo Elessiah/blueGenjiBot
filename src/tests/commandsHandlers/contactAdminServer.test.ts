@@ -248,6 +248,22 @@ test("@everyone administrateur : écarté, même après récupération d'un autr
   ]);
 });
 
+test("@everyone configuré comme rôle admin : écarté et journalisé, les autres servis", async () => {
+  await setAdminRole("g9", "g9");
+  const trace: string[] = [];
+  const client = fakeClient(trace, {
+    roles: [{ id: "admin", admin: true, members: ["a1"] }],
+    configured: { id: "g9", members: ["x1", "x2"] },
+    memberFetch: "ok",
+  });
+  assert.equal(await contactAdminServer(client, undefined, "g9", "Alerte"), true);
+  assert.deepEqual(trace, [
+    "guilds.fetch g9", "members.fetch *",
+    "log Configured admin role is the everyone role on guild 'g9', ignored.",
+    "dm:a1 Alerte",
+  ]);
+});
+
 test("bots des rôles d'administration : écartés, ni MP ni échec ; le propriétaire si seuls des bots", async () => {
   await setAdminRole("g9", null);
   const trace: string[] = [];
