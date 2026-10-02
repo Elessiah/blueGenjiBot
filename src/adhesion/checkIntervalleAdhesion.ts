@@ -1,7 +1,7 @@
 import {Bdd, getBddInstance} from "@/bdd/Bdd.js";
 import {adhesionIntervalIds, adhesionIntervalObj} from "@/adhesion/types.js";
 import {Client} from "discord.js";
-import {sendAdhesion} from "@/adhesion/sendAdhesion.js";
+import {sendAdhesionReminder} from "@/adhesion/sendAdhesion.js";
 import {fetchTargets} from "@/adhesion/fetchTargets.js";
 import {sendLog} from "@/safe/sendLog.js";
 import { removeIntervalle } from "./removeIntervalle.js";
@@ -30,16 +30,7 @@ async function checkIntervalleAdhesion(client: Client) {
         const fetchedIntervalle: adhesionIntervalObj | null = await fetchTargets(client, bdd, intervalle);
         if (!fetchedIntervalle)
             continue;
-        await sendAdhesion(
-            client,
-            fetchedIntervalle.message,
-            fetchedIntervalle.channel,
-            fetchedIntervalle.member,
-            fetchedIntervalle.role,
-            false,
-            fetchedIntervalle.author,
-            fetchedIntervalle.roleMembers
-        );
+        await sendAdhesionReminder(client, fetchedIntervalle);
         // Le décompte est décidé **avant** d'être écrit, et par une seule
         // règle. L'enchaînement d'avant — `iteration--` puis `== 0` — laissait
         // passer le zéro, qui devenait `-1` : un rappel à bout d'envois se

@@ -3,6 +3,7 @@ import {loadAdhesionAttachments} from "@/adhesion/adhesionAttachments.js";
 import {collectRecipients} from "@/adhesion/adhesionRecipients.js";
 import {deliverToAuthor, deliverToChannel, deliverToMembers, notifyRoleUnreadable} from "@/adhesion/adhesionDelivery.js";
 import {DEFAULT_ADHESION_MESSAGE, PERMISSION_WARNING} from "@/adhesion/adhesionNotices.js";
+import type {adhesionIntervalObj} from "@/adhesion/types.js";
 
 /** Cibles d'un envoi ; `null` pour une cible non demandée. */
 type AdhesionTargets = {
@@ -25,8 +26,6 @@ type AdhesionTargets = {
  * @param role Rôle cible, ou `null` si aucun envoi par rôle n'est prévu.
  * @param memberPermMissing Indique si l'auteur manque de permissions pour des envois hors MP.
  * @param author Auteur du rappel, notifie en cas de succès/échec.
- * @param roleMembers Membres du rôle déjà lus par l'appelant (rappel
- *   automatique), servis tels quels ; `null` pour les lire ici.
  * @returns `true` si tous les envois demandés aux cibles sélectionnées réussissent; `false` dès qu'au moins un envoi échoue.
  */
 async function sendAdhesion(client: Client,
@@ -35,15 +34,48 @@ async function sendAdhesion(client: Client,
                             member: GuildMember | null,
                             role: Role | null,
                             memberPermMissing: boolean,
-                            author: User,
-                            roleMembers: GuildMember[] | null = null): Promise<boolean> {
+                            author: User): Promise<boolean> {
+    return await sendToTargets(client, message, {channel, member, role, roleMembers: null}, memberPermMissing, author);
+}
+
+/**
+ * Envoie les papiers d'un rappel automatique, avec les membres du rôle lus à
+ * la résolution des cibles : l'envoi ne relit pas le rôle, une seconde lecture
+ * qui échouerait consommerait l'envoi sans servir personne.
+ * @param client Client Discord utilisé pour les envois et logs.
+ * @param interval Rappel résolu par `fetchTargets`.
+ * @returns `true` si tous les envois demandés réussissent.
+ */
+async function sendAdhesionReminder(client: Client, interval: adhesionIntervalObj): Promise<boolean> {
+    const targets: AdhesionTargets = {
+        channel: interval.channel,
+        member: interval.member,
+        role: interval.role,
+        roleMembers: interval.roleMembers,
+    };
+    return await sendToTargets(client, interval.message, targets, false, interval.author);
+}
+
+/**
+ * Corps commun de {@link sendAdhesion} et {@link sendAdhesionReminder}.
+ * @param client Client Discord utilisé pour les envois et logs.
+ * @param message Message personnalisé, ou `null` pour le message par défaut.
+ * @param targets Cibles demandées.
+ * @param memberPermMissing L'auteur ne peut envoyer qu'en MP.
+ * @param author Auteur, avisé du résultat.
+ * @returns `true` si tous les envois demandés réussissent.
+ */
+async function sendToTargets(client: Client,
+                             message: string | null,
+                             targets: AdhesionTargets,
+                             memberPermMissing: boolean,
+                             author: User): Promise<boolean> {
     const files = await loadAdhesionAttachments(client, author);
     if (files === null) {
         return false;
     }
     // `||` et non `??` : un message vide prend lui aussi le texte par défaut.
     const content = message || DEFAULT_ADHESION_MESSAGE;
-    const targets: AdhesionTargets = {channel, member, role, roleMembers};
 
     let delivered = true;
     if (!memberPermMissing) {
@@ -126,4 +158,4 @@ function authorCopy(content: string, targets: AdhesionTargets, memberPermMissing
     return refused ? content + PERMISSION_WARNING : content;
 }
 
-export {sendAdhesion};
+export {sendAdhesion, sendAdhesionReminder};

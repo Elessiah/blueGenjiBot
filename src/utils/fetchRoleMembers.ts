@@ -46,9 +46,10 @@ async function fetchAllMembersOnce(guild: Guild): Promise<void> {
  *   passerelle) : à l'appelant de décider quoi en faire.
  */
 async function fetchRoleMembers(guild: Guild, role: Role): Promise<GuildMember[]> {
-    // Négation plutôt que `<` : un compte inconnu (`memberCount` absent) force
-    // la récupération au lieu de se fier au cache.
-    if (!(guild.members.cache.size >= guild.memberCount)) {
+    // Un compte inconnu (`memberCount` absent) force la récupération au lieu
+    // de se fier au cache.
+    const cacheComplete = typeof guild.memberCount === "number" && guild.members.cache.size >= guild.memberCount;
+    if (!cacheComplete) {
         await fetchAllMembersOnce(guild);
     }
     return [...role.members.values()];
