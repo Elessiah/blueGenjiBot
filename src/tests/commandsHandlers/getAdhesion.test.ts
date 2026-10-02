@@ -30,6 +30,8 @@ type Setup = {
   interval?: string | null;
   /** L'auteur est le propriétaire du bot (sinon : aucune permission). */
   admin?: boolean;
+  /** La récupération des membres du serveur lève (cache incomplet). */
+  fetchFails?: boolean;
 };
 
 /**
@@ -46,7 +48,8 @@ function fakeInteraction(trace: string[], setup: Setup): ChatInputCommandInterac
   };
   const users = Array.from({ length: setup.members ?? 0 }, (_, i) => ({ user: { id: "u" + i, bot: false, send: record("dm:u" + i) } }));
   const cache = new Map(users.map((m) => [m.user.id, m]));
-  const guild = { id: "guild-1", memberCount: cache.size, members: { cache, fetch: async () => undefined } };
+  const fetch = async () => { if (setup.fetchFails) throw new Error("Members didn't arrive in time."); };
+  const guild = { id: "guild-1", memberCount: cache.size + (setup.fetchFails ? 1 : 0), members: { cache, fetch } };
   const role = {
     id: setup.everyone ? "guild-1" : "role-1",
     name: setup.everyone ? "@everyone" : "Membres",
@@ -100,4 +103,20 @@ test("sans permission, @everyone n'est pas refusé : l'auteur reçoit sa propre 
   await getAdhesion(quietClient, fakeInteraction(trace, { everyone: true, admin: false }));
   assert.equal(trace.includes("followUp " + EVERYONE_NOTICE), false);
   assert.ok(trace.some((t) => t.startsWith("dm:author")));
+});
+
+test("intervalle illisible : aucun rappel, l'envoi immédiat suit son cours sans refus de plafond", async () => {
+  const trace: string[] = [];
+  await getAdhesion(quietClient, fakeInteraction(trace, { members: 51, interval: "abc" }));
+  assert.equal(trace.some((t) => t.includes("Aucun rappel")), false);
+  assert.equal(trace.at(-1), "followUp Echec de l'envoi !");
+});
+
+test("rappel vers un rôle illisible : refusé, rien n'est enregistré ni envoyé", async () => {
+  const trace: string[] = [];
+  await getAdhesion(quietClient, fakeInteraction(trace, { members: 3, interval: "30", fetchFails: true }));
+  assert.deepEqual(trace, [PENDING, "followUp Echec de l'envoi des adhésions en message privé aux membres du rôle « Membres » : " +
+    "Discord n'a pas permis de les lire, aucun ne les a reçus. Réessayez plus tard en ne visant que ce rôle ! " +
+    "Aucun rappel n'a été enregistré."]);
+  assert.equal(fs.existsSync(process.env.BDD_PATH ?? ""), false);
 });
