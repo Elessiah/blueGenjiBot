@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>JSDoc: Source: safe/errorGuards.js</title>
+    <title>JSDoc: Source: bdd/schema.js</title>
 
     <script src="scripts/prettify/prettify.js"> </script>
     <script src="scripts/prettify/lang-css.js"> </script>
@@ -17,7 +17,7 @@
 
 <div id="main">
 
-    <h1 class="page-title">Source: safe/errorGuards.js</h1>
+    <h1 class="page-title">Source: bdd/schema.js</h1>
 
     
 
@@ -26,182 +26,311 @@
     
     <section>
         <article>
-            <pre class="prettyprint source linenums"><code>/**
- * Classification des erreurs runtime et garde-fous process.
- *
- * Le bot tombait sur des erreurs *transitoires* : une coupure DNS/réseau
- * (`EAI_AGAIN`, `UND_ERR_CONNECT_TIMEOUT`) remontait depuis les appels internes
- * de discord.js sous forme de rejet non capturé, et Node — qui termine le
- * process sur un `unhandledRejection` depuis la v15 — tuait le bot. Une
- * coupure de trente secondes ne doit pas coûter un redémarrage.
- *
- * Deux familles d'erreurs sont donc reconnues ici :
- * - **transitoires** : réseau injoignable. On journalise en console uniquement,
- *   car un `sendLog()` passe justement par le réseau qui est tombé — l'envoyer
- *   déclencherait une cascade d'échecs pendant toute la panne.
- * - **bénignes** : l'objet Discord visé n'existe plus ou est hors de portée
- *   (message supprimé, interaction expirée, permission manquante). Rien à
- *   corriger, on ne réveille pas le canal de supervision pour ça.
- *
- * Tout le reste est un vrai défaut : console **et** canal de logs Discord.
+            <pre class="prettyprint source linenums"><code>/*
+ * Instructions SQL du schéma, jouées dans l'ordre par `Bdd.initDatabase`
+ * (liste `SCHEMA_STEPS`). Chaque texte est repris à l'octet près de sa
+ * version d'origine, retours à la ligne et indentation compris : SQLite garde
+ * le texte d'un `CREATE TABLE` dans `sqlite_master`, et `initDatabaseSql.test.ts`
+ * en fixe l'empreinte.
  */
-/** Codes système/undici signalant une indisponibilité réseau passagère. */
-const TRANSIENT_NETWORK_CODES = new Set([
-    "EAI_AGAIN",
-    "ENOTFOUND",
-    "ECONNRESET",
-    "ECONNREFUSED",
-    "ECONNABORTED",
-    "EPIPE",
-    "ETIMEDOUT",
-    "EHOSTUNREACH",
-    "ENETUNREACH",
-    "ENETDOWN",
-    "EAI_FAIL",
-    "UND_ERR_CONNECT_TIMEOUT",
-    "UND_ERR_HEADERS_TIMEOUT",
-    "UND_ERR_BODY_TIMEOUT",
-    "UND_ERR_SOCKET",
-    // `UND_ERR_RESPONSE_STATUS_CODE` est volontairement absent : il signale une
-    // réponse HTTP non-2xx, pas une panne réseau. Le classer transitoire
-    // masquerait un 500 permanent au canal de supervision.
-]);
 /**
- * Codes d'API Discord sans action corrective possible côté bot.
- * 10003 salon inconnu, 10004 serveur inconnu, 10008 message inconnu,
- * 10013 utilisateur inconnu, 10062 interaction inconnue (expirée),
- * 40060 interaction déjà acquittée, 50001 accès manquant,
- * 50007 MP fermés, 50013 permissions manquantes.
+ * Une ligne effacée ou réécrite (auteur anonymisé, table `UserLink`
+ * supprimée, serveur oublié) laisserait sinon ses octets dans les pages
+ * libérées du fichier — et la sauvegarde, qui copie les pages telles
+ * quelles, les emporterait. Réglage de connexion, rejoué à chaque ouverture.
+ * `ON` plutôt que `FAST` : `FAST` ne réécrit pas les pages rendues à la
+ * liste libre, justement celles d'une table supprimée. Le coût (quelques
+ * écritures de plus par purge de relais) est négligeable sur cette base.
  */
-const IGNORABLE_DISCORD_CODES = new Set([
-    10003, 10004, 10008, 10013, 10062, 40060, 50001, 50007, 50013,
-]);
+export const SECURE_DELETE_PRAGMA = "PRAGMA secure_delete = ON";
 /**
- * Extrait le code d'erreur d'une valeur inconnue levée par une API tierce.
- * @param error Valeur capturée (pas nécessairement une `Error`).
- * @returns Le champ `code` s'il est une chaîne ou un nombre, sinon `null`.
+ * Une écriture qui trouve la base verrouillée (sauvegarde en cours)
+ * attend jusqu'à 5 s au lieu d'échouer aussitôt : les reprises des
+ * appelants ne font alors plus dix échecs en rafale.
  */
-function errorCode(error) {
-    // Lire un objet inconnu peut lever (accesseur, Proxy révoqué) : un code
-    // illisible vaut « pas de code », jamais une exception dans un gardien.
-    try {
-        if (typeof error !== "object" || error === null)
-            return null;
-        const code = error.code;
-        if (typeof code === "string" || typeof code === "number")
-            return code;
-    }
-    catch { /* illisible */ }
-    return null;
-}
-/** Profondeur maximale explorée dans la chaîne `cause`. */
-const MAX_CAUSE_DEPTH = 8;
+export const BUSY_TIMEOUT_PRAGMA = "PRAGMA busy_timeout = 5000";
+/** Table `OGMsg` (sans effet si elle existe déjà). */
+export const OGMSG_TABLE = `CREATE TABLE IF NOT EXISTS OGMsg
+           (
+             id_msg
+               TEXT,
+             id_author
+               TEXT,
+             date
+               DATETIME
+               DEFAULT
+                 CURRENT_TIMESTAMP,
+             PRIMARY
+               KEY
+               (
+                id_msg
+                 )
+           );`;
+/** Table `MessageService` (sans effet si elle existe déjà). */
+export const MESSAGE_SERVICE_TABLE = `CREATE TABLE IF NOT EXISTS MessageService
+           (
+             id_msg
+               text,
+             id_service
+               INTEGER,
+             PRIMARY
+               KEY
+               (
+                id_msg,
+                id_service
+                 )
+           );`;
+/** Table `DPMsg` (sans effet si elle existe déjà). */
+export const DPMSG_TABLE = `CREATE TABLE IF NOT EXISTS DPMsg
+           (
+             id_msg
+               TEXT,
+             id_channel
+               TEXT,
+             id_og
+               TEXT,
+             date
+               DATETIME
+               DEFAULT
+                 CURRENT_TIMESTAMP,
+             PRIMARY
+               KEY
+               (
+                id_msg
+                 )
+           );`;
+/** Table `ChannelPartner` (sans effet si elle existe déjà). */
+export const CHANNEL_PARTNER_TABLE = `CREATE TABLE IF NOT EXISTS ChannelPartner
+           (
+             id_channel
+               TEXT
+               PRIMARY
+                 KEY,
+             id_guild
+               TEXT
+           );`;
+/** Table `Service` (sans effet si elle existe déjà). */
+export const SERVICE_TABLE = `CREATE TABLE IF NOT EXISTS Service
+           (
+             id_service
+               INTEGER
+               PRIMARY
+                 KEY
+               AUTOINCREMENT,
+             name
+               TEXT
+               NOT
+                 NULL
+           );`;
+/** Table `ChannelPartnerService` (sans effet si elle existe déjà). */
+export const CHANNEL_PARTNER_SERVICE_TABLE = `CREATE TABLE IF NOT EXISTS ChannelPartnerService
+           (
+             id_channel
+               TEXT
+               NOT
+                 NULL,
+             id_service
+               INTEGER
+               NOT
+                 NULL,
+             PRIMARY
+               KEY
+               (
+                id_channel,
+                id_service
+                 )
+           );`;
+/** Table `Ban` (sans effet si elle existe déjà). */
+export const BAN_TABLE = `CREATE TABLE IF NOT EXISTS Ban
+           (
+             id_user
+               TEXT
+               PRIMARY
+                 KEY,
+             id_moderator
+               TEXT
+               NOT
+                 NULL,
+             id_reason
+               TEXT
+               NOT
+                 NULL,
+             date
+               DATETIME
+               DEFAULT
+                 CURRENT_TIMESTAMP,
+             id_reason_owner TEXT,
+             id_notice_admin TEXT
+           );`;
+/** Table `Ranks` (sans effet si elle existe déjà). */
+export const RANKS_TABLE = `CREATE TABLE IF NOT EXISTS Ranks
+           (
+             id_rank INTEGER PRIMARY KEY AUTOINCREMENT,
+             name    TEXT NOT NULL
+           );`;
+/** Table `ChannelPartnerRank` (sans effet si elle existe déjà). */
+export const CHANNEL_PARTNER_RANK_TABLE = `CREATE TABLE IF NOT EXISTS ChannelPartnerRank
+           (
+               id_channel TEXT    NOT NULL,
+               id_rank    INTEGER NOT NULL,
+               PRIMARY KEY (id_channel, id_rank)
+           );`;
+/** Table `AdhesionInterval` (sans effet si elle existe déjà). */
+export const ADHESION_INTERVAL_TABLE = `CREATE TABLE IF NOT EXISTS AdhesionInterval
+            (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                message TEXT NOT NULL ,
+                guild_id TEXT NOT NULL,
+                channel_id TEXT,
+                member_id TEXT,
+                role_id TEXT,
+                author_id TEXT NOT NULL,
+                interval_days INTEGER NOT NULL,
+                iteration INTEGER NOT NULL DEFAULT -1,
+                nextTransmission DATETIME DEFAULT CURRENT_TIMESTAMP
+           );`;
+/** Table `RoleAdmin` (sans effet si elle existe déjà). */
+export const ROLE_ADMIN_TABLE = `CREATE TABLE IF NOT EXISTS RoleAdmin
+          (
+            guild_id TEXT NOT NULL PRIMARY KEY,
+            role_id TEXT NOT NULL
+          );
+        `;
+/** Table `ServerModule` (sans effet si elle existe déjà). */
+export const SERVER_MODULE_TABLE = `CREATE TABLE IF NOT EXISTS ServerModule
+          (
+            id_guild TEXT NOT NULL,
+            module_key TEXT NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            PRIMARY KEY (id_guild, module_key)
+          );
+        `;
+/** Table `FeedEvent` (sans effet si elle existe déjà). */
+export const FEED_EVENT_TABLE = `CREATE TABLE IF NOT EXISTS FeedEvent
+          (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ts DATETIME DEFAULT CURRENT_TIMESTAMP,
+            type TEXT NOT NULL,
+            source TEXT,
+            target TEXT,
+            summary TEXT NOT NULL
+          );
+        `;
+/** Table `DailySnapshot` (sans effet si elle existe déjà). */
+export const DAILY_SNAPSHOT_TABLE = `CREATE TABLE IF NOT EXISTS DailySnapshot
+          (
+            date TEXT PRIMARY KEY,
+            servers_count INTEGER NOT NULL DEFAULT 0,
+            channels_count INTEGER NOT NULL DEFAULT 0,
+            messages_count INTEGER NOT NULL DEFAULT 0,
+            relays_count INTEGER NOT NULL DEFAULT 0
+          );
+        `;
+/** Table `Scrim` (sans effet si elle existe déjà). */
+export const SCRIM_TABLE = `CREATE TABLE IF NOT EXISTS Scrim
+          (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id_author TEXT NOT NULL,
+            game TEXT NOT NULL,
+            level TEXT NOT NULL,
+            id_guild TEXT,
+            date DATETIME DEFAULT CURRENT_TIMESTAMP
+          );
+        `;
+/** Table `Recrute` (sans effet si elle existe déjà). */
+export const RECRUTE_TABLE = `CREATE TABLE IF NOT EXISTS Recrute
+          (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id_author TEXT NOT NULL,
+            role TEXT NOT NULL,
+            id_guild TEXT,
+            date DATETIME DEFAULT CURRENT_TIMESTAMP
+          );
+        `;
 /**
- * Indique si l'erreur traduit une indisponibilité réseau passagère.
- *
- * La chaîne `cause` est suivie sur une profondeur bornée : deux erreurs qui se
- * citent mutuellement — ce que produisent certaines couches de retry —
- * feraient sinon déborder la pile, et ce depuis l'intérieur même du
- * gestionnaire d'`unhandledRejection`.
- *
- * @param error Valeur capturée.
- * @param depth Profondeur courante dans la chaîne de causes.
- * @returns `true` pour une coupure DNS/TCP transitoire.
+ * `/link` a été retirée : elle promettait une liaison que le site n'a
+ * jamais su recevoir, et sa table ne gardait plus que des identifiants
+ * Discord et des codes expirés. La supprimer efface les lignes des
+ * bases qui tournent ; aucune ne sera plus jamais écrite.
  */
-function isTransientNetworkError(error, depth = 0) {
-    const code = errorCode(error);
-    if (typeof code === "string" &amp;&amp; TRANSIENT_NETWORK_CODES.has(code))
-        return true;
-    if (depth >= MAX_CAUSE_DEPTH)
-        return false;
-    // Certaines couches (undici, node-fetch) enveloppent l'erreur d'origine
-    // sans recopier son `code` : on suit la chaîne de causes.
-    if (typeof error === "object" &amp;&amp; error !== null &amp;&amp; "cause" in error) {
-        const cause = error.cause;
-        if (cause &amp;&amp; cause !== error)
-            return isTransientNetworkError(cause, depth + 1);
-    }
-    return false;
-}
+export const DROP_USER_LINK = "DROP TABLE IF EXISTS UserLink";
 /**
- * Indique si l'erreur Discord est sans conséquence (cible disparue ou hors de portée).
- * @param error Valeur capturée.
- * @returns `true` pour un code d'API Discord connu comme non actionnable.
+ * Modules retirés : `oauth` n'existait que pour `/link`, `notifications`
+ * et `stats` n'étaient relus par aucune commande. Leurs préférences,
+ * qu'aucun code ne relit plus, partent avec eux.
  */
-function isIgnorableDiscordError(error) {
-    const code = errorCode(error);
-    return typeof code === "number" &amp;&amp; IGNORABLE_DISCORD_CODES.has(code);
-}
-/** `Error.isError` (Node 24 et plus), absent des versions antérieures. */
-const errorIsError = Error.isError;
+export const PURGE_RETIRED_MODULES = "DELETE FROM ServerModule WHERE module_key IN ('oauth', 'notifications', 'stats')";
+/** Table `ServerInvite` (sans effet si elle existe déjà). */
+export const SERVER_INVITE_TABLE = `CREATE TABLE IF NOT EXISTS ServerInvite
+          (
+            id_guild TEXT PRIMARY KEY,
+            invite_url TEXT NOT NULL,
+            set_by TEXT,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          );
+        `;
 /**
- * Reconnaît une `Error`, y compris venue d'un autre contexte (vm, worker), où
- * `instanceof` échoue. Remplace `util.types.isNativeError`, déprécié, par sa
- * relève `Error.isError`. Celle-ci absente, une `Error` d'un autre contexte
- * est traitée comme un objet quelconque : décrite par son seul type, jamais
- * par un `message` qu'un objet déguisé (`Symbol.toStringTag`) pourrait porter.
- * @param value Valeur capturée.
- * @returns `true` pour une `Error` native.
+ * Role arbitre d'un serveur : destinataires des signalements de probleme
+ * pousses par l'app web sur /internal/notify/referees. Une ligne par
+ * serveur, definie par la commande /set-referee-role.
  */
-function isNativeError(value) {
-    return value instanceof Error || errorIsError?.(value) === true;
-}
+export const REFEREE_ROLE_TABLE = `CREATE TABLE IF NOT EXISTS RefereeRole
+          (
+            id_guild TEXT PRIMARY KEY,
+            id_role TEXT NOT NULL,
+            set_by TEXT,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          );
+        `;
 /**
- * Produit une description lisible d'une valeur levée, quelle que soit sa forme.
- *
- * Un objet qui n'est pas une `Error` n'est **jamais sérialisé** : levé sur le
- * chemin d'une annonce, il peut porter son texte et le pseudo de son auteur,
- * et cette description part au journal Discord et dans les messages privés
- * du titulaire (`reportError`, `sendLog`). Seul son type est dit. Le message
- * d'une `Error`, lui, est rendu tel quel.
- * @param error Valeur capturée.
- * @returns Message d'erreur (suffixé du code), la chaîne levée, ou le type de la valeur.
+ * Instantane de frequentation du site, pousse par l'app web sur
+ * /internal/site-visits. Une seule ligne (id = 1) : le bot ne conserve
+ * que la derniere mesure, l'historique restant du cote du site.
  */
-function describeError(error) {
-    try {
-        // `isNativeError` reconnaît aussi une `Error` venue d'un autre contexte (vm, worker).
-        if (isNativeError(error)) {
-            const message = typeof error.message === "string" ? error.message : "(message non textuel)";
-            // Une vraie `Error` garde son code (« auth/invalid-token »…) : son
-            // message est déjà rendu, filtrer le code ne protégerait rien.
-            const code = errorCode(error);
-            const shown = typeof code === "number" || (typeof code === "string" &amp;&amp; /^\S{1,80}$/.test(code)) ? code : null;
-            return shown === null ? message : `${message} [${shown}]`;
-        }
-        // Une chaîne levée est rendue telle quelle : aucun code du bot ne lève
-        // le texte d'une annonce (règle à garder : lever une `Error`).
-        if (typeof error === "string")
-            return error;
-        // Un scalaire (null, undefined, nombre, booléen, bigint, symbole) ne porte
-        // rien d'autre que lui-même : il est rendu tel quel.
-        if (error === null || (typeof error !== "object" &amp;&amp; typeof error !== "function")) {
-            return `valeur levée non standard (${String(error)})`;
-        }
-        // Un objet : son seul code, et seulement s'il en a la forme (nombre, ou
-        // jeton court) — un champ « code » en texte libre pourrait porter n'importe quoi.
-        const code = errorCode(error);
-        const shown = typeof code === "number" || (typeof code === "string" &amp;&amp; /^\w{1,40}$/.test(code)) ? `, code ${code}` : "";
-        return `valeur levée non standard (${typeof error}${shown})`;
-    }
-    catch {
-        // Proxy révoqué, accesseur `message` hostile… : la description ne lève jamais.
-        return "valeur levée illisible";
-    }
-}
+export const SITE_VISIT_TABLE = `CREATE TABLE IF NOT EXISTS SiteVisit
+          (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            total_visits INTEGER NOT NULL DEFAULT 0,
+            unique_visitors INTEGER NOT NULL DEFAULT 0,
+            visits_24h INTEGER NOT NULL DEFAULT 0,
+            unique_24h INTEGER NOT NULL DEFAULT 0,
+            visits_7d INTEGER NOT NULL DEFAULT 0,
+            unique_7d INTEGER NOT NULL DEFAULT 0,
+            visits_30d INTEGER NOT NULL DEFAULT 0,
+            unique_30d INTEGER NOT NULL DEFAULT 0,
+            identified_visitors INTEGER NOT NULL DEFAULT 0,
+            first_visit_at DATETIME,
+            last_visit_at DATETIME,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          );
+        `;
 /**
- * Classe une erreur pour décider où la journaliser.
- * @param error Valeur capturée.
- * @returns `transient` (réseau), `ignorable` (objet Discord disparu) ou `fatal`.
+ * Scrims et recherches de plus de 30 jours, repliés en nombres : ni
+ * auteur, ni ordre, ni heure (voir `anonymizeActivityAuthors`).
  */
-function classifyError(error) {
-    if (isTransientNetworkError(error))
-        return "transient";
-    if (isIgnorableDiscordError(error))
-        return "ignorable";
-    return "fatal";
-}
-export { classifyError, MAX_CAUSE_DEPTH, describeError, errorCode, isIgnorableDiscordError, isTransientNetworkError, IGNORABLE_DISCORD_CODES, TRANSIENT_NETWORK_CODES, };
-//# sourceMappingURL=errorGuards.js.map</code></pre>
+export const ACTIVITY_DAILY_TABLE = `CREATE TABLE IF NOT EXISTS ActivityDaily
+          (
+            kind TEXT NOT NULL,
+            day TEXT NOT NULL,
+            id_guild TEXT NOT NULL DEFAULT '',
+            detail TEXT NOT NULL DEFAULT '',
+            count INTEGER NOT NULL,
+            PRIMARY KEY (kind, day, id_guild, detail)
+          );
+        `;
+/**
+ * Application Discord propriétaire de cette base (une ligne). Le
+ * rattrapage des serveurs quittés s'y fie avant tout effacement : un bot
+ * lancé avec un autre jeton sur cette base verrait un cache qui ne la
+ * décrit pas, et oublierait tout le réseau.
+ */
+export const BOT_OWNER_TABLE = `CREATE TABLE IF NOT EXISTS BotOwner
+          (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            application_id TEXT NOT NULL
+          );
+        `;
+//# sourceMappingURL=schema.js.map</code></pre>
         </article>
     </section>
 
