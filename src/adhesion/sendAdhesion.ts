@@ -1,7 +1,7 @@
 import type {AttachmentBuilder, Client, GuildMember, Role, TextChannel, User} from "discord.js";
 import {loadAdhesionAttachments} from "@/adhesion/adhesionAttachments.js";
 import {collectRecipients} from "@/adhesion/adhesionRecipients.js";
-import {deliverToAuthor, deliverToChannel, deliverToMembers} from "@/adhesion/adhesionDelivery.js";
+import {deliverToAuthor, deliverToChannel, deliverToMembers, notifyRoleUnreadable} from "@/adhesion/adhesionDelivery.js";
 import {DEFAULT_ADHESION_MESSAGE, PERMISSION_WARNING} from "@/adhesion/adhesionNotices.js";
 
 /** Cibles d'un envoi ; `null` pour une cible non demandée. */
@@ -69,10 +69,35 @@ async function deliverToTargets(client: Client,
         delivered = await deliverToChannel(client, targets.channel, files, content, author);
     }
     if (targets.role !== null || targets.member !== null) {
-        const recipients = await collectRecipients(client, targets.role, targets.member);
-        delivered = (await deliverToMembers(client, recipients, files, content, author, targets.role?.name ?? null)) && delivered;
+        delivered = (await deliverToRecipients(client, targets, files, content, author)) && delivered;
     }
     return delivered;
+}
+
+/**
+ * Remet les papiers en MP aux membres du rôle et au membre désigné. Des
+ * membres du rôle illisibles sont un échec, avisé à part ; le membre désigné
+ * est servi quand même.
+ * @param client Client Discord utilisé pour les envois et le journal.
+ * @param targets Cibles demandées (au moins un rôle ou un membre).
+ * @param files Pièces jointes.
+ * @param content Message joint.
+ * @param author Auteur de l'envoi, avisé du résultat.
+ * @returns `true` si chaque destinataire a reçu les papiers.
+ */
+async function deliverToRecipients(client: Client,
+                                   targets: AdhesionTargets,
+                                   files: AttachmentBuilder[],
+                                   content: string,
+                                   author: User): Promise<boolean> {
+    const roleName = targets.role?.name ?? null;
+    const {recipients, roleUnreadable} = await collectRecipients(client, targets.role, targets.member);
+    if (roleUnreadable) {
+        await notifyRoleUnreadable(client, author, roleName);
+        // Rôle illisible sans membre désigné : l'avis ci-dessus suffit.
+        if (recipients.length === 0) return false;
+    }
+    return (await deliverToMembers(client, recipients, files, content, author, roleName)) && !roleUnreadable;
 }
 
 /**

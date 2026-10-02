@@ -42,13 +42,26 @@ function memberDeliveredNotice(recipient: User): string {
 }
 
 /**
- * Avis à l'auteur quand personne n'est à servir en MP : aucun membre du rôle
- * trouvé (si les membres du rôle sont illisibles, un membre désigné en même
- * temps n'est pas servi non plus). Le texte dit ce que le bot a
- * constaté, pas que le rôle est vide : les membres d'un rôle se lisent dans le
- * cache du bot, qui peut être incomplet. Il ne parle que des MP : un salon visé
- * en même temps a son propre avis. Le rôle est nommé pour que l'auteur de
- * plusieurs rappels sache lequel vérifier.
+ * Avis à l'auteur quand les membres du rôle visé n'ont pas pu être lus
+ * (Discord n'a pas répondu à temps, ou a limité le débit) : aucun d'eux n'a
+ * reçu les papiers. Un membre désigné en même temps a son propre avis. Le
+ * texte invite à réessayer plus tard plutôt qu'à corriger la cible, qui n'est
+ * pas en cause.
+ * @param roleName Nom du rôle visé, ou `null` s'il est inconnu.
+ * @returns Le texte de l'avis.
+ */
+function roleUnreadableNotice(roleName: string | null): string {
+    const role = roleName === null ? "du rôle visé" : "du rôle « " + escapeMarkdown(roleName) + " »";
+    return "Echec de l'envoi des adhésions en message privé aux membres " + role +
+        " : Discord n'a pas permis de les lire, aucun ne les a reçus. Réessayez plus tard !";
+}
+
+/**
+ * Avis à l'auteur quand personne n'est à servir en MP : le rôle visé, lu
+ * après récupération des membres du serveur, n'a aucun membre, et aucun membre
+ * n'est désigné. Il ne parle que des MP : un salon visé en même temps a son
+ * propre avis. Le rôle est nommé pour que l'auteur de plusieurs rappels sache
+ * lequel vérifier.
  * @param roleName Nom du rôle visé, ou `null` s'il est inconnu.
  * @returns Le texte de l'avis.
  */
@@ -75,5 +88,6 @@ export {
     channelDeliveredNotice,
     memberDeliveredNotice,
     noRecipientNotice,
+    roleUnreadableNotice,
     memberFailedLine,
 };
