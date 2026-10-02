@@ -154,7 +154,7 @@ test("retrouve un verdict une fois la base revenue", async () => {
 });
 
 test.after(async () => {
-  closeBddInstance();
+  await closeBddInstance();
   await new Promise((resolve) => setTimeout(resolve, 100));
   try { fs.unlinkSync(TMP_DB); } catch { /* deja parti */ }
 });

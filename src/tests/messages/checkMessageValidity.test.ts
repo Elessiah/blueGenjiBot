@@ -70,7 +70,7 @@ test("un exclu visant deux services n'est prévenu et marqué qu'une fois", asyn
 });
 
 test.after(async () => {
-  closeBddInstance();
+  await closeBddInstance();
   await new Promise((r) => setTimeout(r, 50));
   try { fs.unlinkSync(TMP_DB); } catch { /* noop */ }
 });

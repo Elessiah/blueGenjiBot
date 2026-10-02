@@ -89,7 +89,7 @@ test("_resetServer vide aussi les filtres de rang de ses salons", async () => {
 });
 
 test.after(async () => {
-  closeBddInstance();
+  await closeBddInstance();
   if (fs.existsSync(TMP_DB)) {
     fs.unlinkSync(TMP_DB);
   }
