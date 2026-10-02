@@ -72,10 +72,6 @@ type AdminTargets = {
  * échec, journalisé par identifiant sans aucun nom, il se rabat sur le cache
  * pour ce rôle et les suivants : une nouvelle tentative par rôle échouerait
  * de même, contre la limite de débit de Discord.
- *
- * `@everyone` (dont l'identifiant est celui du serveur) reste lu dans le seul
- * cache, comme avant : un serveur qui lui donne la permission Administrateur
- * recevrait sinon le message en MP tout entier.
  */
 type RoleReader = {
     read: (role: Role) => Promise<GuildMember[]>,
@@ -92,7 +88,7 @@ function roleReader(client: Client, server: Guild): RoleReader {
     let failed = false;
     return {
         read: async (role: Role) => {
-            if (!failed && role.id !== server.id) {
+            if (!failed) {
                 try {
                     return await fetchRoleMembers(server, role);
                 } catch (err) {
@@ -149,8 +145,12 @@ async function fetchServer(client: Client, serverId: string, interaction?: ChatI
 async function collectAdmins(client: Client, server: Guild): Promise<AdminTargets> {
     const targets: Map<string, User> = new Map();
     const reader = roleReader(client, server);
+    // `@everyone` (dont l'identifiant est celui du serveur) est écarté, même
+    // porteur de la permission Administrateur : ses membres sont tous ceux du
+    // cache, que la récupération d'un autre rôle remplit — le message
+    // partirait en MP au serveur entier.
     const adminRoles: Collection<string, Role> = server.roles.cache.filter(r =>
-        r.permissions.has(PermissionsBitField.Flags.Administrator)
+        r.id !== server.id && r.permissions.has(PermissionsBitField.Flags.Administrator)
     );
     for (const role of adminRoles.values()) {
         addMembers(targets, await reader.read(role));
