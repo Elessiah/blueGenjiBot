@@ -305,6 +305,20 @@ test("membres illisibles en appel interne, aucun connu : journalisé, le propri�
   ]);
 });
 
+test("rôle configuré illisible en commande : les autres servis, la confirmation avertit", async () => {
+  await setAdminRole("g1", "staff");
+  const trace: string[] = [];
+  const client = fakeClient(trace, { roles: [{ id: "admin", admin: true, members: ["a1"] }], configured: { id: "staff", fetch: "throw" } });
+  assert.equal(await contactAdminServer(client, fakeInteraction(trace, client, { server: "g1", message: "m" })), true);
+  assert.deepEqual(trace, [
+    DEFER, "guilds.fetch g1", "roles.fetch staff",
+    "log Failed to fetch configured admin role : Missing Access",
+    "dm:a1 m",
+    "editReply Message successfully sent to 1 admin(s) !\nWarning: Discord did not let the bot read every admin role, " +
+      "so some admins may not have received it. Please try again later if needed.",
+  ]);
+});
+
 test("message absent : refus en réponse, ou au journal en appel interne", async () => {
   await setAdminRole("g1", null);
   const trace: string[] = [];
