@@ -18,7 +18,7 @@ Options:
 - `message` (texte, optionnel): message d'accompagnement.
 - `channel` (salon, optionnel): salon cible.
 - `membre` (utilisateur, optionnel): membre cible en message prive.
-- `role` (role, optionnel): envoi en message prive a tous les membres du role.
+- `role` (role, optionnel): envoi en message prive a tous les membres du role (les bots du role sont ignores).
 - `interval` (texte, optionnel): intervalle en jours pour un envoi automatique.
 
 Comportement:
