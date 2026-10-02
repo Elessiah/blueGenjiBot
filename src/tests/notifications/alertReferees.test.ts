@@ -54,7 +54,10 @@ function fakeClient(trace: string[], guilds: FakeGuild[]): Client {
         };
       },
     },
+    // Cache vide d'un serveur peuplé : la récupération complète est demandée.
+    memberCount: 10,
     members: {
+      cache: new Map(),
       fetch: async () => {
         trace.push("members.fetch " + g.id);
         if (g.membersFetchFails) throw new Error("Timeout");

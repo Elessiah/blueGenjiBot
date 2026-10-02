@@ -1,31 +1,68 @@
-import type {Client, GuildMember, Role, User} from "discord.js";
+import type {Client, Guild, GuildMember, Role, User} from "discord.js";
 import {logAdhesionError} from "@/adhesion/adhesionLog.js";
+import {fetchRoleMembers} from "@/utils/fetchRoleMembers.js";
+
+/** Destinataires d'un envoi en MP, et si les membres du rôle ont pu être lus. */
+type AdhesionRecipients = {
+    /** Utilisateurs à servir, dans l'ordre d'envoi (doublons conservés). */
+    recipients: User[],
+    /** Un rôle était visé mais ses membres n'ont pas pu être lus. */
+    roleUnreadable: boolean,
+};
+
+/**
+ * Membres d'un rôle visé par une adhésion.
+ *
+ * `@everyone` (dont l'identifiant est celui du serveur) reste lu dans le seul
+ * cache, comme avant la récupération complète : la récupérer enverrait les
+ * papiers en MP à tout le serveur. Le refuser ou plafonner les envois est une
+ * décision à prendre, pas un correctif.
+ * @param guild Serveur du rôle.
+ * @param role Rôle visé.
+ * @returns Les membres du rôle.
+ * @throws L'erreur de la récupération des membres du serveur.
+ */
+async function readAdhesionRoleMembers(guild: Guild, role: Role): Promise<GuildMember[]> {
+    if (role.id === guild.id) return [...role.members.values()];
+    return await fetchRoleMembers(guild, role);
+}
 
 /**
  * Liste les utilisateurs à servir en MP : les membres du rôle, puis le membre
  * désigné.
  *
- * Une lecture qui lève est journalisée et la liste s'arrête là où elle en
- * était : si les membres du rôle sont illisibles, le membre désigné n'est pas
- * ajouté non plus.
+ * Les membres du rôle sont lus après récupération des membres du serveur (le
+ * cache seul paraît vide après un redémarrage) ; les bots en sont écartés. Si cette lecture échoue, elle
+ * est journalisée sans aucun nom et signalée par `roleUnreadable` ; le membre
+ * désigné, lu indépendamment, est servi quand même.
  * @param client Client Discord utilisé pour le journal.
  * @param role Rôle dont chaque membre est servi, ou `null`.
  * @param member Membre servi individuellement, ou `null`.
- * @returns Les destinataires, dans l'ordre d'envoi (doublons conservés).
+ * @param knownRoleMembers Membres du rôle déjà lus par l'appelant, servis sans
+ *   nouvelle lecture ; `null` pour les lire ici.
+ * @returns Les destinataires et l'état de la lecture du rôle.
  */
-async function collectRecipients(client: Client, role: Role | null, member: GuildMember | null): Promise<User[]> {
-    let recipients: User[] = [];
-    try {
-        if (role !== null) {
-            recipients = role.members.map(m => m.user);
+async function collectRecipients(client: Client,
+                                 role: Role | null,
+                                 member: GuildMember | null,
+                                 knownRoleMembers: GuildMember[] | null = null): Promise<AdhesionRecipients> {
+    const recipients: User[] = [];
+    let roleUnreadable = false;
+    if (role !== null) {
+        try {
+            const members = knownRoleMembers ?? await readAdhesionRoleMembers(role.guild, role);
+            // Un bot ne reçoit pas de MP : il ne compterait que pour un échec.
+            recipients.push(...members.filter(m => !m.user.bot).map(m => m.user));
+        } catch (err) {
+            roleUnreadable = true;
+            await logAdhesionError(client, "sendAdhesion membres du rôle illisibles", err);
         }
-        if (member) {
-            recipients.push(member.user);
-        }
-    } catch (err) {
-        await logAdhesionError(client, "sendAdhesion targets", err);
     }
-    return recipients;
+    if (member) {
+        recipients.push(member.user);
+    }
+    return {recipients, roleUnreadable};
 }
 
-export {collectRecipients};
+export {collectRecipients, readAdhesionRoleMembers};
+export type {AdhesionRecipients};

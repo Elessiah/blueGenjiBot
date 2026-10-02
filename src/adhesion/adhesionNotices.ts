@@ -42,19 +42,72 @@ function memberDeliveredNotice(recipient: User): string {
 }
 
 /**
- * Avis à l'auteur quand personne n'est à servir en MP : aucun membre du rôle
- * trouvé (si les membres du rôle sont illisibles, un membre désigné en même
- * temps n'est pas servi non plus). Le texte dit ce que le bot a
- * constaté, pas que le rôle est vide : les membres d'un rôle se lisent dans le
- * cache du bot, qui peut être incomplet. Il ne parle que des MP : un salon visé
- * en même temps a son propre avis. Le rôle est nommé pour que l'auteur de
- * plusieurs rappels sache lequel vérifier.
+ * Avis à l'auteur quand les membres du rôle visé n'ont pas pu être lus
+ * (Discord n'a pas répondu à temps, ou a limité le débit) : aucun d'eux n'a
+ * reçu les papiers. Un membre désigné en même temps a son propre avis. Le
+ * texte invite à réessayer plus tard plutôt qu'à corriger la cible, qui n'est
+ * pas en cause, et à ne viser que le rôle : un salon ou un membre servis en
+ * même temps recevraient les papiers deux fois.
+ * @param roleName Nom du rôle visé, ou `null` s'il est inconnu.
+ * @returns Le texte de l'avis.
+ */
+function roleUnreadableNotice(roleName: string | null): string {
+    const role = roleName === null ? "du rôle visé" : "du rôle « " + escapeMarkdown(roleName) + " »";
+    return "Echec de l'envoi des adhésions en message privé aux membres " + role +
+        " : Discord n'a pas permis de les lire, aucun ne les a reçus. Réessayez plus tard en ne visant que ce rôle !";
+}
+
+/**
+ * Avis à l'auteur d'un rappel reporté faute de pouvoir lire les membres de son
+ * rôle : sans lui, un rappel reporté chaque jour paraîtrait actif sans que rien
+ * ne parte. Il dit que tout le rappel attend, et comment l'arrêter.
+ * @param intervalId Numéro du rappel, tel que l'affiche `/show-rappel-adhesion`.
+ * @param roleName Nom du rôle visé.
+ * @returns Le texte de l'avis.
+ */
+function reminderPostponedNotice(intervalId: number, roleName: string): string {
+    return "Rappel d'adhésion n°" + intervalId + " reporté : Discord n'a pas permis de lire les membres du rôle « " +
+        escapeMarkdown(roleName) + " ». Rien n'est parti, nouvel essai à la prochaine vérification " +
+        "(/delete-rappel-adhesion pour l'arrêter).";
+}
+
+/**
+ * Avis à l'auteur quand personne n'est à servir en MP : le rôle visé, lu
+ * après récupération des membres du serveur, n'a aucun membre, et aucun membre
+ * n'est désigné. Il ne parle que des MP : un salon visé en même temps a son
+ * propre avis. Le rôle est nommé pour que l'auteur de plusieurs rappels sache
+ * lequel vérifier.
  * @param roleName Nom du rôle visé, ou `null` s'il est inconnu.
  * @returns Le texte de l'avis.
  */
 function noRecipientNotice(roleName: string | null): string {
     const role = roleName === null ? "du rôle visé" : "du rôle « " + escapeMarkdown(roleName) + " »";
     return "Echec de l'envoi des adhésions en message privé : aucun membre " + role + " n'a été trouvé, personne ne les a reçus. Vérifiez la cible !";
+}
+
+/** Longueur maximale d'un message Discord. */
+const DISCORD_MESSAGE_MAX = 2000;
+
+/**
+ * Avis d'échec : une ligne par membre non servi, tronqué sous la limite d'un
+ * message Discord (un avis trop long serait refusé, et l'auteur n'apprendrait
+ * rien). Les membres qui ne tiennent pas sont comptés en dernière ligne.
+ * @param failedLines Lignes de `memberFailedLine`, dans l'ordre d'envoi.
+ * @returns Le texte de l'avis.
+ */
+function membersFailedNotice(failedLines: string[]): string {
+    const remainder = (n: number) => "Et " + n + " autre(s) échec(s).\n";
+    let text = "";
+    for (let i = 0; i < failedLines.length; i++) {
+        const rest = failedLines.length - i - 1;
+        // Place gardée pour la ligne de reste, qui pourrait suivre celle-ci.
+        const tail = rest > 0 ? remainder(rest).length : 0;
+        if (text.length + failedLines[i].length + tail > DISCORD_MESSAGE_MAX) {
+            return text + remainder(failedLines.length - i);
+        }
+        text += failedLines[i];
+    }
+    return text;
 }
 
 /**
@@ -75,5 +128,8 @@ export {
     channelDeliveredNotice,
     memberDeliveredNotice,
     noRecipientNotice,
+    roleUnreadableNotice,
+    reminderPostponedNotice,
     memberFailedLine,
+    membersFailedNotice,
 };

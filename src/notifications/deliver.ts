@@ -1,6 +1,7 @@
 import type { Client, Guild, GuildMember, Role } from "discord.js";
 import { getBddInstance } from "@/bdd/Bdd.js";
 import { sendLog } from "@/safe/sendLog.js";
+import { fetchRoleMembers } from "@/utils/fetchRoleMembers.js";
 import { findGuildMemberByHandle, parseDiscordHandle } from "@/notifications/resolveHandle.js";
 import { capRefereeTargets, homeGuildIds, leadershipIds, MAX_REFEREE_DMS } from "@/notifications/notifications.js";
 import type { DirectMessageRecipient } from "@/notifications/notifications.js";
@@ -214,10 +215,9 @@ async function readRefereeMembers(guild: Guild, roleId: string, report: Delivery
       return null;
     }
     // Le cache des membres d'un rôle n'est peuplé que si la guilde entière a
-    // été récupérée : on force la récupération plutôt que d'alerter un sous-
-    // ensemble arbitraire des arbitres.
-    await guild.members.fetch();
-    return [...role.members.values()];
+    // été récupérée : on la récupère plutôt que d'alerter un sous-ensemble
+    // arbitraire des arbitres.
+    return await fetchRoleMembers(guild, role);
   } catch {
     report.unresolved.push(`${guild.name}: membres du rôle illisibles`);
     return null;

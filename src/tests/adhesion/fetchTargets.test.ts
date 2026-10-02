@@ -30,7 +30,11 @@ import type { Client } from "discord.js";
 /** Issue d'une lecture : l'objet, `null`, « n'existe plus », panne passagère. */
 type Outcome = "ok" | "null" | "gone" | "flaky";
 
-type Setup = { author?: Outcome; guild?: Outcome; channel?: Outcome; role?: Outcome; member?: Outcome };
+type Setup = {
+  author?: Outcome; guild?: Outcome; channel?: Outcome; role?: Outcome; member?: Outcome;
+  /** Récupération de tous les membres du serveur (lecture du rôle). */
+  roleMembers?: Outcome;
+};
 
 function gone(code: number): DiscordAPIError {
   return new DiscordAPIError({ code, message: "Unknown" }, code, 404, "GET", "https://discord.invalid", {});
@@ -70,10 +74,15 @@ function fakeClient(trace: string[], setup: Setup): Client {
           fetch: (cid: string) => answer("channels.fetch " + cid, setup.channel ?? "ok", RESTJSONErrorCodes.UnknownChannel, { id: cid, name: "salon" }),
         },
         roles: {
-          fetch: (rid: string) => answer("roles.fetch " + rid, setup.role ?? "ok", RESTJSONErrorCodes.UnknownRole, { id: rid }),
+          fetch: (rid: string) => answer("roles.fetch " + rid, setup.role ?? "ok", RESTJSONErrorCodes.UnknownRole, { id: rid, name: "Bureau", members: new Map() }),
         },
+        // Cache vide d'un serveur peuplé : lire un rôle demande la récupération complète.
+        memberCount: 2,
         members: {
-          fetch: (mid: string) => answer("members.fetch " + mid, setup.member ?? "ok", RESTJSONErrorCodes.UnknownMember, { id: mid }),
+          cache: new Map(),
+          fetch: (mid?: string) => (mid === undefined
+            ? answer("members.fetch *", setup.roleMembers ?? "ok", RESTJSONErrorCodes.UnknownGuild, undefined)
+            : answer("members.fetch " + mid, setup.member ?? "ok", RESTJSONErrorCodes.UnknownMember, { id: mid })),
         },
       }),
     },
@@ -124,17 +133,20 @@ async function run(setup: Setup, targets: Targets) {
 
 test("toutes les cibles trouvées : rendues telles quelles, rien d'écrit", async () => {
   const r = await run({}, { channel: "c1", role: "r1", member: "m1" });
-  assert.deepEqual(r.trace, ["users.fetch auteur-1", "guilds.fetch guild-1", "channels.fetch c1", "roles.fetch r1", "members.fetch m1"]);
+  assert.deepEqual(r.trace, ["users.fetch auteur-1", "guilds.fetch guild-1", "channels.fetch c1", "roles.fetch r1", "members.fetch m1", "members.fetch *"]);
   assert.deepEqual(summary(r.result), {
     guild: "guild-1", channel: "c1", role: "r1", member: "m1", author: "auteur-1", message: "Rappel", iteration: 3, interval_days: 7,
   });
   assert.equal(r.result?.nextTransmission.getTime(), new Date(r.interval.nextTransmission).getTime());
+  // Membres du rôle lus ici et transmis à l'envoi, qui ne les relit pas.
+  assert.deepEqual(r.result?.roleMembers, []);
   assert.equal(r.kept, true);
 });
 
 test("sans cible : seuls l'auteur et le serveur sont lus", async () => {
   const r = await run({}, {});
   assert.deepEqual(r.trace, ["users.fetch auteur-1", "guilds.fetch guild-1"]);
+  assert.equal(r.result?.roleMembers, null);
   assert.deepEqual(summary(r.result), {
     guild: "guild-1", channel: null, role: null, member: null, author: "auteur-1", message: "Rappel", iteration: 3, interval_days: 7,
   });
@@ -230,6 +242,7 @@ test("membre disparu à côté d'un rôle : membre retiré, l'auteur prévenu, r
   assert.deepEqual(r.trace, [
     "users.fetch auteur-1", "guilds.fetch guild-1", "roles.fetch r1", "members.fetch m1",
     `dm:auteur-1 Le membre n'est plus valide pour l'interval ${r.id}, suppression de la cible.`,
+    "members.fetch *",
   ]);
   assert.deepEqual(summary(r.result), {
     guild: "guild-1", channel: null, role: "r1", member: null, author: "auteur-1", message: "Rappel", iteration: 3, interval_days: 7,
@@ -242,6 +255,19 @@ test("membre en panne passagère : abandon sans rien toucher", async () => {
   const r = await run({ member: "flaky" }, { channel: "c1", member: "m1" });
   assert.equal(r.result, null);
   assert.deepEqual(r.trace, ["users.fetch auteur-1", "guilds.fetch guild-1", "channels.fetch c1", "members.fetch m1"]);
+  assert.equal(r.kept, true);
+});
+
+test("membres du rôle injoignables : report journalisé, l'auteur prévenu, rien d'écrit ni consommé", async () => {
+  const r = await run({ roleMembers: "flaky" }, { role: "r1", member: "m1" });
+  assert.equal(r.result, null);
+  assert.deepEqual(r.trace, [
+    "users.fetch auteur-1", "guilds.fetch guild-1", "roles.fetch r1", "members.fetch m1", "members.fetch *",
+    `log Interval n°${r.id} : membres du rôle injoignables pour l'instant, report (Service Unavailable).`,
+    `dm:auteur-1 Rappel d'adhésion n°${r.id} reporté : Discord n'a pas permis de lire les membres du rôle « Bureau ». ` +
+      "Rien n'est parti, nouvel essai à la prochaine vérification (/delete-rappel-adhesion pour l'arrêter).",
+  ]);
+  assert.equal(r.interval.role_id, "r1");
   assert.equal(r.kept, true);
 });
 

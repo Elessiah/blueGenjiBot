@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>JSDoc: Source: safe/reportError.js</title>
+    <title>JSDoc: Source: utils/fetchRoleMembers.js</title>
 
     <script src="scripts/prettify/prettify.js"> </script>
     <script src="scripts/prettify/lang-css.js"> </script>
@@ -17,7 +17,7 @@
 
 <div id="main">
 
-    <h1 class="page-title">Source: safe/reportError.js</h1>
+    <h1 class="page-title">Source: utils/fetchRoleMembers.js</h1>
 
     
 
@@ -26,84 +26,59 @@
     
     <section>
         <article>
-            <pre class="prettyprint source linenums"><code>import { classifyError, describeError } from "./errorGuards.js";
-/** Fenêtre par défaut : une panne réseau de 30 s ne produit qu'une ligne. */
-const DEFAULT_DEDUPE_WINDOW_MS = 60_000;
-/** Borne dure de la table de dédoublonnage, purge des clés les plus anciennes au-delà. */
-const MAX_TRACKED_KEYS = 200;
-/**
- * Construit un rapporteur d'erreurs dédoublonné.
+            <pre class="prettyprint source linenums"><code>/**
+ * Lit les membres d'un rôle sans se fier au seul cache du bot.
  *
- * Une coupure réseau produit la même erreur des dizaines de fois par minute :
- * la journaliser à chaque occurrence a déjà rempli un fichier de log de 235 Mo
- * sur l'application sœur. Les répétitions à l'identique sont donc comptées
- * pendant `dedupeWindowMs`, et la première ligne émise après la fenêtre indique
- * combien d'occurrences ont été étouffées.
- *
- * @param options Sorties, horloge et fenêtre de dédoublonnage.
- * @returns Fonction de report, qui ne rejette jamais.
+ * `role.members` ne filtre que les membres déjà en cache : après un
+ * redémarrage, un rôle peuplé paraît vide tant que la guilde n'a pas été
+ * récupérée. Partagé par l'alerte aux arbitres et l'envoi des adhésions.
  */
-function createErrorReporter(options) {
-    const now = options.now ?? Date.now;
-    const windowMs = options.dedupeWindowMs ?? DEFAULT_DEDUPE_WINDOW_MS;
-    const seen = new Map();
-    /**
-     * Ramène la table sous sa borne dure.
-     *
-     * Les entrées dormantes partent d'abord ; si cela ne suffit pas — un défaut
-     * dont le message varie à chaque occurrence crée une clé neuve à chaque
-     * fois — les plus anciennes sont retirées dans l'ordre d'insertion, que
-     * `Map` préserve. Sans cette seconde passe, la table grossirait sans fin
-     * sur un process qui tourne des semaines.
-     *
-     * @param current Horodatage courant.
-     */
-    function prune(current) {
-        if (seen.size &lt;= MAX_TRACKED_KEYS)
-            return;
-        for (const [key, entry] of seen) {
-            if (current - entry.last > windowMs * 10)
-                seen.delete(key);
-        }
-        for (const key of seen.keys()) {
-            if (seen.size &lt;= MAX_TRACKED_KEYS)
-                break;
-            seen.delete(key);
-        }
+/**
+ * Récupérations complètes en cours, par serveur : des lectures simultanées
+ * d'un même serveur attendent la même au lieu d'en lancer chacune une, que la
+ * limite de débit de Discord ferait échouer.
+ */
+const inFlight = new Map();
+/**
+ * Récupère tous les membres d'un serveur, une seule fois à la fois par serveur.
+ * @param guild Serveur à récupérer.
+ * @returns Une promesse résolue une fois la récupération terminée.
+ */
+async function fetchAllMembersOnce(guild) {
+    let pending = inFlight.get(guild.id);
+    if (pending === undefined) {
+        pending = guild.members.fetch().finally(() => inFlight.delete(guild.id));
+        inFlight.set(guild.id, pending);
     }
-    return async function report(context, error) {
-        const severity = classifyError(error);
-        const description = describeError(error);
-        const key = `${severity}|${context}|${description}`;
-        const current = now();
-        const entry = seen.get(key);
-        if (entry &amp;&amp; current - entry.last &lt; windowMs) {
-            entry.suppressed += 1;
-            return;
-        }
-        const repeated = entry &amp;&amp; entry.suppressed > 0
-            ? ` (+${entry.suppressed} occurrence(s) identique(s) étouffée(s))`
-            : "";
-        seen.set(key, { last: current, suppressed: 0 });
-        prune(current);
-        const line = `[${severity}] ${context} : ${description}${repeated}`;
-        try {
-            options.toConsole(line);
-        }
-        catch { /* une sortie de log cassée ne doit pas propager */ }
-        // Le canal de supervision passe par le réseau Discord : l'appeler pendant
-        // une coupure réseau ne ferait qu'empiler des échecs. Et une cible
-        // disparue (message supprimé, interaction expirée) n'appelle aucune action.
-        if (severity === "fatal") {
-            try {
-                await options.toRemote(line);
-            }
-            catch { /* idem : le report ne doit jamais lever */ }
-        }
-    };
+    await pending;
 }
-export { createErrorReporter, DEFAULT_DEDUPE_WINDOW_MS, MAX_TRACKED_KEYS };
-//# sourceMappingURL=reportError.js.map</code></pre>
+/**
+ * Membres d'un rôle, après récupération de tous les membres du serveur si le
+ * cache est incomplet.
+ *
+ * La récupération complète est limitée en débit par Discord (par serveur) :
+ * elle n'est demandée que si le cache compte moins de membres que le serveur,
+ * si bien que plusieurs lectures successives d'un même serveur n'en coûtent
+ * qu'une, et des lectures simultanées partagent la même. Le délai reste celui
+ * de discord.js.
+ *
+ * @param guild Serveur du rôle.
+ * @param role Rôle à lire.
+ * @returns Les membres du rôle, dans l'ordre du cache.
+ * @throws L'erreur de la récupération (délai dépassé, limite de débit,
+ *   passerelle) : à l'appelant de décider quoi en faire.
+ */
+async function fetchRoleMembers(guild, role) {
+    // Un compte inconnu (`memberCount` absent) force la récupération au lieu
+    // de se fier au cache.
+    const cacheComplete = typeof guild.memberCount === "number" &amp;&amp; guild.members.cache.size >= guild.memberCount;
+    if (!cacheComplete) {
+        await fetchAllMembersOnce(guild);
+    }
+    return [...role.members.values()];
+}
+export { fetchRoleMembers };
+//# sourceMappingURL=fetchRoleMembers.js.map</code></pre>
         </article>
     </section>
 

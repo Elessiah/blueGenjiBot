@@ -8,7 +8,9 @@ import {
     channelDeliveredNotice,
     memberDeliveredNotice,
     memberFailedLine,
+    membersFailedNotice,
     noRecipientNotice,
+    roleUnreadableNotice,
 } from "@/adhesion/adhesionNotices.js";
 
 /**
@@ -74,7 +76,7 @@ async function deliverToChannel(client: Client,
  * Envoie les papiers en MP à chaque destinataire, puis avise l'auteur : la
  * liste des échecs s'il y en a, une confirmation sinon.
  *
- * Sans destinataire (aucun membre du rôle trouvé, ou membres illisibles), rien
+ * Sans destinataire (aucun membre dans le rôle visé, aucun membre désigné), rien
  * n'est envoyé en MP : l'auteur en est avisé, le journal le note, et l'envoi
  * échoue.
  * @param client Client Discord utilisé pour les envois et le journal.
@@ -97,14 +99,14 @@ async function deliverToMembers(client: Client,
         await sendPrivately(client, author, [], noRecipientNotice(roleName), "sendAdhesion safeUser (no recipient)");
         return false;
     }
-    let failures = "";
+    const failures: string[] = [];
     for (const recipient of recipients) {
         if (!(await sendPrivately(client, recipient, files, content, "sendAdhesion safeUser target"))) {
-            failures += memberFailedLine(recipient);
+            failures.push(memberFailedLine(recipient));
         }
     }
     if (failures.length > 0) {
-        await sendPrivately(client, author, [], failures, "sendAdhesion safeUser author errMsg");
+        await sendPrivately(client, author, [], membersFailedNotice(failures), "sendAdhesion safeUser author errMsg");
         return false;
     }
     await confirmMembersDelivered(client, recipients, author);
@@ -142,4 +144,15 @@ async function deliverToAuthor(client: Client,
     await sendPrivately(client, author, files, content, "sendAdhesion safeUser (memberPermMissing)");
 }
 
-export {deliverToChannel, deliverToMembers, deliverToAuthor};
+/**
+ * Avise l'auteur que les membres du rôle visé n'ont pas pu être lus.
+ * @param client Client Discord utilisé pour l'envoi et le journal.
+ * @param author Auteur de l'envoi.
+ * @param roleName Nom du rôle visé, repris dans l'avis.
+ * @returns Une promesse résolue une fois l'avis tenté.
+ */
+async function notifyRoleUnreadable(client: Client, author: User, roleName: string | null): Promise<void> {
+    await sendPrivately(client, author, [], roleUnreadableNotice(roleName), "sendAdhesion safeUser (role unreadable)");
+}
+
+export {deliverToChannel, deliverToMembers, deliverToAuthor, notifyRoleUnreadable};

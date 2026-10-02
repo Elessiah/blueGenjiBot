@@ -6,6 +6,8 @@ import {safeUser} from "@/safe/safeUser.js";
 import {removeIntervalle} from "@/adhesion/removeIntervalle.js";
 import {checkTargets} from "@/adhesion/checkTargets.js";
 import {isGone} from "@/adhesion/isGone.js";
+import {readAdhesionRoleMembers} from "@/adhesion/adhesionRecipients.js";
+import {reminderPostponedNotice} from "@/adhesion/adhesionNotices.js";
 
 /**
  * Lecture reportée au prochain passage : Discord a échoué sans dire que l'objet
@@ -35,6 +37,8 @@ async function fetchTargets(client: Client, bdd: Bdd, interval: adhesionInterval
     const role = await resolveRole(client, bdd, interval, guild, user);
     const member = await resolveMember(client, bdd, interval, guild, user);
     if (member === POSTPONED) return null;
+    const roleMembers = role === null ? null : await readRoleMembers(client, interval, guild, role, user);
+    if (role !== null && roleMembers === null) return null;
 
     return {
         id: interval.id,
@@ -43,6 +47,7 @@ async function fetchTargets(client: Client, bdd: Bdd, interval: adhesionInterval
         channel: channel,
         member: member,
         role: role,
+        roleMembers: roleMembers,
         author: user,
         interval_days: interval.interval_days,
         iteration: interval.iteration,
@@ -149,6 +154,34 @@ async function resolveMember(client: Client,
         if (!isGone(e)) return POSTPONED;
         await dropTarget(client, bdd, user, interval, "member_id",
             "Le membre n'est plus valide pour l'interval " + interval.id + ", suppression de la cible.");
+        return null;
+    }
+}
+
+/**
+ * Lit les membres du rôle cible, après récupération des membres du serveur.
+ * Un échec (délai, limite de débit) reporte tout le rappel au prochain
+ * passage, sans consommer d'envoi : sinon les membres du rôle attendraient une
+ * période entière, et un rappel à son dernier envoi s'effacerait sans les
+ * avoir servis. L'envoi qui suit reçoit cette liste et
+ * ne relit pas le rôle : une seconde lecture qui échouerait consommerait
+ * l'envoi. L'auteur est prévenu de chaque report, pour qu'un rappel bloqué ne
+ * paraisse pas actif.
+ * @returns Les membres du rôle, ou `null` si le rappel est reporté.
+ */
+async function readRoleMembers(client: Client,
+                               interval: adhesionIntervalIds,
+                               guild: Guild,
+                               role: Role,
+                               user: User): Promise<GuildMember[] | null> {
+    try {
+        return await readAdhesionRoleMembers(guild, role);
+    } catch (e) {
+        // La raison (message discord.js, sans nom) permet de distinguer une
+        // panne passagère d'un échec qui se répéterait à chaque passage.
+        const reason = e instanceof Error ? e.message : String(e);
+        await sendLog(client, "Interval n°" + interval.id + " : membres du rôle injoignables pour l'instant, report (" + reason + ").");
+        await safeUser(client, user, undefined, undefined, reminderPostponedNotice(interval.id, role.name));
         return null;
     }
 }
