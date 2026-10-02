@@ -23,7 +23,7 @@ import type { ChatInputCommandInteraction, Client } from "discord.js";
  * privés, journal) et la valeur rendue.
  */
 
-type FakeUser = { id: string; send: (payload: unknown) => Promise<unknown> };
+type FakeUser = { id: string; bot: boolean; send: (payload: unknown) => Promise<unknown> };
 type FakeRole = { id: string; admin: boolean; members: string[] };
 
 type ServerSetup = {
@@ -45,6 +45,8 @@ type ServerSetup = {
 function fakeClient(trace: string[], setup: ServerSetup): Client {
   const user = (id: string): FakeUser => ({
     id,
+    // Convention des tests : un identifiant préfixé « bot » est un bot.
+    bot: id.startsWith("bot"),
     send: async (payload: unknown) => {
       if (setup.closedDms?.includes(id)) throw new Error("Cannot send messages to this user");
       const text = typeof payload === "string" ? payload : String((payload as { content?: unknown }).content ?? "");
@@ -236,6 +238,16 @@ test("@everyone administrateur : lu dans le seul cache, sans récupérer tout le
   const client = fakeClient(trace, { roles: [{ id: "g9", admin: true, members: ["k1", "x1", "x2"] }], memberFetch: "ok" });
   assert.equal(await contactAdminServer(client, undefined, "g9", "Alerte"), true);
   assert.deepEqual(trace, ["guilds.fetch g9", "dm:k1 Alerte"]);
+});
+
+test("bots des rôles d'administration : écartés, ni MP ni échec ; le propriétaire si seuls des bots", async () => {
+  await setAdminRole("g9", null);
+  const trace: string[] = [];
+  const roles = [{ id: "admin", admin: true, members: ["bot1", "a1", "bot2"] }];
+  assert.equal(await contactAdminServer(fakeClient(trace, { roles }), undefined, "g9", "m"), true);
+  const botsOnly = [{ id: "admin", admin: true, members: ["bot1"] }];
+  assert.equal(await contactAdminServer(fakeClient(trace, { roles: botsOnly }), undefined, "g9", "m"), true);
+  assert.deepEqual(trace, ["guilds.fetch g9", "dm:a1 m", "guilds.fetch g9", "users.fetch proprio", "dm:proprio m"]);
 });
 
 test("membres illisibles : une seule tentative, journal sans nom, les connus servis, l'auteur averti", async () => {
