@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>JSDoc: Source: commandsHandlers/recrute.js</title>
+    <title>JSDoc: Source: utils/displayNameLabel.js</title>
 
     <script src="scripts/prettify/prettify.js"> </script>
     <script src="scripts/prettify/lang-css.js"> </script>
@@ -17,7 +17,7 @@
 
 <div id="main">
 
-    <h1 class="page-title">Source: commandsHandlers/recrute.js</h1>
+    <h1 class="page-title">Source: utils/displayNameLabel.js</h1>
 
     
 
@@ -27,52 +27,36 @@
     <section>
         <article>
             <pre class="prettyprint source linenums"><code>/**
- * Handler de `/recrute` : publie une recherche d'equipe ou de staff, pour
- * Marvel Rivals uniquement (comme toutes les recherches du bot).
+ * Nom d'un utilisateur prêt à être cité dans un message du bot.
  *
- * Verifie le module "recrutement" avant d'ecrire, sinon un serveur qui l'a
- * desactive verrait quand meme des entrees s'accumuler en base et remonter
- * dans les stats — desactiver un module doit couper l'ecriture, pas juste
- * l'affichage.
+ * Le nom d'affichage est choisi par la personne : cité tel quel, `**`, `||`
+ * ou un lien masqué `[texte](adresse)` y changent la mise en forme du message,
+ * et un `@everyone` ou un `&lt;@id>` s'y lisent comme une mention. `globalName`
+ * vaut `null` pour qui n'en a pas choisi : le message disait alors « null ».
  */
-import { safeReply } from "../safe/safeReply.js";
-import { sendLog } from "../safe/sendLog.js";
-import { getBddInstance } from "../bdd/Bdd.js";
-import { recordEvent } from "../feed/feedBus.js";
-import { isModuleEnabled } from "../modules/moduleGuard.js";
-import { choiceLabel, RECRUIT_ROLE_CHOICES } from "../config/searchChoices.js";
+import { escapeMarkdown } from "discord.js";
+/** Libellé neutre quand l'utilisateur n'a aucun nom lisible. */
+const NO_DISPLAY_NAME = "membre sans pseudo";
 /**
- * @param client Client Discord, utilise pour le feed d'evenements et les logs.
- * @param interaction Interaction `/recrute` (option `role` requise).
- * @param guildId Serveur d'origine ; `null` en DM, auquel cas le module n'est pas verifie.
+ * Cite le nom d'affichage d'un utilisateur, à défaut son nom d'utilisateur,
+ * mise en forme et mentions neutralisées ; sans nom lisible, un libellé
+ * neutre.
+ * @param user Utilisateur à citer.
+ * @returns Le nom, sûr à insérer dans un message Discord.
  */
-export async function recrute(client, interaction, guildId) {
-    try {
-        const role = interaction.options.getString("role", true);
-        const label = choiceLabel(RECRUIT_ROLE_CHOICES, role);
-        if (label === null) {
-            // Client resté sur l'ancienne définition (texte libre) : rien n'est écrit.
-            await safeReply(interaction, "Role inconnu : choisis-le dans la liste proposee par la commande.", true, false);
-            return;
-        }
-        if (guildId &amp;&amp; !(await isModuleEnabled(guildId, "recrutement"))) {
-            await safeReply(interaction, "Le module Recrutement est desactive sur ce serveur.", true, false);
-            return;
-        }
-        const bdd = await getBddInstance();
-        const status = await bdd.set("Recrute", ["id_author", "role", "id_guild"], [interaction.user.id, role, guildId]);
-        if (!status.success) {
-            await safeReply(interaction, "Erreur lors de l'enregistrement de la recherche.", true, false);
-            return;
-        }
-        await recordEvent(client, "recr", `Recherche ${label}`, interaction.guild?.name ?? null, null);
-        await safeReply(interaction, `Recherche publiee : **${label}**.`, false, false);
-    }
-    catch (err) {
-        await sendLog(client, `recrute handler error: ${err.message}`);
-    }
+function displayNameLabel(user) {
+    // Les blancs (sauts de ligne compris) se réduisent à une espace : un nom
+    // ne doit pas ouvrir une ligne de plus dans un avis ligne par ligne.
+    const clean = (name) => (name ?? "").replace(/\s+/g, " ").trim();
+    const name = clean(user.globalName) || clean(user.username);
+    if (name === "")
+        return NO_DISPLAY_NAME;
+    // Une espace sans largeur après chaque @ : ni `@everyone` ni `&lt;@id>` ne
+    // forment plus de mention, le texte affiché reste le même.
+    return escapeMarkdown(name, { maskedLink: true }).replace(/@/g, "@​");
 }
-//# sourceMappingURL=recrute.js.map</code></pre>
+export { displayNameLabel, NO_DISPLAY_NAME };
+//# sourceMappingURL=displayNameLabel.js.map</code></pre>
         </article>
     </section>
 
