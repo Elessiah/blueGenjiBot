@@ -6,7 +6,7 @@ import {safeUser} from "@/safe/safeUser.js";
 import {removeIntervalle} from "@/adhesion/removeIntervalle.js";
 import {checkTargets} from "@/adhesion/checkTargets.js";
 import {isGone} from "@/adhesion/isGone.js";
-import {fetchRoleMembers} from "@/utils/fetchRoleMembers.js";
+import {readAdhesionRoleMembers} from "@/adhesion/adhesionRecipients.js";
 import {reminderPostponedNotice} from "@/adhesion/adhesionNotices.js";
 
 /**
@@ -175,7 +175,7 @@ async function readRoleMembers(client: Client,
                                role: Role,
                                user: User): Promise<GuildMember[] | null> {
     try {
-        return await fetchRoleMembers(guild, role);
+        return await readAdhesionRoleMembers(guild, role);
     } catch (e) {
         // La raison (message discord.js, sans nom) permet de distinguer une
         // panne passagère d'un échec qui se répéterait à chaque passage.

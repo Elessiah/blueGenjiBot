@@ -1,4 +1,4 @@
-import type {Client, GuildMember, Role, User} from "discord.js";
+import type {Client, Guild, GuildMember, Role, User} from "discord.js";
 import {logAdhesionError} from "@/adhesion/adhesionLog.js";
 import {fetchRoleMembers} from "@/utils/fetchRoleMembers.js";
 
@@ -9,6 +9,23 @@ type AdhesionRecipients = {
     /** Un rôle était visé mais ses membres n'ont pas pu être lus. */
     roleUnreadable: boolean,
 };
+
+/**
+ * Membres d'un rôle visé par une adhésion.
+ *
+ * `@everyone` (dont l'identifiant est celui du serveur) reste lu dans le seul
+ * cache, comme avant la récupération complète : la récupérer enverrait les
+ * papiers en MP à tout le serveur. Le refuser ou plafonner les envois est une
+ * décision à prendre, pas un correctif.
+ * @param guild Serveur du rôle.
+ * @param role Rôle visé.
+ * @returns Les membres du rôle.
+ * @throws L'erreur de la récupération des membres du serveur.
+ */
+async function readAdhesionRoleMembers(guild: Guild, role: Role): Promise<GuildMember[]> {
+    if (role.id === guild.id) return [...role.members.values()];
+    return await fetchRoleMembers(guild, role);
+}
 
 /**
  * Liste les utilisateurs à servir en MP : les membres du rôle, puis le membre
@@ -33,7 +50,7 @@ async function collectRecipients(client: Client,
     let roleUnreadable = false;
     if (role !== null) {
         try {
-            const members = knownRoleMembers ?? await fetchRoleMembers(role.guild, role);
+            const members = knownRoleMembers ?? await readAdhesionRoleMembers(role.guild, role);
             // Un bot ne reçoit pas de MP : il ne compterait que pour un échec.
             recipients.push(...members.filter(m => !m.user.bot).map(m => m.user));
         } catch (err) {
@@ -47,5 +64,5 @@ async function collectRecipients(client: Client,
     return {recipients, roleUnreadable};
 }
 
-export {collectRecipients};
+export {collectRecipients, readAdhesionRoleMembers};
 export type {AdhesionRecipients};
