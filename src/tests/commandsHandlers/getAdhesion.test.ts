@@ -32,6 +32,8 @@ type Setup = {
   admin?: boolean;
   /** La récupération des membres du serveur lève (cache incomplet). */
   fetchFails?: boolean;
+  /** Un salon est aussi demandé. */
+  channel?: boolean;
 };
 
 /**
@@ -67,12 +69,22 @@ function fakeInteraction(trace: string[], setup: Setup): ChatInputCommandInterac
     followUp: record("followUp"),
     options: {
       getString: (name: string) => (name === "interval" ? setup.interval ?? null : null),
-      getChannel: () => null,
+      getChannel: () => (setup.channel ? { name: "general", guild, send: record("channel:general") } : null),
       getMember: () => null,
       getRole: () => role,
     },
   } as unknown as ChatInputCommandInteraction;
 }
+
+// Fichiers d'adhésion valides : un envoi qui part va jusqu'au bout.
+fs.writeFileSync(path.join(TMP_DIR, "adhesion.pdf"), "adhesion");
+fs.writeFileSync(path.join(TMP_DIR, "statut.pdf"), "statut");
+fs.writeFileSync(path.join(TMP_DIR, "paths.json"), JSON.stringify({
+  adhesion: path.join(TMP_DIR, "adhesion.pdf"), adhesionName: "adhesion.pdf",
+  status: path.join(TMP_DIR, "statut.pdf"), statusName: "statut.pdf",
+}));
+const PAPERS = "Voici les papiers pour l'adhésion à l'association BlueGenji :";
+const PERMISSION_WARNING = "\nVous n'avez pas les permissions pour envoyer un message ailleurs que dans vos MP !";
 
 const quietClient = { users: { fetch: async () => ({ send: async () => ({}) }) }, channels: { fetch: async () => ({ send: async () => ({}) }) } } as unknown as Client;
 
@@ -101,14 +113,16 @@ test("rappel vers un rôle de 51 membres : refusé avant tout envoi, rien n'est 
 test("sans permission, @everyone n'est pas refusé : l'auteur reçoit sa propre copie", async () => {
   const trace: string[] = [];
   await getAdhesion(quietClient, fakeInteraction(trace, { everyone: true, admin: false }));
-  assert.equal(trace.includes("followUp " + EVERYONE_NOTICE), false);
-  assert.ok(trace.some((t) => t.startsWith("dm:author")));
+  assert.deepEqual(trace, [PENDING, "dm:author " + PAPERS + PERMISSION_WARNING, "followUp Envoi réussi !"]);
 });
 
 test("intervalle illisible : aucun rappel, l'envoi immédiat suit son cours sans refus de plafond", async () => {
   const trace: string[] = [];
   await getAdhesion(quietClient, fakeInteraction(trace, { members: 51, interval: "abc" }));
+  // Le plafond est vérifié à l'envoi même : refus en MP, aucun rappel.
   assert.equal(trace.some((t) => t.includes("Aucun rappel")), false);
+  assert.equal(trace.some((t) => t.startsWith("dm:u")), false);
+  assert.ok(trace.some((t) => t.startsWith("dm:author Envoi en message privé refusé")));
   assert.equal(trace.at(-1), "followUp Echec de l'envoi !");
 });
 
@@ -119,4 +133,18 @@ test("rappel vers un rôle illisible : refusé, rien n'est enregistré ni envoy�
     "Discord n'a pas permis de les lire, aucun ne les a reçus. Réessayez plus tard en ne visant que ce rôle ! " +
     "Aucun rappel n'a été enregistré."]);
   assert.equal(fs.existsSync(process.env.BDD_PATH ?? ""), false);
+});
+
+test("@everyone avec un salon : refusé en entier, l'avis dit que le salon n'a rien reçu", async () => {
+  const trace: string[] = [];
+  await getAdhesion(quietClient, fakeInteraction(trace, { everyone: true, channel: true }));
+  assert.deepEqual(trace, [PENDING, "followUp " + EVERYONE_NOTICE +
+    " Rien n'est parti, pas même dans le salon demandé : relancez la commande sans ce rôle."]);
+});
+
+test("rôle de 50 membres : tous servis, envoi réussi", async () => {
+  const trace: string[] = [];
+  await getAdhesion(quietClient, fakeInteraction(trace, { members: 50, interval: null }));
+  assert.equal(trace.filter((t) => t.startsWith("dm:u")).length, 50);
+  assert.equal(trace.at(-1), "followUp Envoi réussi !");
 });

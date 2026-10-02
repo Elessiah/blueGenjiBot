@@ -361,14 +361,15 @@ test("@everyone dans un rappel enregistré : refusé, le salon est servi quand m
   const rec = recorder();
   const bob = fakeUser(rec, "Bob");
   const interval = {
-    message: "", channel: fakeChannel(rec), member: null, role: fakeRole([bob], { everyone: true }),
+    id: 7, message: "", channel: fakeChannel(rec), member: null, role: fakeRole([bob], { everyone: true }),
     roleMembers: [fakeMember(bob)], author: author(rec),
   } as unknown as adhesionIntervalObj;
   const ok = await sendAdhesionReminder(fakeClient(rec), interval);
   assert.equal(ok, false);
   assert.equal(rec.trace.some((t) => t.to === "dm:Bob"), false);
   assert.equal(rec.trace[0].to, "channel:general");
-  assert.deepEqual(rec.trace.slice(-2), [log(EVERYONE_LOG), dm("author", EVERYONE_NOTICE)]);
+  assert.deepEqual(rec.trace.slice(-2), [log(EVERYONE_LOG), dm("author", EVERYONE_NOTICE +
+    " (Rappel n°7 : il sera refusé de même à chaque échéance, /delete-rappel-adhesion pour l'arrêter.)")]);
 });
 
 const users = (rec: Rec, n: number) => Array.from({ length: n }, (_, i) => fakeUser(rec, "M" + i));
