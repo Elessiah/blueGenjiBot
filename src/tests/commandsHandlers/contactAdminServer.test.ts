@@ -230,6 +230,14 @@ test("cache vide après redémarrage : les membres du serveur sont récupérés 
   ]);
 });
 
+test("@everyone administrateur : lu dans le seul cache, sans récupérer tout le serveur", async () => {
+  await setAdminRole("g9", null);
+  const trace: string[] = [];
+  const client = fakeClient(trace, { roles: [{ id: "g9", admin: true, members: ["k1", "x1", "x2"] }], memberFetch: "ok" });
+  assert.equal(await contactAdminServer(client, undefined, "g9", "Alerte"), true);
+  assert.deepEqual(trace, ["guilds.fetch g9", "dm:k1 Alerte"]);
+});
+
 test("membres illisibles : une seule tentative, journal sans nom, les connus servis, l'auteur averti", async () => {
   await setAdminRole("g9", "staff");
   const trace: string[] = [];
