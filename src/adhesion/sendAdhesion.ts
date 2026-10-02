@@ -145,14 +145,13 @@ async function deliverToRecipients(client: Client,
         await refuseRecipients(client, author, "sendAdhesion: rôle @everyone visé, envoi en MP refusé.", EVERYONE_REFUSED_NOTICE);
         return false;
     }
-    const {recipients, roleUnreadable} = await collectRecipients(client, targets.role, targets.member, targets.roleMembers);
+    const {recipients, roleCount, roleUnreadable} = await collectRecipients(client, targets.role, targets.member, targets.roleMembers);
     if (roleUnreadable) {
         await notifyRoleUnreadable(client, author, roleName);
         // Rôle illisible sans membre désigné : l'avis ci-dessus suffit.
         if (recipients.length === 0) return false;
     }
     if (recipients.length > MAX_ADHESION_DMS) {
-        const roleCount = recipients.length - (targets.member === null ? 0 : 1);
         await refuseRecipients(client, author,
             "sendAdhesion: " + recipients.length + " destinataires au-delà du plafond de " + MAX_ADHESION_DMS + ", envoi en MP refusé.",
             recipientCapNotice(roleName, roleCount, recipients.length, MAX_ADHESION_DMS));

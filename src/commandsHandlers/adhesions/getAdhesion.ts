@@ -5,8 +5,8 @@ import {safeReply} from "@/safe/safeReply.js";
 import {sendAdhesion} from "@/adhesion/sendAdhesion.js";
 import {setupIntervalAdhesion} from "@/adhesion/setupIntervalAdhesion.js";
 import {nextTransmissionAfter} from "@/adhesion/nextTransmission.js";
-import {isEveryoneRole} from "@/adhesion/adhesionRecipients.js";
-import {EVERYONE_REFUSED_NOTICE} from "@/adhesion/adhesionNotices.js";
+import {collectRecipients, isEveryoneRole, MAX_ADHESION_DMS} from "@/adhesion/adhesionRecipients.js";
+import {EVERYONE_REFUSED_NOTICE, recipientCapNotice} from "@/adhesion/adhesionNotices.js";
 
 /**
  * Récupère et envoie les fichiers d'adhésion configurés.
@@ -26,11 +26,6 @@ async function getAdhesion(client: Client,
     const channel: TextChannel | null = interaction.options.getChannel("channel");
     const member: GuildMember | null = interaction.options.getMember("membre") as GuildMember | null;
     const role: Role | null = interaction.options.getRole("role") as Role | null;
-    if (role !== null && isEveryoneRole(role)) {
-        // Refusé avant tout envoi et avant d'enregistrer un rappel.
-        await safeFollowUp(interaction, EVERYONE_REFUSED_NOTICE, true, []);
-        return;
-    }
     const interval: string | null = interaction.options.getString("interval");
     let intInterval: number = 0;
     if (interval != null) {
@@ -46,6 +41,10 @@ async function getAdhesion(client: Client,
         );
         return;
     }
+    // Sans permission, rien ne part vers le rôle : l'auteur reçoit sa copie.
+    if (!memberPermMissing && role !== null && await refusedRole(client, interaction, role, member, intInterval)) {
+        return;
+    }
     if (await sendAdhesion(client, message, channel, member, role, memberPermMissing, interaction.user))
         await safeFollowUp(interaction, "Envoi réussi !", true, []);
     else
@@ -59,6 +58,38 @@ async function getAdhesion(client: Client,
             { intInterval, nextTransmission }
         );
     }
+}
+
+/**
+ * Refuse, avant tout envoi et avant d'enregistrer un rappel, un rôle que
+ * l'envoi refuserait de toute façon : `@everyone`, et, pour un rappel, un rôle
+ * au-delà de `MAX_ADHESION_DMS` messages privés (sinon le rappel serait
+ * enregistré puis refusé à chaque échéance). Un envoi immédiat vérifie le
+ * plafond à l'envoi même, sans seconde lecture ici.
+ * @param client Client Discord utilisé pour le journal.
+ * @param interaction Interaction en cours, qui reçoit le refus.
+ * @param role Rôle visé.
+ * @param member Membre désigné en même temps, ou `null`.
+ * @param intInterval Intervalle du rappel demandé, `0` sans rappel.
+ * @returns `true` si l'envoi est refusé (l'auteur en est avisé).
+ */
+async function refusedRole(client: Client,
+                           interaction: ChatInputCommandInteraction,
+                           role: Role,
+                           member: GuildMember | null,
+                           intInterval: number): Promise<boolean> {
+    if (isEveryoneRole(role)) {
+        await safeFollowUp(interaction, EVERYONE_REFUSED_NOTICE, true, []);
+        return true;
+    }
+    if (intInterval <= 0) return false;
+    // Rôle illisible : l'envoi qui suit le signale lui-même.
+    const {recipients, roleCount, roleUnreadable} = await collectRecipients(client, role, member);
+    if (roleUnreadable || recipients.length <= MAX_ADHESION_DMS) return false;
+    await safeFollowUp(interaction,
+        recipientCapNotice(role.name, roleCount, recipients.length, MAX_ADHESION_DMS) + " Aucun rappel n'a été enregistré.",
+        true, []);
+    return true;
 }
 
 export {getAdhesion};

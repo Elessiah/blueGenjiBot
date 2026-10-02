@@ -19,8 +19,10 @@ function isEveryoneRole(role: Role): boolean {
 
 /** Destinataires d'un envoi en MP, et si les membres du rôle ont pu être lus. */
 type AdhesionRecipients = {
-    /** Utilisateurs à servir, dans l'ordre d'envoi (doublons conservés). */
+    /** Utilisateurs à servir, dans l'ordre d'envoi, chacun une seule fois. */
     recipients: User[],
+    /** Membres du rôle parmi `recipients` (bots écartés). */
+    roleCount: number,
     /** Un rôle était visé mais ses membres n'ont pas pu être lus. */
     roleUnreadable: boolean,
 };
@@ -46,7 +48,8 @@ async function readAdhesionRoleMembers(guild: Guild, role: Role): Promise<GuildM
  * désigné.
  *
  * Les membres du rôle sont lus après récupération des membres du serveur (le
- * cache seul paraît vide après un redémarrage) ; les bots en sont écartés. Si cette lecture échoue, elle
+ * cache seul paraît vide après un redémarrage) ; les bots en sont écartés. Le
+ * membre désigné, s'il est déjà du rôle, n'est pas servi deux fois. Si cette lecture échoue, elle
  * est journalisée sans aucun nom et signalée par `roleUnreadable` ; le membre
  * désigné, lu indépendamment, est servi quand même.
  * @param client Client Discord utilisé pour le journal.
@@ -62,20 +65,22 @@ async function collectRecipients(client: Client,
                                  knownRoleMembers: GuildMember[] | null = null): Promise<AdhesionRecipients> {
     const recipients: User[] = [];
     let roleUnreadable = false;
+    let roleCount = 0;
     if (role !== null) {
         try {
             const members = knownRoleMembers ?? await readAdhesionRoleMembers(role.guild, role);
             // Un bot ne reçoit pas de MP : il ne compterait que pour un échec.
             recipients.push(...members.filter(m => !m.user.bot).map(m => m.user));
+            roleCount = recipients.length;
         } catch (err) {
             roleUnreadable = true;
             await logAdhesionError(client, "sendAdhesion membres du rôle illisibles", err);
         }
     }
-    if (member) {
+    if (member && !recipients.some(u => u.id === member.user.id)) {
         recipients.push(member.user);
     }
-    return {recipients, roleUnreadable};
+    return {recipients, roleCount, roleUnreadable};
 }
 
 export {MAX_ADHESION_DMS, collectRecipients, isEveryoneRole, readAdhesionRoleMembers};
