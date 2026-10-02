@@ -369,7 +369,7 @@ test("@everyone dans un rappel enregistré : refusé, le salon est servi quand m
   assert.equal(rec.trace.some((t) => t.to === "dm:Bob"), false);
   assert.equal(rec.trace[0].to, "channel:general");
   assert.deepEqual(rec.trace.slice(-2), [log(EVERYONE_LOG), dm("author", EVERYONE_NOTICE +
-    " (Rappel n°7 : il sera refusé de même à chaque échéance, /delete-rappel-adhesion pour l'arrêter.)")]);
+    " (Rappel n°7 : chaque échéance sera refusée de même, et comptée comme un envoi du rappel ; /delete-rappel-adhesion pour l'arrêter.)")]);
 });
 
 const users = (rec: Rec, n: number) => Array.from({ length: n }, (_, i) => fakeUser(rec, "M" + i));
