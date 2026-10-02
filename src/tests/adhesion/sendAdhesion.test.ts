@@ -409,6 +409,17 @@ test("plafond : 50 membres du rôle plus un membre désigné dépassent la limit
   ]);
 });
 
+test("plafond : un membre désigné déjà du rôle n'est compté et servi qu'une fois", async () => {
+  validPaths();
+  const rec = recorder();
+  const members = users(rec, 50);
+  const role = Object.assign(fakeRole(members), { name: "Membres" });
+  const ok = await sendAdhesion(fakeClient(rec), null, null, fakeMember(members[0]), role, false, author(rec));
+  assert.equal(ok, true);
+  assert.equal(rec.trace.filter((t) => t.to === "dm:M0").length, 1);
+  assert.equal(rec.trace.filter((t) => t.to.startsWith("dm:M")).length, 50);
+});
+
 test("plafond : 49 membres du rôle plus un membre désigné restent servis", async () => {
   validPaths();
   const rec = recorder();
