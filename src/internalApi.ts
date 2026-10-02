@@ -159,6 +159,8 @@ function refuseUnjoinedGuild(client: Client, res: Response, guildId: string): bo
  * @returns Un entier fini.
  */
 function queryInteger(value: unknown, fallback: number): number {
+  // `Number("")` vaut 0 : un paramètre présent mais vide vaut absent.
+  if (typeof value === "string" && value.trim() === "") { return fallback; }
   const parsed = Number(value ?? fallback);
   return Number.isFinite(parsed) ? Math.trunc(parsed) : fallback;
 }
