@@ -1,8 +1,20 @@
 import type {AttachmentBuilder, Client, GuildMember, Role, TextChannel, User} from "discord.js";
 import {loadAdhesionAttachments} from "@/adhesion/adhesionAttachments.js";
-import {collectRecipients} from "@/adhesion/adhesionRecipients.js";
-import {deliverToAuthor, deliverToChannel, deliverToMembers, notifyRoleUnreadable} from "@/adhesion/adhesionDelivery.js";
-import {DEFAULT_ADHESION_MESSAGE, PERMISSION_WARNING} from "@/adhesion/adhesionNotices.js";
+import {collectRecipients, isEveryoneRole, MAX_ADHESION_DMS} from "@/adhesion/adhesionRecipients.js";
+import {
+    deliverToAuthor,
+    deliverToChannel,
+    deliverToMembers,
+    notifyRoleUnreadable,
+    refuseRecipients,
+} from "@/adhesion/adhesionDelivery.js";
+import {
+    DEFAULT_ADHESION_MESSAGE,
+    EVERYONE_REFUSED_NOTICE,
+    PERMISSION_WARNING,
+    recipientCapNotice,
+    reminderRefusedSuffix,
+} from "@/adhesion/adhesionNotices.js";
 import type {adhesionIntervalObj} from "@/adhesion/types.js";
 
 /** Cibles d'un envoi ; `null` pour une cible non demandée. */
@@ -12,6 +24,10 @@ type AdhesionTargets = {
     role: Role | null,
     /** Membres du rôle déjà lus (rappel automatique), ou `null` pour les lire à l'envoi. */
     roleMembers: GuildMember[] | null,
+    /** Numéro du rappel servi, ou `null` pour un envoi immédiat. */
+    reminderId: number | null,
+    /** Reçoit le texte de chaque refus, pour la réponse à la commande. */
+    refusals?: string[],
 };
 
 /**
@@ -26,6 +42,10 @@ type AdhesionTargets = {
  * @param role Rôle cible, ou `null` si aucun envoi par rôle n'est prévu.
  * @param memberPermMissing Indique si l'auteur manque de permissions pour des envois hors MP.
  * @param author Auteur du rappel, notifie en cas de succès/échec.
+ * @param options `refusals` reçoit le texte de chaque refus (plafond
+ *   dépassé), que la commande répète : l'auteur aux MP fermés le saurait sinon
+ *   jamais. `roleMembers` : membres du rôle déjà lus par l'appelant, servis
+ *   sans seconde lecture.
  * @returns `true` si tous les envois demandés aux cibles sélectionnées réussissent; `false` dès qu'au moins un envoi échoue.
  */
 async function sendAdhesion(client: Client,
@@ -34,8 +54,15 @@ async function sendAdhesion(client: Client,
                             member: GuildMember | null,
                             role: Role | null,
                             memberPermMissing: boolean,
-                            author: User): Promise<boolean> {
-    return await sendToTargets(client, message, {channel, member, role, roleMembers: null}, memberPermMissing, author);
+                            author: User,
+                            options: {refusals?: string[], roleMembers?: GuildMember[] | null} = {}): Promise<boolean> {
+    const targets: AdhesionTargets = {
+        channel, member, role,
+        roleMembers: options.roleMembers ?? null,
+        reminderId: null,
+        refusals: options.refusals,
+    };
+    return await sendToTargets(client, message, targets, memberPermMissing, author);
 }
 
 /**
@@ -52,6 +79,7 @@ async function sendAdhesionReminder(client: Client, interval: adhesionIntervalOb
         member: interval.member,
         role: interval.role,
         roleMembers: interval.roleMembers,
+        reminderId: interval.id,
     };
     return await sendToTargets(client, interval.message, targets, false, interval.author);
 }
@@ -114,7 +142,9 @@ async function deliverToTargets(client: Client,
 /**
  * Remet les papiers en MP aux membres du rôle et au membre désigné. Des
  * membres du rôle illisibles sont un échec, avisé à part ; le membre désigné
- * est servi quand même.
+ * est servi quand même. `@everyone` (rappel enregistré avant son refus) et un
+ * envoi au-delà de `MAX_ADHESION_DMS` messages privés sont refusés en entier :
+ * personne n'est servi, pas même le membre désigné.
  * @param client Client Discord utilisé pour les envois et le journal.
  * @param targets Cibles demandées (au moins un rôle ou un membre).
  * @param files Pièces jointes.
@@ -128,11 +158,26 @@ async function deliverToRecipients(client: Client,
                                    content: string,
                                    author: User): Promise<boolean> {
     const roleName = targets.role?.name ?? null;
-    const {recipients, roleUnreadable} = await collectRecipients(client, targets.role, targets.member, targets.roleMembers);
+    const suffix = (when: "always" | "overCap") =>
+        targets.reminderId === null ? "" : reminderRefusedSuffix(targets.reminderId, when);
+    if (targets.role !== null && isEveryoneRole(targets.role)) {
+        await refuseRecipients(client, author, "sendAdhesion: rôle @everyone visé, envoi en MP refusé.", EVERYONE_REFUSED_NOTICE + suffix("always"));
+        targets.refusals?.push(EVERYONE_REFUSED_NOTICE);
+        return false;
+    }
+    const {recipients, roleCount, roleUnreadable} = await collectRecipients(client, targets.role, targets.member, targets.roleMembers);
     if (roleUnreadable) {
         await notifyRoleUnreadable(client, author, roleName);
         // Rôle illisible sans membre désigné : l'avis ci-dessus suffit.
         if (recipients.length === 0) return false;
+    }
+    if (recipients.length > MAX_ADHESION_DMS) {
+        const notice = recipientCapNotice(roleName, roleCount, recipients.length, MAX_ADHESION_DMS);
+        await refuseRecipients(client, author,
+            "sendAdhesion: " + recipients.length + " destinataires au-delà du plafond de " + MAX_ADHESION_DMS + ", envoi en MP refusé.",
+            notice + suffix("overCap"));
+        targets.refusals?.push(notice);
+        return false;
     }
     return (await deliverToMembers(client, recipients, files, content, author, roleName)) && !roleUnreadable;
 }

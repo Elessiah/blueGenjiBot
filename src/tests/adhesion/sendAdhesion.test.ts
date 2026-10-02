@@ -331,24 +331,129 @@ test("les bots du rôle sont écartés : ni MP ni échec compté", async () => {
 test("beaucoup d'échecs : l'avis à l'auteur reste sous 2000 caractères et compte le reste", async () => {
   validPaths();
   const rec = recorder();
-  const users = Array.from({ length: 150 }, (_, i) => fakeUser(rec, "Membre-au-nom-assez-long-" + i, true));
+  const users = Array.from({ length: 50 }, (_, i) => fakeUser(rec, "Membre-au-nom-assez-long-" + i, true));
   const ok = await sendAdhesion(fakeClient(rec), null, null, null, fakeRole(users), false, author(rec));
   assert.equal(ok, false);
   const notice = rec.trace.at(-1);
   assert.equal(notice?.to, "dm:author");
   assert.ok((notice?.content.length ?? 0) <= 2000);
   const shown = (notice?.content.match(/^Echec de l'envoi pour /gm) ?? []).length;
-  assert.ok((notice?.content ?? "").endsWith("Et " + (150 - shown) + " autre(s) échec(s).\n"));
+  assert.ok((notice?.content ?? "").endsWith("Et " + (50 - shown) + " autre(s) échec(s).\n"));
 });
 
-test("@everyone : lu dans le seul cache, sans récupération du serveur entier", async () => {
+const EVERYONE_LOG = "sendAdhesion: rôle @everyone visé, envoi en MP refusé.";
+const EVERYONE_NOTICE = "Envoi refusé : le rôle @​everyone ne peut pas être visé, " +
+  "il enverrait les adhésions en message privé à tout le serveur. " +
+  "Visez un rôle plus restreint, ou envoyez-les dans un salon !";
+
+test("@everyone : refusé à l'envoi, sans récupération du serveur ni MP, même au membre désigné", async () => {
   validPaths();
   const rec = recorder();
-  const role = fakeRole([fakeUser(rec, "Bob")], { everyone: true });
-  const ok = await sendAdhesion(fakeClient(rec), null, null, null, role, false, author(rec));
+  const role = fakeRole([fakeUser(rec, "Bob")], { everyone: true, cached: true });
+  const ok = await sendAdhesion(fakeClient(rec), null, null, fakeMember(fakeUser(rec, "Alice")), role, false, author(rec));
   assert.equal(ok, false);
   assert.equal(role.fetches, 0);
-  assert.deepEqual(rec.trace, [log(NO_RECIPIENT_LOG), dm("author", NO_RECIPIENT_NOTICE)]);
+  assert.deepEqual(rec.trace, [log(EVERYONE_LOG), dm("author", EVERYONE_NOTICE)]);
+});
+
+test("@everyone dans un rappel enregistré : refusé, le salon est servi quand même", async () => {
+  validPaths();
+  const rec = recorder();
+  const bob = fakeUser(rec, "Bob");
+  const interval = {
+    id: 7, message: "", channel: fakeChannel(rec), member: null, role: fakeRole([bob], { everyone: true }),
+    roleMembers: [fakeMember(bob)], author: author(rec),
+  } as unknown as adhesionIntervalObj;
+  const ok = await sendAdhesionReminder(fakeClient(rec), interval);
+  assert.equal(ok, false);
+  assert.equal(rec.trace.some((t) => t.to === "dm:Bob"), false);
+  assert.equal(rec.trace[0].to, "channel:general");
+  assert.deepEqual(rec.trace.slice(-2), [log(EVERYONE_LOG), dm("author", EVERYONE_NOTICE +
+    " (Rappel n°7 : chaque échéance sera refusée de même, et comptée comme un envoi du rappel ; /delete-rappel-adhesion pour l'arrêter.)")]);
+});
+
+const users = (rec: Rec, n: number) => Array.from({ length: n }, (_, i) => fakeUser(rec, "M" + i));
+const capNotice = (count: string) => "Envoi en message privé refusé : Le rôle « Membres » compte " + count +
+  ", au-delà de la limite de 50 messages privés par envoi. Aucun membre n'a reçu les adhésions en message privé. " +
+  "Visez un rôle plus restreint, ou envoyez-les dans un salon !";
+
+test("plafond : 50 membres du rôle sont tous servis", async () => {
+  validPaths();
+  const rec = recorder();
+  const role = Object.assign(fakeRole(users(rec, 50)), { name: "Membres" });
+  const ok = await sendAdhesion(fakeClient(rec), null, null, null, role, false, author(rec));
+  assert.equal(ok, true);
+  assert.equal(rec.trace.filter((t) => t.to.startsWith("dm:M")).length, 50);
+});
+
+test("plafond : 51 membres, rien ne part, l'auteur apprend le compte et la limite, journal sans nom", async () => {
+  validPaths();
+  const rec = recorder();
+  const role = Object.assign(fakeRole(users(rec, 51)), { name: "Membres" });
+  const ok = await sendAdhesion(fakeClient(rec), null, null, null, role, false, author(rec));
+  assert.equal(ok, false);
+  assert.deepEqual(rec.trace, [
+    log("sendAdhesion: 51 destinataires au-delà du plafond de 50, envoi en MP refusé."),
+    dm("author", capNotice("51 membres")),
+  ]);
+});
+
+test("plafond : 50 membres du rôle plus un membre désigné dépassent la limite, personne n'est servi", async () => {
+  validPaths();
+  const rec = recorder();
+  const role = Object.assign(fakeRole(users(rec, 50)), { name: "Membres" });
+  const ok = await sendAdhesion(fakeClient(rec), null, null, fakeMember(fakeUser(rec, "Alice")), role, false, author(rec));
+  assert.equal(ok, false);
+  assert.deepEqual(rec.trace, [
+    log("sendAdhesion: 51 destinataires au-delà du plafond de 50, envoi en MP refusé."),
+    dm("author", capNotice("50 membres (51 messages privés avec le membre désigné)")),
+  ]);
+});
+
+test("plafond : un membre désigné déjà du rôle n'est compté et servi qu'une fois", async () => {
+  validPaths();
+  const rec = recorder();
+  const members = users(rec, 50);
+  const role = Object.assign(fakeRole(members), { name: "Membres" });
+  const ok = await sendAdhesion(fakeClient(rec), null, null, fakeMember(members[0]), role, false, author(rec));
+  assert.equal(ok, true);
+  assert.equal(rec.trace.filter((t) => t.to === "dm:M0").length, 1);
+  assert.equal(rec.trace.filter((t) => t.to.startsWith("dm:M")).length, 50);
+});
+
+test("plafond dans un rappel : refusé, l'avis dit que seules les échéances encore au-delà le seront", async () => {
+  validPaths();
+  const rec = recorder();
+  const members = users(rec, 51);
+  const interval = {
+    id: 8, message: "", channel: null, member: null, role: Object.assign(fakeRole(members), { name: "Membres" }),
+    roleMembers: members.map(fakeMember), author: author(rec),
+  } as unknown as adhesionIntervalObj;
+  const ok = await sendAdhesionReminder(fakeClient(rec), interval);
+  assert.equal(ok, false);
+  assert.deepEqual(rec.trace.at(-1), dm("author", capNotice("51 membres") +
+    " (Rappel n°8 : chaque échéance où le rôle dépasse encore la limite sera refusée de même, " +
+    "et comptée comme un envoi du rappel ; /delete-rappel-adhesion pour l'arrêter.)"));
+});
+
+test("plafond : 49 membres du rôle plus un membre désigné restent servis", async () => {
+  validPaths();
+  const rec = recorder();
+  const role = Object.assign(fakeRole(users(rec, 49)), { name: "Membres" });
+  const ok = await sendAdhesion(fakeClient(rec), null, null, fakeMember(fakeUser(rec, "Alice")), role, false, author(rec));
+  assert.equal(ok, true);
+  assert.equal(rec.trace.filter((t) => t.to.startsWith("dm:")).length, 51);
+});
+
+test("plafond : un salon demandé avec un rôle trop grand est servi, les MP refusés", async () => {
+  validPaths();
+  const rec = recorder();
+  const role = Object.assign(fakeRole(users(rec, 60)), { name: "Membres" });
+  const ok = await sendAdhesion(fakeClient(rec), null, fakeChannel(rec), null, role, false, author(rec));
+  assert.equal(ok, false);
+  assert.equal(rec.trace[0].to, "channel:general");
+  assert.equal(rec.trace.some((t) => t.to.startsWith("dm:M")), false);
+  assert.deepEqual(rec.trace.at(-1), dm("author", capNotice("60 membres")));
 });
 
 test("membres du rôle déjà lus (rappel) : servis tels quels, sans seconde lecture qui pourrait échouer", async () => {
