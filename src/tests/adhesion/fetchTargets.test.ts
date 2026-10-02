@@ -236,7 +236,7 @@ test("rôle en panne passagère : report journalisé sans nom, l'auteur prévenu
   assert.deepEqual(r.trace, [
     "users.fetch auteur-1", "guilds.fetch guild-1", "channels.fetch c1", "roles.fetch r1",
     `log Interval n°${r.id} : rôle injoignable pour l'instant, report (Service Unavailable).`,
-    `dm:auteur-1 Rappel d'adhésion n°${r.id} reporté : Discord n'a pas permis de lire les membres du rôle visé. ` +
+    `dm:auteur-1 Rappel d'adhésion n°${r.id} reporté : Discord n'a pas permis de lire le rôle visé. ` +
       "Rien n'est parti, nouvel essai à la prochaine vérification (/delete-rappel-adhesion pour l'arrêter).",
   ]);
   assert.equal(r.interval.role_id, "r1");
