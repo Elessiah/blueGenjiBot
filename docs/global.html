@@ -10384,7 +10384,7 @@ avertissement si des cibles lui ont été refusées faute de permission.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="adhesion_sendAdhesion.js.html">adhesion/sendAdhesion.js</a>, <a href="adhesion_sendAdhesion.js.html#line145">line 145</a>
+        <a href="adhesion_sendAdhesion.js.html">adhesion/sendAdhesion.js</a>, <a href="adhesion_sendAdhesion.js.html#line144">line 144</a>
     </li></ul></dd>
     
 
@@ -19776,7 +19776,7 @@ personne n'est servi, pas même le membre désigné.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="adhesion_sendAdhesion.js.html">adhesion/sendAdhesion.js</a>, <a href="adhesion_sendAdhesion.js.html#line107">line 107</a>
+        <a href="adhesion_sendAdhesion.js.html">adhesion/sendAdhesion.js</a>, <a href="adhesion_sendAdhesion.js.html#line106">line 106</a>
     </li></ul></dd>
     
 
@@ -19990,7 +19990,7 @@ personne n'est servi, pas même le membre désigné.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="adhesion_sendAdhesion.js.html">adhesion/sendAdhesion.js</a>, <a href="adhesion_sendAdhesion.js.html#line84">line 84</a>
+        <a href="adhesion_sendAdhesion.js.html">adhesion/sendAdhesion.js</a>, <a href="adhesion_sendAdhesion.js.html#line83">line 83</a>
     </li></ul></dd>
     
 
@@ -28606,7 +28606,7 @@ il court-circuite la vérification de permission `CreateInstantInvite` de l'aute
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="adhesion_sendAdhesion.js.html">adhesion/sendAdhesion.js</a>, <a href="adhesion_sendAdhesion.js.html#line134">line 134</a>
+        <a href="adhesion_sendAdhesion.js.html">adhesion/sendAdhesion.js</a>, <a href="adhesion_sendAdhesion.js.html#line133">line 133</a>
     </li></ul></dd>
     
 
@@ -51049,7 +51049,7 @@ ce qu'on ne sait pas dater) — mais il l'est après une restauration réussie.
     
 
     
-    <h4 class="name" id="sendAdhesion"><span class="type-signature">(async) </span>sendAdhesion<span class="signature">(client, message, channel, member, role, memberPermMissing, author, options)</span><span class="type-signature"></span></h4>
+    <h4 class="name" id="sendAdhesion"><span class="type-signature">(async) </span>sendAdhesion<span class="signature">(client, message, targets, memberPermMissing, author, options)</span><span class="type-signature"></span></h4>
     
 
     
@@ -51132,7 +51132,7 @@ papiers partent en MP à l'auteur lui-même.
 
         <tr>
             
-                <td class="name"><code>channel</code></td>
+                <td class="name"><code>targets</code></td>
             
 
             <td class="type">
@@ -51143,43 +51143,8 @@ papiers partent en MP à l'auteur lui-même.
 
             
 
-            <td class="description last">Canal cible, ou `null` si aucun envoi en canal n'est prévu.</td>
-        </tr>
-
-    
-
-        <tr>
-            
-                <td class="name"><code>member</code></td>
-            
-
-            <td class="type">
-            
-            </td>
-
-            
-
-            
-
-            <td class="description last">Membre cible, ou `null` si aucun envoi individuel n'est prévu.</td>
-        </tr>
-
-    
-
-        <tr>
-            
-                <td class="name"><code>role</code></td>
-            
-
-            <td class="type">
-            
-            </td>
-
-            
-
-            
-
-            <td class="description last">Rôle cible, ou `null` si aucun envoi par rôle n'est prévu.</td>
+            <td class="description last">Cibles choisies : `channel` (canal), `member` (membre) et
+  `role` (rôle), chacune `null` quand aucun envoi de ce type n'est prévu.</td>
         </tr>
 
     
@@ -51277,7 +51242,7 @@ papiers partent en MP à l'auteur lui-même.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="adhesion_sendAdhesion.js.html">adhesion/sendAdhesion.js</a>, <a href="adhesion_sendAdhesion.js.html#line23">line 23</a>
+        <a href="adhesion_sendAdhesion.js.html">adhesion/sendAdhesion.js</a>, <a href="adhesion_sendAdhesion.js.html#line22">line 22</a>
     </li></ul></dd>
     
 
@@ -51439,7 +51404,7 @@ qui échouerait consommerait l'envoi sans servir personne.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="adhesion_sendAdhesion.js.html">adhesion/sendAdhesion.js</a>, <a href="adhesion_sendAdhesion.js.html#line40">line 40</a>
+        <a href="adhesion_sendAdhesion.js.html">adhesion/sendAdhesion.js</a>, <a href="adhesion_sendAdhesion.js.html#line39">line 39</a>
     </li></ul></dd>
     
 
@@ -52889,7 +52854,7 @@ miroir chiffré des images, clé publique à comparer à la copie hors ligne).
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="adhesion_sendAdhesion.js.html">adhesion/sendAdhesion.js</a>, <a href="adhesion_sendAdhesion.js.html#line59">line 59</a>
+        <a href="adhesion_sendAdhesion.js.html">adhesion/sendAdhesion.js</a>, <a href="adhesion_sendAdhesion.js.html#line58">line 58</a>
     </li></ul></dd>
     
 
@@ -57138,7 +57103,7 @@ production avec un fichier corrompu serait pire que l'absence de restauration.
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Fri Oct 02 2026 11:10:59 GMT+0200 (heure d’été d’Europe centrale)
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Fri Oct 02 2026 14:01:57 GMT+0200 (heure d’été d’Europe centrale)
 </footer>
 
 <script> prettyPrint(); </script>
