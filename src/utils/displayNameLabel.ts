@@ -27,7 +27,7 @@ function displayNameLabel(user: Pick<User, "globalName" | "username">): string {
     if (name === "") return NO_DISPLAY_NAME;
     // Une espace sans largeur après chaque @ : ni `@everyone` ni `<@id>` ne
     // forment plus de mention, le texte affiché reste le même.
-    return escapeMarkdown(name, {maskedLink: true}).replace(/@/g, "@​");
+    return escapeMarkdown(name, {maskedLink: true}).replaceAll("@", "@​");
 }
 
 export {displayNameLabel, NO_DISPLAY_NAME};
