@@ -397,17 +397,19 @@ test("checkUploadsMirror est sans objet quand aucune image n'est sauvegardée", 
   assert.match(result.detail, /sans objet/);
 });
 
+/** Archive locale lisible : `age` rend une tar, `tar` en liste les deux dumps. */
+const local: SpawnFn = (command, _args, options) =>
+  spawn(
+    process.execPath,
+    ["-e", command === "age" ? `process.stdout.write("TAR")` : `process.stdin.resume(); process.stdin.on("end", () => process.stdout.write("database.sqlite\\nappbluegenji.sql\\n"))`],
+    options,
+  );
+
 test("checkLatestArchive ne s'annonce pas réussie quand une source n'a pas répondu", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bg-check-"));
   try {
     fs.writeFileSync(path.join(dir, "bluegenji-2026-09-21.tar.age"), "");
     const logged: string[] = [];
-    const local: SpawnFn = (command, _args, options) =>
-      spawn(
-        process.execPath,
-        ["-e", command === "age" ? `process.stdout.write("TAR")` : `process.stdin.resume(); process.stdin.on("end", () => process.stdout.write("database.sqlite\\nappbluegenji.sql\\n"))`],
-        options,
-      );
     const result = await checkLatestArchive(
       config({ sources: { localDir: dir, remote: "store:b", identity: "/k/id.key" } }),
       { run: fakeRun({ "rclone lsf": new Error("dial tcp host.example.invalid") }), spawnFn: local, log: (l) => logged.push(l) },
@@ -425,12 +427,6 @@ test("checkLatestArchive nomme la commande manquante quand seule la source local
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bg-check-"));
   try {
     fs.writeFileSync(path.join(dir, "bluegenji-2026-09-21.tar.age"), "");
-    const local: SpawnFn = (command, _args, options) =>
-      spawn(
-        process.execPath,
-        ["-e", command === "age" ? `process.stdout.write("TAR")` : `process.stdin.resume(); process.stdin.on("end", () => process.stdout.write("database.sqlite\\nappbluegenji.sql\\n"))`],
-        options,
-      );
     const run: CommandRunner = async () => {
       throw new MissingCommandError("rclone");
     };

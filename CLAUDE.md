@@ -35,7 +35,7 @@ node --test "dist/tests/path/to/file.test.js"  # un seul fichier, après build
 - **Flux d'activité** : rien de ce qui entre dans `recordEvent()` ne nomme une personne (règle posée dans `recordEvent`, unique écrivain).
 - **Journal Discord** : un identifiant, **jamais un pseudo**.
 - **Commandes** : enregistrées par `updateCommands()`, déclarées dans `config/commands.ts` ou `fillBlueCommands()`.
-- **Tests** : `node:test` sur `dist/`. **Lint** : ESLint 10 flat, `src/` seul.
+- **Tests** : `node:test` sur `dist/`. **Lint** : ESLint 10 flat + SonarJS (complexité cognitive ≤ 15), `src/` seul.
 - **Variables d'environnement** : `.env.example` fait foi → `dev-notes/ENVIRONMENT.md`.
 - **Données d'un serveur** : une table de configuration se range dans `GUILD_CONFIG_TABLES`, une table par salon dans `Bdd.deleteChannel` ; l'oubli d'un serveur passe par `eraseGuild` seul → `dev-notes/LEGAL_AND_DATA.md`.
 

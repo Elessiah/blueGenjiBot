@@ -8,6 +8,7 @@
 import js from "@eslint/js";
 import globals from "globals";
 import tseslint from "typescript-eslint";
+import sonarjs from "eslint-plugin-sonarjs";
 
 export default tseslint.config(
   {
@@ -21,6 +22,21 @@ export default tseslint.config(
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
+  // Règles SonarQube : la CI refuse tout nouveau constat (dev-notes/STACK.md).
+  sonarjs.configs.recommended,
+  {
+    rules: {
+      "sonarjs/cognitive-complexity": ["error", 15],
+      // Points chauds de sécurité côté SonarQube (revus un à un, pas des
+      // « issues ») : ESLint ne sait pas marquer un point revu, il crierait à
+      // chaque IP de test, `http://` local, `/tmp` ou binaire système appelé.
+      "sonarjs/no-hardcoded-ip": "off",
+      "sonarjs/no-clear-text-protocols": "off",
+      "sonarjs/super-linear-regex": "off",
+      "sonarjs/publicly-writable-directories": "off",
+      "sonarjs/no-os-command-from-path": "off",
+    },
+  },
   {
     languageOptions: {
       ecmaVersion: "latest",
