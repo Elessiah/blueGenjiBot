@@ -148,6 +148,22 @@ function refuseUnjoinedGuild(client: Client, res: Response, guildId: string): bo
 }
 
 /**
+ * Lit un entier dans la chaîne de requête, avec repli.
+ *
+ * `Number("abc")` vaut `NaN`, que `Math.min`/`Math.max` propagent : la
+ * pagination de `/internal/servers` rendait alors une liste vide et
+ * `limit: null`. Une valeur illisible prend le défaut, une fraction est
+ * tronquée (une tranche de 2,5 serveurs n'existe pas).
+ * @param value Valeur brute de `req.query`.
+ * @param fallback Valeur retenue si `value` est absente ou non numérique.
+ * @returns Un entier fini.
+ */
+function queryInteger(value: unknown, fallback: number): number {
+  const parsed = Number(value ?? fallback);
+  return Number.isFinite(parsed) ? Math.trunc(parsed) : fallback;
+}
+
+/**
  * Construit, monte et demarre le serveur Express de l'API interne.
  *
  * Le port reste en ecoute sur `INTERNAL_API_HOST` (127.0.0.1 par defaut) et
@@ -564,8 +580,8 @@ export function startInternalApi(client: Client) {
 
   app.get("/internal/servers", async (req: Request, res: Response) => {
     try {
-      const limit = Math.max(1, Math.min(100, Number(req.query.limit ?? 8)));
-      const offset = Math.max(0, Number(req.query.offset ?? 0));
+      const limit = Math.max(1, Math.min(100, queryInteger(req.query.limit, 8)));
+      const offset = Math.max(0, queryInteger(req.query.offset, 0));
       const bdd = await getBddInstance();
 
       const guilds = Array.from(client.guilds.cache.values());
