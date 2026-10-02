@@ -19,6 +19,8 @@ Options:
 - `channel` (salon, optionnel): salon cible.
 - `membre` (utilisateur, optionnel): membre cible en message prive.
 - `role` (role, optionnel): envoi en message prive a tous les membres du role (les bots du role sont ignores).
+- Le role `@everyone` est refuse (envoi immediat comme rappel automatique): il enverrait les papiers en prive a tout le serveur. La commande repond par un message qui le dit, rien n'est envoye ni enregistre. Pour toucher tout le serveur, utiliser `channel`.
+- Un envoi est limite a 50 messages prives (membres du `role` hors bots, plus le `membre` designe). Au-dela, personne ne recoit les papiers en prive (aucun tri arbitraire): l'auteur recoit un avis qui donne le nombre de membres du role et la limite, et la commande repond "Echec de l'envoi !". Un `channel` demande en meme temps recoit quand meme les papiers. Un rappel automatique vers un role trop grand (ou vers `@everyone`, s'il a ete cree avant ce refus) est refuse de la meme facon a chaque echeance: le reduire, ou l'arreter avec `/delete-rappel-adhesion`.
 - `interval` (texte, optionnel): intervalle en jours pour un envoi automatique.
 
 Comportement:
