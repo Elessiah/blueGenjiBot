@@ -46,14 +46,29 @@ function memberDeliveredNotice(recipient: User): string {
  * (Discord n'a pas répondu à temps, ou a limité le débit) : aucun d'eux n'a
  * reçu les papiers. Un membre désigné en même temps a son propre avis. Le
  * texte invite à réessayer plus tard plutôt qu'à corriger la cible, qui n'est
- * pas en cause.
+ * pas en cause, et à ne viser que le rôle : un salon ou un membre servis en
+ * même temps recevraient les papiers deux fois.
  * @param roleName Nom du rôle visé, ou `null` s'il est inconnu.
  * @returns Le texte de l'avis.
  */
 function roleUnreadableNotice(roleName: string | null): string {
     const role = roleName === null ? "du rôle visé" : "du rôle « " + escapeMarkdown(roleName) + " »";
     return "Echec de l'envoi des adhésions en message privé aux membres " + role +
-        " : Discord n'a pas permis de les lire, aucun ne les a reçus. Réessayez plus tard !";
+        " : Discord n'a pas permis de les lire, aucun ne les a reçus. Réessayez plus tard en ne visant que ce rôle !";
+}
+
+/**
+ * Avis à l'auteur d'un rappel reporté faute de pouvoir lire les membres de son
+ * rôle : sans lui, un rappel reporté chaque jour paraîtrait actif sans que rien
+ * ne parte. Il dit que tout le rappel attend, et comment l'arrêter.
+ * @param intervalId Numéro du rappel, tel que l'affiche `/show-rappel-adhesion`.
+ * @param roleName Nom du rôle visé.
+ * @returns Le texte de l'avis.
+ */
+function reminderPostponedNotice(intervalId: number, roleName: string): string {
+    return "Rappel d'adhésion n°" + intervalId + " reporté : Discord n'a pas permis de lire les membres du rôle « " +
+        escapeMarkdown(roleName) + " ». Rien n'est parti, nouvel essai à la prochaine vérification " +
+        "(/delete-rappel-adhesion pour l'arrêter).";
 }
 
 /**
@@ -89,5 +104,6 @@ export {
     memberDeliveredNotice,
     noRecipientNotice,
     roleUnreadableNotice,
+    reminderPostponedNotice,
     memberFailedLine,
 };

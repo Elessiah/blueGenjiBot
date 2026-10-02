@@ -7,6 +7,7 @@ import {removeIntervalle} from "@/adhesion/removeIntervalle.js";
 import {checkTargets} from "@/adhesion/checkTargets.js";
 import {isGone} from "@/adhesion/isGone.js";
 import {fetchRoleMembers} from "@/utils/fetchRoleMembers.js";
+import {reminderPostponedNotice} from "@/adhesion/adhesionNotices.js";
 
 /**
  * Lecture reportée au prochain passage : Discord a échoué sans dire que l'objet
@@ -36,7 +37,7 @@ async function fetchTargets(client: Client, bdd: Bdd, interval: adhesionInterval
     const role = await resolveRole(client, bdd, interval, guild, user);
     const member = await resolveMember(client, bdd, interval, guild, user);
     if (member === POSTPONED) return null;
-    if (role !== null && !(await roleMembersReadable(client, interval, guild, role))) return null;
+    if (role !== null && !(await roleMembersReadable(client, interval, guild, role, user))) return null;
 
     return {
         id: interval.id,
@@ -161,18 +162,21 @@ async function resolveMember(client: Client,
  * prochain passage, sans consommer d'envoi : sinon les membres du rôle
  * attendraient une période entière, et un rappel à son dernier envoi
  * s'effacerait sans les avoir servis. L'envoi qui suit relit le rôle sans
- * nouvelle récupération, le cache étant alors complet.
+ * nouvelle récupération, le cache étant alors complet. L'auteur est prévenu
+ * de chaque report, pour qu'un rappel bloqué ne paraisse pas actif.
  * @returns `true` si les membres du rôle sont lisibles.
  */
 async function roleMembersReadable(client: Client,
                                    interval: adhesionIntervalIds,
                                    guild: Guild,
-                                   role: Role): Promise<boolean> {
+                                   role: Role,
+                                   user: User): Promise<boolean> {
     try {
         await fetchRoleMembers(guild, role);
         return true;
     } catch {
         await sendLog(client, "Interval n°" + interval.id + " : membres du rôle injoignables pour l'instant, report.");
+        await safeUser(client, user, undefined, undefined, reminderPostponedNotice(interval.id, role.name));
         return false;
     }
 }
