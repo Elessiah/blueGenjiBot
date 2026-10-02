@@ -452,6 +452,13 @@ test("/internal/servers : limit/offset illisibles retombent sur les valeurs par 
   assert.equal(res.body.limit, 8);
   assert.equal(res.body.offset, 0);
   assert.equal((res.body.servers as unknown[]).length, 2);
+
+  const empty = await call("/internal/servers?limit=&offset=%20");
+  assert.equal(empty.body.limit, 8, "paramètre vide : défaut, pas 0 borné à 1");
+  assert.equal(empty.body.offset, 0);
+
+  const fraction = await call("/internal/servers?limit=1.9");
+  assert.equal(fraction.body.limit, 1, "fraction tronquée");
 });
 
 // --- Activité (plages 7j / 30j / 90j) ---------------------------------------
