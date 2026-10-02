@@ -166,11 +166,17 @@ async function collectAdmins(client: Client, server: Guild): Promise<AdminTarget
 
 /**
  * Ajoute les membres du rôle admin configuré par `/set-admin-role`, s'il y en
- * a un ; un rôle introuvable ou illisible est journalisé.
+ * a un ; un rôle introuvable ou illisible est journalisé. `@everyone` configuré
+ * est écarté et journalisé, pour la même raison que parmi les rôles
+ * Administrateur : le message partirait en MP au serveur entier.
  */
 async function addConfiguredAdmins(client: Client, server: Guild, targets: Map<string, User>, reader: RoleReader): Promise<void> {
     const adminRoleId = await getAdminRole(server);
     if (!adminRoleId) {
+        return;
+    }
+    if (adminRoleId === server.id) {
+        await sendLog(client, `Configured admin role is the everyone role on guild '${server.id}', ignored.`);
         return;
     }
     let configuredRole: Role | null;
