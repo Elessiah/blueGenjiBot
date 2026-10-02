@@ -6,7 +6,10 @@ import {sendAdhesion} from "@/adhesion/sendAdhesion.js";
 import {setupIntervalAdhesion} from "@/adhesion/setupIntervalAdhesion.js";
 import {nextTransmissionAfter} from "@/adhesion/nextTransmission.js";
 import {collectRecipients, isEveryoneRole, MAX_ADHESION_DMS} from "@/adhesion/adhesionRecipients.js";
-import {EVERYONE_REFUSED_NOTICE, recipientCapNotice} from "@/adhesion/adhesionNotices.js";
+import {EVERYONE_REFUSED_NOTICE, recipientCapNotice, roleUnreadableNotice} from "@/adhesion/adhesionNotices.js";
+
+/** Ajouté à un refus prononcé à la création d'un rappel. */
+const REMINDER_NOT_SAVED = " Aucun rappel n'a été enregistré.";
 
 /**
  * Récupère et envoie les fichiers d'adhésion configurés.
@@ -82,12 +85,18 @@ async function refusedRole(client: Client,
         await safeFollowUp(interaction, EVERYONE_REFUSED_NOTICE, true, []);
         return true;
     }
-    if (intInterval <= 0) return false;
-    // Rôle illisible : l'envoi qui suit le signale lui-même.
+    // `!(… > 0)` et non `<= 0` : un intervalle illisible (`NaN`) n'est pas un rappel.
+    if (!(intInterval > 0)) return false;
     const {recipients, roleCount, roleUnreadable} = await collectRecipients(client, role, member);
-    if (roleUnreadable || recipients.length <= MAX_ADHESION_DMS) return false;
+    // Rôle illisible : le plafond ne peut pas être vérifié, le rappel n'est pas
+    // enregistré (la lecture en échec est déjà journalisée).
+    if (roleUnreadable) {
+        await safeFollowUp(interaction, roleUnreadableNotice(role.name) + REMINDER_NOT_SAVED, true, []);
+        return true;
+    }
+    if (recipients.length <= MAX_ADHESION_DMS) return false;
     await safeFollowUp(interaction,
-        recipientCapNotice(role.name, roleCount, recipients.length, MAX_ADHESION_DMS) + " Aucun rappel n'a été enregistré.",
+        recipientCapNotice(role.name, roleCount, recipients.length, MAX_ADHESION_DMS) + REMINDER_NOT_SAVED,
         true, []);
     return true;
 }
