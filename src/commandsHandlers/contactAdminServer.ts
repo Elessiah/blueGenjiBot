@@ -39,12 +39,14 @@ async function contactAdminServer(client: Client,
     if (!server) {
         return false;
     }
-    const {targets, incomplete} = await collectAdmins(client, server);
     const content = interaction ? interaction.options.getString("message") ?? undefined : msg;
     if (!content) {
         await refuse(client, interaction, "Parameter 'message' not found. Please try again.");
         return false;
     }
+    // Après le refus d'un message vide : la lecture des administrateurs peut
+    // récupérer tous les membres du serveur, limitée en débit par Discord.
+    const {targets, incomplete} = await collectAdmins(client, server);
     await sendToAdmins(client, targets, content);
     if (interaction)
         await safeReply(interaction, `Message successfully sent to ${targets.length} admin(s) !` +
