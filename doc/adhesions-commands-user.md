@@ -26,7 +26,7 @@ Comportement:
 - Si l'auteur n'a pas les permissions admin du bot, les envois vers `channel`/`membre`/`role` sont ignores et le bot envoie en prive a l'auteur.
 - Les membres du `role` sont lus apres recuperation de la liste des membres du serveur: un role peuple n'apparait plus vide apres un redemarrage du bot.
 - Si le bot ne trouve personne a servir en prive (aucun membre dans le `role` vise, sans `membre` designe), personne ne recoit les papiers en prive: l'auteur recoit un avis qui nomme le role et le dit, et la commande repond "Echec de l'envoi !". Un `channel` demande en meme temps recoit quand meme les papiers (et l'auteur en est avise): ne pas relancer la commande pour lui. Un rappel automatique vers ce role previent l'auteur de la meme facon a chaque echeance.
-- Si Discord ne permet pas de lire les membres du `role` (delai depasse, limite de debit), aucun d'eux ne recoit les papiers: l'auteur recoit un avis qui nomme le role et l'invite a reessayer plus tard, et la commande repond "Echec de l'envoi !". Le `membre` designe en meme temps est servi quand meme, avec sa propre confirmation. (Pour un rappel automatique, voir plus bas: il est reporte.)
+- Si Discord ne permet pas de lire les membres du `role` (delai depasse, limite de debit), aucun d'eux ne recoit les papiers: l'auteur recoit un avis qui nomme le role et l'invite a reessayer plus tard en ne visant que ce role (un `channel` ou un `membre` servis en meme temps recevraient sinon les papiers deux fois), et la commande repond "Echec de l'envoi !". Le `membre` designe en meme temps est servi quand meme, avec sa propre confirmation. (Pour un rappel automatique, voir plus bas: il est reporte.)
 - Si `interval` est defini a une valeur > 0 et que l'auteur n'a pas les permissions, la programmation est refusee.
 - En cas de programmation, le prochain envoi est prevu a 10:00 (heure Europe/Paris) apres le nombre de jours indique.
 - L'intervalle est un nombre de jours, **sans plafond**: le rappel se repete
@@ -133,7 +133,7 @@ Exemple:
 - Le bot verifie les rappels a chaque demarrage.
 - Ensuite, verification quotidienne a 10:00 (Europe/Paris).
 - Quand une cible (salon/role/membre) n'existe plus, elle est retiree du rappel.
-- Si Discord ne permet pas de lire les membres du role vise (delai depasse, limite de debit), le rappel entier est reporte a la verification suivante: rien n'est envoye et aucun envoi n'est consomme.
+- Si Discord ne permet pas de lire les membres du role vise (delai depasse, limite de debit), le rappel entier (salon et membre compris) est reporte a la verification suivante: rien n'est envoye, aucun envoi n'est consomme, et l'auteur recoit un avis qui nomme le rappel et le role a chaque report. Si les reports se repetent, `/delete-rappel-adhesion` arrete le rappel.
 - Si un rappel n'a plus aucune cible, il est supprime.
 - Un rappel a nombre d'envois fini (`/adhesion-valide`) est supprime apres son
   dernier envoi; un rappel recurrent (`/get-adhesion`) n'a pas de terme et ne
