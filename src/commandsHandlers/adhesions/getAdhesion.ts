@@ -5,7 +5,8 @@ import {safeReply} from "@/safe/safeReply.js";
 import {sendAdhesion} from "@/adhesion/sendAdhesion.js";
 import {setupIntervalAdhesion} from "@/adhesion/setupIntervalAdhesion.js";
 import {nextTransmissionAfter} from "@/adhesion/nextTransmission.js";
-import {collectRecipients, isEveryoneRole, MAX_ADHESION_DMS} from "@/adhesion/adhesionRecipients.js";
+import {collectRecipients, isEveryoneRole, MAX_ADHESION_DMS, readAdhesionRoleMembers} from "@/adhesion/adhesionRecipients.js";
+import {logAdhesionError} from "@/adhesion/adhesionLog.js";
 import {EVERYONE_REFUSED_NOTICE, recipientCapNotice, roleUnreadableNotice} from "@/adhesion/adhesionNotices.js";
 
 /** Ajouté à un refus prononcé à la création d'un rappel. */
@@ -48,11 +49,14 @@ async function getAdhesion(client: Client,
         return;
     }
     // Sans permission, rien ne part vers le rôle : l'auteur reçoit sa copie.
-    if (!memberPermMissing && role !== null && await refusedRole(client, interaction, role, member, intInterval, channel !== null)) {
-        return;
+    let roleMembers: GuildMember[] | null = null;
+    if (!memberPermMissing && role !== null) {
+        const check = await checkRole(client, interaction, role, member, intInterval, channel !== null);
+        if (check === REFUSED) return;
+        roleMembers = check;
     }
     const refusals: string[] = [];
-    if (await sendAdhesion(client, message, channel, member, role, memberPermMissing, interaction.user, refusals))
+    if (await sendAdhesion(client, message, channel, member, role, memberPermMissing, interaction.user, {refusals, roleMembers}))
         await safeFollowUp(interaction, "Envoi réussi !", true, []);
     else
         await safeFollowUp(interaction, ["Echec de l'envoi !", ...refusals].join("\n"), true, []);
@@ -67,12 +71,17 @@ async function getAdhesion(client: Client,
     }
 }
 
+/** Rendu par {@link checkRole} quand la commande est refusée. */
+const REFUSED = Symbol("refused");
+
 /**
  * Refuse, avant tout envoi et avant d'enregistrer un rappel, un rôle que
  * l'envoi refuserait de toute façon : `@everyone`, et, pour un rappel, un rôle
  * au-delà de `MAX_ADHESION_DMS` messages privés (sinon le rappel serait
  * enregistré puis refusé à chaque échéance). Un envoi immédiat vérifie le
- * plafond à l'envoi même, sans seconde lecture ici.
+ * plafond à l'envoi même, sans seconde lecture ici ; pour un rappel, les
+ * membres lus ici sont rendus pour que l'envoi ne les relise pas (une seconde
+ * récupération pourrait être limitée par Discord).
  * @param client Client Discord utilisé pour le journal.
  * @param interaction Interaction en cours, qui reçoit le refus.
  * @param role Rôle visé.
@@ -80,33 +89,38 @@ async function getAdhesion(client: Client,
  * @param intInterval Intervalle du rappel demandé, `0` sans rappel.
  * @param withChannel Un salon était aussi demandé : le refus dit qu'il n'a
  *   rien reçu.
- * @returns `true` si l'envoi est refusé (l'auteur en est avisé).
+ * @returns `REFUSED` si l'envoi est refusé (l'auteur en est avisé), sinon les
+ *   membres du rôle déjà lus, ou `null` s'ils restent à lire.
  */
-async function refusedRole(client: Client,
+async function checkRole(client: Client,
                            interaction: ChatInputCommandInteraction,
                            role: Role,
                            member: GuildMember | null,
                            intInterval: number,
-                           withChannel: boolean): Promise<boolean> {
+                           withChannel: boolean): Promise<GuildMember[] | null | typeof REFUSED> {
     const channelNote = withChannel ? CHANNEL_NOT_SERVED : "";
     if (isEveryoneRole(role)) {
         await safeFollowUp(interaction, EVERYONE_REFUSED_NOTICE + channelNote, true, []);
-        return true;
+        return REFUSED;
     }
     // Un intervalle illisible (`NaN`) n'est pas un rappel, pas plus que `0`.
-    if (Number.isNaN(intInterval) || intInterval <= 0) return false;
-    const {recipients, roleCount, roleUnreadable} = await collectRecipients(client, role, member);
-    // Rôle illisible : le plafond ne peut pas être vérifié, le rappel n'est pas
-    // enregistré (la lecture en échec est déjà journalisée).
-    if (roleUnreadable) {
+    if (Number.isNaN(intInterval) || intInterval <= 0) return null;
+    let members: GuildMember[];
+    try {
+        members = await readAdhesionRoleMembers(role.guild, role);
+    } catch (err) {
+        // Rôle illisible : le plafond ne peut pas être vérifié, le rappel
+        // n'est pas enregistré.
+        await logAdhesionError(client, "getAdhesion membres du rôle illisibles", err);
         await safeFollowUp(interaction, roleUnreadableNotice(role.name) + REMINDER_NOT_SAVED + channelNote, true, []);
-        return true;
+        return REFUSED;
     }
-    if (recipients.length <= MAX_ADHESION_DMS) return false;
+    const {recipients, roleCount} = await collectRecipients(client, role, member, members);
+    if (recipients.length <= MAX_ADHESION_DMS) return members;
     await safeFollowUp(interaction,
         recipientCapNotice(role.name, roleCount, recipients.length, MAX_ADHESION_DMS) + REMINDER_NOT_SAVED + channelNote,
         true, []);
-    return true;
+    return REFUSED;
 }
 
 export {getAdhesion};

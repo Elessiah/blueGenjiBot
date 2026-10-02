@@ -42,8 +42,10 @@ type AdhesionTargets = {
  * @param role Rôle cible, ou `null` si aucun envoi par rôle n'est prévu.
  * @param memberPermMissing Indique si l'auteur manque de permissions pour des envois hors MP.
  * @param author Auteur du rappel, notifie en cas de succès/échec.
- * @param refusals Reçoit le texte de chaque refus (plafond dépassé), que la
- *   commande répète : l'auteur aux MP fermés le saurait sinon jamais.
+ * @param options `refusals` reçoit le texte de chaque refus (plafond
+ *   dépassé), que la commande répète : l'auteur aux MP fermés le saurait sinon
+ *   jamais. `roleMembers` : membres du rôle déjà lus par l'appelant, servis
+ *   sans seconde lecture.
  * @returns `true` si tous les envois demandés aux cibles sélectionnées réussissent; `false` dès qu'au moins un envoi échoue.
  */
 async function sendAdhesion(client: Client,
@@ -53,8 +55,13 @@ async function sendAdhesion(client: Client,
                             role: Role | null,
                             memberPermMissing: boolean,
                             author: User,
-                            refusals: string[] = []): Promise<boolean> {
-    const targets: AdhesionTargets = {channel, member, role, roleMembers: null, reminderId: null, refusals};
+                            options: {refusals?: string[], roleMembers?: GuildMember[] | null} = {}): Promise<boolean> {
+    const targets: AdhesionTargets = {
+        channel, member, role,
+        roleMembers: options.roleMembers ?? null,
+        reminderId: null,
+        refusals: options.refusals,
+    };
     return await sendToTargets(client, message, targets, memberPermMissing, author);
 }
 

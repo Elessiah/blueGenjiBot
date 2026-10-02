@@ -98,8 +98,9 @@ const EVERYONE_REFUSED_NOTICE = "Envoi refusé : le rôle @\u200beveryone ne peu
     "Visez un rôle plus restreint, ou envoyez-les dans un salon !";
 
 /**
- * Refus d'un envoi en MP au-delà du plafond : personne ne reçoit les papiers
- * (servir une partie choisirait arbitrairement qui). Le texte donne le nombre
+ * Refus d'un envoi en MP au-delà du plafond : aucun membre ne reçoit les
+ * papiers en MP (servir une partie choisirait arbitrairement qui) ; un salon
+ * demandé en même temps, lui, les a reçus. Le texte donne le nombre
  * de membres du rôle et la limite, pour que l'auteur sache quoi corriger ; un
  * membre désigné en même temps est compté dans le total annoncé.
  * @param roleName Nom du rôle visé, ou `null` s'il est inconnu.
@@ -112,7 +113,7 @@ function recipientCapNotice(roleName: string | null, roleCount: number, total: n
     const role = roleName === null ? "Le rôle visé" : "Le rôle « " + escapeMarkdown(roleName) + " »";
     const withMember = total > roleCount ? " (" + total + " messages privés avec le membre désigné)" : "";
     return "Envoi en message privé refusé : " + role + " compte " + roleCount + " membres" + withMember +
-        ", au-delà de la limite de " + cap + " messages privés par envoi. Personne n'a reçu les adhésions. " +
+        ", au-delà de la limite de " + cap + " messages privés par envoi. Aucun membre n'a reçu les adhésions en message privé. " +
         "Visez un rôle plus restreint, ou envoyez-les dans un salon !";
 }
 
