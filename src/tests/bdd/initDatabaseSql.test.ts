@@ -10,7 +10,7 @@ import { ranks, services } from "../../utils/globals.js";
  * SQLite : chaque instruction, dans l'ordre, avec ses paramètres, et le
  * libellé de chaque étape. Une base factice enregistre les appels ; les
  * empreintes ont été relevées avant la mise en commun des étapes du schéma
- * (`SCHEMA_STEPS`), qui ne devait rien changer.
+ * (`Bdd.schemaSteps()`), qui ne devait rien changer.
  */
 
 type Call = [method: string, sql: string, params?: unknown];
