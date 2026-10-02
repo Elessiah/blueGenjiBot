@@ -59,7 +59,7 @@ test("getSnapshotsBetween retourne un tableau (vide si pas de match)", async () 
 });
 
 test.after(async () => {
-  closeBddInstance();
+  await closeBddInstance();
   await new Promise((r) => setTimeout(r, 50));
   try { fs.unlinkSync(TMP_DB); } catch { /* noop */ }
 });

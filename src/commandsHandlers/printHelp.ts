@@ -16,6 +16,11 @@ const HELP_CHUNK_MAX_LENGTH = 1900;
  */
 function splitForDiscord(content: string, maxLength: number = HELP_CHUNK_MAX_LENGTH): string[] {
     const normalized = content.replaceAll("\r\n", "\n").trim();
+    // Un texte vide ne fait aucun bloc : Discord refuse un message vide, et
+    // l'appelant a un message d'indisponibilité pour ce cas.
+    if (normalized.length === 0) {
+        return [];
+    }
     if (normalized.length <= maxLength) {
         return [normalized];
     }

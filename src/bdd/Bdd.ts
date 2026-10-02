@@ -790,7 +790,7 @@ class Bdd {
       }
 
     if (index_elem && index_elem.length > 0) {
-      orderClause += `ORDER BY ${index_elem}`;
+      orderClause += ` ORDER BY ${index_elem}`;
       if (is_ascending === true) {
         orderClause += ' ASC';
       } else if (is_ascending === false) {

@@ -38,7 +38,7 @@ test("bdd.raw supporte les requetes GROUP BY (cas reel: stats par bucket)", asyn
 });
 
 test.after(async () => {
-  closeBddInstance();
+  await closeBddInstance();
   await new Promise((r) => setTimeout(r, 50));
   try {
     fs.unlinkSync(TMP_DB);

@@ -134,7 +134,7 @@ test("/recrute enregistre la valeur et affiche le libelle ; refuse un role hors 
 });
 
 test.after(async () => {
-  closeBddInstance();
+  await closeBddInstance();
   await new Promise((r) => setTimeout(r, 50));
   try { fs.unlinkSync(TMP_DB); } catch { /* noop */ }
 });

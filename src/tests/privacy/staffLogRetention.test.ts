@@ -182,7 +182,7 @@ test("purgeLogChannel s'arrête au plafond de pages sur un historique sans fin",
 });
 
 test.after(async () => {
-  closeBddInstance();
+  await closeBddInstance();
   await new Promise((r) => setTimeout(r, 50));
   try { fs.unlinkSync(TMP_DB); } catch { /* noop */ }
 });

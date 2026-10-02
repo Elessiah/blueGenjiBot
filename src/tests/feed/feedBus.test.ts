@@ -143,7 +143,6 @@ test("purgeOldFeedEvents supprime les evenements de plus de N jours, et eux seul
 });
 
 test.after(async () => {
-  closeBddInstance();
-  await new Promise((r) => setTimeout(r, 50));
+  await closeBddInstance();
   try { fs.unlinkSync(TMP_DB); } catch { /* noop */ }
 });

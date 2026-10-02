@@ -40,7 +40,7 @@ test("removeServerInvite supprime un lien et renvoie true, puis false si absent"
 });
 
 test.after(async () => {
-  closeBddInstance();
+  await closeBddInstance();
   if (fs.existsSync(TMP_DB)) {
     fs.unlinkSync(TMP_DB);
   }

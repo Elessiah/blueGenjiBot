@@ -51,7 +51,7 @@ test("listModules retourne les 3 modules; defaut true sans preference", async ()
 });
 
 test.after(async () => {
-  closeBddInstance();
+  await closeBddInstance();
   // Petit delai pour laisser sqlite fermer le handle Windows
   await new Promise((r) => setTimeout(r, 50));
   try { fs.unlinkSync(TMP_DB); } catch { /* noop */ }
