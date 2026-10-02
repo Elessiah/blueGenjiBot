@@ -14,7 +14,8 @@ process.env.ADHESIONS_PATH = TMP_DIR;
 process.env.OWNER_ID = "owner-1";
 process.env.INFO_SERV = "admin-channel-1";
 
-import { sendAdhesion } from "../../adhesion/sendAdhesion.js";
+import { sendAdhesion, sendAdhesionReminder } from "../../adhesion/sendAdhesion.js";
+import type { adhesionIntervalObj } from "../../adhesion/types.js";
 
 /**
  * Caractérisation de `sendAdhesion` : chaque scénario fige, dans l'ordre, tout
@@ -328,7 +329,10 @@ test("membres du rôle déjà lus (rappel) : servis tels quels, sans seconde lec
   const rec = recorder();
   const bob = fakeUser(rec, "Bob");
   const role = fakeRole([bob], { fetchFails: true });
-  const ok = await sendAdhesion(fakeClient(rec), null, null, null, role, false, author(rec), [fakeMember(bob)]);
+  const interval = {
+    message: "", channel: null, member: null, role, roleMembers: [fakeMember(bob)], author: author(rec),
+  } as unknown as adhesionIntervalObj;
+  const ok = await sendAdhesionReminder(fakeClient(rec), interval);
   assert.equal(ok, true);
   assert.equal(role.fetches, 0);
   assert.deepEqual(rec.trace, [dm("Bob", DEFAULT_MESSAGE, FILES), dm("author", "Adhésion envoyée avec succès à Bob !")]);
