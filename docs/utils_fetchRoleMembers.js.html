@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>JSDoc: Source: backup/backupStatus.js</title>
+    <title>JSDoc: Source: utils/fetchRoleMembers.js</title>
 
     <script src="scripts/prettify/prettify.js"> </script>
     <script src="scripts/prettify/lang-css.js"> </script>
@@ -17,7 +17,7 @@
 
 <div id="main">
 
-    <h1 class="page-title">Source: backup/backupStatus.js</h1>
+    <h1 class="page-title">Source: utils/fetchRoleMembers.js</h1>
 
     
 
@@ -26,73 +26,38 @@
     
     <section>
         <article>
-            <pre class="prettyprint source linenums"><code>import fs from "node:fs";
-/** Au-delà de ce délai, une sauvegarde distante réussie n'est plus une garantie. */
-export const STALE_AFTER_MS = 8 * 24 * 60 * 60 * 1000;
-/**
- * Lit le statut de la dernière sauvegarde distante.
+            <pre class="prettyprint source linenums"><code>/**
+ * Lit les membres d'un rôle sans se fier au seul cache du bot.
  *
- * Le script tourne en cron système, indépendamment du bot : le fichier peut
- * donc être absent (script pas encore installé) ou illisible sans que ce soit
- * une anomalie du bot.
- * @param statusPath Chemin du fichier de statut JSON.
- * @returns Le statut lu, ou `null` s'il est absent ou invalide.
+ * `role.members` ne filtre que les membres déjà en cache : après un
+ * redémarrage, un rôle peuplé paraît vide tant que la guilde n'a pas été
+ * récupérée. Partagé par l'alerte aux arbitres et l'envoi des adhésions.
  */
-export async function readBackupStatus(statusPath) {
-    try {
-        const raw = await fs.promises.readFile(statusPath, "utf8");
-        const parsed = JSON.parse(raw);
-        if (typeof parsed.date !== "string" || typeof parsed.ok !== "boolean") {
-            return null;
-        }
-        return {
-            date: parsed.date,
-            ok: parsed.ok,
-            remote: parsed.remote ?? "",
-            sizeBytes: typeof parsed.sizeBytes === "number" ? parsed.sizeBytes : 0,
-            parts: parsed.parts ?? "",
-            error: parsed.error ?? "",
-        };
-    }
-    catch {
-        return null;
-    }
-}
 /**
- * Indique si le statut atteste d'une sauvegarde distante récente et réussie.
+ * Membres d'un rôle, après récupération de tous les membres du serveur si le
+ * cache est incomplet.
  *
- * Tant que ce n'est pas le cas, la pièce jointe Discord reste envoyée : mieux
- * vaut une sauvegarde redondante qu'aucune.
- * @param status Statut lu, ou `null`.
- * @param now Horloge injectable, pour les tests.
- * @returns `true` si le stockage distant couvre déjà la sauvegarde de la semaine.
+ * La récupération complète est limitée en débit par Discord (par serveur) :
+ * elle n'est demandée que si le cache compte moins de membres que le serveur,
+ * si bien que plusieurs lectures d'un même serveur dans un passage n'en
+ * coûtent qu'une. Le délai reste celui de discord.js.
+ *
+ * @param guild Serveur du rôle.
+ * @param role Rôle à lire.
+ * @returns Les membres du rôle, dans l'ordre du cache.
+ * @throws L'erreur de la récupération (délai dépassé, limite de débit,
+ *   passerelle) : à l'appelant de décider quoi en faire.
  */
-export function isBackupFresh(status, now = Date.now()) {
-    if (!status?.ok) {
-        return false;
+async function fetchRoleMembers(guild, role) {
+    // Négation plutôt que `&lt;` : un compte inconnu (`memberCount` absent) force
+    // la récupération au lieu de se fier au cache.
+    if (!(guild.members.cache.size >= guild.memberCount)) {
+        await guild.members.fetch();
     }
-    const date = Date.parse(status.date);
-    return Number.isFinite(date) &amp;&amp; now - date &lt; STALE_AFTER_MS;
+    return [...role.members.values()];
 }
-/**
- * Met en forme la ligne du stockage distant jointe au rapport hebdomadaire.
- * @param status Statut lu, ou `null` si le script n'a jamais tourné.
- * @param now Horloge injectable, pour les tests.
- * @returns Une ligne prête à être envoyée en message privé.
- */
-export function formatBackupStatus(status, now = Date.now()) {
-    if (!status) {
-        return "☁️ Stockage distant : aucune sauvegarde enregistrée (script non installé ?).";
-    }
-    const day = status.date.slice(0, 10);
-    if (!status.ok) {
-        return `❌ Stockage distant : échec du ${day} — ${status.error || "cause inconnue"}.`;
-    }
-    const size = `${(status.sizeBytes / 1024 / 1024).toFixed(1).replace(".", ",")} Mo`;
-    const line = `Stockage distant : ${status.parts || "base"} sauvegardée le ${day} (${size}).`;
-    return isBackupFresh(status, now) ? `☁️ ${line}` : `⚠️ ${line} Sauvegarde périmée.`;
-}
-//# sourceMappingURL=backupStatus.js.map</code></pre>
+export { fetchRoleMembers };
+//# sourceMappingURL=fetchRoleMembers.js.map</code></pre>
         </article>
     </section>
 
