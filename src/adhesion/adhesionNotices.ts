@@ -1,4 +1,5 @@
 import {escapeMarkdown, type User} from "discord.js";
+import {displayNameLabel} from "@/utils/displayNameLabel.js";
 
 /**
  * Textes de l'envoi des adhésions : le message joint aux papiers et les avis
@@ -38,7 +39,7 @@ function channelDeliveredNotice(channelName: string): string {
  * @returns Le texte de l'avis.
  */
 function memberDeliveredNotice(recipient: User): string {
-    return "Adhésion envoyée avec succès à " + recipient.globalName + " !";
+    return "Adhésion envoyée avec succès à " + displayNameLabel(recipient) + " !";
 }
 
 /**
@@ -58,16 +59,19 @@ function roleUnreadableNotice(roleName: string | null): string {
 }
 
 /**
- * Avis à l'auteur d'un rappel reporté faute de pouvoir lire les membres de son
- * rôle : sans lui, un rappel reporté chaque jour paraîtrait actif sans que rien
- * ne parte. Il dit que tout le rappel attend, et comment l'arrêter.
+ * Avis à l'auteur d'un rappel reporté faute de pouvoir lire son rôle ou les
+ * membres de celui-ci : sans lui, un rappel reporté chaque jour paraîtrait
+ * actif sans que rien ne parte. Il dit que tout le rappel attend, et comment
+ * l'arrêter.
  * @param intervalId Numéro du rappel, tel que l'affiche `/show-rappel-adhesion`.
- * @param roleName Nom du rôle visé.
+ * @param roleName Nom du rôle visé, ou `null` si le rôle lui-même n'a pas pu
+ *   être lu.
  * @returns Le texte de l'avis.
  */
-function reminderPostponedNotice(intervalId: number, roleName: string): string {
-    return "Rappel d'adhésion n°" + intervalId + " reporté : Discord n'a pas permis de lire les membres du rôle « " +
-        escapeMarkdown(roleName) + " ». Rien n'est parti, nouvel essai à la prochaine vérification " +
+function reminderPostponedNotice(intervalId: number, roleName: string | null): string {
+    const role = roleName === null ? "du rôle visé" : "du rôle « " + escapeMarkdown(roleName) + " »";
+    return "Rappel d'adhésion n°" + intervalId + " reporté : Discord n'a pas permis de lire les membres " +
+        role + ". Rien n'est parti, nouvel essai à la prochaine vérification " +
         "(/delete-rappel-adhesion pour l'arrêter).";
 }
 
@@ -111,12 +115,14 @@ function membersFailedNotice(failedLines: string[]): string {
 }
 
 /**
- * Ligne de l'avis d'échec pour un membre qui n'a pas reçu les papiers.
+ * Ligne de l'avis d'échec pour un membre qui n'a pas reçu les papiers. Le nom
+ * est cité par `displayNameLabel` (mise en forme et mentions neutralisées,
+ * libellé neutre sans nom).
  * @param recipient Membre non servi.
  * @returns La ligne, saut de ligne final compris.
  */
 function memberFailedLine(recipient: User): string {
-    return "Echec de l'envoi pour " + recipient.globalName + "\n";
+    return "Echec de l'envoi pour " + displayNameLabel(recipient) + "\n";
 }
 
 export {
