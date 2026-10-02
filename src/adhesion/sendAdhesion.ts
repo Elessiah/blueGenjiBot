@@ -37,9 +37,8 @@ type AdhesionTargets = {
  * papiers partent en MP à l'auteur lui-même.
  * @param client Client Discord utilisé pour les envois et logs.
  * @param message Message personnalisé à joindre; un message par défaut est utilisé si `null`.
- * @param channel Canal cible, ou `null` si aucun envoi en canal n'est prévu.
- * @param member Membre cible, ou `null` si aucun envoi individuel n'est prévu.
- * @param role Rôle cible, ou `null` si aucun envoi par rôle n'est prévu.
+ * @param targets Cibles choisies : `channel` (canal), `member` (membre) et
+ *   `role` (rôle), chacune `null` quand aucun envoi de ce type n'est prévu.
  * @param memberPermMissing Indique si l'auteur manque de permissions pour des envois hors MP.
  * @param author Auteur du rappel, notifie en cas de succès/échec.
  * @param options `refusals` reçoit le texte de chaque refus (plafond
@@ -50,9 +49,7 @@ type AdhesionTargets = {
  */
 async function sendAdhesion(client: Client,
                             message: string | null,
-                            channel: TextChannel | null,
-                            member: GuildMember | null,
-                            role: Role | null,
+                            {channel, member, role}: {channel: TextChannel | null, member: GuildMember | null, role: Role | null},
                             memberPermMissing: boolean,
                             author: User,
                             options: {refusals?: string[], roleMembers?: GuildMember[] | null} = {}): Promise<boolean> {

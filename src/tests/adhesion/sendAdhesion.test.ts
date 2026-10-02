@@ -143,7 +143,7 @@ const log = (content: string): Sent => ({ to: "log", content, files: [] });
 test("sans chemins configurés : l'auteur est prévenu, le journal aussi, échec", async () => {
   writePaths("null");
   const rec = recorder();
-  const ok = await sendAdhesion(fakeClient(rec), null, null, null, null, false, author(rec));
+  const ok = await sendAdhesion(fakeClient(rec), null, {channel: null, member: null, role: null}, false, author(rec));
   assert.equal(ok, false);
   assert.deepEqual(rec.trace, [
     dm("author", "Echec de l'envoie des adhésions, impossible de récupérer les fichiers. Admin en cours de contact..."),
@@ -154,7 +154,7 @@ test("sans chemins configurés : l'auteur est prévenu, le journal aussi, échec
 test("configuration illisible : recréée vide, puis envoi à l'auteur", async () => {
   writePaths("{pas du json");
   const rec = recorder();
-  const ok = await sendAdhesion(fakeClient(rec), null, null, null, null, false, author(rec));
+  const ok = await sendAdhesion(fakeClient(rec), null, {channel: null, member: null, role: null}, false, author(rec));
   assert.equal(ok, true);
   assert.equal(rec.trace.length, 2);
   assert.match(rec.trace[0].content, /^Impossible de lire le fichier de configuration des adhésions/);
@@ -167,7 +167,7 @@ test("configuration illisible : recréée vide, puis envoi à l'auteur", async (
 test("aucune cible : les papiers partent en MP à l'auteur, message par défaut", async () => {
   validPaths();
   const rec = recorder();
-  const ok = await sendAdhesion(fakeClient(rec), null, null, null, null, false, author(rec));
+  const ok = await sendAdhesion(fakeClient(rec), null, {channel: null, member: null, role: null}, false, author(rec));
   assert.equal(ok, true);
   assert.deepEqual(rec.trace, [dm("author", DEFAULT_MESSAGE, FILES)]);
 });
@@ -175,14 +175,14 @@ test("aucune cible : les papiers partent en MP à l'auteur, message par défaut"
 test("un message vide vaut le message par défaut", async () => {
   validPaths();
   const rec = recorder();
-  await sendAdhesion(fakeClient(rec), "", null, null, null, false, author(rec));
+  await sendAdhesion(fakeClient(rec), "", {channel: null, member: null, role: null}, false, author(rec));
   assert.deepEqual(rec.trace, [dm("author", DEFAULT_MESSAGE, FILES)]);
 });
 
 test("salon joignable : envoi au salon puis confirmation à l'auteur", async () => {
   validPaths();
   const rec = recorder();
-  const ok = await sendAdhesion(fakeClient(rec), "Bonjour", fakeChannel(rec), null, null, false, author(rec));
+  const ok = await sendAdhesion(fakeClient(rec), "Bonjour", {channel: fakeChannel(rec), member: null, role: null}, false, author(rec));
   assert.equal(ok, true);
   assert.deepEqual(rec.trace, [
     { to: "channel:general", content: "Bonjour", files: FILES },
@@ -193,7 +193,7 @@ test("salon joignable : envoi au salon puis confirmation à l'auteur", async () 
 test("salon en échec : trois essais, un seul journal, l'auteur averti, échec", async () => {
   validPaths();
   const rec = recorder();
-  const ok = await sendAdhesion(fakeClient(rec), "Bonjour", fakeChannel(rec, { fails: true }), null, null, false, author(rec));
+  const ok = await sendAdhesion(fakeClient(rec), "Bonjour", {channel: fakeChannel(rec, { fails: true }), member: null, role: null}, false, author(rec));
   assert.equal(ok, false);
   assert.deepEqual(rec.trace, [
     log("SafeMessage failed  to `Guilde` : boom"),
@@ -204,7 +204,7 @@ test("salon en échec : trois essais, un seul journal, l'auteur averti, échec",
 test("salon dont l'envoi lève : l'exception est journalisée, l'auteur averti", async () => {
   validPaths();
   const rec = recorder();
-  const ok = await sendAdhesion(fakeClient(rec), "Bonjour", fakeChannel(rec, { fails: true, noGuild: true }), null, null, false, author(rec));
+  const ok = await sendAdhesion(fakeClient(rec), "Bonjour", {channel: fakeChannel(rec, { fails: true, noGuild: true }), member: null, role: null}, false, author(rec));
   assert.equal(ok, false);
   assert.deepEqual(rec.trace, [
     log("sendAdhesion safeChannel: Cannot read properties of undefined (reading 'name')"),
@@ -215,7 +215,7 @@ test("salon dont l'envoi lève : l'exception est journalisée, l'auteur averti",
 test("un membre : MP au membre puis confirmation nominative", async () => {
   validPaths();
   const rec = recorder();
-  const ok = await sendAdhesion(fakeClient(rec), "Salut", null, fakeMember(fakeUser(rec, "Alice")), null, false, author(rec));
+  const ok = await sendAdhesion(fakeClient(rec), "Salut", {channel: null, member: fakeMember(fakeUser(rec, "Alice")), role: null}, false, author(rec));
   assert.equal(ok, true);
   assert.deepEqual(rec.trace, [
     dm("Alice", "Salut", FILES),
@@ -227,7 +227,7 @@ test("rôle et membre : chaque membre du rôle puis le membre, confirmation grou
   validPaths();
   const rec = recorder();
   const role = fakeRole([fakeUser(rec, "Bob"), fakeUser(rec, "Carol")]);
-  const ok = await sendAdhesion(fakeClient(rec), null, null, fakeMember(fakeUser(rec, "Alice")), role, false, author(rec));
+  const ok = await sendAdhesion(fakeClient(rec), null, {channel: null, member: fakeMember(fakeUser(rec, "Alice")), role: role}, false, author(rec));
   assert.equal(ok, true);
   assert.deepEqual(rec.trace, [
     dm("Bob", DEFAULT_MESSAGE, FILES),
@@ -241,7 +241,7 @@ test("un membre injoignable : les autres reçoivent, l'auteur reçoit la liste d
   validPaths();
   const rec = recorder();
   const role = fakeRole([fakeUser(rec, "Bob", true), fakeUser(rec, "Carol"), fakeUser(rec, "Dan", true)]);
-  const ok = await sendAdhesion(fakeClient(rec), null, null, null, role, false, author(rec));
+  const ok = await sendAdhesion(fakeClient(rec), null, {channel: null, member: null, role: role}, false, author(rec));
   assert.equal(ok, false);
   assert.deepEqual(rec.trace, [
     log("SafeUser failed : boom"),
@@ -261,7 +261,7 @@ test("noms d'affichage : mise en forme et mentions neutralisées, libellé neutr
     named("u2", null, "pseudo_x"),
     named("u3", "  ", ""),
   ]);
-  const ok = await sendAdhesion(fakeClient(rec), null, null, null, role, false, author(rec));
+  const ok = await sendAdhesion(fakeClient(rec), null, {channel: null, member: null, role: role}, false, author(rec));
   assert.equal(ok, false);
   assert.deepEqual(rec.trace.at(-1), dm("author",
     "Echec de l'envoi pour \\*\\*Gras\\*\\* @\u200beveryone\n" +
@@ -273,7 +273,7 @@ test("un membre servi sans nom d'affichage : confirmé sous son nom d'utilisateu
   validPaths();
   const rec = recorder();
   const user = { id: "u4", globalName: null, username: "zoe", send: rec.sender("dm:u4") } as unknown as User;
-  const ok = await sendAdhesion(fakeClient(rec), null, null, fakeMember(user), null, false, author(rec));
+  const ok = await sendAdhesion(fakeClient(rec), null, {channel: null, member: fakeMember(user), role: null}, false, author(rec));
   assert.equal(ok, true);
   assert.deepEqual(rec.trace.at(-1), dm("author", "Adhésion envoyée avec succès à zoe !"));
 });
@@ -285,7 +285,7 @@ const NO_RECIPIENT_NOTICE = "Echec de l'envoi des adhésions en message privé :
 test("rôle vide sans membre : l'auteur est avisé, le journal sans nom, échec", async () => {
   validPaths();
   const rec = recorder();
-  const ok = await sendAdhesion(fakeClient(rec), null, null, null, fakeRole([]), false, author(rec));
+  const ok = await sendAdhesion(fakeClient(rec), null, {channel: null, member: null, role: fakeRole([])}, false, author(rec));
   assert.equal(ok, false);
   assert.deepEqual(rec.trace, [log(NO_RECIPIENT_LOG), dm("author", NO_RECIPIENT_NOTICE)]);
 });
@@ -298,7 +298,7 @@ test("cache vide après redémarrage : les membres du serveur sont récupérés,
   validPaths();
   const rec = recorder();
   const role = fakeRole([fakeUser(rec, "Bob"), fakeUser(rec, "Carol")]);
-  const ok = await sendAdhesion(fakeClient(rec), null, null, null, role, false, author(rec));
+  const ok = await sendAdhesion(fakeClient(rec), null, {channel: null, member: null, role: role}, false, author(rec));
   assert.equal(ok, true);
   assert.equal(role.fetches, 1);
   assert.deepEqual(rec.trace, [
@@ -312,7 +312,7 @@ test("cache déjà complet : aucune récupération (limite de débit), le rôle 
   validPaths();
   const rec = recorder();
   const role = fakeRole([fakeUser(rec, "Bob")], { cached: true });
-  const ok = await sendAdhesion(fakeClient(rec), null, null, null, role, false, author(rec));
+  const ok = await sendAdhesion(fakeClient(rec), null, {channel: null, member: null, role: role}, false, author(rec));
   assert.equal(ok, true);
   assert.equal(role.fetches, 0);
   assert.deepEqual(rec.trace, [dm("Bob", DEFAULT_MESSAGE, FILES), dm("author", "Adhésion envoyée avec succès à Bob !")]);
@@ -323,7 +323,7 @@ test("les bots du rôle sont écartés : ni MP ni échec compté", async () => {
   const rec = recorder();
   const robot = Object.assign(fakeUser(rec, "Robot", true), { bot: true });
   const role = fakeRole([robot, fakeUser(rec, "Bob")]);
-  const ok = await sendAdhesion(fakeClient(rec), null, null, null, role, false, author(rec));
+  const ok = await sendAdhesion(fakeClient(rec), null, {channel: null, member: null, role: role}, false, author(rec));
   assert.equal(ok, true);
   assert.deepEqual(rec.trace, [dm("Bob", DEFAULT_MESSAGE, FILES), dm("author", "Adhésion envoyée avec succès à Bob !")]);
 });
@@ -332,7 +332,7 @@ test("beaucoup d'échecs : l'avis à l'auteur reste sous 2000 caractères et com
   validPaths();
   const rec = recorder();
   const users = Array.from({ length: 50 }, (_, i) => fakeUser(rec, "Membre-au-nom-assez-long-" + i, true));
-  const ok = await sendAdhesion(fakeClient(rec), null, null, null, fakeRole(users), false, author(rec));
+  const ok = await sendAdhesion(fakeClient(rec), null, {channel: null, member: null, role: fakeRole(users)}, false, author(rec));
   assert.equal(ok, false);
   const notice = rec.trace.at(-1);
   assert.equal(notice?.to, "dm:author");
@@ -350,7 +350,7 @@ test("@everyone : refusé à l'envoi, sans récupération du serveur ni MP, mêm
   validPaths();
   const rec = recorder();
   const role = fakeRole([fakeUser(rec, "Bob")], { everyone: true, cached: true });
-  const ok = await sendAdhesion(fakeClient(rec), null, null, fakeMember(fakeUser(rec, "Alice")), role, false, author(rec));
+  const ok = await sendAdhesion(fakeClient(rec), null, {channel: null, member: fakeMember(fakeUser(rec, "Alice")), role: role}, false, author(rec));
   assert.equal(ok, false);
   assert.equal(role.fetches, 0);
   assert.deepEqual(rec.trace, [log(EVERYONE_LOG), dm("author", EVERYONE_NOTICE)]);
@@ -381,7 +381,7 @@ test("plafond : 50 membres du rôle sont tous servis", async () => {
   validPaths();
   const rec = recorder();
   const role = Object.assign(fakeRole(users(rec, 50)), { name: "Membres" });
-  const ok = await sendAdhesion(fakeClient(rec), null, null, null, role, false, author(rec));
+  const ok = await sendAdhesion(fakeClient(rec), null, {channel: null, member: null, role: role}, false, author(rec));
   assert.equal(ok, true);
   assert.equal(rec.trace.filter((t) => t.to.startsWith("dm:M")).length, 50);
 });
@@ -390,7 +390,7 @@ test("plafond : 51 membres, rien ne part, l'auteur apprend le compte et la limit
   validPaths();
   const rec = recorder();
   const role = Object.assign(fakeRole(users(rec, 51)), { name: "Membres" });
-  const ok = await sendAdhesion(fakeClient(rec), null, null, null, role, false, author(rec));
+  const ok = await sendAdhesion(fakeClient(rec), null, {channel: null, member: null, role: role}, false, author(rec));
   assert.equal(ok, false);
   assert.deepEqual(rec.trace, [
     log("sendAdhesion: 51 destinataires au-delà du plafond de 50, envoi en MP refusé."),
@@ -402,7 +402,7 @@ test("plafond : 50 membres du rôle plus un membre désigné dépassent la limit
   validPaths();
   const rec = recorder();
   const role = Object.assign(fakeRole(users(rec, 50)), { name: "Membres" });
-  const ok = await sendAdhesion(fakeClient(rec), null, null, fakeMember(fakeUser(rec, "Alice")), role, false, author(rec));
+  const ok = await sendAdhesion(fakeClient(rec), null, {channel: null, member: fakeMember(fakeUser(rec, "Alice")), role: role}, false, author(rec));
   assert.equal(ok, false);
   assert.deepEqual(rec.trace, [
     log("sendAdhesion: 51 destinataires au-delà du plafond de 50, envoi en MP refusé."),
@@ -415,7 +415,7 @@ test("plafond : un membre désigné déjà du rôle n'est compté et servi qu'un
   const rec = recorder();
   const members = users(rec, 50);
   const role = Object.assign(fakeRole(members), { name: "Membres" });
-  const ok = await sendAdhesion(fakeClient(rec), null, null, fakeMember(members[0]), role, false, author(rec));
+  const ok = await sendAdhesion(fakeClient(rec), null, {channel: null, member: fakeMember(members[0]), role: role}, false, author(rec));
   assert.equal(ok, true);
   assert.equal(rec.trace.filter((t) => t.to === "dm:M0").length, 1);
   assert.equal(rec.trace.filter((t) => t.to.startsWith("dm:M")).length, 50);
@@ -440,7 +440,7 @@ test("plafond : 49 membres du rôle plus un membre désigné restent servis", as
   validPaths();
   const rec = recorder();
   const role = Object.assign(fakeRole(users(rec, 49)), { name: "Membres" });
-  const ok = await sendAdhesion(fakeClient(rec), null, null, fakeMember(fakeUser(rec, "Alice")), role, false, author(rec));
+  const ok = await sendAdhesion(fakeClient(rec), null, {channel: null, member: fakeMember(fakeUser(rec, "Alice")), role: role}, false, author(rec));
   assert.equal(ok, true);
   assert.equal(rec.trace.filter((t) => t.to.startsWith("dm:")).length, 51);
 });
@@ -449,7 +449,7 @@ test("plafond : un salon demandé avec un rôle trop grand est servi, les MP ref
   validPaths();
   const rec = recorder();
   const role = Object.assign(fakeRole(users(rec, 60)), { name: "Membres" });
-  const ok = await sendAdhesion(fakeClient(rec), null, fakeChannel(rec), null, role, false, author(rec));
+  const ok = await sendAdhesion(fakeClient(rec), null, {channel: fakeChannel(rec), member: null, role: role}, false, author(rec));
   assert.equal(ok, false);
   assert.equal(rec.trace[0].to, "channel:general");
   assert.equal(rec.trace.some((t) => t.to.startsWith("dm:M")), false);
@@ -474,7 +474,7 @@ test("membres du rôle illisibles : journalisé sans nom, le membre désigné se
   validPaths();
   const rec = recorder();
   const role = Object.assign(fakeRole([fakeUser(rec, "Bob")], { fetchFails: true }), { name: "Bureau" });
-  const ok = await sendAdhesion(fakeClient(rec), null, null, fakeMember(fakeUser(rec, "Alice")), role, false, author(rec));
+  const ok = await sendAdhesion(fakeClient(rec), null, {channel: null, member: fakeMember(fakeUser(rec, "Alice")), role: role}, false, author(rec));
   assert.equal(ok, false);
   assert.equal(role.fetches, 1);
   assert.deepEqual(rec.trace, [
@@ -490,7 +490,7 @@ test("membres du rôle illisibles sans membre désigné : un seul avis, pas celu
   validPaths();
   const rec = recorder();
   const role = fakeRole([fakeUser(rec, "Bob")], { fetchFails: true });
-  const ok = await sendAdhesion(fakeClient(rec), null, null, null, role, false, author(rec));
+  const ok = await sendAdhesion(fakeClient(rec), null, {channel: null, member: null, role: role}, false, author(rec));
   assert.equal(ok, false);
   assert.deepEqual(rec.trace, [log(UNREADABLE_LOG), dm("author", unreadableNotice("du rôle visé"))]);
 });
@@ -499,7 +499,7 @@ test("rôle vide nommé : l'avis nomme le rôle, sans mise en forme Discord", as
   validPaths();
   const rec = recorder();
   const role = Object.assign(fakeRole([]), { name: "**Bureau** _2026_" });
-  const ok = await sendAdhesion(fakeClient(rec), null, null, null, role, false, author(rec));
+  const ok = await sendAdhesion(fakeClient(rec), null, {channel: null, member: null, role: role}, false, author(rec));
   assert.equal(ok, false);
   assert.deepEqual(rec.trace, [
     log(NO_RECIPIENT_LOG),
@@ -510,7 +510,7 @@ test("rôle vide nommé : l'avis nomme le rôle, sans mise en forme Discord", as
 test("salon servi mais rôle vide : le salon reçoit, l'auteur est avisé des deux, échec", async () => {
   validPaths();
   const rec = recorder();
-  const ok = await sendAdhesion(fakeClient(rec), null, fakeChannel(rec), null, fakeRole([]), false, author(rec));
+  const ok = await sendAdhesion(fakeClient(rec), null, {channel: fakeChannel(rec), member: null, role: fakeRole([])}, false, author(rec));
   assert.equal(ok, false);
   assert.deepEqual(rec.trace, [
     { to: "channel:general", content: DEFAULT_MESSAGE, files: FILES },
@@ -523,7 +523,7 @@ test("salon servi mais rôle vide : le salon reçoit, l'auteur est avisé des de
 test("rôle vide et auteur injoignable : l'avis manqué est journalisé, toujours un échec", async () => {
   validPaths();
   const rec = recorder();
-  const ok = await sendAdhesion(fakeClient(rec), null, null, null, fakeRole([]), false, author(rec, true));
+  const ok = await sendAdhesion(fakeClient(rec), null, {channel: null, member: null, role: fakeRole([])}, false, author(rec, true));
   assert.equal(ok, false);
   assert.deepEqual(rec.trace, [log(NO_RECIPIENT_LOG), log("SafeUser failed : boom")]);
 });
@@ -531,7 +531,7 @@ test("rôle vide et auteur injoignable : l'avis manqué est journalisé, toujour
 test("salon et membre : le salon d'abord, puis les membres, chacun confirmé", async () => {
   validPaths();
   const rec = recorder();
-  const ok = await sendAdhesion(fakeClient(rec), "Yo", fakeChannel(rec), fakeMember(fakeUser(rec, "Alice")), null, false, author(rec));
+  const ok = await sendAdhesion(fakeClient(rec), "Yo", {channel: fakeChannel(rec), member: fakeMember(fakeUser(rec, "Alice")), role: null}, false, author(rec));
   assert.equal(ok, true);
   assert.deepEqual(rec.trace, [
     { to: "channel:general", content: "Yo", files: FILES },
@@ -544,7 +544,7 @@ test("salon et membre : le salon d'abord, puis les membres, chacun confirmé", a
 test("salon en échec : les membres sont tout de même servis, échec global", async () => {
   validPaths();
   const rec = recorder();
-  const ok = await sendAdhesion(fakeClient(rec), "Yo", fakeChannel(rec, { fails: true }), fakeMember(fakeUser(rec, "Alice")), null, false, author(rec));
+  const ok = await sendAdhesion(fakeClient(rec), "Yo", {channel: fakeChannel(rec, { fails: true }), member: fakeMember(fakeUser(rec, "Alice")), role: null}, false, author(rec));
   assert.equal(ok, false);
   assert.deepEqual(rec.trace, [
     log("SafeMessage failed  to `Guilde` : boom"),
@@ -557,7 +557,7 @@ test("salon en échec : les membres sont tout de même servis, échec global", a
 test("auteur injoignable : l'échec de sa confirmation ne change pas le résultat", async () => {
   validPaths();
   const rec = recorder();
-  const ok = await sendAdhesion(fakeClient(rec), "Yo", fakeChannel(rec), null, null, false, author(rec, true));
+  const ok = await sendAdhesion(fakeClient(rec), "Yo", {channel: fakeChannel(rec), member: null, role: null}, false, author(rec, true));
   assert.equal(ok, true);
   assert.deepEqual(rec.trace, [
     { to: "channel:general", content: "Yo", files: FILES },
@@ -569,7 +569,7 @@ test("permissions manquantes avec cibles : rien hors MP, l'auteur reçoit les pa
   validPaths();
   const rec = recorder();
   const role = fakeRole([fakeUser(rec, "Bob")]);
-  const ok = await sendAdhesion(fakeClient(rec), "Yo", fakeChannel(rec), fakeMember(fakeUser(rec, "Alice")), role, true, author(rec));
+  const ok = await sendAdhesion(fakeClient(rec), "Yo", {channel: fakeChannel(rec), member: fakeMember(fakeUser(rec, "Alice")), role: role}, true, author(rec));
   assert.equal(ok, true);
   assert.deepEqual(rec.trace, [
     dm("author", "Yo\nVous n'avez pas les permissions pour envoyer un message ailleurs que dans vos MP !", FILES),
@@ -579,7 +579,7 @@ test("permissions manquantes avec cibles : rien hors MP, l'auteur reçoit les pa
 test("permissions manquantes sans cible : MP à l'auteur sans avertissement", async () => {
   validPaths();
   const rec = recorder();
-  const ok = await sendAdhesion(fakeClient(rec), null, null, null, null, true, author(rec));
+  const ok = await sendAdhesion(fakeClient(rec), null, {channel: null, member: null, role: null}, true, author(rec));
   assert.equal(ok, true);
   assert.deepEqual(rec.trace, [dm("author", DEFAULT_MESSAGE, FILES)]);
 });
@@ -587,7 +587,7 @@ test("permissions manquantes sans cible : MP à l'auteur sans avertissement", as
 test("permissions manquantes, auteur injoignable : journalisé, résultat inchangé", async () => {
   validPaths();
   const rec = recorder();
-  const ok = await sendAdhesion(fakeClient(rec), null, fakeChannel(rec), null, null, true, author(rec, true));
+  const ok = await sendAdhesion(fakeClient(rec), null, {channel: fakeChannel(rec), member: null, role: null}, true, author(rec, true));
   assert.equal(ok, true);
   assert.deepEqual(rec.trace, [log("SafeUser failed : boom")]);
 });
