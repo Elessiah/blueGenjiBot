@@ -145,6 +145,20 @@ async function deliverToAuthor(client: Client,
 }
 
 /**
+ * Refuse un envoi en MP : journalise la raison (sans aucun nom) et avise
+ * l'auteur. Rien n'est envoyé aux membres.
+ * @param client Client Discord utilisé pour l'envoi et le journal.
+ * @param author Auteur de l'envoi.
+ * @param logLine Ligne du journal, sans nom ni identifiant de membre.
+ * @param notice Avis adressé à l'auteur.
+ * @returns Une promesse résolue une fois l'avis tenté.
+ */
+async function refuseRecipients(client: Client, author: User, logLine: string, notice: string): Promise<void> {
+    await logAdhesion(client, logLine);
+    await sendPrivately(client, author, [], notice, "sendAdhesion safeUser (refused)");
+}
+
+/**
  * Avise l'auteur que les membres du rôle visé n'ont pas pu être lus.
  * @param client Client Discord utilisé pour l'envoi et le journal.
  * @param author Auteur de l'envoi.
@@ -155,4 +169,4 @@ async function notifyRoleUnreadable(client: Client, author: User, roleName: stri
     await sendPrivately(client, author, [], roleUnreadableNotice(roleName), "sendAdhesion safeUser (role unreadable)");
 }
 
-export {deliverToChannel, deliverToMembers, deliverToAuthor, notifyRoleUnreadable};
+export {deliverToChannel, deliverToMembers, deliverToAuthor, notifyRoleUnreadable, refuseRecipients};

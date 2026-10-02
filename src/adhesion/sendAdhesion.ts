@@ -1,8 +1,19 @@
 import type {AttachmentBuilder, Client, GuildMember, Role, TextChannel, User} from "discord.js";
 import {loadAdhesionAttachments} from "@/adhesion/adhesionAttachments.js";
-import {collectRecipients} from "@/adhesion/adhesionRecipients.js";
-import {deliverToAuthor, deliverToChannel, deliverToMembers, notifyRoleUnreadable} from "@/adhesion/adhesionDelivery.js";
-import {DEFAULT_ADHESION_MESSAGE, PERMISSION_WARNING} from "@/adhesion/adhesionNotices.js";
+import {collectRecipients, isEveryoneRole, MAX_ADHESION_DMS} from "@/adhesion/adhesionRecipients.js";
+import {
+    deliverToAuthor,
+    deliverToChannel,
+    deliverToMembers,
+    notifyRoleUnreadable,
+    refuseRecipients,
+} from "@/adhesion/adhesionDelivery.js";
+import {
+    DEFAULT_ADHESION_MESSAGE,
+    EVERYONE_REFUSED_NOTICE,
+    PERMISSION_WARNING,
+    recipientCapNotice,
+} from "@/adhesion/adhesionNotices.js";
 import type {adhesionIntervalObj} from "@/adhesion/types.js";
 
 /** Cibles d'un envoi ; `null` pour une cible non demandée. */
@@ -114,7 +125,9 @@ async function deliverToTargets(client: Client,
 /**
  * Remet les papiers en MP aux membres du rôle et au membre désigné. Des
  * membres du rôle illisibles sont un échec, avisé à part ; le membre désigné
- * est servi quand même.
+ * est servi quand même. `@everyone` (rappel enregistré avant son refus) et un
+ * envoi au-delà de `MAX_ADHESION_DMS` messages privés sont refusés en entier :
+ * personne n'est servi, pas même le membre désigné.
  * @param client Client Discord utilisé pour les envois et le journal.
  * @param targets Cibles demandées (au moins un rôle ou un membre).
  * @param files Pièces jointes.
@@ -128,11 +141,22 @@ async function deliverToRecipients(client: Client,
                                    content: string,
                                    author: User): Promise<boolean> {
     const roleName = targets.role?.name ?? null;
+    if (targets.role !== null && isEveryoneRole(targets.role)) {
+        await refuseRecipients(client, author, "sendAdhesion: rôle @everyone visé, envoi en MP refusé.", EVERYONE_REFUSED_NOTICE);
+        return false;
+    }
     const {recipients, roleUnreadable} = await collectRecipients(client, targets.role, targets.member, targets.roleMembers);
     if (roleUnreadable) {
         await notifyRoleUnreadable(client, author, roleName);
         // Rôle illisible sans membre désigné : l'avis ci-dessus suffit.
         if (recipients.length === 0) return false;
+    }
+    if (recipients.length > MAX_ADHESION_DMS) {
+        const roleCount = recipients.length - (targets.member === null ? 0 : 1);
+        await refuseRecipients(client, author,
+            "sendAdhesion: " + recipients.length + " destinataires au-delà du plafond de " + MAX_ADHESION_DMS + ", envoi en MP refusé.",
+            recipientCapNotice(roleName, roleCount, recipients.length, MAX_ADHESION_DMS));
+        return false;
     }
     return (await deliverToMembers(client, recipients, files, content, author, roleName)) && !roleUnreadable;
 }

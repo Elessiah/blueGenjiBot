@@ -5,6 +5,8 @@ import {safeReply} from "@/safe/safeReply.js";
 import {sendAdhesion} from "@/adhesion/sendAdhesion.js";
 import {setupIntervalAdhesion} from "@/adhesion/setupIntervalAdhesion.js";
 import {nextTransmissionAfter} from "@/adhesion/nextTransmission.js";
+import {isEveryoneRole} from "@/adhesion/adhesionRecipients.js";
+import {EVERYONE_REFUSED_NOTICE} from "@/adhesion/adhesionNotices.js";
 
 /**
  * Récupère et envoie les fichiers d'adhésion configurés.
@@ -24,6 +26,11 @@ async function getAdhesion(client: Client,
     const channel: TextChannel | null = interaction.options.getChannel("channel");
     const member: GuildMember | null = interaction.options.getMember("membre") as GuildMember | null;
     const role: Role | null = interaction.options.getRole("role") as Role | null;
+    if (role !== null && isEveryoneRole(role)) {
+        // Refusé avant tout envoi et avant d'enregistrer un rappel.
+        await safeFollowUp(interaction, EVERYONE_REFUSED_NOTICE, true, []);
+        return;
+    }
     const interval: string | null = interaction.options.getString("interval");
     let intInterval: number = 0;
     if (interval != null) {

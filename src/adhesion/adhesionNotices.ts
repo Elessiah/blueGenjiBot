@@ -89,6 +89,33 @@ function noRecipientNotice(roleName: string | null): string {
     return "Echec de l'envoi des adhésions en message privé : aucun membre " + role + " n'a été trouvé, personne ne les a reçus. Vérifiez la cible !";
 }
 
+/**
+ * Refus d'un envoi qui vise `@everyone` : il enverrait les papiers en MP à
+ * tout le serveur. Le texte propose le geste qui convient (un salon).
+ */
+const EVERYONE_REFUSED_NOTICE = "Envoi refusé : le rôle @\u200beveryone ne peut pas être visé, " +
+    "il enverrait les adhésions en message privé à tout le serveur. " +
+    "Visez un rôle plus restreint, ou envoyez-les dans un salon !";
+
+/**
+ * Refus d'un envoi en MP au-delà du plafond : personne ne reçoit les papiers
+ * (servir une partie choisirait arbitrairement qui). Le texte donne le nombre
+ * de membres du rôle et la limite, pour que l'auteur sache quoi corriger ; un
+ * membre désigné en même temps est compté dans le total annoncé.
+ * @param roleName Nom du rôle visé, ou `null` s'il est inconnu.
+ * @param roleCount Membres du rôle à servir (bots écartés).
+ * @param total Messages privés que l'envoi aurait demandés.
+ * @param cap Plafond de messages privés par envoi.
+ * @returns Le texte de l'avis.
+ */
+function recipientCapNotice(roleName: string | null, roleCount: number, total: number, cap: number): string {
+    const role = roleName === null ? "Le rôle visé" : "Le rôle « " + escapeMarkdown(roleName) + " »";
+    const withMember = total > roleCount ? " (" + total + " messages privés avec le membre désigné)" : "";
+    return "Envoi en message privé refusé : " + role + " compte " + roleCount + " membres" + withMember +
+        ", au-delà de la limite de " + cap + " messages privés par envoi. Personne n'a reçu les adhésions. " +
+        "Visez un rôle plus restreint, ou envoyez-les dans un salon !";
+}
+
 /** Longueur maximale d'un message Discord. */
 const DISCORD_MESSAGE_MAX = 2000;
 
@@ -133,7 +160,9 @@ export {
     MEMBERS_DELIVERED_NOTICE,
     channelDeliveredNotice,
     memberDeliveredNotice,
+    EVERYONE_REFUSED_NOTICE,
     noRecipientNotice,
+    recipientCapNotice,
     roleUnreadableNotice,
     reminderPostponedNotice,
     memberFailedLine,

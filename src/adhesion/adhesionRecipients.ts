@@ -2,6 +2,21 @@ import type {Client, Guild, GuildMember, Role, User} from "discord.js";
 import {logAdhesionError} from "@/adhesion/adhesionLog.js";
 import {fetchRoleMembers} from "@/utils/fetchRoleMembers.js";
 
+/**
+ * Plafond de messages privés par envoi d'adhésion. Au-delà, rien ne part :
+ * contrairement aux alertes arbitres (`MAX_REFEREE_DMS`, qui servent les
+ * premiers), servir une partie du rôle choisirait arbitrairement qui reçoit.
+ */
+const MAX_ADHESION_DMS = 50;
+
+/**
+ * @param role Rôle visé.
+ * @returns `true` pour `@everyone`, dont l'identifiant est celui du serveur.
+ */
+function isEveryoneRole(role: Role): boolean {
+    return role.id === role.guild.id;
+}
+
 /** Destinataires d'un envoi en MP, et si les membres du rôle ont pu être lus. */
 type AdhesionRecipients = {
     /** Utilisateurs à servir, dans l'ordre d'envoi (doublons conservés). */
@@ -13,10 +28,9 @@ type AdhesionRecipients = {
 /**
  * Membres d'un rôle visé par une adhésion.
  *
- * `@everyone` (dont l'identifiant est celui du serveur) reste lu dans le seul
- * cache, comme avant la récupération complète : la récupérer enverrait les
- * papiers en MP à tout le serveur. Le refuser ou plafonner les envois est une
- * décision à prendre, pas un correctif.
+ * `@everyone` est refusé à l'envoi (`isEveryoneRole`) ; un rappel enregistré
+ * avant ce refus le vise encore : il reste lu dans le seul cache, pour ne pas
+ * récupérer tout le serveur avant un envoi qui sera refusé.
  * @param guild Serveur du rôle.
  * @param role Rôle visé.
  * @returns Les membres du rôle.
@@ -64,5 +78,5 @@ async function collectRecipients(client: Client,
     return {recipients, roleUnreadable};
 }
 
-export {collectRecipients, readAdhesionRoleMembers};
+export {MAX_ADHESION_DMS, collectRecipients, isEveryoneRole, readAdhesionRoleMembers};
 export type {AdhesionRecipients};
