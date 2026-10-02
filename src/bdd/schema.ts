@@ -1,6 +1,6 @@
 /*
  * Instructions SQL du schéma, jouées dans l'ordre par `Bdd.initDatabase`
- * (liste `SCHEMA_STEPS`). Chaque texte est repris à l'octet près de sa
+ * (liste `Bdd.schemaSteps()`). Chaque texte est repris à l'octet près de sa
  * version d'origine, retours à la ligne et indentation compris : SQLite garde
  * le texte d'un `CREATE TABLE` dans `sqlite_master`, et `initDatabaseSql.test.ts`
  * en fixe l'empreinte.
