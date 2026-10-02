@@ -26,6 +26,8 @@ type AdhesionTargets = {
     roleMembers: GuildMember[] | null,
     /** Numéro du rappel servi, ou `null` pour un envoi immédiat. */
     reminderId: number | null,
+    /** Reçoit le texte de chaque refus, pour la réponse à la commande. */
+    refusals?: string[],
 };
 
 /**
@@ -40,6 +42,8 @@ type AdhesionTargets = {
  * @param role Rôle cible, ou `null` si aucun envoi par rôle n'est prévu.
  * @param memberPermMissing Indique si l'auteur manque de permissions pour des envois hors MP.
  * @param author Auteur du rappel, notifie en cas de succès/échec.
+ * @param refusals Reçoit le texte de chaque refus (plafond dépassé), que la
+ *   commande répète : l'auteur aux MP fermés le saurait sinon jamais.
  * @returns `true` si tous les envois demandés aux cibles sélectionnées réussissent; `false` dès qu'au moins un envoi échoue.
  */
 async function sendAdhesion(client: Client,
@@ -48,8 +52,10 @@ async function sendAdhesion(client: Client,
                             member: GuildMember | null,
                             role: Role | null,
                             memberPermMissing: boolean,
-                            author: User): Promise<boolean> {
-    return await sendToTargets(client, message, {channel, member, role, roleMembers: null, reminderId: null}, memberPermMissing, author);
+                            author: User,
+                            refusals: string[] = []): Promise<boolean> {
+    const targets: AdhesionTargets = {channel, member, role, roleMembers: null, reminderId: null, refusals};
+    return await sendToTargets(client, message, targets, memberPermMissing, author);
 }
 
 /**
@@ -145,9 +151,11 @@ async function deliverToRecipients(client: Client,
                                    content: string,
                                    author: User): Promise<boolean> {
     const roleName = targets.role?.name ?? null;
-    const suffix = targets.reminderId === null ? "" : reminderRefusedSuffix(targets.reminderId);
+    const suffix = (when: "always" | "overCap") =>
+        targets.reminderId === null ? "" : reminderRefusedSuffix(targets.reminderId, when);
     if (targets.role !== null && isEveryoneRole(targets.role)) {
-        await refuseRecipients(client, author, "sendAdhesion: rôle @everyone visé, envoi en MP refusé.", EVERYONE_REFUSED_NOTICE + suffix);
+        await refuseRecipients(client, author, "sendAdhesion: rôle @everyone visé, envoi en MP refusé.", EVERYONE_REFUSED_NOTICE + suffix("always"));
+        targets.refusals?.push(EVERYONE_REFUSED_NOTICE);
         return false;
     }
     const {recipients, roleCount, roleUnreadable} = await collectRecipients(client, targets.role, targets.member, targets.roleMembers);
@@ -157,9 +165,11 @@ async function deliverToRecipients(client: Client,
         if (recipients.length === 0) return false;
     }
     if (recipients.length > MAX_ADHESION_DMS) {
+        const notice = recipientCapNotice(roleName, roleCount, recipients.length, MAX_ADHESION_DMS);
         await refuseRecipients(client, author,
             "sendAdhesion: " + recipients.length + " destinataires au-delà du plafond de " + MAX_ADHESION_DMS + ", envoi en MP refusé.",
-            recipientCapNotice(roleName, roleCount, recipients.length, MAX_ADHESION_DMS) + suffix);
+            notice + suffix("overCap"));
+        targets.refusals?.push(notice);
         return false;
     }
     return (await deliverToMembers(client, recipients, files, content, author, roleName)) && !roleUnreadable;

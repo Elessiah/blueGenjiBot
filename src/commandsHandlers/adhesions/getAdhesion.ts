@@ -51,10 +51,11 @@ async function getAdhesion(client: Client,
     if (!memberPermMissing && role !== null && await refusedRole(client, interaction, role, member, intInterval, channel !== null)) {
         return;
     }
-    if (await sendAdhesion(client, message, channel, member, role, memberPermMissing, interaction.user))
+    const refusals: string[] = [];
+    if (await sendAdhesion(client, message, channel, member, role, memberPermMissing, interaction.user, refusals))
         await safeFollowUp(interaction, "Envoi réussi !", true, []);
     else
-        await safeFollowUp(interaction, "Echec de l'envoi !", true, []);
+        await safeFollowUp(interaction, ["Echec de l'envoi !", ...refusals].join("\n"), true, []);
     if (intInterval > 0) {
         const nextTransmission: Date = nextTransmissionAfter(new Date(), intInterval);
         await setupIntervalAdhesion(
