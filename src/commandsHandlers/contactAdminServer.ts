@@ -187,9 +187,13 @@ async function addConfiguredAdmins(client: Client, server: Guild, targets: Map<s
     }
 }
 
-/** Ajoute des membres aux destinataires, par identifiant. */
+/**
+ * Ajoute des membres aux destinataires, par identifiant. Les bots en sont
+ * écartés : ils ne reçoivent pas de MP, chacun ne compterait que pour un échec.
+ */
 function addMembers(targets: Map<string, User>, members: GuildMember[]): void {
     for (const member of members) {
+        if (member.user.bot) continue;
         targets.set(member.user.id, member.user);
     }
 }
