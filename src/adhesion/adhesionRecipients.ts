@@ -15,7 +15,7 @@ type AdhesionRecipients = {
  * désigné.
  *
  * Les membres du rôle sont lus après récupération des membres du serveur (le
- * cache seul paraît vide après un redémarrage). Si cette lecture échoue, elle
+ * cache seul paraît vide après un redémarrage) ; les bots en sont écartés. Si cette lecture échoue, elle
  * est journalisée sans aucun nom et signalée par `roleUnreadable` ; le membre
  * désigné, lu indépendamment, est servi quand même.
  * @param client Client Discord utilisé pour le journal.
@@ -34,7 +34,8 @@ async function collectRecipients(client: Client,
     if (role !== null) {
         try {
             const members = knownRoleMembers ?? await fetchRoleMembers(role.guild, role);
-            recipients.push(...members.map(m => m.user));
+            // Un bot ne reçoit pas de MP : il ne compterait que pour un échec.
+            recipients.push(...members.filter(m => !m.user.bot).map(m => m.user));
         } catch (err) {
             roleUnreadable = true;
             await logAdhesionError(client, "sendAdhesion membres du rôle illisibles", err);

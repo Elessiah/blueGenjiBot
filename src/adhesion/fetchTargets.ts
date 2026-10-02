@@ -176,8 +176,11 @@ async function readRoleMembers(client: Client,
                                user: User): Promise<GuildMember[] | null> {
     try {
         return await fetchRoleMembers(guild, role);
-    } catch {
-        await sendLog(client, "Interval n°" + interval.id + " : membres du rôle injoignables pour l'instant, report.");
+    } catch (e) {
+        // La raison (message discord.js, sans nom) permet de distinguer une
+        // panne passagère d'un échec qui se répéterait à chaque passage.
+        const reason = e instanceof Error ? e.message : String(e);
+        await sendLog(client, "Interval n°" + interval.id + " : membres du rôle injoignables pour l'instant, report (" + reason + ").");
         await safeUser(client, user, undefined, undefined, reminderPostponedNotice(interval.id, role.name));
         return null;
     }

@@ -85,6 +85,31 @@ function noRecipientNotice(roleName: string | null): string {
     return "Echec de l'envoi des adhésions en message privé : aucun membre " + role + " n'a été trouvé, personne ne les a reçus. Vérifiez la cible !";
 }
 
+/** Longueur maximale d'un message Discord. */
+const DISCORD_MESSAGE_MAX = 2000;
+
+/**
+ * Avis d'échec : une ligne par membre non servi, tronqué sous la limite d'un
+ * message Discord (un avis trop long serait refusé, et l'auteur n'apprendrait
+ * rien). Les membres qui ne tiennent pas sont comptés en dernière ligne.
+ * @param failedLines Lignes de `memberFailedLine`, dans l'ordre d'envoi.
+ * @returns Le texte de l'avis.
+ */
+function membersFailedNotice(failedLines: string[]): string {
+    const remainder = (n: number) => "Et " + n + " autre(s) échec(s).\n";
+    let text = "";
+    for (let i = 0; i < failedLines.length; i++) {
+        const rest = failedLines.length - i - 1;
+        // Place gardée pour la ligne de reste, qui pourrait suivre celle-ci.
+        const tail = rest > 0 ? remainder(rest).length : 0;
+        if (text.length + failedLines[i].length + tail > DISCORD_MESSAGE_MAX) {
+            return text + remainder(failedLines.length - i);
+        }
+        text += failedLines[i];
+    }
+    return text;
+}
+
 /**
  * Ligne de l'avis d'échec pour un membre qui n'a pas reçu les papiers.
  * @param recipient Membre non servi.
@@ -106,4 +131,5 @@ export {
     roleUnreadableNotice,
     reminderPostponedNotice,
     memberFailedLine,
+    membersFailedNotice,
 };

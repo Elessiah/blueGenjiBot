@@ -8,6 +8,7 @@ import {
     channelDeliveredNotice,
     memberDeliveredNotice,
     memberFailedLine,
+    membersFailedNotice,
     noRecipientNotice,
     roleUnreadableNotice,
 } from "@/adhesion/adhesionNotices.js";
@@ -98,14 +99,14 @@ async function deliverToMembers(client: Client,
         await sendPrivately(client, author, [], noRecipientNotice(roleName), "sendAdhesion safeUser (no recipient)");
         return false;
     }
-    let failures = "";
+    const failures: string[] = [];
     for (const recipient of recipients) {
         if (!(await sendPrivately(client, recipient, files, content, "sendAdhesion safeUser target"))) {
-            failures += memberFailedLine(recipient);
+            failures.push(memberFailedLine(recipient));
         }
     }
     if (failures.length > 0) {
-        await sendPrivately(client, author, [], failures, "sendAdhesion safeUser author errMsg");
+        await sendPrivately(client, author, [], membersFailedNotice(failures), "sendAdhesion safeUser author errMsg");
         return false;
     }
     await confirmMembersDelivered(client, recipients, author);
