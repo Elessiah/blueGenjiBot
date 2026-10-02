@@ -260,7 +260,7 @@ test("rôle vide sans membre : l'auteur est avisé, le journal sans nom, échec"
 
 const UNREADABLE_LOG = "sendAdhesion membres du rôle illisibles: Members didn't arrive in time.";
 const unreadableNotice = (role: string) => "Echec de l'envoi des adhésions en message privé aux membres " + role +
-  " : Discord n'a pas permis de les lire, aucun ne les a reçus. Réessayez plus tard !";
+  " : Discord n'a pas permis de les lire, aucun ne les a reçus. Réessayez plus tard en ne visant que ce rôle !";
 
 test("cache vide après redémarrage : les membres du serveur sont récupérés, le rôle servi", async () => {
   validPaths();

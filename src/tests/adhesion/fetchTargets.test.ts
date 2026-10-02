@@ -74,7 +74,7 @@ function fakeClient(trace: string[], setup: Setup): Client {
           fetch: (cid: string) => answer("channels.fetch " + cid, setup.channel ?? "ok", RESTJSONErrorCodes.UnknownChannel, { id: cid, name: "salon" }),
         },
         roles: {
-          fetch: (rid: string) => answer("roles.fetch " + rid, setup.role ?? "ok", RESTJSONErrorCodes.UnknownRole, { id: rid, members: new Map() }),
+          fetch: (rid: string) => answer("roles.fetch " + rid, setup.role ?? "ok", RESTJSONErrorCodes.UnknownRole, { id: rid, name: "Bureau", members: new Map() }),
         },
         // Cache vide d'un serveur peuplé : lire un rôle demande la récupération complète.
         memberCount: 2,
@@ -255,12 +255,14 @@ test("membre en panne passagère : abandon sans rien toucher", async () => {
   assert.equal(r.kept, true);
 });
 
-test("membres du rôle injoignables : report journalisé, rien d'écrit ni consommé", async () => {
+test("membres du rôle injoignables : report journalisé, l'auteur prévenu, rien d'écrit ni consommé", async () => {
   const r = await run({ roleMembers: "flaky" }, { role: "r1", member: "m1" });
   assert.equal(r.result, null);
   assert.deepEqual(r.trace, [
     "users.fetch auteur-1", "guilds.fetch guild-1", "roles.fetch r1", "members.fetch m1", "members.fetch *",
     `log Interval n°${r.id} : membres du rôle injoignables pour l'instant, report.`,
+    `dm:auteur-1 Rappel d'adhésion n°${r.id} reporté : Discord n'a pas permis de lire les membres du rôle « Bureau ». ` +
+      "Rien n'est parti, nouvel essai à la prochaine vérification (/delete-rappel-adhesion pour l'arrêter).",
   ]);
   assert.equal(r.interval.role_id, "r1");
   assert.equal(r.kept, true);
