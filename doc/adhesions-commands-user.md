@@ -24,7 +24,9 @@ Options:
 Comportement:
 - Si aucune cible n'est fournie, le bot envoie les fichiers en message prive a l'auteur de la commande.
 - Si l'auteur n'a pas les permissions admin du bot, les envois vers `channel`/`membre`/`role` sont ignores et le bot envoie en prive a l'auteur.
-- Si le bot ne trouve personne a servir en prive (aucun membre trouve dans le `role` vise, sans `membre` designe; ou membres du role illisibles, auquel cas le `membre` designe n'est pas servi non plus), personne ne recoit les papiers en prive: l'auteur recoit un avis qui nomme le role et le dit, et la commande repond "Echec de l'envoi !". Un `channel` demande en meme temps recoit quand meme les papiers (et l'auteur en est avise): ne pas relancer la commande pour lui. Un rappel automatique vers ce role previent l'auteur de la meme facon a chaque echeance.
+- Les membres du `role` sont lus apres recuperation de la liste des membres du serveur: un role peuple n'apparait plus vide apres un redemarrage du bot.
+- Si le bot ne trouve personne a servir en prive (aucun membre dans le `role` vise, sans `membre` designe), personne ne recoit les papiers en prive: l'auteur recoit un avis qui nomme le role et le dit, et la commande repond "Echec de l'envoi !". Un `channel` demande en meme temps recoit quand meme les papiers (et l'auteur en est avise): ne pas relancer la commande pour lui. Un rappel automatique vers ce role previent l'auteur de la meme facon a chaque echeance.
+- Si Discord ne permet pas de lire les membres du `role` (delai depasse, limite de debit), aucun d'eux ne recoit les papiers: l'auteur recoit un avis qui nomme le role et l'invite a reessayer plus tard, et la commande repond "Echec de l'envoi !". Le `membre` designe en meme temps est servi quand meme, avec sa propre confirmation.
 - Si `interval` est defini a une valeur > 0 et que l'auteur n'a pas les permissions, la programmation est refusee.
 - En cas de programmation, le prochain envoi est prevu a 10:00 (heure Europe/Paris) apres le nombre de jours indique.
 - L'intervalle est un nombre de jours, **sans plafond**: le rappel se repete
