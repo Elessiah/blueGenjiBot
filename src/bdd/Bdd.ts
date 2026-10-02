@@ -8,6 +8,33 @@ import type {status, Query} from "../types.js";
 import {ranks, services} from '../utils/globals.js';
 import {toSQLiteDate} from '../utils/toSQLiteDatetime.js';
 import {RECRUIT_ROLE_CHOICES, SCRIM_LEVEL_CHOICES, normalizeLegacyChoice} from '../config/searchChoices.js';
+import {
+    ACTIVITY_DAILY_TABLE,
+    ADHESION_INTERVAL_TABLE,
+    BAN_TABLE,
+    BOT_OWNER_TABLE,
+    BUSY_TIMEOUT_PRAGMA,
+    CHANNEL_PARTNER_RANK_TABLE,
+    CHANNEL_PARTNER_SERVICE_TABLE,
+    CHANNEL_PARTNER_TABLE,
+    DAILY_SNAPSHOT_TABLE,
+    DPMSG_TABLE,
+    DROP_USER_LINK,
+    FEED_EVENT_TABLE,
+    MESSAGE_SERVICE_TABLE,
+    OGMSG_TABLE,
+    PURGE_RETIRED_MODULES,
+    RANKS_TABLE,
+    RECRUTE_TABLE,
+    REFEREE_ROLE_TABLE,
+    ROLE_ADMIN_TABLE,
+    SCRIM_TABLE,
+    SECURE_DELETE_PRAGMA,
+    SERVER_INVITE_TABLE,
+    SERVER_MODULE_TABLE,
+    SERVICE_TABLE,
+    SITE_VISIT_TABLE,
+} from './schema.js';
 
 import type {
     Ranks,
@@ -22,6 +49,12 @@ import type {
 } from "./types.js";
 
 let bdd: Bdd;
+
+/**
+ * Étape du schéma : libellé de la ligne d'erreur, instruction SQL seule ou
+ * fonction qui en enchaîne plusieurs, réglages de la ligne d'erreur.
+ */
+type SchemaStep = readonly [label: string, step: string | (() => Promise<void>), options?: {withFullError?: boolean}];
 
 /**
  * Emplacement de la base, quand `BDD_PATH` n'est pas défini.
@@ -251,421 +284,136 @@ class Bdd {
   }
 
   /**
+   * Étapes du schéma, dans l'ordre où elles sont jouées : un libellé (préfixe
+   * de la ligne d'erreur, voir `schemaStep`), puis une instruction SQL seule
+   * ou une étape qui en enchaîne plusieurs (migration, semis).
+   * @returns La liste des étapes, liées à cette instance.
+   */
+  private schemaSteps(): SchemaStep[] {
+    return [
+      ["secure_delete error: ", SECURE_DELETE_PRAGMA],
+      ["busy_timeout error: ", BUSY_TIMEOUT_PRAGMA],
+      ["OGMsg :", OGMSG_TABLE],
+      ["MessageService : ", MESSAGE_SERVICE_TABLE],
+      ["DPMsg : ", DPMSG_TABLE],
+      ["ChannelPartner : ", () => this.createChannelPartner()],
+      ["Service&Co", () => this.createServices(), {withFullError: true}],
+      ["ChannelPartnerService : ", CHANNEL_PARTNER_SERVICE_TABLE],
+      ["Ban : ", () => this.createBan()],
+      ["Error rank filter : ", () => this.createRanks()],
+      ["ChannelPartnerRank: ", CHANNEL_PARTNER_RANK_TABLE],
+      ["AdhesionInterval error: ", ADHESION_INTERVAL_TABLE],
+      ["RoleAdmin error: ", ROLE_ADMIN_TABLE],
+      ["ServerModule error: ", SERVER_MODULE_TABLE],
+      ["FeedEvent error: ", FEED_EVENT_TABLE],
+      ["DailySnapshot error: ", DAILY_SNAPSHOT_TABLE],
+      ["Scrim error: ", SCRIM_TABLE],
+      ["Recrute error: ", RECRUTE_TABLE],
+      ["UserLink error: ", DROP_USER_LINK],
+      ["ServerModule oauth cleanup error: ", PURGE_RETIRED_MODULES],
+      ["ServerInvite error: ", SERVER_INVITE_TABLE],
+      ["RefereeRole error: ", REFEREE_ROLE_TABLE],
+      ["SiteVisit error: ", SITE_VISIT_TABLE],
+      ["ActivityDaily error: ", ACTIVITY_DAILY_TABLE],
+      ["BotOwner error: ", BOT_OWNER_TABLE],
+    ];
+  }
+
+  /**
    * Crée les tables nécessaires et injecte les données statiques manquantes.
    * Chaque étape est indépendante (voir `schemaStep`).
    */
   async initDatabase(): Promise<void> {
-    await this.schemaStep("secure_delete error: ", async () => {
-      // Une ligne effacée ou réécrite (auteur anonymisé, table `UserLink`
-      // supprimée, serveur oublié) laisserait sinon ses octets dans les pages
-      // libérées du fichier — et la sauvegarde, qui copie les pages telles
-      // quelles, les emporterait. Réglage de connexion, rejoué à chaque ouverture.
-      // `ON` plutôt que `FAST` : `FAST` ne réécrit pas les pages rendues à la
-      // liste libre, justement celles d'une table supprimée. Le coût (quelques
-      // écritures de plus par purge de relais) est négligeable sur cette base.
-      await this.Database?.exec("PRAGMA secure_delete = ON");
-    });
-    await this.schemaStep("busy_timeout error: ", async () => {
-      // Une écriture qui trouve la base verrouillée (sauvegarde en cours)
-      // attend jusqu'à 5 s au lieu d'échouer aussitôt : les reprises des
-      // appelants ne font alors plus dix échecs en rafale.
-      await this.Database?.exec("PRAGMA busy_timeout = 5000");
-    });
-    await this.schemaStep("OGMsg :", async () => {
-      await this.Database?.exec(
-          `CREATE TABLE IF NOT EXISTS OGMsg
-           (
-             id_msg
-               TEXT,
-             id_author
-               TEXT,
-             date
-               DATETIME
-               DEFAULT
-                 CURRENT_TIMESTAMP,
-             PRIMARY
-               KEY
-               (
-                id_msg
-                 )
-           );`
-      );
-    });
-    await this.schemaStep("MessageService : ", async () => {
-      await this.Database?.exec(
-          `CREATE TABLE IF NOT EXISTS MessageService
-           (
-             id_msg
-               text,
-             id_service
-               INTEGER,
-             PRIMARY
-               KEY
-               (
-                id_msg,
-                id_service
-                 )
-           );`
-      );
-    });
-    await this.schemaStep("DPMsg : ", async () => {
-      await this.Database?.exec(
-          `CREATE TABLE IF NOT EXISTS DPMsg
-           (
-             id_msg
-               TEXT,
-             id_channel
-               TEXT,
-             id_og
-               TEXT,
-             date
-               DATETIME
-               DEFAULT
-                 CURRENT_TIMESTAMP,
-             PRIMARY
-               KEY
-               (
-                id_msg
-                 )
-           );`
-      );
-    });
-    await this.schemaStep("ChannelPartner : ", async () => {
-      await this.Database?.exec(
-          `CREATE TABLE IF NOT EXISTS ChannelPartner
-           (
-             id_channel
-               TEXT
-               PRIMARY
-                 KEY,
-             id_guild
-               TEXT
-           );`
-      );
-      await this.Database?.exec(`
+    for (const [label, step, options] of this.schemaSteps()) {
+      const run = typeof step === "string"
+        ? async () => { await this.Database?.exec(step); }
+        : step;
+      await this.schemaStep(label, run, options);
+    }
+  }
+
+  /**
+   * Table `ChannelPartner`, et sa colonne `region` sur une base antérieure.
+   */
+  private async createChannelPartner(): Promise<void> {
+    await this.Database?.exec(CHANNEL_PARTNER_TABLE);
+    await this.Database?.exec(`
         PRAGMA table_info(ChannelPartner);
       `);
 
-      const columnExists = await this.Database?.get(`
+    const columnExists = await this.Database?.get(`
         SELECT 1
         FROM pragma_table_info('ChannelPartner')
         WHERE name = 'region'
       `);
 
-      if (!columnExists) {
-        await this.Database?.exec(`
+    if (!columnExists) {
+      await this.Database?.exec(`
           ALTER TABLE ChannelPartner
             ADD COLUMN region INTEGER DEFAULT 0 CHECK (region BETWEEN 0 AND 5);
         `);
-      }
-    });
-    await this.schemaStep("Service&Co", async () => {
-      await this.Database?.exec(
-          `CREATE TABLE IF NOT EXISTS Service
-           (
-             id_service
-               INTEGER
-               PRIMARY
-                 KEY
-               AUTOINCREMENT,
-             name
-               TEXT
-               NOT
-                 NULL
-           );`
-      );
-
-      for (const service of services) {
-        const ret: Service[] = await this.get("Service", ["*"], {}, {query: "name = ?", values: [service]}) as Service[];
-        if (ret.length > 0) {
-          continue;
-        }
-        console.log(
-            `Adding "${service}" to the database...`
-        );
-        await this.Database?.run('INSERT INTO Service (name) VALUES (?)', [service], function (err: TypeError) {
-          if (err) {
-            console.error(`Error while adding "${service}":`, err.message);
-          } else {
-            console.log(`Successfully added "${service}".`);
-          }
-        });
-      }
-    }, {withFullError: true});
-    await this.schemaStep("ChannelPartnerService : ", async () => {
-      await this.Database?.exec(
-          `CREATE TABLE IF NOT EXISTS ChannelPartnerService
-           (
-             id_channel
-               TEXT
-               NOT
-                 NULL,
-             id_service
-               INTEGER
-               NOT
-                 NULL,
-             PRIMARY
-               KEY
-               (
-                id_channel,
-                id_service
-                 )
-           );`
-      );
-    });
-    await this.schemaStep("Ban : ", async () => {
-      await this.Database?.exec(
-          `CREATE TABLE IF NOT EXISTS Ban
-           (
-             id_user
-               TEXT
-               PRIMARY
-                 KEY,
-             id_moderator
-               TEXT
-               NOT
-                 NULL,
-             id_reason
-               TEXT
-               NOT
-                 NULL,
-             date
-               DATETIME
-               DEFAULT
-                 CURRENT_TIMESTAMP,
-             id_reason_owner TEXT,
-             id_notice_admin TEXT
-           );`
-      );
-      // Messages du journal qui décrivent l'exclusion, effacés à sa levée
-      // (`/unban`) : le motif en message privé au propriétaire, et l'avis
-      // « un joueur a été exclu » au salon. `NULL` pour une exclusion
-      // antérieure à ces colonnes — seul son motif au salon (`id_reason`)
-      // peut alors être effacé.
-      for (const column of ["id_reason_owner", "id_notice_admin"]) {
-        const exists = await this.Database?.get(
-          "SELECT 1 FROM pragma_table_info('Ban') WHERE name = ?",
-          [column],
-        );
-        if (!exists) {
-          await this.Database?.exec(`ALTER TABLE Ban ADD COLUMN ${column} TEXT`);
-        }
-      }
-    });
-    await this.schemaStep("Error rank filter : ", async () => {
-      await this.Database?.exec(
-          `CREATE TABLE IF NOT EXISTS Ranks
-           (
-             id_rank INTEGER PRIMARY KEY AUTOINCREMENT,
-             name    TEXT NOT NULL
-           );`
-      );
-      for (const rank of ranks) {
-        const ret: Ranks[] = await this.get('Ranks', ["*"], {}, {query: "name = ?", values: [rank]}) as Ranks[];
-        if (ret.length > 0)
-          {continue;}
-        console.log(`Adding "${rank}" to the database...`);
-        await this.Database?.run("INSERT INTO Ranks (name) VALUES (?)", [rank]);
-      }
-    });
-    await this.schemaStep('ChannelPartnerRank: ', async () => {
-      await this.Database?.exec(
-          `CREATE TABLE IF NOT EXISTS ChannelPartnerRank
-           (
-               id_channel TEXT    NOT NULL,
-               id_rank    INTEGER NOT NULL,
-               PRIMARY KEY (id_channel, id_rank)
-           );`
-      );
-    });
-    await this.schemaStep("AdhesionInterval error: ", async () => {
-      await this.Database?.exec(
-          `CREATE TABLE IF NOT EXISTS AdhesionInterval
-            (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                message TEXT NOT NULL ,
-                guild_id TEXT NOT NULL,
-                channel_id TEXT,
-                member_id TEXT,
-                role_id TEXT,
-                author_id TEXT NOT NULL,
-                interval_days INTEGER NOT NULL,
-                iteration INTEGER NOT NULL DEFAULT -1,
-                nextTransmission DATETIME DEFAULT CURRENT_TIMESTAMP
-           );`
-      );
-    });
-    await this.schemaStep("RoleAdmin error: ", async () => {
-      await this.Database?.exec(
-        `CREATE TABLE IF NOT EXISTS RoleAdmin
-          (
-            guild_id TEXT NOT NULL PRIMARY KEY,
-            role_id TEXT NOT NULL
-          );
-        `
-      );
-    });
-    await this.schemaStep("ServerModule error: ", async () => {
-      await this.Database?.exec(
-        `CREATE TABLE IF NOT EXISTS ServerModule
-          (
-            id_guild TEXT NOT NULL,
-            module_key TEXT NOT NULL,
-            enabled INTEGER NOT NULL DEFAULT 1,
-            PRIMARY KEY (id_guild, module_key)
-          );
-        `
-      );
-    });
-    await this.schemaStep("FeedEvent error: ", async () => {
-      await this.Database?.exec(
-        `CREATE TABLE IF NOT EXISTS FeedEvent
-          (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ts DATETIME DEFAULT CURRENT_TIMESTAMP,
-            type TEXT NOT NULL,
-            source TEXT,
-            target TEXT,
-            summary TEXT NOT NULL
-          );
-        `
-      );
-    });
-    await this.schemaStep("DailySnapshot error: ", async () => {
-      await this.Database?.exec(
-        `CREATE TABLE IF NOT EXISTS DailySnapshot
-          (
-            date TEXT PRIMARY KEY,
-            servers_count INTEGER NOT NULL DEFAULT 0,
-            channels_count INTEGER NOT NULL DEFAULT 0,
-            messages_count INTEGER NOT NULL DEFAULT 0,
-            relays_count INTEGER NOT NULL DEFAULT 0
-          );
-        `
-      );
-    });
-    await this.schemaStep("Scrim error: ", async () => {
-      await this.Database?.exec(
-        `CREATE TABLE IF NOT EXISTS Scrim
-          (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            id_author TEXT NOT NULL,
-            game TEXT NOT NULL,
-            level TEXT NOT NULL,
-            id_guild TEXT,
-            date DATETIME DEFAULT CURRENT_TIMESTAMP
-          );
-        `
-      );
-    });
-    await this.schemaStep("Recrute error: ", async () => {
-      await this.Database?.exec(
-        `CREATE TABLE IF NOT EXISTS Recrute
-          (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            id_author TEXT NOT NULL,
-            role TEXT NOT NULL,
-            id_guild TEXT,
-            date DATETIME DEFAULT CURRENT_TIMESTAMP
-          );
-        `
-      );
-    });
-    await this.schemaStep("UserLink error: ", async () => {
-      // `/link` a été retirée : elle promettait une liaison que le site n'a
-      // jamais su recevoir, et sa table ne gardait plus que des identifiants
-      // Discord et des codes expirés. La supprimer efface les lignes des
-      // bases qui tournent ; aucune ne sera plus jamais écrite.
-      await this.Database?.exec("DROP TABLE IF EXISTS UserLink");
-    });
-    await this.schemaStep("ServerModule oauth cleanup error: ", async () => {
-      // Modules retirés : `oauth` n'existait que pour `/link`, `notifications`
-      // et `stats` n'étaient relus par aucune commande. Leurs préférences,
-      // qu'aucun code ne relit plus, partent avec eux.
-      await this.Database?.exec("DELETE FROM ServerModule WHERE module_key IN ('oauth', 'notifications', 'stats')");
-    });
-    await this.schemaStep("ServerInvite error: ", async () => {
-      await this.Database?.exec(
-        `CREATE TABLE IF NOT EXISTS ServerInvite
-          (
-            id_guild TEXT PRIMARY KEY,
-            invite_url TEXT NOT NULL,
-            set_by TEXT,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-          );
-        `
-      );
-    });
-    await this.schemaStep("RefereeRole error: ", async () => {
-      // Role arbitre d'un serveur : destinataires des signalements de probleme
-      // pousses par l'app web sur /internal/notify/referees. Une ligne par
-      // serveur, definie par la commande /set-referee-role.
-      await this.Database?.exec(
-        `CREATE TABLE IF NOT EXISTS RefereeRole
-          (
-            id_guild TEXT PRIMARY KEY,
-            id_role TEXT NOT NULL,
-            set_by TEXT,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-          );
-        `
-      );
-    });
-    await this.schemaStep("SiteVisit error: ", async () => {
-      // Instantane de frequentation du site, pousse par l'app web sur
-      // /internal/site-visits. Une seule ligne (id = 1) : le bot ne conserve
-      // que la derniere mesure, l'historique restant du cote du site.
-      await this.Database?.exec(
-        `CREATE TABLE IF NOT EXISTS SiteVisit
-          (
-            id INTEGER PRIMARY KEY CHECK (id = 1),
-            total_visits INTEGER NOT NULL DEFAULT 0,
-            unique_visitors INTEGER NOT NULL DEFAULT 0,
-            visits_24h INTEGER NOT NULL DEFAULT 0,
-            unique_24h INTEGER NOT NULL DEFAULT 0,
-            visits_7d INTEGER NOT NULL DEFAULT 0,
-            unique_7d INTEGER NOT NULL DEFAULT 0,
-            visits_30d INTEGER NOT NULL DEFAULT 0,
-            unique_30d INTEGER NOT NULL DEFAULT 0,
-            identified_visitors INTEGER NOT NULL DEFAULT 0,
-            first_visit_at DATETIME,
-            last_visit_at DATETIME,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-          );
-        `
-      );
-    });
-    await this.schemaStep("ActivityDaily error: ", async () => {
-      // Scrims et recherches de plus de 30 jours, repliés en nombres : ni
-      // auteur, ni ordre, ni heure (voir `anonymizeActivityAuthors`).
-      await this.Database?.exec(
-        `CREATE TABLE IF NOT EXISTS ActivityDaily
-          (
-            kind TEXT NOT NULL,
-            day TEXT NOT NULL,
-            id_guild TEXT NOT NULL DEFAULT '',
-            detail TEXT NOT NULL DEFAULT '',
-            count INTEGER NOT NULL,
-            PRIMARY KEY (kind, day, id_guild, detail)
-          );
-        `
-      );
-    });
-    await this.schemaStep("BotOwner error: ", async () => {
-      // Application Discord propriétaire de cette base (une ligne). Le
-      // rattrapage des serveurs quittés s'y fie avant tout effacement : un bot
-      // lancé avec un autre jeton sur cette base verrait un cache qui ne la
-      // décrit pas, et oublierait tout le réseau.
-      await this.Database?.exec(
-        `CREATE TABLE IF NOT EXISTS BotOwner
-          (
-            id INTEGER PRIMARY KEY CHECK (id = 1),
-            application_id TEXT NOT NULL
-          );
-        `
-      );
-    });
+    }
   }
+
+  /**
+   * Table `Service`, puis chaque service de `services` qui n'y est pas encore.
+   */
+  private async createServices(): Promise<void> {
+    await this.Database?.exec(SERVICE_TABLE);
+
+    for (const service of services) {
+      const ret: Service[] = await this.get("Service", ["*"], {}, {query: "name = ?", values: [service]}) as Service[];
+      if (ret.length > 0) {
+        continue;
+      }
+      console.log(
+          `Adding "${service}" to the database...`
+      );
+      await this.Database?.run('INSERT INTO Service (name) VALUES (?)', [service], function (err: TypeError) {
+        if (err) {
+          console.error(`Error while adding "${service}":`, err.message);
+        } else {
+          console.log(`Successfully added "${service}".`);
+        }
+      });
+    }
+  }
+
+  /**
+   * Table `Ban`, et ses colonnes de messages du journal sur une base antérieure.
+   */
+  private async createBan(): Promise<void> {
+    await this.Database?.exec(BAN_TABLE);
+    // Messages du journal qui décrivent l'exclusion, effacés à sa levée
+    // (`/unban`) : le motif en message privé au propriétaire, et l'avis
+    // « un joueur a été exclu » au salon. `NULL` pour une exclusion
+    // antérieure à ces colonnes — seul son motif au salon (`id_reason`)
+    // peut alors être effacé.
+    for (const column of ["id_reason_owner", "id_notice_admin"]) {
+      const exists = await this.Database?.get(
+        "SELECT 1 FROM pragma_table_info('Ban') WHERE name = ?",
+        [column],
+      );
+      if (!exists) {
+        await this.Database?.exec(`ALTER TABLE Ban ADD COLUMN ${column} TEXT`);
+      }
+    }
+  }
+
+  /**
+   * Table `Ranks`, puis chaque rang de `ranks` qui n'y est pas encore.
+   */
+  private async createRanks(): Promise<void> {
+    await this.Database?.exec(RANKS_TABLE);
+    for (const rank of ranks) {
+      const ret: Ranks[] = await this.get('Ranks', ["*"], {}, {query: "name = ?", values: [rank]}) as Ranks[];
+      if (ret.length > 0)
+        {continue;}
+      console.log(`Adding "${rank}" to the database...`);
+      await this.Database?.run("INSERT INTO Ranks (name) VALUES (?)", [rank]);
+    }
+  }
+
 
     /**
      * insère une ligne dans la table cible.
