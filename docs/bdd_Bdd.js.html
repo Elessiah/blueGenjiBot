@@ -33,6 +33,7 @@ import sqlite3 from 'sqlite3';
 import { ranks, services } from '../utils/globals.js';
 import { toSQLiteDate } from '../utils/toSQLiteDatetime.js';
 import { RECRUIT_ROLE_CHOICES, SCRIM_LEVEL_CHOICES, normalizeLegacyChoice } from '../config/searchChoices.js';
+import { ACTIVITY_DAILY_TABLE, ADHESION_INTERVAL_TABLE, BAN_TABLE, BOT_OWNER_TABLE, BUSY_TIMEOUT_PRAGMA, CHANNEL_PARTNER_RANK_TABLE, CHANNEL_PARTNER_SERVICE_TABLE, CHANNEL_PARTNER_TABLE, DAILY_SNAPSHOT_TABLE, DPMSG_TABLE, DROP_USER_LINK, FEED_EVENT_TABLE, MESSAGE_SERVICE_TABLE, OGMSG_TABLE, PURGE_RETIRED_MODULES, RANKS_TABLE, RECRUTE_TABLE, REFEREE_ROLE_TABLE, ROLE_ADMIN_TABLE, SCRIM_TABLE, SECURE_DELETE_PRAGMA, SERVER_INVITE_TABLE, SERVER_MODULE_TABLE, SERVICE_TABLE, SITE_VISIT_TABLE, } from './schema.js';
 let bdd;
 /**
  * Emplacement de la base, quand `BDD_PATH` n'est pas défini.
@@ -245,372 +246,123 @@ class Bdd {
         }
     }
     /**
+     * Étapes du schéma, dans l'ordre où elles sont jouées : un libellé (préfixe
+     * de la ligne d'erreur, voir `schemaStep`), puis une instruction SQL seule
+     * ou une étape qui en enchaîne plusieurs (migration, semis).
+     * @returns La liste des étapes, liées à cette instance.
+     */
+    schemaSteps() {
+        return [
+            ["secure_delete error: ", SECURE_DELETE_PRAGMA],
+            ["busy_timeout error: ", BUSY_TIMEOUT_PRAGMA],
+            ["OGMsg :", OGMSG_TABLE],
+            ["MessageService : ", MESSAGE_SERVICE_TABLE],
+            ["DPMsg : ", DPMSG_TABLE],
+            ["ChannelPartner : ", () => this.createChannelPartner()],
+            ["Service&amp;Co", () => this.createServices(), { withFullError: true }],
+            ["ChannelPartnerService : ", CHANNEL_PARTNER_SERVICE_TABLE],
+            ["Ban : ", () => this.createBan()],
+            ["Error rank filter : ", () => this.createRanks()],
+            ["ChannelPartnerRank: ", CHANNEL_PARTNER_RANK_TABLE],
+            ["AdhesionInterval error: ", ADHESION_INTERVAL_TABLE],
+            ["RoleAdmin error: ", ROLE_ADMIN_TABLE],
+            ["ServerModule error: ", SERVER_MODULE_TABLE],
+            ["FeedEvent error: ", FEED_EVENT_TABLE],
+            ["DailySnapshot error: ", DAILY_SNAPSHOT_TABLE],
+            ["Scrim error: ", SCRIM_TABLE],
+            ["Recrute error: ", RECRUTE_TABLE],
+            ["UserLink error: ", DROP_USER_LINK],
+            ["ServerModule oauth cleanup error: ", PURGE_RETIRED_MODULES],
+            ["ServerInvite error: ", SERVER_INVITE_TABLE],
+            ["RefereeRole error: ", REFEREE_ROLE_TABLE],
+            ["SiteVisit error: ", SITE_VISIT_TABLE],
+            ["ActivityDaily error: ", ACTIVITY_DAILY_TABLE],
+            ["BotOwner error: ", BOT_OWNER_TABLE],
+        ];
+    }
+    /**
      * Crée les tables nécessaires et injecte les données statiques manquantes.
      * Chaque étape est indépendante (voir `schemaStep`).
      */
     async initDatabase() {
-        await this.schemaStep("secure_delete error: ", async () => {
-            // Une ligne effacée ou réécrite (auteur anonymisé, table `UserLink`
-            // supprimée, serveur oublié) laisserait sinon ses octets dans les pages
-            // libérées du fichier — et la sauvegarde, qui copie les pages telles
-            // quelles, les emporterait. Réglage de connexion, rejoué à chaque ouverture.
-            // `ON` plutôt que `FAST` : `FAST` ne réécrit pas les pages rendues à la
-            // liste libre, justement celles d'une table supprimée. Le coût (quelques
-            // écritures de plus par purge de relais) est négligeable sur cette base.
-            await this.Database?.exec("PRAGMA secure_delete = ON");
-        });
-        await this.schemaStep("busy_timeout error: ", async () => {
-            // Une écriture qui trouve la base verrouillée (sauvegarde en cours)
-            // attend jusqu'à 5 s au lieu d'échouer aussitôt : les reprises des
-            // appelants ne font alors plus dix échecs en rafale.
-            await this.Database?.exec("PRAGMA busy_timeout = 5000");
-        });
-        await this.schemaStep("OGMsg :", async () => {
-            await this.Database?.exec(`CREATE TABLE IF NOT EXISTS OGMsg
-           (
-             id_msg
-               TEXT,
-             id_author
-               TEXT,
-             date
-               DATETIME
-               DEFAULT
-                 CURRENT_TIMESTAMP,
-             PRIMARY
-               KEY
-               (
-                id_msg
-                 )
-           );`);
-        });
-        await this.schemaStep("MessageService : ", async () => {
-            await this.Database?.exec(`CREATE TABLE IF NOT EXISTS MessageService
-           (
-             id_msg
-               text,
-             id_service
-               INTEGER,
-             PRIMARY
-               KEY
-               (
-                id_msg,
-                id_service
-                 )
-           );`);
-        });
-        await this.schemaStep("DPMsg : ", async () => {
-            await this.Database?.exec(`CREATE TABLE IF NOT EXISTS DPMsg
-           (
-             id_msg
-               TEXT,
-             id_channel
-               TEXT,
-             id_og
-               TEXT,
-             date
-               DATETIME
-               DEFAULT
-                 CURRENT_TIMESTAMP,
-             PRIMARY
-               KEY
-               (
-                id_msg
-                 )
-           );`);
-        });
-        await this.schemaStep("ChannelPartner : ", async () => {
-            await this.Database?.exec(`CREATE TABLE IF NOT EXISTS ChannelPartner
-           (
-             id_channel
-               TEXT
-               PRIMARY
-                 KEY,
-             id_guild
-               TEXT
-           );`);
-            await this.Database?.exec(`
+        for (const [label, step, options] of this.schemaSteps()) {
+            const run = typeof step === "string"
+                ? async () => { await this.Database?.exec(step); }
+                : step;
+            await this.schemaStep(label, run, options);
+        }
+    }
+    /**
+     * Table `ChannelPartner`, et sa colonne `region` sur une base antérieure.
+     */
+    async createChannelPartner() {
+        await this.Database?.exec(CHANNEL_PARTNER_TABLE);
+        await this.Database?.exec(`
         PRAGMA table_info(ChannelPartner);
       `);
-            const columnExists = await this.Database?.get(`
+        const columnExists = await this.Database?.get(`
         SELECT 1
         FROM pragma_table_info('ChannelPartner')
         WHERE name = 'region'
       `);
-            if (!columnExists) {
-                await this.Database?.exec(`
+        if (!columnExists) {
+            await this.Database?.exec(`
           ALTER TABLE ChannelPartner
             ADD COLUMN region INTEGER DEFAULT 0 CHECK (region BETWEEN 0 AND 5);
         `);
+        }
+    }
+    /**
+     * Table `Service`, puis chaque service de `services` qui n'y est pas encore.
+     */
+    async createServices() {
+        await this.Database?.exec(SERVICE_TABLE);
+        for (const service of services) {
+            const ret = await this.get("Service", ["*"], {}, { query: "name = ?", values: [service] });
+            if (ret.length > 0) {
+                continue;
             }
-        });
-        await this.schemaStep("Service&amp;Co", async () => {
-            await this.Database?.exec(`CREATE TABLE IF NOT EXISTS Service
-           (
-             id_service
-               INTEGER
-               PRIMARY
-                 KEY
-               AUTOINCREMENT,
-             name
-               TEXT
-               NOT
-                 NULL
-           );`);
-            for (const service of services) {
-                const ret = await this.get("Service", ["*"], {}, { query: "name = ?", values: [service] });
-                if (ret.length > 0) {
-                    continue;
+            console.log(`Adding "${service}" to the database...`);
+            await this.Database?.run('INSERT INTO Service (name) VALUES (?)', [service], function (err) {
+                if (err) {
+                    console.error(`Error while adding "${service}":`, err.message);
                 }
-                console.log(`Adding "${service}" to the database...`);
-                await this.Database?.run('INSERT INTO Service (name) VALUES (?)', [service], function (err) {
-                    if (err) {
-                        console.error(`Error while adding "${service}":`, err.message);
-                    }
-                    else {
-                        console.log(`Successfully added "${service}".`);
-                    }
-                });
-            }
-        }, { withFullError: true });
-        await this.schemaStep("ChannelPartnerService : ", async () => {
-            await this.Database?.exec(`CREATE TABLE IF NOT EXISTS ChannelPartnerService
-           (
-             id_channel
-               TEXT
-               NOT
-                 NULL,
-             id_service
-               INTEGER
-               NOT
-                 NULL,
-             PRIMARY
-               KEY
-               (
-                id_channel,
-                id_service
-                 )
-           );`);
-        });
-        await this.schemaStep("Ban : ", async () => {
-            await this.Database?.exec(`CREATE TABLE IF NOT EXISTS Ban
-           (
-             id_user
-               TEXT
-               PRIMARY
-                 KEY,
-             id_moderator
-               TEXT
-               NOT
-                 NULL,
-             id_reason
-               TEXT
-               NOT
-                 NULL,
-             date
-               DATETIME
-               DEFAULT
-                 CURRENT_TIMESTAMP,
-             id_reason_owner TEXT,
-             id_notice_admin TEXT
-           );`);
-            // Messages du journal qui décrivent l'exclusion, effacés à sa levée
-            // (`/unban`) : le motif en message privé au propriétaire, et l'avis
-            // « un joueur a été exclu » au salon. `NULL` pour une exclusion
-            // antérieure à ces colonnes — seul son motif au salon (`id_reason`)
-            // peut alors être effacé.
-            for (const column of ["id_reason_owner", "id_notice_admin"]) {
-                const exists = await this.Database?.get("SELECT 1 FROM pragma_table_info('Ban') WHERE name = ?", [column]);
-                if (!exists) {
-                    await this.Database?.exec(`ALTER TABLE Ban ADD COLUMN ${column} TEXT`);
+                else {
+                    console.log(`Successfully added "${service}".`);
                 }
+            });
+        }
+    }
+    /**
+     * Table `Ban`, et ses colonnes de messages du journal sur une base antérieure.
+     */
+    async createBan() {
+        await this.Database?.exec(BAN_TABLE);
+        // Messages du journal qui décrivent l'exclusion, effacés à sa levée
+        // (`/unban`) : le motif en message privé au propriétaire, et l'avis
+        // « un joueur a été exclu » au salon. `NULL` pour une exclusion
+        // antérieure à ces colonnes — seul son motif au salon (`id_reason`)
+        // peut alors être effacé.
+        for (const column of ["id_reason_owner", "id_notice_admin"]) {
+            const exists = await this.Database?.get("SELECT 1 FROM pragma_table_info('Ban') WHERE name = ?", [column]);
+            if (!exists) {
+                await this.Database?.exec(`ALTER TABLE Ban ADD COLUMN ${column} TEXT`);
             }
-        });
-        await this.schemaStep("Error rank filter : ", async () => {
-            await this.Database?.exec(`CREATE TABLE IF NOT EXISTS Ranks
-           (
-             id_rank INTEGER PRIMARY KEY AUTOINCREMENT,
-             name    TEXT NOT NULL
-           );`);
-            for (const rank of ranks) {
-                const ret = await this.get('Ranks', ["*"], {}, { query: "name = ?", values: [rank] });
-                if (ret.length > 0) {
-                    continue;
-                }
-                console.log(`Adding "${rank}" to the database...`);
-                await this.Database?.run("INSERT INTO Ranks (name) VALUES (?)", [rank]);
+        }
+    }
+    /**
+     * Table `Ranks`, puis chaque rang de `ranks` qui n'y est pas encore.
+     */
+    async createRanks() {
+        await this.Database?.exec(RANKS_TABLE);
+        for (const rank of ranks) {
+            const ret = await this.get('Ranks', ["*"], {}, { query: "name = ?", values: [rank] });
+            if (ret.length > 0) {
+                continue;
             }
-        });
-        await this.schemaStep('ChannelPartnerRank: ', async () => {
-            await this.Database?.exec(`CREATE TABLE IF NOT EXISTS ChannelPartnerRank
-           (
-               id_channel TEXT    NOT NULL,
-               id_rank    INTEGER NOT NULL,
-               PRIMARY KEY (id_channel, id_rank)
-           );`);
-        });
-        await this.schemaStep("AdhesionInterval error: ", async () => {
-            await this.Database?.exec(`CREATE TABLE IF NOT EXISTS AdhesionInterval
-            (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                message TEXT NOT NULL ,
-                guild_id TEXT NOT NULL,
-                channel_id TEXT,
-                member_id TEXT,
-                role_id TEXT,
-                author_id TEXT NOT NULL,
-                interval_days INTEGER NOT NULL,
-                iteration INTEGER NOT NULL DEFAULT -1,
-                nextTransmission DATETIME DEFAULT CURRENT_TIMESTAMP
-           );`);
-        });
-        await this.schemaStep("RoleAdmin error: ", async () => {
-            await this.Database?.exec(`CREATE TABLE IF NOT EXISTS RoleAdmin
-          (
-            guild_id TEXT NOT NULL PRIMARY KEY,
-            role_id TEXT NOT NULL
-          );
-        `);
-        });
-        await this.schemaStep("ServerModule error: ", async () => {
-            await this.Database?.exec(`CREATE TABLE IF NOT EXISTS ServerModule
-          (
-            id_guild TEXT NOT NULL,
-            module_key TEXT NOT NULL,
-            enabled INTEGER NOT NULL DEFAULT 1,
-            PRIMARY KEY (id_guild, module_key)
-          );
-        `);
-        });
-        await this.schemaStep("FeedEvent error: ", async () => {
-            await this.Database?.exec(`CREATE TABLE IF NOT EXISTS FeedEvent
-          (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ts DATETIME DEFAULT CURRENT_TIMESTAMP,
-            type TEXT NOT NULL,
-            source TEXT,
-            target TEXT,
-            summary TEXT NOT NULL
-          );
-        `);
-        });
-        await this.schemaStep("DailySnapshot error: ", async () => {
-            await this.Database?.exec(`CREATE TABLE IF NOT EXISTS DailySnapshot
-          (
-            date TEXT PRIMARY KEY,
-            servers_count INTEGER NOT NULL DEFAULT 0,
-            channels_count INTEGER NOT NULL DEFAULT 0,
-            messages_count INTEGER NOT NULL DEFAULT 0,
-            relays_count INTEGER NOT NULL DEFAULT 0
-          );
-        `);
-        });
-        await this.schemaStep("Scrim error: ", async () => {
-            await this.Database?.exec(`CREATE TABLE IF NOT EXISTS Scrim
-          (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            id_author TEXT NOT NULL,
-            game TEXT NOT NULL,
-            level TEXT NOT NULL,
-            id_guild TEXT,
-            date DATETIME DEFAULT CURRENT_TIMESTAMP
-          );
-        `);
-        });
-        await this.schemaStep("Recrute error: ", async () => {
-            await this.Database?.exec(`CREATE TABLE IF NOT EXISTS Recrute
-          (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            id_author TEXT NOT NULL,
-            role TEXT NOT NULL,
-            id_guild TEXT,
-            date DATETIME DEFAULT CURRENT_TIMESTAMP
-          );
-        `);
-        });
-        await this.schemaStep("UserLink error: ", async () => {
-            // `/link` a été retirée : elle promettait une liaison que le site n'a
-            // jamais su recevoir, et sa table ne gardait plus que des identifiants
-            // Discord et des codes expirés. La supprimer efface les lignes des
-            // bases qui tournent ; aucune ne sera plus jamais écrite.
-            await this.Database?.exec("DROP TABLE IF EXISTS UserLink");
-        });
-        await this.schemaStep("ServerModule oauth cleanup error: ", async () => {
-            // Modules retirés : `oauth` n'existait que pour `/link`, `notifications`
-            // et `stats` n'étaient relus par aucune commande. Leurs préférences,
-            // qu'aucun code ne relit plus, partent avec eux.
-            await this.Database?.exec("DELETE FROM ServerModule WHERE module_key IN ('oauth', 'notifications', 'stats')");
-        });
-        await this.schemaStep("ServerInvite error: ", async () => {
-            await this.Database?.exec(`CREATE TABLE IF NOT EXISTS ServerInvite
-          (
-            id_guild TEXT PRIMARY KEY,
-            invite_url TEXT NOT NULL,
-            set_by TEXT,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-          );
-        `);
-        });
-        await this.schemaStep("RefereeRole error: ", async () => {
-            // Role arbitre d'un serveur : destinataires des signalements de probleme
-            // pousses par l'app web sur /internal/notify/referees. Une ligne par
-            // serveur, definie par la commande /set-referee-role.
-            await this.Database?.exec(`CREATE TABLE IF NOT EXISTS RefereeRole
-          (
-            id_guild TEXT PRIMARY KEY,
-            id_role TEXT NOT NULL,
-            set_by TEXT,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-          );
-        `);
-        });
-        await this.schemaStep("SiteVisit error: ", async () => {
-            // Instantane de frequentation du site, pousse par l'app web sur
-            // /internal/site-visits. Une seule ligne (id = 1) : le bot ne conserve
-            // que la derniere mesure, l'historique restant du cote du site.
-            await this.Database?.exec(`CREATE TABLE IF NOT EXISTS SiteVisit
-          (
-            id INTEGER PRIMARY KEY CHECK (id = 1),
-            total_visits INTEGER NOT NULL DEFAULT 0,
-            unique_visitors INTEGER NOT NULL DEFAULT 0,
-            visits_24h INTEGER NOT NULL DEFAULT 0,
-            unique_24h INTEGER NOT NULL DEFAULT 0,
-            visits_7d INTEGER NOT NULL DEFAULT 0,
-            unique_7d INTEGER NOT NULL DEFAULT 0,
-            visits_30d INTEGER NOT NULL DEFAULT 0,
-            unique_30d INTEGER NOT NULL DEFAULT 0,
-            identified_visitors INTEGER NOT NULL DEFAULT 0,
-            first_visit_at DATETIME,
-            last_visit_at DATETIME,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-          );
-        `);
-        });
-        await this.schemaStep("ActivityDaily error: ", async () => {
-            // Scrims et recherches de plus de 30 jours, repliés en nombres : ni
-            // auteur, ni ordre, ni heure (voir `anonymizeActivityAuthors`).
-            await this.Database?.exec(`CREATE TABLE IF NOT EXISTS ActivityDaily
-          (
-            kind TEXT NOT NULL,
-            day TEXT NOT NULL,
-            id_guild TEXT NOT NULL DEFAULT '',
-            detail TEXT NOT NULL DEFAULT '',
-            count INTEGER NOT NULL,
-            PRIMARY KEY (kind, day, id_guild, detail)
-          );
-        `);
-        });
-        await this.schemaStep("BotOwner error: ", async () => {
-            // Application Discord propriétaire de cette base (une ligne). Le
-            // rattrapage des serveurs quittés s'y fie avant tout effacement : un bot
-            // lancé avec un autre jeton sur cette base verrait un cache qui ne la
-            // décrit pas, et oublierait tout le réseau.
-            await this.Database?.exec(`CREATE TABLE IF NOT EXISTS BotOwner
-          (
-            id INTEGER PRIMARY KEY CHECK (id = 1),
-            application_id TEXT NOT NULL
-          );
-        `);
-        });
+            console.log(`Adding "${rank}" to the database...`);
+            await this.Database?.run("INSERT INTO Ranks (name) VALUES (?)", [rank]);
+        }
     }
     /**
      * insère une ligne dans la table cible.
@@ -1230,13 +982,13 @@ export { Bdd, getBddInstance, closeBddInstance, resetBddInstance, resolveBddPath
 </div>
 
 <nav>
-    <h2><a href="index.html">Home</a></h2><h3>Classes</h3><ul><li><a href="Bdd.html">Bdd</a></li><li><a href="HandleResolutionTimeoutError.html">HandleResolutionTimeoutError</a></li><li><a href="HomeGuildUnavailableError.html">HomeGuildUnavailableError</a></li><li><a href="MissingCommandError.html">MissingCommandError</a></li><li><a href="Tips.html">Tips</a></li></ul><h3>Global</h3><ul><li><a href="global.html#ACTIVITY_AUTHOR_RETENTION_DAYS">ACTIVITY_AUTHOR_RETENTION_DAYS</a></li><li><a href="global.html#ADHESION_REMINDER_HOUR">ADHESION_REMINDER_HOUR</a></li><li><a href="global.html#ARCHIVE_NAME">ARCHIVE_NAME</a></li><li><a href="global.html#CHANNEL_FAILED_NOTICE">CHANNEL_FAILED_NOTICE</a></li><li><a href="global.html#CHECK_TIMEOUT_MS">CHECK_TIMEOUT_MS</a></li><li><a href="global.html#COMMAND_DIRS">COMMAND_DIRS</a></li><li><a href="global.html#COMMAND_PATH">COMMAND_PATH</a></li><li><a href="global.html#COMMAND_TIMEOUT_MS">COMMAND_TIMEOUT_MS</a></li><li><a href="global.html#CONFIGURED_GUILDS_SQL">CONFIGURED_GUILDS_SQL</a></li><li><a href="global.html#DEFAULT_ADHESION_MESSAGE">DEFAULT_ADHESION_MESSAGE</a></li><li><a href="global.html#DEFAULT_BDD_PATH">DEFAULT_BDD_PATH</a></li><li><a href="global.html#DEFAULT_DEDUPE_WINDOW_MS">DEFAULT_DEDUPE_WINDOW_MS</a></li><li><a href="global.html#DEFAULT_INTERNAL_HOST">DEFAULT_INTERNAL_HOST</a></li><li><a href="global.html#DISCORD_ID_RE">DISCORD_ID_RE</a></li><li><a href="global.html#DISCORD_MESSAGE_MAX">DISCORD_MESSAGE_MAX</a></li><li><a href="global.html#EXPECTED_ARCHIVE_ENTRIES">EXPECTED_ARCHIVE_ENTRIES</a></li><li><a href="global.html#FEED_ANONYMOUS_ACTOR">FEED_ANONYMOUS_ACTOR</a></li><li><a href="global.html#FEED_EVENT_RETENTION_DAYS">FEED_EVENT_RETENTION_DAYS</a></li><li><a href="global.html#FETCH_GRACE_MS">FETCH_GRACE_MS</a></li><li><a href="global.html#GONE_CODES">GONE_CODES</a></li><li><a href="global.html#GUILD_CHANNEL_TABLE">GUILD_CHANNEL_TABLE</a></li><li><a href="global.html#GUILD_CONFIG_TABLES">GUILD_CONFIG_TABLES</a></li><li><a href="global.html#IGNORABLE_DISCORD_CODES">IGNORABLE_DISCORD_CODES</a></li><li><a href="global.html#INCOMPLETE_WARNING">INCOMPLETE_WARNING</a></li><li><a href="global.html#INHERITED_ENV_KEYS">INHERITED_ENV_KEYS</a></li><li><a href="global.html#IPV4_MAPPED_PREFIX">IPV4_MAPPED_PREFIX</a></li><li><a href="global.html#ITERATION_UNLIMITED">ITERATION_UNLIMITED</a></li><li><a href="global.html#LISTED_ARCHIVES">LISTED_ARCHIVES</a></li><li><a href="global.html#LOOPBACK_HOSTS">LOOPBACK_HOSTS</a></li><li><a href="global.html#MARKDOWN_LINK_SPECIALS">MARKDOWN_LINK_SPECIALS</a></li><li><a href="global.html#MAX_ATTEMPTS">MAX_ATTEMPTS</a></li><li><a href="global.html#MAX_CAUSE_DEPTH">MAX_CAUSE_DEPTH</a></li><li><a href="global.html#MAX_LISTING_BYTES">MAX_LISTING_BYTES</a></li><li><a href="global.html#MAX_LOG_DELETIONS_PER_RUN">MAX_LOG_DELETIONS_PER_RUN</a></li><li><a href="global.html#MAX_LOG_PAGES_PER_RUN">MAX_LOG_PAGES_PER_RUN</a></li><li><a href="global.html#MAX_MESSAGE_LENGTH">MAX_MESSAGE_LENGTH</a></li><li><a href="global.html#MAX_RECIPIENTS">MAX_RECIPIENTS</a></li><li><a href="global.html#MAX_REFEREE_DMS">MAX_REFEREE_DMS</a></li><li><a href="global.html#MAX_TRACKED_KEYS">MAX_TRACKED_KEYS</a></li><li><a href="global.html#MEMBERS_DELIVERED_NOTICE">MEMBERS_DELIVERED_NOTICE</a></li><li><a href="global.html#MENTION_PATTERN">MENTION_PATTERN</a></li><li><a href="global.html#MESSAGE_RETENTION_DAYS">MESSAGE_RETENTION_DAYS</a></li><li><a href="global.html#MESSAGE_WINDOW_DAYS">MESSAGE_WINDOW_DAYS</a></li><li><a href="global.html#MISSING_ACCESS">MISSING_ACCESS</a></li><li><a href="global.html#MISSING_FILES_NOTICE">MISSING_FILES_NOTICE</a></li><li><a href="global.html#MODULE_KEYS">MODULE_KEYS</a></li><li><a href="global.html#NO_DISPLAY_NAME">NO_DISPLAY_NAME</a></li><li><a href="global.html#PARIS_TIME_ZONE">PARIS_TIME_ZONE</a></li><li><a href="global.html#PERMISSION_WARNING">PERMISSION_WARNING</a></li><li><a href="global.html#POSTPONED">POSTPONED</a></li><li><a href="global.html#PRODUCTION_SEARCH_OPTIONS">PRODUCTION_SEARCH_OPTIONS</a></li><li><a href="global.html#RECRUIT_ROLE_CHOICES">RECRUIT_ROLE_CHOICES</a></li><li><a href="global.html#RESOLVE_BUDGET_MS">RESOLVE_BUDGET_MS</a></li><li><a href="global.html#RESOLVE_CONCURRENCY">RESOLVE_CONCURRENCY</a></li><li><a href="global.html#RESOLVE_WAVE_BUDGET_MS">RESOLVE_WAVE_BUDGET_MS</a></li><li><a href="global.html#RETENTION_MODIFIER">RETENTION_MODIFIER</a></li><li><a href="global.html#ROLLBACK_RETENTION_DAYS">ROLLBACK_RETENTION_DAYS</a></li><li><a href="global.html#ROLLBACK_STAMP">ROLLBACK_STAMP</a></li><li><a href="global.html#SCRIM_GAME">SCRIM_GAME</a></li><li><a href="global.html#SCRIM_GAME_LABEL">SCRIM_GAME_LABEL</a></li><li><a href="global.html#SCRIM_LEVEL_CHOICES">SCRIM_LEVEL_CHOICES</a></li><li><a href="global.html#SEE_PM2">SEE_PM2</a></li><li><a href="global.html#SEVERAL_SERVICES">SEVERAL_SERVICES</a></li><li><a href="global.html#SITE_VISITOR_WINDOW_MONTHS">SITE_VISITOR_WINDOW_MONTHS</a></li><li><a href="global.html#SNOWFLAKE_PATTERN">SNOWFLAKE_PATTERN</a></li><li><a href="global.html#SPARKLINE_POINTS">SPARKLINE_POINTS</a></li><li><a href="global.html#SQLITE_MAGIC">SQLITE_MAGIC</a></li><li><a href="global.html#STAFF_LOG_RETENTION_DAYS">STAFF_LOG_RETENTION_DAYS</a></li><li><a href="global.html#STALE_AFTER_MS">STALE_AFTER_MS</a></li><li><a href="global.html#TIPS_EVERY">TIPS_EVERY</a></li><li><a href="global.html#TOO_MANY_ATTACHMENTS">TOO_MANY_ATTACHMENTS</a></li><li><a href="global.html#TRANSIENT_NETWORK_CODES">TRANSIENT_NETWORK_CODES</a></li><li><a href="global.html#UNSPECIFIED_CHOICE_VALUE">UNSPECIFIED_CHOICE_VALUE</a></li><li><a href="global.html#_deleteTempMsg">_deleteTempMsg</a></li><li><a href="global.html#_resetChannel">_resetChannel</a></li><li><a href="global.html#_resetProcessGuards">_resetProcessGuards</a></li><li><a href="global.html#_resetServer">_resetServer</a></li><li><a href="global.html#absDelta">absDelta</a></li><li><a href="global.html#activeBanMessageIds">activeBanMessageIds</a></li><li><a href="global.html#addArchives">addArchives</a></li><li><a href="global.html#addConfiguredAdmins">addConfiguredAdmins</a></li><li><a href="global.html#addMembers">addMembers</a></li><li><a href="global.html#adhesionDir">adhesionDir</a></li><li><a href="global.html#adhesionFilePath">adhesionFilePath</a></li><li><a href="global.html#adhesionPerimee">adhesionPerimee</a></li><li><a href="global.html#adhesionValide">adhesionValide</a></li><li><a href="global.html#alertLeadership">alertLeadership</a></li><li><a href="global.html#alertReferees">alertReferees</a></li><li><a href="global.html#anonymizeOldActivity">anonymizeOldActivity</a></li><li><a href="global.html#answerBackupCheck">answerBackupCheck</a></li><li><a href="global.html#answerTmp">answerTmp</a></li><li><a href="global.html#archiveSourcesFromEnv">archiveSourcesFromEnv</a></li><li><a href="global.html#areaFilter">areaFilter</a></li><li><a href="global.html#asLogChannel">asLogChannel</a></li><li><a href="global.html#assertSqlIdentifier">assertSqlIdentifier</a></li><li><a href="global.html#authorCopy">authorCopy</a></li><li><a href="global.html#authorize">authorize</a></li><li><a href="global.html#backupCheck">backupCheck</a></li><li><a href="global.html#backupCheckConfigFromEnv">backupCheckConfigFromEnv</a></li><li><a href="global.html#backupChecksPassed">backupChecksPassed</a></li><li><a href="global.html#ban">ban</a></li><li><a href="global.html#banMessageIds">banMessageIds</a></li><li><a href="global.html#ban_id">ban_id</a></li><li><a href="global.html#ban_username">ban_username</a></li><li><a href="global.html#banlist">banlist</a></li><li><a href="global.html#broadcast">broadcast</a></li><li><a href="global.html#buildAttachments">buildAttachments</a></li><li><a href="global.html#buildEmbedPage">buildEmbedPage</a></li><li><a href="global.html#buildServerChoices">buildServerChoices</a></li><li><a href="global.html#buildServiceMessage">buildServiceMessage</a></li><li><a href="global.html#capRefereeTargets">capRefereeTargets</a></li><li><a href="global.html#capReferees">capReferees</a></li><li><a href="global.html#channelDeliveredNotice">channelDeliveredNotice</a></li><li><a href="global.html#channelIsGone">channelIsGone</a></li><li><a href="global.html#checkAdminRole">checkAdminRole</a></li><li><a href="global.html#checkBan">checkBan</a></li><li><a href="global.html#checkChannelMinPermissions">checkChannelMinPermissions</a></li><li><a href="global.html#checkCooldown">checkCooldown</a></li><li><a href="global.html#checkIntervalleAdhesion">checkIntervalleAdhesion</a></li><li><a href="global.html#checkLatestArchive">checkLatestArchive</a></li><li><a href="global.html#checkMessageValidity">checkMessageValidity</a></li><li><a href="global.html#checkPermissions">checkPermissions</a></li><li><a href="global.html#checkRecipientKey">checkRecipientKey</a></li><li><a href="global.html#checkTargets">checkTargets</a></li><li><a href="global.html#checkUploadsMirror">checkUploadsMirror</a></li><li><a href="global.html#choiceLabel">choiceLabel</a></li><li><a href="global.html#classifyError">classifyError</a></li><li><a href="global.html#client">client</a></li><li><a href="global.html#closeBddInstance">closeBddInstance</a></li><li><a href="global.html#collectAdmins">collectAdmins</a></li><li><a href="global.html#collectRecipients">collectRecipients</a></li><li><a href="global.html#commandEnv">commandEnv</a></li><li><a href="global.html#commands">commands</a></li><li><a href="global.html#comparable">comparable</a></li><li><a href="global.html#compareNewestFirst">compareNewestFirst</a></li><li><a href="global.html#configModule">configModule</a></li><li><a href="global.html#confirmMembersDelivered">confirmMembersDelivered</a></li><li><a href="global.html#contactAdminServer">contactAdminServer</a></li><li><a href="global.html#createErrorReporter">createErrorReporter</a></li><li><a href="global.html#decryptDatabase">decryptDatabase</a></li><li><a href="global.html#dedupeRecipients">dedupeRecipients</a></li><li><a href="global.html#defaultRunner">defaultRunner</a></li><li><a href="global.html#defineRankRange">defineRankRange</a></li><li><a href="global.html#delay">delay</a></li><li><a href="global.html#deleteBanMessages">deleteBanMessages</a></li><li><a href="global.html#deleteDPMsgs">deleteDPMsgs</a></li><li><a href="global.html#deleteOldAttachment">deleteOldAttachment</a></li><li><a href="global.html#deleteSetupAdhesion">deleteSetupAdhesion</a></li><li><a href="global.html#deliverDirectMessages">deliverDirectMessages</a></li><li><a href="global.html#deliverToAuthor">deliverToAuthor</a></li><li><a href="global.html#deliverToChannel">deliverToChannel</a></li><li><a href="global.html#deliverToMembers">deliverToMembers</a></li><li><a href="global.html#deliverToRecipients">deliverToRecipients</a></li><li><a href="global.html#deliverToTargets">deliverToTargets</a></li><li><a href="global.html#describeError">describeError</a></li><li><a href="global.html#deterministicColor">deterministicColor</a></li><li><a href="global.html#displayChannelFilter">displayChannelFilter</a></li><li><a href="global.html#displayChannelRankFilter">displayChannelRankFilter</a></li><li><a href="global.html#displayNameLabel">displayNameLabel</a></li><li><a href="global.html#displaySetupAdhesion">displaySetupAdhesion</a></li><li><a href="global.html#downloadAttachment">downloadAttachment</a></li><li><a href="global.html#dropTarget">dropTarget</a></li><li><a href="global.html#eraseGuild">eraseGuild</a></li><li><a href="global.html#eraseLeftGuild">eraseLeftGuild</a></li><li><a href="global.html#errorCode">errorCode</a></li><li><a href="global.html#errorIsError">errorIsError</a></li><li><a href="global.html#errorTrace">errorTrace</a></li><li><a href="global.html#escapeLinkLabel">escapeLinkLabel</a></li><li><a href="global.html#execCommand">execCommand</a></li><li><a href="global.html#expandHome">expandHome</a></li><li><a href="global.html#extractRanks">extractRanks</a></li><li><a href="global.html#failedSourceLabel">failedSourceLabel</a></li><li><a href="global.html#failureDetail">failureDetail</a></li><li><a href="global.html#fetchAllMembersOnce">fetchAllMembersOnce</a></li><li><a href="global.html#fetchArchive">fetchArchive</a></li><li><a href="global.html#fetchAuthor">fetchAuthor</a></li><li><a href="global.html#fetchGuild">fetchGuild</a></li><li><a href="global.html#fetchHomeGuilds">fetchHomeGuilds</a></li><li><a href="global.html#fetchRoleMembers">fetchRoleMembers</a></li><li><a href="global.html#fetchServer">fetchServer</a></li><li><a href="global.html#fetchTargets">fetchTargets</a></li><li><a href="global.html#fillBlueCommands">fillBlueCommands</a></li><li><a href="global.html#filterArchiveNames">filterArchiveNames</a></li><li><a href="global.html#findGuildMemberByHandle">findGuildMemberByHandle</a></li><li><a href="global.html#findHomeMember">findHomeMember</a></li><li><a href="global.html#findMemberIn">findMemberIn</a></li><li><a href="global.html#findMissingCommand">findMissingCommand</a></li><li><a href="global.html#findTargetChannels">findTargetChannels</a></li><li><a href="global.html#forgetDeletedChannels">forgetDeletedChannels</a></li><li><a href="global.html#forgetDepartedGuilds">forgetDepartedGuilds</a></li><li><a href="global.html#forgetGuildDeletedChannels">forgetGuildDeletedChannels</a></li><li><a href="global.html#formatBackupChecks">formatBackupChecks</a></li><li><a href="global.html#formatBackupStatus">formatBackupStatus</a></li><li><a href="global.html#formatBytes">formatBytes</a></li><li><a href="global.html#formatCadence">formatCadence</a></li><li><a href="global.html#formatDiskUsage">formatDiskUsage</a></li><li><a href="global.html#formatPlayerStats">formatPlayerStats</a></li><li><a href="global.html#formatRawRanks">formatRawRanks</a></li><li><a href="global.html#formatSiteVisitStats">formatSiteVisitStats</a></li><li><a href="global.html#formatSnapshotAge">formatSnapshotAge</a></li><li><a href="global.html#formatTarget">formatTarget</a></li><li><a href="global.html#getAdhesion">getAdhesion</a></li><li><a href="global.html#getAdminRole">getAdminRole</a></li><li><a href="global.html#getBacklog">getBacklog</a></li><li><a href="global.html#getBddInstance">getBddInstance</a></li><li><a href="global.html#getCpuPercent">getCpuPercent</a></li><li><a href="global.html#getDiskUsage">getDiskUsage</a></li><li><a href="global.html#getInviteFromChannel">getInviteFromChannel</a></li><li><a href="global.html#getInviteFromMessage">getInviteFromMessage</a></li><li><a href="global.html#getReporter">getReporter</a></li><li><a href="global.html#getServicesAndID">getServicesAndID</a></li><li><a href="global.html#getSnapshotsBetween">getSnapshotsBetween</a></li><li><a href="global.html#getTargetRegions">getTargetRegions</a></li><li><a href="global.html#getTips">getTips</a></li><li><a href="global.html#hasTarget">hasTarget</a></li><li><a href="global.html#homeGuildIds">homeGuildIds</a></li><li><a href="global.html#inFlight">inFlight</a></li><li><a href="global.html#initialIteration">initialIteration</a></li><li><a href="global.html#installProcessGuards">installProcessGuards</a></li><li><a href="global.html#isBackupFresh">isBackupFresh</a></li><li><a href="global.html#isDiscordInvite">isDiscordInvite</a></li><li><a href="global.html#isExecutable">isExecutable</a></li><li><a href="global.html#isGone">isGone</a></li><li><a href="global.html#isIgnorableDiscordError">isIgnorableDiscordError</a></li><li><a href="global.html#isInheritedEnvKey">isInheritedEnvKey</a></li><li><a href="global.html#isLoopbackHost">isLoopbackHost</a></li><li><a href="global.html#isMissingBinary">isMissingBinary</a></li><li><a href="global.html#isModuleEnabled">isModuleEnabled</a></li><li><a href="global.html#isNativeError">isNativeError</a></li><li><a href="global.html#isSnowflake">isSnowflake</a></li><li><a href="global.html#isTransientNetworkError">isTransientNetworkError</a></li><li><a href="global.html#isValidModule">isValidModule</a></li><li><a href="global.html#leadershipIds">leadershipIds</a></li><li><a href="global.html#listArchives">listArchives</a></li><li><a href="global.html#listModules">listModules</a></li><li><a href="global.html#listOrExplain">listOrExplain</a></li><li><a href="global.html#listPartner">listPartner</a></li><li><a href="global.html#loadAdhesionAttachments">loadAdhesionAttachments</a></li><li><a href="global.html#loadAdhesionFiles">loadAdhesionFiles</a></li><li><a href="global.html#loadAdhesionPaths">loadAdhesionPaths</a></li><li><a href="global.html#logAdhesion">logAdhesion</a></li><li><a href="global.html#logAdhesionError">logAdhesionError</a></li><li><a href="global.html#logDistributionError">logDistributionError</a></li><li><a href="global.html#logFailure">logFailure</a></li><li><a href="global.html#manageDistribution">manageDistribution</a></li><li><a href="global.html#manageMsgExpiration">manageMsgExpiration</a></li><li><a href="global.html#manageOldFiles">manageOldFiles</a></li><li><a href="global.html#manageServiceSuccess">manageServiceSuccess</a></li><li><a href="global.html#matchesToken">matchesToken</a></li><li><a href="global.html#maxSnowflake">maxSnowflake</a></li><li><a href="global.html#memberDeliveredNotice">memberDeliveredNotice</a></li><li><a href="global.html#memberFailedLine">memberFailedLine</a></li><li><a href="global.html#memberMatchesHandle">memberMatchesHandle</a></li><li><a href="global.html#membersFailedNotice">membersFailedNotice</a></li><li><a href="global.html#missingCommandText">missingCommandText</a></li><li><a href="global.html#newChannelPartner">newChannelPartner</a></li><li><a href="global.html#nextTips">nextTips</a></li><li><a href="global.html#nextTransmissionAfter">nextTransmissionAfter</a></li><li><a href="global.html#noRecipientNotice">noRecipientNotice</a></li><li><a href="global.html#normalizeInvite">normalizeInvite</a></li><li><a href="global.html#normalizeLegacyChoice">normalizeLegacyChoice</a></li><li><a href="global.html#normalizeText">normalizeText</a></li><li><a href="global.html#notifyBannedUser">notifyBannedUser</a></li><li><a href="global.html#notifyRoleUnreadable">notifyRoleUnreadable</a></li><li><a href="global.html#olderThanRetention">olderThanRetention</a></li><li><a href="global.html#ownsDatabase">ownsDatabase</a></li><li><a href="global.html#parisDaysLater">parisDaysLater</a></li><li><a href="global.html#parisOffsetMs">parisOffsetMs</a></li><li><a href="global.html#parisWallClock">parisWallClock</a></li><li><a href="global.html#parseDirectMessageRequest">parseDirectMessageRequest</a></li><li><a href="global.html#parseDiscordHandle">parseDiscordHandle</a></li><li><a href="global.html#parseEnvFile">parseEnvFile</a></li><li><a href="global.html#parseRecipients">parseRecipients</a></li><li><a href="global.html#parseRefereeAlert">parseRefereeAlert</a></li><li><a href="global.html#parseSiteVisitStats">parseSiteVisitStats</a></li><li><a href="global.html#parseTarListing">parseTarListing</a></li><li><a href="global.html#partialFailureText">partialFailureText</a></li><li><a href="global.html#pickArchive">pickArchive</a></li><li><a href="global.html#pickAttachment">pickAttachment</a></li><li><a href="global.html#ping">ping</a></li><li><a href="global.html#pipelineFailureText">pipelineFailureText</a></li><li><a href="global.html#postToAdminChannel">postToAdminChannel</a></li><li><a href="global.html#postponeForRole">postponeForRole</a></li><li><a href="global.html#printHelp">printHelp</a></li><li><a href="global.html#purgeFeedIdentifiers">purgeFeedIdentifiers</a></li><li><a href="global.html#purgeLogChannel">purgeLogChannel</a></li><li><a href="global.html#purgeOldFeedEvents">purgeOldFeedEvents</a></li><li><a href="global.html#purgeOldRollbacks">purgeOldRollbacks</a></li><li><a href="global.html#purgeStaffLogs">purgeStaffLogs</a></li><li><a href="global.html#queryInteger">queryInteger</a></li><li><a href="global.html#rankChoices">rankChoices</a></li><li><a href="global.html#readAdhesionPaths">readAdhesionPaths</a></li><li><a href="global.html#readAdhesionRoleMembers">readAdhesionRoleMembers</a></li><li><a href="global.html#readBackupStatus">readBackupStatus</a></li><li><a href="global.html#readOptionalFile">readOptionalFile</a></li><li><a href="global.html#readPackageInfo">readPackageInfo</a></li><li><a href="global.html#readRefereeMembers">readRefereeMembers</a></li><li><a href="global.html#readRoleMembers">readRoleMembers</a></li><li><a href="global.html#readSiteVisitStats">readSiteVisitStats</a></li><li><a href="global.html#recordDailySnapshot">recordDailySnapshot</a></li><li><a href="global.html#recordEvent">recordEvent</a></li><li><a href="global.html#recrute">recrute</a></li><li><a href="global.html#refuse">refuse</a></li><li><a href="global.html#refuseUnjoinedGuild">refuseUnjoinedGuild</a></li><li><a href="global.html#relay">relay</a></li><li><a href="global.html#relayStatus">relayStatus</a></li><li><a href="global.html#remainingIteration">remainingIteration</a></li><li><a href="global.html#reminderPostponedNotice">reminderPostponedNotice</a></li><li><a href="global.html#remoteArchiveNames">remoteArchiveNames</a></li><li><a href="global.html#remotePath">remotePath</a></li><li><a href="global.html#remoteServerReset">remoteServerReset</a></li><li><a href="global.html#removeIntervalle">removeIntervalle</a></li><li><a href="global.html#reportDistribution">reportDistribution</a></li><li><a href="global.html#reportError">reportError</a></li><li><a href="global.html#reportMissingPaths">reportMissingPaths</a></li><li><a href="global.html#reportRestore">reportRestore</a></li><li><a href="global.html#resetBddInstance">resetBddInstance</a></li><li><a href="global.html#resetChannel">resetChannel</a></li><li><a href="global.html#resetRefereeRole">resetRefereeRole</a></li><li><a href="global.html#resetServer">resetServer</a></li><li><a href="global.html#resetServerInvite">resetServerInvite</a></li><li><a href="global.html#resolutionWaves">resolutionWaves</a></li><li><a href="global.html#resolveBddPath">resolveBddPath</a></li><li><a href="global.html#resolveChannel">resolveChannel</a></li><li><a href="global.html#resolveCommand">resolveCommand</a></li><li><a href="global.html#resolveDiscordHandle">resolveDiscordHandle</a></li><li><a href="global.html#resolveMember">resolveMember</a></li><li><a href="global.html#resolveRole">resolveRole</a></li><li><a href="global.html#resolveScriptPath">resolveScriptPath</a></li><li><a href="global.html#resolveServerId">resolveServerId</a></li><li><a href="global.html#resolveTargetRegions">resolveTargetRegions</a></li><li><a href="global.html#restoreBackup">restoreBackup</a></li><li><a href="global.html#restoreDatabase">restoreDatabase</a></li><li><a href="global.html#restoreFailureText">restoreFailureText</a></li><li><a href="global.html#resumePoints">resumePoints</a></li><li><a href="global.html#roleReader">roleReader</a></li><li><a href="global.html#roleUnreadableNotice">roleUnreadableNotice</a></li><li><a href="global.html#rollbackTimestamp">rollbackTimestamp</a></li><li><a href="global.html#runBackupChecks">runBackupChecks</a></li><li><a href="global.html#runDataRetention">runDataRetention</a></li><li><a href="global.html#runDataRetentionOnce">runDataRetentionOnce</a></li><li><a href="global.html#runPipeline">runPipeline</a></li><li><a href="global.html#runSetupWizard">runSetupWizard</a></li><li><a href="global.html#safeChannel">safeChannel</a></li><li><a href="global.html#safeFollowUp">safeFollowUp</a></li><li><a href="global.html#safeMsgReply">safeMsgReply</a></li><li><a href="global.html#safeReact">safeReact</a></li><li><a href="global.html#safeReply">safeReply</a></li><li><a href="global.html#safeUser">safeUser</a></li><li><a href="global.html#saveAdhesionPaths">saveAdhesionPaths</a></li><li><a href="global.html#saveSiteVisitStats">saveSiteVisitStats</a></li><li><a href="global.html#scrim">scrim</a></li><li><a href="global.html#scrubFeedField">scrubFeedField</a></li><li><a href="global.html#scrubFeedText">scrubFeedText</a></li><li><a href="global.html#searchInWaves">searchInWaves</a></li><li><a href="global.html#searchString">searchString</a></li><li><a href="global.html#selectExpiredLogMessages">selectExpiredLogMessages</a></li><li><a href="global.html#selectExpiredRollbacks">selectExpiredRollbacks</a></li><li><a href="global.html#selectTargetedService">selectTargetedService</a></li><li><a href="global.html#sendAdhesion">sendAdhesion</a></li><li><a href="global.html#sendAdhesionReminder">sendAdhesionReminder</a></li><li><a href="global.html#sendDatabaseBackup">sendDatabaseBackup</a></li><li><a href="global.html#sendInteractiveMsg">sendInteractiveMsg</a></li><li><a href="global.html#sendLog">sendLog</a></li><li><a href="global.html#sendPrivately">sendPrivately</a></li><li><a href="global.html#sendServiceMessage">sendServiceMessage</a></li><li><a href="global.html#sendToAdmins">sendToAdmins</a></li><li><a href="global.html#sendToReferee">sendToReferee</a></li><li><a href="global.html#sendToTargets">sendToTargets</a></li><li><a href="global.html#servicesChoices">servicesChoices</a></li><li><a href="global.html#servicesWithNoRanks">servicesWithNoRanks</a></li><li><a href="global.html#setBotAdminRole">setBotAdminRole</a></li><li><a href="global.html#setChannelFilter">setChannelFilter</a></li><li><a href="global.html#setChannelRankFilter">setChannelRankFilter</a></li><li><a href="global.html#setModuleEnabled">setModuleEnabled</a></li><li><a href="global.html#setRankFilter">setRankFilter</a></li><li><a href="global.html#setRefereeRole">setRefereeRole</a></li><li><a href="global.html#setServerInvite">setServerInvite</a></li><li><a href="global.html#setupIntervalAdhesion">setupIntervalAdhesion</a></li><li><a href="global.html#showBotAdminRole">showBotAdminRole</a></li><li><a href="global.html#showRefereeRole">showRefereeRole</a></li><li><a href="global.html#showServerInvite">showServerInvite</a></li><li><a href="global.html#shutdown">shutdown</a></li><li><a href="global.html#shuttingDown">shuttingDown</a></li><li><a href="global.html#sparklineFromBuckets">sparklineFromBuckets</a></li><li><a href="global.html#spawnCommand">spawnCommand</a></li><li><a href="global.html#splitForDiscord">splitForDiscord</a></li><li><a href="global.html#startInternalApi">startInternalApi</a></li><li><a href="global.html#statsPlayer">statsPlayer</a></li><li><a href="global.html#statsSite">statsSite</a></li><li><a href="global.html#stopProcess">stopProcess</a></li><li><a href="global.html#subscribe">subscribe</a></li><li><a href="global.html#toSQLiteDate">toSQLiteDate</a></li><li><a href="global.html#truncateMessage">truncateMessage</a></li><li><a href="global.html#ts">ts</a></li><li><a href="global.html#unban">unban</a></li><li><a href="global.html#unlinkedFrom">unlinkedFrom</a></li><li><a href="global.html#updateCommands">updateCommands</a></li><li><a href="global.html#validateSqliteFile">validateSqliteFile</a></li></ul>
+    <h2><a href="index.html">Home</a></h2><h3>Classes</h3><ul><li><a href="Bdd.html">Bdd</a></li><li><a href="HandleResolutionTimeoutError.html">HandleResolutionTimeoutError</a></li><li><a href="HomeGuildUnavailableError.html">HomeGuildUnavailableError</a></li><li><a href="MissingCommandError.html">MissingCommandError</a></li><li><a href="Tips.html">Tips</a></li></ul><h3>Global</h3><ul><li><a href="global.html#ACTIVITY_AUTHOR_RETENTION_DAYS">ACTIVITY_AUTHOR_RETENTION_DAYS</a></li><li><a href="global.html#ACTIVITY_DAILY_TABLE">ACTIVITY_DAILY_TABLE</a></li><li><a href="global.html#ADHESION_INTERVAL_TABLE">ADHESION_INTERVAL_TABLE</a></li><li><a href="global.html#ADHESION_REMINDER_HOUR">ADHESION_REMINDER_HOUR</a></li><li><a href="global.html#ARCHIVE_NAME">ARCHIVE_NAME</a></li><li><a href="global.html#BAN_TABLE">BAN_TABLE</a></li><li><a href="global.html#BOT_OWNER_TABLE">BOT_OWNER_TABLE</a></li><li><a href="global.html#BUSY_TIMEOUT_PRAGMA">BUSY_TIMEOUT_PRAGMA</a></li><li><a href="global.html#CHANNEL_FAILED_NOTICE">CHANNEL_FAILED_NOTICE</a></li><li><a href="global.html#CHANNEL_PARTNER_RANK_TABLE">CHANNEL_PARTNER_RANK_TABLE</a></li><li><a href="global.html#CHANNEL_PARTNER_SERVICE_TABLE">CHANNEL_PARTNER_SERVICE_TABLE</a></li><li><a href="global.html#CHANNEL_PARTNER_TABLE">CHANNEL_PARTNER_TABLE</a></li><li><a href="global.html#CHECK_TIMEOUT_MS">CHECK_TIMEOUT_MS</a></li><li><a href="global.html#COMMAND_DIRS">COMMAND_DIRS</a></li><li><a href="global.html#COMMAND_PATH">COMMAND_PATH</a></li><li><a href="global.html#COMMAND_TIMEOUT_MS">COMMAND_TIMEOUT_MS</a></li><li><a href="global.html#CONFIGURED_GUILDS_SQL">CONFIGURED_GUILDS_SQL</a></li><li><a href="global.html#DAILY_SNAPSHOT_TABLE">DAILY_SNAPSHOT_TABLE</a></li><li><a href="global.html#DEFAULT_ADHESION_MESSAGE">DEFAULT_ADHESION_MESSAGE</a></li><li><a href="global.html#DEFAULT_BDD_PATH">DEFAULT_BDD_PATH</a></li><li><a href="global.html#DEFAULT_DEDUPE_WINDOW_MS">DEFAULT_DEDUPE_WINDOW_MS</a></li><li><a href="global.html#DEFAULT_INTERNAL_HOST">DEFAULT_INTERNAL_HOST</a></li><li><a href="global.html#DISCORD_ID_RE">DISCORD_ID_RE</a></li><li><a href="global.html#DISCORD_MESSAGE_MAX">DISCORD_MESSAGE_MAX</a></li><li><a href="global.html#DPMSG_TABLE">DPMSG_TABLE</a></li><li><a href="global.html#DROP_USER_LINK">DROP_USER_LINK</a></li><li><a href="global.html#EXPECTED_ARCHIVE_ENTRIES">EXPECTED_ARCHIVE_ENTRIES</a></li><li><a href="global.html#FEED_ANONYMOUS_ACTOR">FEED_ANONYMOUS_ACTOR</a></li><li><a href="global.html#FEED_EVENT_RETENTION_DAYS">FEED_EVENT_RETENTION_DAYS</a></li><li><a href="global.html#FEED_EVENT_TABLE">FEED_EVENT_TABLE</a></li><li><a href="global.html#FETCH_GRACE_MS">FETCH_GRACE_MS</a></li><li><a href="global.html#GONE_CODES">GONE_CODES</a></li><li><a href="global.html#GUILD_CHANNEL_TABLE">GUILD_CHANNEL_TABLE</a></li><li><a href="global.html#GUILD_CONFIG_TABLES">GUILD_CONFIG_TABLES</a></li><li><a href="global.html#IGNORABLE_DISCORD_CODES">IGNORABLE_DISCORD_CODES</a></li><li><a href="global.html#INCOMPLETE_WARNING">INCOMPLETE_WARNING</a></li><li><a href="global.html#INHERITED_ENV_KEYS">INHERITED_ENV_KEYS</a></li><li><a href="global.html#IPV4_MAPPED_PREFIX">IPV4_MAPPED_PREFIX</a></li><li><a href="global.html#ITERATION_UNLIMITED">ITERATION_UNLIMITED</a></li><li><a href="global.html#LISTED_ARCHIVES">LISTED_ARCHIVES</a></li><li><a href="global.html#LOOPBACK_HOSTS">LOOPBACK_HOSTS</a></li><li><a href="global.html#MARKDOWN_LINK_SPECIALS">MARKDOWN_LINK_SPECIALS</a></li><li><a href="global.html#MAX_ATTEMPTS">MAX_ATTEMPTS</a></li><li><a href="global.html#MAX_CAUSE_DEPTH">MAX_CAUSE_DEPTH</a></li><li><a href="global.html#MAX_LISTING_BYTES">MAX_LISTING_BYTES</a></li><li><a href="global.html#MAX_LOG_DELETIONS_PER_RUN">MAX_LOG_DELETIONS_PER_RUN</a></li><li><a href="global.html#MAX_LOG_PAGES_PER_RUN">MAX_LOG_PAGES_PER_RUN</a></li><li><a href="global.html#MAX_MESSAGE_LENGTH">MAX_MESSAGE_LENGTH</a></li><li><a href="global.html#MAX_RECIPIENTS">MAX_RECIPIENTS</a></li><li><a href="global.html#MAX_REFEREE_DMS">MAX_REFEREE_DMS</a></li><li><a href="global.html#MAX_TRACKED_KEYS">MAX_TRACKED_KEYS</a></li><li><a href="global.html#MEMBERS_DELIVERED_NOTICE">MEMBERS_DELIVERED_NOTICE</a></li><li><a href="global.html#MENTION_PATTERN">MENTION_PATTERN</a></li><li><a href="global.html#MESSAGE_RETENTION_DAYS">MESSAGE_RETENTION_DAYS</a></li><li><a href="global.html#MESSAGE_SERVICE_TABLE">MESSAGE_SERVICE_TABLE</a></li><li><a href="global.html#MESSAGE_WINDOW_DAYS">MESSAGE_WINDOW_DAYS</a></li><li><a href="global.html#MISSING_ACCESS">MISSING_ACCESS</a></li><li><a href="global.html#MISSING_FILES_NOTICE">MISSING_FILES_NOTICE</a></li><li><a href="global.html#MODULE_KEYS">MODULE_KEYS</a></li><li><a href="global.html#NO_DISPLAY_NAME">NO_DISPLAY_NAME</a></li><li><a href="global.html#OGMSG_TABLE">OGMSG_TABLE</a></li><li><a href="global.html#PARIS_TIME_ZONE">PARIS_TIME_ZONE</a></li><li><a href="global.html#PERMISSION_WARNING">PERMISSION_WARNING</a></li><li><a href="global.html#POSTPONED">POSTPONED</a></li><li><a href="global.html#PRODUCTION_SEARCH_OPTIONS">PRODUCTION_SEARCH_OPTIONS</a></li><li><a href="global.html#PURGE_RETIRED_MODULES">PURGE_RETIRED_MODULES</a></li><li><a href="global.html#RANKS_TABLE">RANKS_TABLE</a></li><li><a href="global.html#RECRUIT_ROLE_CHOICES">RECRUIT_ROLE_CHOICES</a></li><li><a href="global.html#RECRUTE_TABLE">RECRUTE_TABLE</a></li><li><a href="global.html#REFEREE_ROLE_TABLE">REFEREE_ROLE_TABLE</a></li><li><a href="global.html#RESOLVE_BUDGET_MS">RESOLVE_BUDGET_MS</a></li><li><a href="global.html#RESOLVE_CONCURRENCY">RESOLVE_CONCURRENCY</a></li><li><a href="global.html#RESOLVE_WAVE_BUDGET_MS">RESOLVE_WAVE_BUDGET_MS</a></li><li><a href="global.html#RETENTION_MODIFIER">RETENTION_MODIFIER</a></li><li><a href="global.html#ROLE_ADMIN_TABLE">ROLE_ADMIN_TABLE</a></li><li><a href="global.html#ROLLBACK_RETENTION_DAYS">ROLLBACK_RETENTION_DAYS</a></li><li><a href="global.html#ROLLBACK_STAMP">ROLLBACK_STAMP</a></li><li><a href="global.html#SCRIM_GAME">SCRIM_GAME</a></li><li><a href="global.html#SCRIM_GAME_LABEL">SCRIM_GAME_LABEL</a></li><li><a href="global.html#SCRIM_LEVEL_CHOICES">SCRIM_LEVEL_CHOICES</a></li><li><a href="global.html#SCRIM_TABLE">SCRIM_TABLE</a></li><li><a href="global.html#SECURE_DELETE_PRAGMA">SECURE_DELETE_PRAGMA</a></li><li><a href="global.html#SEE_PM2">SEE_PM2</a></li><li><a href="global.html#SERVER_INVITE_TABLE">SERVER_INVITE_TABLE</a></li><li><a href="global.html#SERVER_MODULE_TABLE">SERVER_MODULE_TABLE</a></li><li><a href="global.html#SERVICE_TABLE">SERVICE_TABLE</a></li><li><a href="global.html#SEVERAL_SERVICES">SEVERAL_SERVICES</a></li><li><a href="global.html#SITE_VISITOR_WINDOW_MONTHS">SITE_VISITOR_WINDOW_MONTHS</a></li><li><a href="global.html#SITE_VISIT_TABLE">SITE_VISIT_TABLE</a></li><li><a href="global.html#SNOWFLAKE_PATTERN">SNOWFLAKE_PATTERN</a></li><li><a href="global.html#SPARKLINE_POINTS">SPARKLINE_POINTS</a></li><li><a href="global.html#SQLITE_MAGIC">SQLITE_MAGIC</a></li><li><a href="global.html#STAFF_LOG_RETENTION_DAYS">STAFF_LOG_RETENTION_DAYS</a></li><li><a href="global.html#STALE_AFTER_MS">STALE_AFTER_MS</a></li><li><a href="global.html#TIPS_EVERY">TIPS_EVERY</a></li><li><a href="global.html#TOO_MANY_ATTACHMENTS">TOO_MANY_ATTACHMENTS</a></li><li><a href="global.html#TRANSIENT_NETWORK_CODES">TRANSIENT_NETWORK_CODES</a></li><li><a href="global.html#UNSPECIFIED_CHOICE_VALUE">UNSPECIFIED_CHOICE_VALUE</a></li><li><a href="global.html#_deleteTempMsg">_deleteTempMsg</a></li><li><a href="global.html#_resetChannel">_resetChannel</a></li><li><a href="global.html#_resetProcessGuards">_resetProcessGuards</a></li><li><a href="global.html#_resetServer">_resetServer</a></li><li><a href="global.html#absDelta">absDelta</a></li><li><a href="global.html#activeBanMessageIds">activeBanMessageIds</a></li><li><a href="global.html#addArchives">addArchives</a></li><li><a href="global.html#addConfiguredAdmins">addConfiguredAdmins</a></li><li><a href="global.html#addMembers">addMembers</a></li><li><a href="global.html#adhesionDir">adhesionDir</a></li><li><a href="global.html#adhesionFilePath">adhesionFilePath</a></li><li><a href="global.html#adhesionPerimee">adhesionPerimee</a></li><li><a href="global.html#adhesionValide">adhesionValide</a></li><li><a href="global.html#alertLeadership">alertLeadership</a></li><li><a href="global.html#alertReferees">alertReferees</a></li><li><a href="global.html#anonymizeOldActivity">anonymizeOldActivity</a></li><li><a href="global.html#answerBackupCheck">answerBackupCheck</a></li><li><a href="global.html#answerTmp">answerTmp</a></li><li><a href="global.html#archiveSourcesFromEnv">archiveSourcesFromEnv</a></li><li><a href="global.html#areaFilter">areaFilter</a></li><li><a href="global.html#asLogChannel">asLogChannel</a></li><li><a href="global.html#assertSqlIdentifier">assertSqlIdentifier</a></li><li><a href="global.html#authorCopy">authorCopy</a></li><li><a href="global.html#authorize">authorize</a></li><li><a href="global.html#backupCheck">backupCheck</a></li><li><a href="global.html#backupCheckConfigFromEnv">backupCheckConfigFromEnv</a></li><li><a href="global.html#backupChecksPassed">backupChecksPassed</a></li><li><a href="global.html#ban">ban</a></li><li><a href="global.html#banMessageIds">banMessageIds</a></li><li><a href="global.html#ban_id">ban_id</a></li><li><a href="global.html#ban_username">ban_username</a></li><li><a href="global.html#banlist">banlist</a></li><li><a href="global.html#broadcast">broadcast</a></li><li><a href="global.html#buildAttachments">buildAttachments</a></li><li><a href="global.html#buildEmbedPage">buildEmbedPage</a></li><li><a href="global.html#buildServerChoices">buildServerChoices</a></li><li><a href="global.html#buildServiceMessage">buildServiceMessage</a></li><li><a href="global.html#capRefereeTargets">capRefereeTargets</a></li><li><a href="global.html#capReferees">capReferees</a></li><li><a href="global.html#channelDeliveredNotice">channelDeliveredNotice</a></li><li><a href="global.html#channelIsGone">channelIsGone</a></li><li><a href="global.html#checkAdminRole">checkAdminRole</a></li><li><a href="global.html#checkBan">checkBan</a></li><li><a href="global.html#checkChannelMinPermissions">checkChannelMinPermissions</a></li><li><a href="global.html#checkCooldown">checkCooldown</a></li><li><a href="global.html#checkIntervalleAdhesion">checkIntervalleAdhesion</a></li><li><a href="global.html#checkLatestArchive">checkLatestArchive</a></li><li><a href="global.html#checkMessageValidity">checkMessageValidity</a></li><li><a href="global.html#checkPermissions">checkPermissions</a></li><li><a href="global.html#checkRecipientKey">checkRecipientKey</a></li><li><a href="global.html#checkTargets">checkTargets</a></li><li><a href="global.html#checkUploadsMirror">checkUploadsMirror</a></li><li><a href="global.html#choiceLabel">choiceLabel</a></li><li><a href="global.html#classifyError">classifyError</a></li><li><a href="global.html#client">client</a></li><li><a href="global.html#closeBddInstance">closeBddInstance</a></li><li><a href="global.html#collectAdmins">collectAdmins</a></li><li><a href="global.html#collectRecipients">collectRecipients</a></li><li><a href="global.html#commandEnv">commandEnv</a></li><li><a href="global.html#commands">commands</a></li><li><a href="global.html#comparable">comparable</a></li><li><a href="global.html#compareNewestFirst">compareNewestFirst</a></li><li><a href="global.html#configModule">configModule</a></li><li><a href="global.html#confirmMembersDelivered">confirmMembersDelivered</a></li><li><a href="global.html#contactAdminServer">contactAdminServer</a></li><li><a href="global.html#createErrorReporter">createErrorReporter</a></li><li><a href="global.html#decryptDatabase">decryptDatabase</a></li><li><a href="global.html#dedupeRecipients">dedupeRecipients</a></li><li><a href="global.html#defaultRunner">defaultRunner</a></li><li><a href="global.html#defineRankRange">defineRankRange</a></li><li><a href="global.html#delay">delay</a></li><li><a href="global.html#deleteBanMessages">deleteBanMessages</a></li><li><a href="global.html#deleteDPMsgs">deleteDPMsgs</a></li><li><a href="global.html#deleteOldAttachment">deleteOldAttachment</a></li><li><a href="global.html#deleteSetupAdhesion">deleteSetupAdhesion</a></li><li><a href="global.html#deliverDirectMessages">deliverDirectMessages</a></li><li><a href="global.html#deliverToAuthor">deliverToAuthor</a></li><li><a href="global.html#deliverToChannel">deliverToChannel</a></li><li><a href="global.html#deliverToMembers">deliverToMembers</a></li><li><a href="global.html#deliverToRecipients">deliverToRecipients</a></li><li><a href="global.html#deliverToTargets">deliverToTargets</a></li><li><a href="global.html#describeError">describeError</a></li><li><a href="global.html#deterministicColor">deterministicColor</a></li><li><a href="global.html#displayChannelFilter">displayChannelFilter</a></li><li><a href="global.html#displayChannelRankFilter">displayChannelRankFilter</a></li><li><a href="global.html#displayNameLabel">displayNameLabel</a></li><li><a href="global.html#displaySetupAdhesion">displaySetupAdhesion</a></li><li><a href="global.html#downloadAttachment">downloadAttachment</a></li><li><a href="global.html#dropTarget">dropTarget</a></li><li><a href="global.html#eraseGuild">eraseGuild</a></li><li><a href="global.html#eraseLeftGuild">eraseLeftGuild</a></li><li><a href="global.html#errorCode">errorCode</a></li><li><a href="global.html#errorIsError">errorIsError</a></li><li><a href="global.html#errorTrace">errorTrace</a></li><li><a href="global.html#escapeLinkLabel">escapeLinkLabel</a></li><li><a href="global.html#execCommand">execCommand</a></li><li><a href="global.html#expandHome">expandHome</a></li><li><a href="global.html#extractRanks">extractRanks</a></li><li><a href="global.html#failedSourceLabel">failedSourceLabel</a></li><li><a href="global.html#failureDetail">failureDetail</a></li><li><a href="global.html#fetchAllMembersOnce">fetchAllMembersOnce</a></li><li><a href="global.html#fetchArchive">fetchArchive</a></li><li><a href="global.html#fetchAuthor">fetchAuthor</a></li><li><a href="global.html#fetchGuild">fetchGuild</a></li><li><a href="global.html#fetchHomeGuilds">fetchHomeGuilds</a></li><li><a href="global.html#fetchRoleMembers">fetchRoleMembers</a></li><li><a href="global.html#fetchServer">fetchServer</a></li><li><a href="global.html#fetchTargets">fetchTargets</a></li><li><a href="global.html#fillBlueCommands">fillBlueCommands</a></li><li><a href="global.html#filterArchiveNames">filterArchiveNames</a></li><li><a href="global.html#findGuildMemberByHandle">findGuildMemberByHandle</a></li><li><a href="global.html#findHomeMember">findHomeMember</a></li><li><a href="global.html#findMemberIn">findMemberIn</a></li><li><a href="global.html#findMissingCommand">findMissingCommand</a></li><li><a href="global.html#findTargetChannels">findTargetChannels</a></li><li><a href="global.html#forgetDeletedChannels">forgetDeletedChannels</a></li><li><a href="global.html#forgetDepartedGuilds">forgetDepartedGuilds</a></li><li><a href="global.html#forgetGuildDeletedChannels">forgetGuildDeletedChannels</a></li><li><a href="global.html#formatBackupChecks">formatBackupChecks</a></li><li><a href="global.html#formatBackupStatus">formatBackupStatus</a></li><li><a href="global.html#formatBytes">formatBytes</a></li><li><a href="global.html#formatCadence">formatCadence</a></li><li><a href="global.html#formatDiskUsage">formatDiskUsage</a></li><li><a href="global.html#formatPlayerStats">formatPlayerStats</a></li><li><a href="global.html#formatRawRanks">formatRawRanks</a></li><li><a href="global.html#formatSiteVisitStats">formatSiteVisitStats</a></li><li><a href="global.html#formatSnapshotAge">formatSnapshotAge</a></li><li><a href="global.html#formatTarget">formatTarget</a></li><li><a href="global.html#getAdhesion">getAdhesion</a></li><li><a href="global.html#getAdminRole">getAdminRole</a></li><li><a href="global.html#getBacklog">getBacklog</a></li><li><a href="global.html#getBddInstance">getBddInstance</a></li><li><a href="global.html#getCpuPercent">getCpuPercent</a></li><li><a href="global.html#getDiskUsage">getDiskUsage</a></li><li><a href="global.html#getInviteFromChannel">getInviteFromChannel</a></li><li><a href="global.html#getInviteFromMessage">getInviteFromMessage</a></li><li><a href="global.html#getReporter">getReporter</a></li><li><a href="global.html#getServicesAndID">getServicesAndID</a></li><li><a href="global.html#getSnapshotsBetween">getSnapshotsBetween</a></li><li><a href="global.html#getTargetRegions">getTargetRegions</a></li><li><a href="global.html#getTips">getTips</a></li><li><a href="global.html#hasTarget">hasTarget</a></li><li><a href="global.html#homeGuildIds">homeGuildIds</a></li><li><a href="global.html#inFlight">inFlight</a></li><li><a href="global.html#initialIteration">initialIteration</a></li><li><a href="global.html#installProcessGuards">installProcessGuards</a></li><li><a href="global.html#isBackupFresh">isBackupFresh</a></li><li><a href="global.html#isDiscordInvite">isDiscordInvite</a></li><li><a href="global.html#isExecutable">isExecutable</a></li><li><a href="global.html#isGone">isGone</a></li><li><a href="global.html#isIgnorableDiscordError">isIgnorableDiscordError</a></li><li><a href="global.html#isInheritedEnvKey">isInheritedEnvKey</a></li><li><a href="global.html#isLoopbackHost">isLoopbackHost</a></li><li><a href="global.html#isMissingBinary">isMissingBinary</a></li><li><a href="global.html#isModuleEnabled">isModuleEnabled</a></li><li><a href="global.html#isNativeError">isNativeError</a></li><li><a href="global.html#isSnowflake">isSnowflake</a></li><li><a href="global.html#isTransientNetworkError">isTransientNetworkError</a></li><li><a href="global.html#isValidModule">isValidModule</a></li><li><a href="global.html#leadershipIds">leadershipIds</a></li><li><a href="global.html#listArchives">listArchives</a></li><li><a href="global.html#listModules">listModules</a></li><li><a href="global.html#listOrExplain">listOrExplain</a></li><li><a href="global.html#listPartner">listPartner</a></li><li><a href="global.html#loadAdhesionAttachments">loadAdhesionAttachments</a></li><li><a href="global.html#loadAdhesionFiles">loadAdhesionFiles</a></li><li><a href="global.html#loadAdhesionPaths">loadAdhesionPaths</a></li><li><a href="global.html#logAdhesion">logAdhesion</a></li><li><a href="global.html#logAdhesionError">logAdhesionError</a></li><li><a href="global.html#logDistributionError">logDistributionError</a></li><li><a href="global.html#logFailure">logFailure</a></li><li><a href="global.html#manageDistribution">manageDistribution</a></li><li><a href="global.html#manageMsgExpiration">manageMsgExpiration</a></li><li><a href="global.html#manageOldFiles">manageOldFiles</a></li><li><a href="global.html#manageServiceSuccess">manageServiceSuccess</a></li><li><a href="global.html#matchesToken">matchesToken</a></li><li><a href="global.html#maxSnowflake">maxSnowflake</a></li><li><a href="global.html#memberDeliveredNotice">memberDeliveredNotice</a></li><li><a href="global.html#memberFailedLine">memberFailedLine</a></li><li><a href="global.html#memberMatchesHandle">memberMatchesHandle</a></li><li><a href="global.html#membersFailedNotice">membersFailedNotice</a></li><li><a href="global.html#messages">messages</a></li><li><a href="global.html#missingCommandText">missingCommandText</a></li><li><a href="global.html#newChannelPartner">newChannelPartner</a></li><li><a href="global.html#nextTips">nextTips</a></li><li><a href="global.html#nextTransmissionAfter">nextTransmissionAfter</a></li><li><a href="global.html#noRecipientNotice">noRecipientNotice</a></li><li><a href="global.html#normalizeInvite">normalizeInvite</a></li><li><a href="global.html#normalizeLegacyChoice">normalizeLegacyChoice</a></li><li><a href="global.html#normalizeText">normalizeText</a></li><li><a href="global.html#notifyBannedUser">notifyBannedUser</a></li><li><a href="global.html#notifyRoleUnreadable">notifyRoleUnreadable</a></li><li><a href="global.html#olderThanRetention">olderThanRetention</a></li><li><a href="global.html#ownsDatabase">ownsDatabase</a></li><li><a href="global.html#parisDaysLater">parisDaysLater</a></li><li><a href="global.html#parisOffsetMs">parisOffsetMs</a></li><li><a href="global.html#parisWallClock">parisWallClock</a></li><li><a href="global.html#parseDirectMessageRequest">parseDirectMessageRequest</a></li><li><a href="global.html#parseDiscordHandle">parseDiscordHandle</a></li><li><a href="global.html#parseEnvFile">parseEnvFile</a></li><li><a href="global.html#parseRecipients">parseRecipients</a></li><li><a href="global.html#parseRefereeAlert">parseRefereeAlert</a></li><li><a href="global.html#parseSiteVisitStats">parseSiteVisitStats</a></li><li><a href="global.html#parseTarListing">parseTarListing</a></li><li><a href="global.html#partialFailureText">partialFailureText</a></li><li><a href="global.html#pickArchive">pickArchive</a></li><li><a href="global.html#pickAttachment">pickAttachment</a></li><li><a href="global.html#ping">ping</a></li><li><a href="global.html#pipelineFailureText">pipelineFailureText</a></li><li><a href="global.html#postToAdminChannel">postToAdminChannel</a></li><li><a href="global.html#postponeForRole">postponeForRole</a></li><li><a href="global.html#printHelp">printHelp</a></li><li><a href="global.html#purgeFeedIdentifiers">purgeFeedIdentifiers</a></li><li><a href="global.html#purgeLogChannel">purgeLogChannel</a></li><li><a href="global.html#purgeOldFeedEvents">purgeOldFeedEvents</a></li><li><a href="global.html#purgeOldRollbacks">purgeOldRollbacks</a></li><li><a href="global.html#purgeStaffLogs">purgeStaffLogs</a></li><li><a href="global.html#queryInteger">queryInteger</a></li><li><a href="global.html#rankChoices">rankChoices</a></li><li><a href="global.html#readAdhesionPaths">readAdhesionPaths</a></li><li><a href="global.html#readAdhesionRoleMembers">readAdhesionRoleMembers</a></li><li><a href="global.html#readBackupStatus">readBackupStatus</a></li><li><a href="global.html#readOptionalFile">readOptionalFile</a></li><li><a href="global.html#readPackageInfo">readPackageInfo</a></li><li><a href="global.html#readRefereeMembers">readRefereeMembers</a></li><li><a href="global.html#readRoleMembers">readRoleMembers</a></li><li><a href="global.html#readSiteVisitStats">readSiteVisitStats</a></li><li><a href="global.html#recordDailySnapshot">recordDailySnapshot</a></li><li><a href="global.html#recordEvent">recordEvent</a></li><li><a href="global.html#recrute">recrute</a></li><li><a href="global.html#refuse">refuse</a></li><li><a href="global.html#refuseUnjoinedGuild">refuseUnjoinedGuild</a></li><li><a href="global.html#relay">relay</a></li><li><a href="global.html#relayStatus">relayStatus</a></li><li><a href="global.html#remainingIteration">remainingIteration</a></li><li><a href="global.html#reminderPostponedNotice">reminderPostponedNotice</a></li><li><a href="global.html#remoteArchiveNames">remoteArchiveNames</a></li><li><a href="global.html#remotePath">remotePath</a></li><li><a href="global.html#remoteServerReset">remoteServerReset</a></li><li><a href="global.html#removeIntervalle">removeIntervalle</a></li><li><a href="global.html#reportDistribution">reportDistribution</a></li><li><a href="global.html#reportError">reportError</a></li><li><a href="global.html#reportMissingPaths">reportMissingPaths</a></li><li><a href="global.html#reportRestore">reportRestore</a></li><li><a href="global.html#resetBddInstance">resetBddInstance</a></li><li><a href="global.html#resetChannel">resetChannel</a></li><li><a href="global.html#resetRefereeRole">resetRefereeRole</a></li><li><a href="global.html#resetServer">resetServer</a></li><li><a href="global.html#resetServerInvite">resetServerInvite</a></li><li><a href="global.html#resolutionWaves">resolutionWaves</a></li><li><a href="global.html#resolveBddPath">resolveBddPath</a></li><li><a href="global.html#resolveChannel">resolveChannel</a></li><li><a href="global.html#resolveCommand">resolveCommand</a></li><li><a href="global.html#resolveDiscordHandle">resolveDiscordHandle</a></li><li><a href="global.html#resolveMember">resolveMember</a></li><li><a href="global.html#resolveRole">resolveRole</a></li><li><a href="global.html#resolveScriptPath">resolveScriptPath</a></li><li><a href="global.html#resolveServerId">resolveServerId</a></li><li><a href="global.html#resolveTargetRegions">resolveTargetRegions</a></li><li><a href="global.html#restoreBackup">restoreBackup</a></li><li><a href="global.html#restoreDatabase">restoreDatabase</a></li><li><a href="global.html#restoreFailureText">restoreFailureText</a></li><li><a href="global.html#resumePoints">resumePoints</a></li><li><a href="global.html#roleReader">roleReader</a></li><li><a href="global.html#roleUnreadableNotice">roleUnreadableNotice</a></li><li><a href="global.html#rollbackTimestamp">rollbackTimestamp</a></li><li><a href="global.html#runBackupChecks">runBackupChecks</a></li><li><a href="global.html#runDataRetention">runDataRetention</a></li><li><a href="global.html#runDataRetentionOnce">runDataRetentionOnce</a></li><li><a href="global.html#runPipeline">runPipeline</a></li><li><a href="global.html#runSetupWizard">runSetupWizard</a></li><li><a href="global.html#safeChannel">safeChannel</a></li><li><a href="global.html#safeFollowUp">safeFollowUp</a></li><li><a href="global.html#safeMsgReply">safeMsgReply</a></li><li><a href="global.html#safeReact">safeReact</a></li><li><a href="global.html#safeReply">safeReply</a></li><li><a href="global.html#safeUser">safeUser</a></li><li><a href="global.html#saveAdhesionPaths">saveAdhesionPaths</a></li><li><a href="global.html#saveSiteVisitStats">saveSiteVisitStats</a></li><li><a href="global.html#scrim">scrim</a></li><li><a href="global.html#scrubFeedField">scrubFeedField</a></li><li><a href="global.html#scrubFeedText">scrubFeedText</a></li><li><a href="global.html#searchInWaves">searchInWaves</a></li><li><a href="global.html#searchString">searchString</a></li><li><a href="global.html#selectExpiredLogMessages">selectExpiredLogMessages</a></li><li><a href="global.html#selectExpiredRollbacks">selectExpiredRollbacks</a></li><li><a href="global.html#selectTargetedService">selectTargetedService</a></li><li><a href="global.html#sendAdhesion">sendAdhesion</a></li><li><a href="global.html#sendAdhesionReminder">sendAdhesionReminder</a></li><li><a href="global.html#sendDatabaseBackup">sendDatabaseBackup</a></li><li><a href="global.html#sendInteractiveMsg">sendInteractiveMsg</a></li><li><a href="global.html#sendLog">sendLog</a></li><li><a href="global.html#sendPrivately">sendPrivately</a></li><li><a href="global.html#sendServiceMessage">sendServiceMessage</a></li><li><a href="global.html#sendToAdmins">sendToAdmins</a></li><li><a href="global.html#sendToReferee">sendToReferee</a></li><li><a href="global.html#sendToTargets">sendToTargets</a></li><li><a href="global.html#servicesChoices">servicesChoices</a></li><li><a href="global.html#servicesWithNoRanks">servicesWithNoRanks</a></li><li><a href="global.html#setBotAdminRole">setBotAdminRole</a></li><li><a href="global.html#setChannelFilter">setChannelFilter</a></li><li><a href="global.html#setChannelRankFilter">setChannelRankFilter</a></li><li><a href="global.html#setModuleEnabled">setModuleEnabled</a></li><li><a href="global.html#setRankFilter">setRankFilter</a></li><li><a href="global.html#setRefereeRole">setRefereeRole</a></li><li><a href="global.html#setServerInvite">setServerInvite</a></li><li><a href="global.html#setupIntervalAdhesion">setupIntervalAdhesion</a></li><li><a href="global.html#showBotAdminRole">showBotAdminRole</a></li><li><a href="global.html#showRefereeRole">showRefereeRole</a></li><li><a href="global.html#showServerInvite">showServerInvite</a></li><li><a href="global.html#shutdown">shutdown</a></li><li><a href="global.html#shuttingDown">shuttingDown</a></li><li><a href="global.html#sparklineFromBuckets">sparklineFromBuckets</a></li><li><a href="global.html#spawnCommand">spawnCommand</a></li><li><a href="global.html#splitForDiscord">splitForDiscord</a></li><li><a href="global.html#startInternalApi">startInternalApi</a></li><li><a href="global.html#statsPlayer">statsPlayer</a></li><li><a href="global.html#statsSite">statsSite</a></li><li><a href="global.html#stopProcess">stopProcess</a></li><li><a href="global.html#subscribe">subscribe</a></li><li><a href="global.html#toSQLiteDate">toSQLiteDate</a></li><li><a href="global.html#truncateMessage">truncateMessage</a></li><li><a href="global.html#ts">ts</a></li><li><a href="global.html#unban">unban</a></li><li><a href="global.html#unlinkedFrom">unlinkedFrom</a></li><li><a href="global.html#updateCommands">updateCommands</a></li><li><a href="global.html#validateSqliteFile">validateSqliteFile</a></li></ul>
 </nav>
 
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Fri Oct 02 2026 04:43:51 GMT+0200 (heure d’été d’Europe centrale)
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Fri Oct 02 2026 06:19:41 GMT+0200 (heure d’été d’Europe centrale)
 </footer>
 
 <script> prettyPrint(); </script>

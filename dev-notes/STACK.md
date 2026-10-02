@@ -24,7 +24,7 @@ src/
 ├── main.ts                 # entrypoint : client Discord + API interne + cron
 ├── internalApi.ts          # serveur Express pour l'app web
 ├── types.ts                # types partagés
-├── bdd/                    # singleton SQLite Bdd, types, helpers (deleteDPMsgs)
+├── bdd/                    # singleton SQLite Bdd, SQL du schéma (schema.ts), types, helpers (deleteDPMsgs)
 ├── commandsHandlers/       # handlers de commandes slash
 │   ├── adhesions/          # parcours d'adhésion partenaire
 │   ├── admin/              # commandes admin
@@ -41,7 +41,7 @@ src/
 └── tests/                  # node:test
 ```
 
-**Singleton DB** : `getBddInstance()` / `closeBddInstance()` depuis `bdd/Bdd.js`. Les méthodes `set()` et `partnerHasRanks()` ont été sécurisées récemment contre l'injection SQL — toute nouvelle méthode d'accès BDD **doit** utiliser des requêtes paramétrées.
+**Singleton DB** : `getBddInstance()` / `closeBddInstance()` depuis `bdd/Bdd.js`. **Schéma** : une table nouvelle s'écrit en deux temps — son SQL dans `bdd/schema.ts`, une entrée `[libellé, SQL]` dans `Bdd.schemaSteps()` (l'ordre de la liste est l'ordre joué) ; une étape qui enchaîne plusieurs instructions (colonne ajoutée sur une base ancienne, semis) y figure comme une fonction. Le SQL envoyé et les libellés sont fixés par `tests/bdd/initDatabaseSql.test.ts` : un changement voulu y met l'empreinte à jour. Les méthodes `set()` et `partnerHasRanks()` ont été sécurisées récemment contre l'injection SQL — toute nouvelle méthode d'accès BDD **doit** utiliser des requêtes paramétrées.
 
 **Logging** : `sendLog(client, message)` poste dans le channel de logs Discord. Toujours wrapper les opérations BDD dans try/catch + sendLog.
 

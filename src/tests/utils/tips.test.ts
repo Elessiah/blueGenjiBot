@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import os from "node:os";
 import path from "node:path";
 import fs from "node:fs";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 // Base jetable désignée avant l'import : le singleton l'ouvre à son premier appel.
 const TMP_DIR = path.join(os.tmpdir(), "bgenji-tips-" + randomUUID());
@@ -23,6 +23,9 @@ import type { Client } from "discord.js";
  */
 
 const TIPS_COUNT = 12;
+
+/** Texte entier de chaque astuce postée, dans l'ordre. */
+const posted: string[] = [];
 
 /** Salons simulés : `lost` = disparu, `nomsg` = sans messages lisibles, sinon le dernier message. */
 type ChannelState = "lost" | "nomsg" | "empty" | "tip" | "other" | "foreign-tip";
@@ -55,6 +58,7 @@ function fakeClient(trace: string[], states: Record<string, ChannelState>): Clie
             },
           },
           send: async (payload: { content?: string }) => {
+            posted.push(payload.content ?? "");
             trace.push(`tip ${id} ${payload.content?.split("\n")[0]}`);
             return { id: "tip" };
           },
@@ -132,6 +136,26 @@ test("les astuces tournent en boucle, une par palier atteint", async () => {
   }
   assert.equal(new Set(seen.slice(0, TIPS_COUNT)).size, TIPS_COUNT);
   assert.equal(seen[TIPS_COUNT], seen[0]);
+});
+
+test("textes des astuces : identiques à l'octet près, dans l'ordre de rotation", async () => {
+  await relay("latam-1", "lfs", 3);
+  posted.length = 0;
+  for (let round = 0; round < TIPS_COUNT; round++) await announce(15, "lfs", 3);
+  assert.equal(posted.length, TIPS_COUNT);
+  // La rotation reprend où les tests précédents l'ont laissée : on la remet sur la première astuce.
+  const first = posted.findIndex((text) => text.startsWith("# Tips: Setting Rank Filter\n"));
+  const rotation = [...posted.slice(first), ...posted.slice(0, first)];
+  assert.deepEqual(rotation.map((text) => text.split("\n")[0]), [
+    "# Tips: Setting Rank Filter", "# Tips: Displaying Rank Filter", "# Tips: Using the Rank Filter Properly",
+    "# Tips: Using the different services properly", "# Tips: More information = more efficiency",
+    "# Tips: Setting Region Filter", "# Tips: Displaying Region Filter", "# Tips: Adding the Bot to Your Server",
+    "# Tips: Moderation", "# Tips: Got an Idea or a Question?", "# Tips: Need to Talk?",
+    "# Tips: Have an issue or a question? ",
+  ]);
+  // Empreinte relevée sur les textes d'origine, avant leur passage en gabarits.
+  const digest = createHash("sha256").update(JSON.stringify(rotation)).digest("hex");
+  assert.equal(digest, "2161596b81188f381cd17f51eac102fae33999c39925056286f9ca5bd12eafae");
 });
 
 test("ferme la base à la fin de la suite", async () => {
