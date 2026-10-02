@@ -1654,7 +1654,7 @@ que la sauvegarde emporte.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="adhesion_adhesionNotices.js.html">adhesion/adhesionNotices.js</a>, <a href="adhesion_adhesionNotices.js.html#line116">line 116</a>
+        <a href="adhesion_adhesionNotices.js.html">adhesion/adhesionNotices.js</a>, <a href="adhesion_adhesionNotices.js.html#line120">line 120</a>
     </li></ul></dd>
     
 
@@ -10322,7 +10322,7 @@ avertissement si des cibles lui ont été refusées faute de permission.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="adhesion_sendAdhesion.js.html">adhesion/sendAdhesion.js</a>, <a href="adhesion_sendAdhesion.js.html#line132">line 132</a>
+        <a href="adhesion_sendAdhesion.js.html">adhesion/sendAdhesion.js</a>, <a href="adhesion_sendAdhesion.js.html#line138">line 138</a>
     </li></ul></dd>
     
 
@@ -19474,7 +19474,7 @@ personne n'est servi, pas même le membre désigné.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="adhesion_sendAdhesion.js.html">adhesion/sendAdhesion.js</a>, <a href="adhesion_sendAdhesion.js.html#line97">line 97</a>
+        <a href="adhesion_sendAdhesion.js.html">adhesion/sendAdhesion.js</a>, <a href="adhesion_sendAdhesion.js.html#line100">line 100</a>
     </li></ul></dd>
     
 
@@ -19688,7 +19688,7 @@ personne n'est servi, pas même le membre désigné.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="adhesion_sendAdhesion.js.html">adhesion/sendAdhesion.js</a>, <a href="adhesion_sendAdhesion.js.html#line74">line 74</a>
+        <a href="adhesion_sendAdhesion.js.html">adhesion/sendAdhesion.js</a>, <a href="adhesion_sendAdhesion.js.html#line77">line 77</a>
     </li></ul></dd>
     
 
@@ -28304,7 +28304,7 @@ il court-circuite la vérification de permission `CreateInstantInvite` de l'aute
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="adhesion_sendAdhesion.js.html">adhesion/sendAdhesion.js</a>, <a href="adhesion_sendAdhesion.js.html#line121">line 121</a>
+        <a href="adhesion_sendAdhesion.js.html">adhesion/sendAdhesion.js</a>, <a href="adhesion_sendAdhesion.js.html#line127">line 127</a>
     </li></ul></dd>
     
 
@@ -33960,7 +33960,7 @@ libellé neutre sans nom).
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="adhesion_adhesionNotices.js.html">adhesion/adhesionNotices.js</a>, <a href="adhesion_adhesionNotices.js.html#line145">line 145</a>
+        <a href="adhesion_adhesionNotices.js.html">adhesion/adhesionNotices.js</a>, <a href="adhesion_adhesionNotices.js.html#line149">line 149</a>
     </li></ul></dd>
     
 
@@ -34195,7 +34195,7 @@ rien). Les membres qui ne tiennent pas sont comptés en dernière ligne.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="adhesion_adhesionNotices.js.html">adhesion/adhesionNotices.js</a>, <a href="adhesion_adhesionNotices.js.html#line124">line 124</a>
+        <a href="adhesion_adhesionNotices.js.html">adhesion/adhesionNotices.js</a>, <a href="adhesion_adhesionNotices.js.html#line128">line 128</a>
     </li></ul></dd>
     
 
@@ -42232,7 +42232,7 @@ plafond à l'envoi même, sans seconde lecture ici.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="commandsHandlers_adhesions_getAdhesion.js.html">commandsHandlers/adhesions/getAdhesion.js</a>, <a href="commandsHandlers_adhesions_getAdhesion.js.html#line66">line 66</a>
+        <a href="commandsHandlers_adhesions_getAdhesion.js.html">commandsHandlers/adhesions/getAdhesion.js</a>, <a href="commandsHandlers_adhesions_getAdhesion.js.html#line67">line 67</a>
     </li></ul></dd>
     
 
@@ -42897,7 +42897,7 @@ l'arrêter.
     
 
     
-    <h4 class="name" id="reminderRefusedSuffix"><span class="type-signature"></span>reminderRefusedSuffix<span class="signature">(intervalId)</span><span class="type-signature"></span></h4>
+    <h4 class="name" id="reminderRefusedSuffix"><span class="type-signature"></span>reminderRefusedSuffix<span class="signature">(intervalId, when)</span><span class="type-signature"></span></h4>
     
 
     
@@ -42957,6 +42957,25 @@ pas être modifié, et chaque échéance refusée compte comme un envoi.
         </tr>
 
     
+
+        <tr>
+            
+                <td class="name"><code>when</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Échéances refusées de même : toutes (`@everyone`), ou celles où
+  le rôle dépasse encore la limite (il peut repasser dessous).</td>
+        </tr>
+
+    
     </tbody>
 </table>
 
@@ -42994,7 +43013,7 @@ pas être modifié, et chaque échéance refusée compte comme un envoi.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="adhesion_adhesionNotices.js.html">adhesion/adhesionNotices.js</a>, <a href="adhesion_adhesionNotices.js.html#line111">line 111</a>
+        <a href="adhesion_adhesionNotices.js.html">adhesion/adhesionNotices.js</a>, <a href="adhesion_adhesionNotices.js.html#line113">line 113</a>
     </li></ul></dd>
     
 
@@ -50964,7 +50983,7 @@ ce qu'on ne sait pas dater) — mais il l'est après une restauration réussie.
     
 
     
-    <h4 class="name" id="sendAdhesion"><span class="type-signature">(async) </span>sendAdhesion<span class="signature">(client, message, channel, member, role, memberPermMissing, author)</span><span class="type-signature"></span></h4>
+    <h4 class="name" id="sendAdhesion"><span class="type-signature">(async) </span>sendAdhesion<span class="signature">(client, message, channel, member, role, memberPermMissing, author, refusals)</span><span class="type-signature"></span></h4>
     
 
     
@@ -51134,6 +51153,25 @@ papiers partent en MP à l'auteur lui-même.
         </tr>
 
     
+
+        <tr>
+            
+                <td class="name"><code>refusals</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Reçoit le texte de chaque refus (plafond dépassé), que la
+  commande répète : l'auteur aux MP fermés le saurait sinon jamais.</td>
+        </tr>
+
+    
     </tbody>
 </table>
 
@@ -51171,7 +51209,7 @@ papiers partent en MP à l'auteur lui-même.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="adhesion_sendAdhesion.js.html">adhesion/sendAdhesion.js</a>, <a href="adhesion_sendAdhesion.js.html#line19">line 19</a>
+        <a href="adhesion_sendAdhesion.js.html">adhesion/sendAdhesion.js</a>, <a href="adhesion_sendAdhesion.js.html#line21">line 21</a>
     </li></ul></dd>
     
 
@@ -51333,7 +51371,7 @@ qui échouerait consommerait l'envoi sans servir personne.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="adhesion_sendAdhesion.js.html">adhesion/sendAdhesion.js</a>, <a href="adhesion_sendAdhesion.js.html#line30">line 30</a>
+        <a href="adhesion_sendAdhesion.js.html">adhesion/sendAdhesion.js</a>, <a href="adhesion_sendAdhesion.js.html#line33">line 33</a>
     </li></ul></dd>
     
 
@@ -52783,7 +52821,7 @@ miroir chiffré des images, clé publique à comparer à la copie hors ligne).
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="adhesion_sendAdhesion.js.html">adhesion/sendAdhesion.js</a>, <a href="adhesion_sendAdhesion.js.html#line49">line 49</a>
+        <a href="adhesion_sendAdhesion.js.html">adhesion/sendAdhesion.js</a>, <a href="adhesion_sendAdhesion.js.html#line52">line 52</a>
     </li></ul></dd>
     
 
@@ -57032,7 +57070,7 @@ production avec un fichier corrompu serait pire que l'absence de restauration.
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Fri Oct 02 2026 11:02:38 GMT+0200 (heure d’été d’Europe centrale)
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Fri Oct 02 2026 11:07:08 GMT+0200 (heure d’été d’Europe centrale)
 </footer>
 
 <script> prettyPrint(); </script>
