@@ -118,12 +118,12 @@ function recipientCapNotice(roleName: string | null, roleCount: number, total: n
 
 /**
  * Suite d'un refus prononcé à l'échéance d'un rappel enregistré : il ne peut
- * pas être modifié, et sera refusé de même à chaque échéance.
+ * pas être modifié, et chaque échéance refusée compte comme un envoi.
  * @param intervalId Numéro du rappel, tel que l'affiche `/show-rappel-adhesion`.
  * @returns Le texte à ajouter à l'avis de refus.
  */
 function reminderRefusedSuffix(intervalId: number): string {
-    return " (Rappel n°" + intervalId + " : il sera refusé de même à chaque échéance, " +
+    return " (Rappel n°" + intervalId + " : chaque échéance sera refusée de même, et comptée comme un envoi du rappel ; " +
         "/delete-rappel-adhesion pour l'arrêter.)";
 }
 
