@@ -1,11 +1,12 @@
 import {PermissionsBitField, MessageFlags} from "discord.js";
-import type { Client, ChatInputCommandInteraction, Guild, User, Collection, Role} from "discord.js";
+import type { Client, ChatInputCommandInteraction, Guild, GuildMember, User, Collection, Role} from "discord.js";
 
 import {checkPermissions} from "../check/checkPermissions.js";
 import {safeReply} from "../safe/safeReply.js";
 import {safeUser} from "../safe/safeUser.js";
 import {sendLog} from "../safe/sendLog.js";
 import {getAdminRole} from "../utils/getAdminRole.js";
+import {fetchRoleMembers} from "../utils/fetchRoleMembers.js";
 
 /**
  * Transmet un message à l'équipe d'administration du serveur concerné.
@@ -38,16 +39,75 @@ async function contactAdminServer(client: Client,
     if (!server) {
         return false;
     }
-    const targets = await collectAdmins(client, server);
     const content = interaction ? interaction.options.getString("message") ?? undefined : msg;
     if (!content) {
         await refuse(client, interaction, "Parameter 'message' not found. Please try again.");
         return false;
     }
+    // Après le refus d'un message vide : la lecture des administrateurs peut
+    // récupérer tous les membres du serveur, limitée en débit par Discord.
+    const {targets, incomplete} = await collectAdmins(client, server);
     await sendToAdmins(client, targets, content);
     if (interaction)
-        await safeReply(interaction, `Message successfully sent to ${targets.length} admin(s) !`, true, true);
+        await safeReply(interaction, `Message successfully sent to ${targets.length} admin(s) !` +
+            (incomplete ? INCOMPLETE_WARNING : ""), true, true);
     return true;
+}
+
+/**
+ * Ajouté à la confirmation quand les membres d'un rôle d'administration n'ont
+ * pas pu être lus : seuls ceux déjà connus du bot (ou, à défaut, le propriétaire)
+ * ont reçu le message.
+ */
+const INCOMPLETE_WARNING = "\nWarning: Discord did not let the bot read every admin role, " +
+    "so some admins may not have received it. Please try again later if needed.";
+
+/** Destinataires, et si les membres d'un rôle d'administration sont restés illisibles. */
+type AdminTargets = {
+    targets: User[],
+    incomplete: boolean,
+};
+
+/**
+ * Lecteur des membres des rôles d'un serveur : après récupération des membres
+ * du serveur (le cache seul paraît vide après un redémarrage). Au premier
+ * échec, journalisé par identifiant sans aucun nom, il se rabat sur le cache
+ * pour ce rôle et les suivants : une nouvelle tentative par rôle échouerait
+ * de même, contre la limite de débit de Discord.
+ */
+type RoleReader = {
+    read: (role: Role) => Promise<GuildMember[]>,
+    /** Note un rôle d'administration resté illisible hors du lecteur (rôle configuré). */
+    markIncomplete: () => void,
+    /** Un rôle d'administration, ou ses membres, sont restés illisibles. */
+    incomplete: () => boolean,
+};
+
+/**
+ * Crée le lecteur des rôles d'un serveur, pour un seul envoi.
+ * @param client Client Discord utilisé pour le journal.
+ * @param server Serveur des rôles.
+ * @returns Le lecteur, et l'état de ses lectures.
+ */
+function roleReader(client: Client, server: Guild): RoleReader {
+    let failed = false;
+    let skipped = false;
+    return {
+        read: async (role: Role) => {
+            if (!failed) {
+                try {
+                    return await fetchRoleMembers(server, role);
+                } catch (err) {
+                    failed = true;
+                    const reason = err instanceof Error ? err.message : String(err);
+                    await sendLog(client, `Failed to read admin role members on guild '${server.id}' (role '${role.id}'), cache used : ${reason}`);
+                }
+            }
+            return [...role.members.values()];
+        },
+        markIncomplete: () => { skipped = true; },
+        incomplete: () => failed || skipped,
+    };
 }
 
 /**
@@ -84,50 +144,72 @@ async function fetchServer(client: Client, serverId: string, interaction?: ChatI
 /**
  * Destinataires : les membres des rôles qui portent la permission
  * Administrateur, puis ceux du rôle admin configuré, chacun une seule fois ;
- * à défaut, le propriétaire du serveur.
- * @returns Les destinataires, dans l'ordre d'envoi.
+ * à défaut, le propriétaire du serveur. Les membres sont lus après
+ * récupération des membres du serveur ; si elle échoue, ceux du cache sont
+ * servis et le résultat le signale.
+ * @returns Les destinataires, dans l'ordre d'envoi, et si la lecture est incomplète.
  */
-async function collectAdmins(client: Client, server: Guild): Promise<User[]> {
+async function collectAdmins(client: Client, server: Guild): Promise<AdminTargets> {
     const targets: Map<string, User> = new Map();
+    const reader = roleReader(client, server);
+    // `@everyone` (dont l'identifiant est celui du serveur) est écarté, même
+    // porteur de la permission Administrateur : ses membres sont tous ceux du
+    // cache, que la récupération d'un autre rôle remplit — le message
+    // partirait en MP au serveur entier.
     const adminRoles: Collection<string, Role> = server.roles.cache.filter(r =>
-        r.permissions.has(PermissionsBitField.Flags.Administrator)
+        r.id !== server.id && r.permissions.has(PermissionsBitField.Flags.Administrator)
     );
     for (const role of adminRoles.values()) {
-        addMembers(targets, role);
+        addMembers(targets, await reader.read(role));
     }
-    await addConfiguredAdmins(client, server, targets);
+    await addConfiguredAdmins(client, server, targets, reader);
 
     const targetsArray: User[] = Array.from(targets.values());
     if (targetsArray.length === 0) {
         targetsArray.push(await client.users.fetch(server.ownerId));
     }
-    return targetsArray;
+    return {targets: targetsArray, incomplete: reader.incomplete()};
 }
 
 /**
  * Ajoute les membres du rôle admin configuré par `/set-admin-role`, s'il y en
- * a un ; un rôle introuvable ou illisible est journalisé.
+ * a un ; un rôle introuvable ou illisible est journalisé (illisible, l'envoi
+ * est signalé incomplet). `@everyone` configuré
+ * est écarté et journalisé, pour la même raison que parmi les rôles
+ * Administrateur : le message partirait en MP au serveur entier.
  */
-async function addConfiguredAdmins(client: Client, server: Guild, targets: Map<string, User>): Promise<void> {
+async function addConfiguredAdmins(client: Client, server: Guild, targets: Map<string, User>, reader: RoleReader): Promise<void> {
     const adminRoleId = await getAdminRole(server);
     if (!adminRoleId) {
         return;
     }
+    if (adminRoleId === server.id) {
+        await sendLog(client, `Configured admin role is the everyone role on guild '${server.id}', ignored.`);
+        return;
+    }
+    let configuredRole: Role | null;
     try {
-        const configuredRole = await server.roles.fetch(adminRoleId);
-        if (configuredRole) {
-            addMembers(targets, configuredRole);
-        } else {
-            await sendLog(client, `Configured admin role with id '${adminRoleId}' not found on guild '${server.id}'.`);
-        }
+        configuredRole = await server.roles.fetch(adminRoleId);
     } catch (err) {
+        // Ses membres manquent à l'envoi : la confirmation le dira.
+        reader.markIncomplete();
         await sendLog(client, "Failed to fetch configured admin role : " + (err as TypeError).message);
+        return;
+    }
+    if (configuredRole) {
+        addMembers(targets, await reader.read(configuredRole));
+    } else {
+        await sendLog(client, `Configured admin role with id '${adminRoleId}' not found on guild '${server.id}'.`);
     }
 }
 
-/** Ajoute les membres d'un rôle aux destinataires, par identifiant. */
-function addMembers(targets: Map<string, User>, role: Role): void {
-    for (const member of role.members.values()) {
+/**
+ * Ajoute des membres aux destinataires, par identifiant. Les bots en sont
+ * écartés : ils ne reçoivent pas de MP, chacun ne compterait que pour un échec.
+ */
+function addMembers(targets: Map<string, User>, members: GuildMember[]): void {
+    for (const member of members) {
+        if (member.user.bot) continue;
         targets.set(member.user.id, member.user);
     }
 }

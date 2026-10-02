@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>JSDoc: Source: commandsHandlers/admin/showRefereeRole.js</title>
+    <title>JSDoc: Source: utils/displayNameLabel.js</title>
 
     <script src="scripts/prettify/prettify.js"> </script>
     <script src="scripts/prettify/lang-css.js"> </script>
@@ -17,7 +17,7 @@
 
 <div id="main">
 
-    <h1 class="page-title">Source: commandsHandlers/admin/showRefereeRole.js</h1>
+    <h1 class="page-title">Source: utils/displayNameLabel.js</h1>
 
     
 
@@ -26,39 +26,37 @@
     
     <section>
         <article>
-            <pre class="prettyprint source linenums"><code>import { safeReply } from "../../safe/safeReply.js";
-import { getBddInstance } from "../../bdd/Bdd.js";
-/**
- * Affiche le rôle arbitre configuré sur le serveur courant.
- * @param _client Client Discord (non utilisé, signature commune aux handlers).
- * @param interaction Interaction utilisateur en cours.
+            <pre class="prettyprint source linenums"><code>/**
+ * Nom d'un utilisateur prêt à être cité dans un message du bot.
+ *
+ * Le nom d'affichage est choisi par la personne : cité tel quel, `**`, `||`
+ * ou un lien masqué `[texte](adresse)` y changent la mise en forme du message,
+ * et un `@everyone` ou un `&lt;@id>` s'y lisent comme une mention. `globalName`
+ * vaut `null` pour qui n'en a pas choisi : le message disait alors « null ».
  */
-async function showRefereeRole(_client, interaction) {
-    if (!interaction.guild) {
-        await safeReply(interaction, "Cette commande est utilisable uniquement sur un serveur.");
-        return;
-    }
-    const bdd = await getBddInstance();
-    const roleId = await bdd.getRefereeRole(interaction.guild.id);
-    if (!roleId) {
-        await safeReply(interaction, "Aucun rôle arbitre n'est configuré. Utilisez `/set-referee-role` pour en définir un.");
-        return;
-    }
-    // Le rôle peut avoir été supprimé depuis sa configuration : on le dit plutôt
-    // que d'afficher un identifiant nu.
-    const role = await interaction.guild.roles.fetch(roleId).catch(() => null);
-    if (!role) {
-        await safeReply(interaction, `Le rôle arbitre configuré (\`${roleId}\`) n'existe plus sur ce serveur. Redéfinissez-le avec \`/set-referee-role\`.`);
-        return;
-    }
-    // Pas de décompte de membres : `role.members` ne reflète que le cache, et
-    // afficher « 0 membre » sur un rôle bien peuplé ferait douter d'une
-    // configuration pourtant correcte. Forcer la récupération complète des
-    // membres sur une commande ouverte à tous serait, elle, disproportionnée.
-    await safeReply(interaction, `Rôle arbitre : ${role.name}. Ses membres reçoivent les signalements du site en message privé.`);
+import { escapeMarkdown } from "discord.js";
+/** Libellé neutre quand l'utilisateur n'a aucun nom lisible. */
+const NO_DISPLAY_NAME = "membre sans pseudo";
+/**
+ * Cite le nom d'affichage d'un utilisateur, à défaut son nom d'utilisateur,
+ * mise en forme et mentions neutralisées ; sans nom lisible, un libellé
+ * neutre.
+ * @param user Utilisateur à citer.
+ * @returns Le nom, sûr à insérer dans un message Discord.
+ */
+function displayNameLabel(user) {
+    // Les blancs (sauts de ligne compris) se réduisent à une espace : un nom
+    // ne doit pas ouvrir une ligne de plus dans un avis ligne par ligne.
+    const clean = (name) => (name ?? "").replace(/\s+/g, " ").trim();
+    const name = clean(user.globalName) || clean(user.username);
+    if (name === "")
+        return NO_DISPLAY_NAME;
+    // Une espace sans largeur après chaque @ : ni `@everyone` ni `&lt;@id>` ne
+    // forment plus de mention, le texte affiché reste le même.
+    return escapeMarkdown(name, { maskedLink: true }).replaceAll("@", "@​");
 }
-export { showRefereeRole };
-//# sourceMappingURL=showRefereeRole.js.map</code></pre>
+export { displayNameLabel, NO_DISPLAY_NAME };
+//# sourceMappingURL=displayNameLabel.js.map</code></pre>
         </article>
     </section>
 

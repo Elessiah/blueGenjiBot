@@ -35,6 +35,7 @@ async function fetchTargets(client: Client, bdd: Bdd, interval: adhesionInterval
     const channel = await resolveChannel(client, bdd, interval, guild, user);
     if (channel === POSTPONED) return null;
     const role = await resolveRole(client, bdd, interval, guild, user);
+    if (role === POSTPONED) return null;
     const member = await resolveMember(client, bdd, interval, guild, user);
     if (member === POSTPONED) return null;
     const roleMembers = role === null ? null : await readRoleMembers(client, interval, guild, role, user);
@@ -120,17 +121,29 @@ async function resolveChannel(client: Client,
 }
 
 /**
- * Lit le rôle cible, s'il y en a un. Introuvable, la cible est retirée ; une
- * erreur de lecture remonte à l'appelant.
- * @returns Le rôle, ou `null` sans rôle (ou rôle retiré).
+ * Lit le rôle cible, s'il y en a un. Introuvable ou disparu, la cible est
+ * retirée. Une erreur passagère reporte tout le rappel, comme l'échec de la
+ * lecture de ses membres : journalisée sans nom, l'auteur prévenu, aucun envoi
+ * consommé. Sans cette garde, l'erreur sortait de la boucle des rappels et
+ * privait de leur passage tous ceux qui la suivaient.
+ * @returns Le rôle, `null` sans rôle (ou rôle retiré), `POSTPONED` sur une erreur passagère.
  */
 async function resolveRole(client: Client,
                            bdd: Bdd,
                            interval: adhesionIntervalIds,
                            guild: Guild,
-                           user: User): Promise<Role | null> {
+                           user: User): Promise<Role | null | typeof POSTPONED> {
     if (interval.role_id == null) return null;
-    const fetchResult: Role | null = await guild.roles.fetch(interval.role_id);
+    let fetchResult: Role | null;
+    try {
+        fetchResult = await guild.roles.fetch(interval.role_id);
+    } catch (e) {
+        if (!isGone(e)) {
+            await postponeForRole(client, interval, user, null, e);
+            return POSTPONED;
+        }
+        fetchResult = null;
+    }
     if (fetchResult) return fetchResult;
     await dropTarget(client, bdd, user, interval, "role_id",
         "Le role n'est plus valide pour l'interval " + interval.id + ", suppression de la cible.");
@@ -177,13 +190,28 @@ async function readRoleMembers(client: Client,
     try {
         return await readAdhesionRoleMembers(guild, role);
     } catch (e) {
-        // La raison (message discord.js, sans nom) permet de distinguer une
-        // panne passagère d'un échec qui se répéterait à chaque passage.
-        const reason = e instanceof Error ? e.message : String(e);
-        await sendLog(client, "Interval n°" + interval.id + " : membres du rôle injoignables pour l'instant, report (" + reason + ").");
-        await safeUser(client, user, undefined, undefined, reminderPostponedNotice(interval.id, role.name));
+        await postponeForRole(client, interval, user, role.name, e);
         return null;
     }
+}
+
+/**
+ * Report d'un rappel dont le rôle ou ses membres n'ont pas pu être lus :
+ * journalisé sans nom, l'auteur prévenu.
+ * @param roleName Nom du rôle, ou `null` si le rôle lui-même est illisible.
+ * @param error Erreur de la lecture.
+ */
+async function postponeForRole(client: Client,
+                               interval: adhesionIntervalIds,
+                               user: User,
+                               roleName: string | null,
+                               error: unknown): Promise<void> {
+    // La raison (message discord.js, sans nom) permet de distinguer une
+    // panne passagère d'un échec qui se répéterait à chaque passage.
+    const reason = error instanceof Error ? error.message : String(error);
+    const what = roleName === null ? "rôle injoignable" : "membres du rôle injoignables";
+    await sendLog(client, "Interval n°" + interval.id + " : " + what + " pour l'instant, report (" + reason + ").");
+    await safeUser(client, user, undefined, undefined, reminderPostponedNotice(interval.id, roleName));
 }
 
 /**
