@@ -245,7 +245,7 @@ test("membres illisibles : une seule tentative, journal sans nom, les connus ser
     "roles.fetch staff",
     "dm:k1 Bonjour", "dm:k2 Bonjour",
     "editReply Message successfully sent to 2 admin(s) !\nWarning: Discord did not let the bot read every admin role, " +
-      "so only the admins already known to the bot received it. Please try again later if needed.",
+      "so some admins may not have received it. Please try again later if needed.",
   ]);
 });
 

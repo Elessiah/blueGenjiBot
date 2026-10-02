@@ -54,10 +54,11 @@ async function contactAdminServer(client: Client,
 
 /**
  * Ajouté à la confirmation quand les membres d'un rôle d'administration n'ont
- * pas pu être lus : seuls ceux déjà connus du bot ont reçu le message.
+ * pas pu être lus : seuls ceux déjà connus du bot (ou, à défaut, le propriétaire)
+ * ont reçu le message.
  */
 const INCOMPLETE_WARNING = "\nWarning: Discord did not let the bot read every admin role, " +
-    "so only the admins already known to the bot received it. Please try again later if needed.";
+    "so some admins may not have received it. Please try again later if needed.";
 
 /** Destinataires, et si les membres d'un rôle d'administration sont restés illisibles. */
 type AdminTargets = {
