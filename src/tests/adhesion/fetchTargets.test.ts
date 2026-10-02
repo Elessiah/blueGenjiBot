@@ -263,7 +263,7 @@ test("membres du rôle injoignables : report journalisé, l'auteur prévenu, rie
   assert.equal(r.result, null);
   assert.deepEqual(r.trace, [
     "users.fetch auteur-1", "guilds.fetch guild-1", "roles.fetch r1", "members.fetch m1", "members.fetch *",
-    `log Interval n°${r.id} : membres du rôle injoignables pour l'instant, report.`,
+    `log Interval n°${r.id} : membres du rôle injoignables pour l'instant, report (Service Unavailable).`,
     `dm:auteur-1 Rappel d'adhésion n°${r.id} reporté : Discord n'a pas permis de lire les membres du rôle « Bureau ». ` +
       "Rien n'est parti, nouvel essai à la prochaine vérification (/delete-rappel-adhesion pour l'arrêter).",
   ]);

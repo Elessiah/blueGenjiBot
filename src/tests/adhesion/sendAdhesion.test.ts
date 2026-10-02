@@ -286,6 +286,29 @@ test("cache déjà complet : aucune récupération (limite de débit), le rôle 
   assert.deepEqual(rec.trace, [dm("Bob", DEFAULT_MESSAGE, FILES), dm("author", "Adhésion envoyée avec succès à Bob !")]);
 });
 
+test("les bots du rôle sont écartés : ni MP ni échec compté", async () => {
+  validPaths();
+  const rec = recorder();
+  const robot = Object.assign(fakeUser(rec, "Robot", true), { bot: true });
+  const role = fakeRole([robot, fakeUser(rec, "Bob")]);
+  const ok = await sendAdhesion(fakeClient(rec), null, null, null, role, false, author(rec));
+  assert.equal(ok, true);
+  assert.deepEqual(rec.trace, [dm("Bob", DEFAULT_MESSAGE, FILES), dm("author", "Adhésion envoyée avec succès à Bob !")]);
+});
+
+test("beaucoup d'échecs : l'avis à l'auteur reste sous 2000 caractères et compte le reste", async () => {
+  validPaths();
+  const rec = recorder();
+  const users = Array.from({ length: 150 }, (_, i) => fakeUser(rec, "Membre-au-nom-assez-long-" + i, true));
+  const ok = await sendAdhesion(fakeClient(rec), null, null, null, fakeRole(users), false, author(rec));
+  assert.equal(ok, false);
+  const notice = rec.trace.at(-1);
+  assert.equal(notice?.to, "dm:author");
+  assert.ok((notice?.content.length ?? 0) <= 2000);
+  const shown = (notice?.content.match(/^Echec de l'envoi pour /gm) ?? []).length;
+  assert.ok((notice?.content ?? "").endsWith("Et " + (150 - shown) + " autre(s) échec(s).\n"));
+});
+
 test("membres du rôle déjà lus (rappel) : servis tels quels, sans seconde lecture qui pourrait échouer", async () => {
   validPaths();
   const rec = recorder();
