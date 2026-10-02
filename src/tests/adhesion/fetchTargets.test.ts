@@ -138,12 +138,15 @@ test("toutes les cibles trouvées : rendues telles quelles, rien d'écrit", asyn
     guild: "guild-1", channel: "c1", role: "r1", member: "m1", author: "auteur-1", message: "Rappel", iteration: 3, interval_days: 7,
   });
   assert.equal(r.result?.nextTransmission.getTime(), new Date(r.interval.nextTransmission).getTime());
+  // Membres du rôle lus ici et transmis à l'envoi, qui ne les relit pas.
+  assert.deepEqual(r.result?.roleMembers, []);
   assert.equal(r.kept, true);
 });
 
 test("sans cible : seuls l'auteur et le serveur sont lus", async () => {
   const r = await run({}, {});
   assert.deepEqual(r.trace, ["users.fetch auteur-1", "guilds.fetch guild-1"]);
+  assert.equal(r.result?.roleMembers, null);
   assert.deepEqual(summary(r.result), {
     guild: "guild-1", channel: null, role: null, member: null, author: "auteur-1", message: "Rappel", iteration: 3, interval_days: 7,
   });

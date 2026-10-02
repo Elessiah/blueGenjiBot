@@ -286,6 +286,17 @@ test("cache déjà complet : aucune récupération (limite de débit), le rôle 
   assert.deepEqual(rec.trace, [dm("Bob", DEFAULT_MESSAGE, FILES), dm("author", "Adhésion envoyée avec succès à Bob !")]);
 });
 
+test("membres du rôle déjà lus (rappel) : servis tels quels, sans seconde lecture qui pourrait échouer", async () => {
+  validPaths();
+  const rec = recorder();
+  const bob = fakeUser(rec, "Bob");
+  const role = fakeRole([bob], { fetchFails: true });
+  const ok = await sendAdhesion(fakeClient(rec), null, null, null, role, false, author(rec), [fakeMember(bob)]);
+  assert.equal(ok, true);
+  assert.equal(role.fetches, 0);
+  assert.deepEqual(rec.trace, [dm("Bob", DEFAULT_MESSAGE, FILES), dm("author", "Adhésion envoyée avec succès à Bob !")]);
+});
+
 test("membres du rôle illisibles : journalisé sans nom, le membre désigné servi quand même, échec", async () => {
   validPaths();
   const rec = recorder();
