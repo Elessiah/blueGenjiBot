@@ -306,13 +306,14 @@ async function callStatus(t: test.TestContext): Promise<Awaited<ReturnType<typeo
       t.mock.timers.tick(10);
       await new Promise((r) => setImmediate(r));
     }
+    assert.ok(settled, "/internal/status n'a pas répondu sous l'horloge simulée");
     return await pending;
   } finally {
     t.mock.timers.reset();
   }
 }
 
-test("/internal/status : forme de la réponse et état OPERATIONAL / DEGRADED / DOWN", async (t) => {
+test("/internal/status : forme de la réponse et état OPERATIONAL / DEGRADED / DOWN", { timeout: 5000 }, async (t) => {
   let res = await callStatus(t);
   assert.equal(res.status, 200);
   for (const field of ["startupTs", "uptimeMs", "version", "buildHash", "buildDate", "gatewayLatency", "cpuUsage", "ramUsage"]) {
@@ -332,7 +333,7 @@ test("/internal/status : forme de la réponse et état OPERATIONAL / DEGRADED / 
   assert.equal(res.body.status, "DOWN");
 });
 
-test("/internal/status : client en panne, 500 INTERNAL_STATUS_ERROR et détail au journal", async (t) => {
+test("/internal/status : client en panne, 500 INTERNAL_STATUS_ERROR et détail au journal", { timeout: 5000 }, async (t) => {
   state.ready = "throw";
   const res = await callStatus(t);
   assert.equal(res.status, 500);

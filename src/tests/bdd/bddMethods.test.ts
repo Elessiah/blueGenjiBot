@@ -17,11 +17,29 @@ process.env.BDD_PATH = path.join(TMP_DIR, "singleton.sqlite");
 
 import { Bdd, closeBddInstance, getBddInstance, resetBddInstance, resolveBddPath } from "../../bdd/Bdd.js";
 
+/** Schéma bâti une fois ; chaque test en ouvre une copie (la rouvrir ne resème rien). */
+const TEMPLATE = path.join(TMP_DIR, "template.sqlite");
+let templateReady: Promise<void> | null = null;
+
+function buildTemplate(): Promise<void> {
+  templateReady ??= (async () => {
+    const log = console.log;
+    console.log = () => {};
+    try {
+      await (await Bdd.create(TEMPLATE)).close();
+    } finally {
+      console.log = log;
+    }
+  })();
+  return templateReady;
+}
+
 /** Base dédiée à un test, fermée à sa fin (sous Windows un fichier ouvert bloque le nettoyage). */
 async function freshBdd(t: test.TestContext): Promise<Bdd> {
-  t.mock.method(console, "log", () => {});
-  const bdd = await Bdd.create(path.join(TMP_DIR, `${randomUUID()}.sqlite`));
-  t.mock.restoreAll();
+  await buildTemplate();
+  const file = path.join(TMP_DIR, `${randomUUID()}.sqlite`);
+  fs.copyFileSync(TEMPLATE, file);
+  const bdd = await Bdd.create(file);
   t.after(() => bdd.close());
   return bdd;
 }
