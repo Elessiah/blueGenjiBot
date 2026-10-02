@@ -374,7 +374,7 @@ test("@everyone dans un rappel enregistré : refusé, le salon est servi quand m
 
 const users = (rec: Rec, n: number) => Array.from({ length: n }, (_, i) => fakeUser(rec, "M" + i));
 const capNotice = (count: string) => "Envoi en message privé refusé : Le rôle « Membres » compte " + count +
-  ", au-delà de la limite de 50 messages privés par envoi. Personne n'a reçu les adhésions. " +
+  ", au-delà de la limite de 50 messages privés par envoi. Aucun membre n'a reçu les adhésions en message privé. " +
   "Visez un rôle plus restreint, ou envoyez-les dans un salon !";
 
 test("plafond : 50 membres du rôle sont tous servis", async () => {

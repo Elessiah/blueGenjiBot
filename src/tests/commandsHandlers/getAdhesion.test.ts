@@ -32,6 +32,10 @@ type Setup = {
   admin?: boolean;
   /** La récupération des membres du serveur lève (cache incomplet). */
   fetchFails?: boolean;
+  /** Le cache paraît incomplet : chaque lecture du rôle récupérerait le serveur. */
+  incompleteCache?: boolean;
+  /** Compteur des récupérations complètes des membres du serveur. */
+  fetches?: number;
   /** Un salon est aussi demandé. */
   channel?: boolean;
 };
@@ -50,8 +54,12 @@ function fakeInteraction(trace: string[], setup: Setup): ChatInputCommandInterac
   };
   const users = Array.from({ length: setup.members ?? 0 }, (_, i) => ({ user: { id: "u" + i, bot: false, send: record("dm:u" + i) } }));
   const cache = new Map(users.map((m) => [m.user.id, m]));
-  const fetch = async () => { if (setup.fetchFails) throw new Error("Members didn't arrive in time."); };
-  const guild = { id: "guild-1", memberCount: cache.size + (setup.fetchFails ? 1 : 0), members: { cache, fetch } };
+  const fetch = async () => {
+    setup.fetches = (setup.fetches ?? 0) + 1;
+    if (setup.fetchFails) throw new Error("Members didn't arrive in time.");
+  };
+  const incomplete = setup.fetchFails || setup.incompleteCache;
+  const guild = { id: "guild-1", memberCount: cache.size + (incomplete ? 1 : 0), members: { cache, fetch } };
   const role = {
     id: setup.everyone ? "guild-1" : "role-1",
     name: setup.everyone ? "@everyone" : "Membres",
@@ -105,7 +113,7 @@ test("rappel vers un rôle de 51 membres : refusé avant tout envoi, rien n'est 
   const trace: string[] = [];
   await getAdhesion(quietClient, fakeInteraction(trace, { members: 51, interval: "30" }));
   assert.deepEqual(trace, [PENDING, "followUp Envoi en message privé refusé : Le rôle « Membres » compte 51 membres, " +
-    "au-delà de la limite de 50 messages privés par envoi. Personne n'a reçu les adhésions. " +
+    "au-delà de la limite de 50 messages privés par envoi. Aucun membre n'a reçu les adhésions en message privé. " +
     "Visez un rôle plus restreint, ou envoyez-les dans un salon ! Aucun rappel n'a été enregistré."]);
   assert.equal(fs.existsSync(process.env.BDD_PATH ?? ""), false);
 });
@@ -148,4 +156,14 @@ test("rôle de 50 membres : tous servis, envoi réussi", async () => {
   await getAdhesion(quietClient, fakeInteraction(trace, { members: 50, interval: null }));
   assert.equal(trace.filter((t) => t.startsWith("dm:u")).length, 50);
   assert.equal(trace.at(-1), "followUp Envoi réussi !");
+});
+
+// Dernier du fichier : le rappel accepté écrit dans la base jetable.
+test("rappel accepté : les membres lus pour le plafond servent à l'envoi, sans seconde récupération", async () => {
+  const trace: string[] = [];
+  const setup: Setup = { members: 3, interval: "30", incompleteCache: true };
+  await getAdhesion(quietClient, fakeInteraction(trace, setup));
+  assert.equal(setup.fetches, 1);
+  assert.equal(trace.filter((t) => t.startsWith("dm:u")).length, 3);
+  assert.ok(trace.includes("followUp Envoi réussi !"));
 });
