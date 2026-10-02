@@ -37,7 +37,8 @@ async function fetchTargets(client: Client, bdd: Bdd, interval: adhesionInterval
     const role = await resolveRole(client, bdd, interval, guild, user);
     const member = await resolveMember(client, bdd, interval, guild, user);
     if (member === POSTPONED) return null;
-    if (role !== null && !(await roleMembersReadable(client, interval, guild, role, user))) return null;
+    const roleMembers = role === null ? null : await readRoleMembers(client, interval, guild, role, user);
+    if (role !== null && roleMembers === null) return null;
 
     return {
         id: interval.id,
@@ -46,6 +47,7 @@ async function fetchTargets(client: Client, bdd: Bdd, interval: adhesionInterval
         channel: channel,
         member: member,
         role: role,
+        roleMembers: roleMembers,
         author: user,
         interval_days: interval.interval_days,
         iteration: interval.iteration,
@@ -157,27 +159,27 @@ async function resolveMember(client: Client,
 }
 
 /**
- * Récupère les membres du serveur pour que le rôle cible soit lisible à
- * l'envoi. Un échec (délai, limite de débit) reporte tout le rappel au
- * prochain passage, sans consommer d'envoi : sinon les membres du rôle
- * attendraient une période entière, et un rappel à son dernier envoi
- * s'effacerait sans les avoir servis. L'envoi qui suit relit le rôle sans
- * nouvelle récupération, le cache étant alors complet. L'auteur est prévenu
- * de chaque report, pour qu'un rappel bloqué ne paraisse pas actif.
- * @returns `true` si les membres du rôle sont lisibles.
+ * Lit les membres du rôle cible, après récupération des membres du serveur.
+ * Un échec (délai, limite de débit) reporte tout le rappel au prochain
+ * passage, sans consommer d'envoi : sinon les membres du rôle attendraient une
+ * période entière, et un rappel à son dernier envoi s'effacerait sans les
+ * avoir servis. L'envoi qui suit reçoit cette liste et
+ * ne relit pas le rôle : une seconde lecture qui échouerait consommerait
+ * l'envoi. L'auteur est prévenu de chaque report, pour qu'un rappel bloqué ne
+ * paraisse pas actif.
+ * @returns Les membres du rôle, ou `null` si le rappel est reporté.
  */
-async function roleMembersReadable(client: Client,
-                                   interval: adhesionIntervalIds,
-                                   guild: Guild,
-                                   role: Role,
-                                   user: User): Promise<boolean> {
+async function readRoleMembers(client: Client,
+                               interval: adhesionIntervalIds,
+                               guild: Guild,
+                               role: Role,
+                               user: User): Promise<GuildMember[] | null> {
     try {
-        await fetchRoleMembers(guild, role);
-        return true;
+        return await fetchRoleMembers(guild, role);
     } catch {
         await sendLog(client, "Interval n°" + interval.id + " : membres du rôle injoignables pour l'instant, report.");
         await safeUser(client, user, undefined, undefined, reminderPostponedNotice(interval.id, role.name));
-        return false;
+        return null;
     }
 }
 

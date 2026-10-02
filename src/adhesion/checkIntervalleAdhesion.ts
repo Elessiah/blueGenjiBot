@@ -37,7 +37,8 @@ async function checkIntervalleAdhesion(client: Client) {
             fetchedIntervalle.member,
             fetchedIntervalle.role,
             false,
-            fetchedIntervalle.author
+            fetchedIntervalle.author,
+            fetchedIntervalle.roleMembers
         );
         // Le décompte est décidé **avant** d'être écrit, et par une seule
         // règle. L'enchaînement d'avant — `iteration--` puis `== 0` — laissait

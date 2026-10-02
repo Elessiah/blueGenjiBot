@@ -21,14 +21,19 @@ type AdhesionRecipients = {
  * @param client Client Discord utilisé pour le journal.
  * @param role Rôle dont chaque membre est servi, ou `null`.
  * @param member Membre servi individuellement, ou `null`.
+ * @param knownRoleMembers Membres du rôle déjà lus par l'appelant, servis sans
+ *   nouvelle lecture ; `null` pour les lire ici.
  * @returns Les destinataires et l'état de la lecture du rôle.
  */
-async function collectRecipients(client: Client, role: Role | null, member: GuildMember | null): Promise<AdhesionRecipients> {
+async function collectRecipients(client: Client,
+                                 role: Role | null,
+                                 member: GuildMember | null,
+                                 knownRoleMembers: GuildMember[] | null = null): Promise<AdhesionRecipients> {
     const recipients: User[] = [];
     let roleUnreadable = false;
     if (role !== null) {
         try {
-            const members = await fetchRoleMembers(role.guild, role);
+            const members = knownRoleMembers ?? await fetchRoleMembers(role.guild, role);
             recipients.push(...members.map(m => m.user));
         } catch (err) {
             roleUnreadable = true;

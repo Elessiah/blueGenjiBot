@@ -9,6 +9,8 @@ type AdhesionTargets = {
     channel: TextChannel | null,
     member: GuildMember | null,
     role: Role | null,
+    /** Membres du rôle déjà lus (rappel automatique), ou `null` pour les lire à l'envoi. */
+    roleMembers: GuildMember[] | null,
 };
 
 /**
@@ -23,6 +25,8 @@ type AdhesionTargets = {
  * @param role Rôle cible, ou `null` si aucun envoi par rôle n'est prévu.
  * @param memberPermMissing Indique si l'auteur manque de permissions pour des envois hors MP.
  * @param author Auteur du rappel, notifie en cas de succès/échec.
+ * @param roleMembers Membres du rôle déjà lus par l'appelant (rappel
+ *   automatique), servis tels quels ; `null` pour les lire ici.
  * @returns `true` si tous les envois demandés aux cibles sélectionnées réussissent; `false` dès qu'au moins un envoi échoue.
  */
 async function sendAdhesion(client: Client,
@@ -31,14 +35,15 @@ async function sendAdhesion(client: Client,
                             member: GuildMember | null,
                             role: Role | null,
                             memberPermMissing: boolean,
-                            author: User): Promise<boolean> {
+                            author: User,
+                            roleMembers: GuildMember[] | null = null): Promise<boolean> {
     const files = await loadAdhesionAttachments(client, author);
     if (files === null) {
         return false;
     }
     // `||` et non `??` : un message vide prend lui aussi le texte par défaut.
     const content = message || DEFAULT_ADHESION_MESSAGE;
-    const targets: AdhesionTargets = {channel, member, role};
+    const targets: AdhesionTargets = {channel, member, role, roleMembers};
 
     let delivered = true;
     if (!memberPermMissing) {
@@ -91,7 +96,7 @@ async function deliverToRecipients(client: Client,
                                    content: string,
                                    author: User): Promise<boolean> {
     const roleName = targets.role?.name ?? null;
-    const {recipients, roleUnreadable} = await collectRecipients(client, targets.role, targets.member);
+    const {recipients, roleUnreadable} = await collectRecipients(client, targets.role, targets.member, targets.roleMembers);
     if (roleUnreadable) {
         await notifyRoleUnreadable(client, author, roleName);
         // Rôle illisible sans membre désigné : l'avis ci-dessus suffit.

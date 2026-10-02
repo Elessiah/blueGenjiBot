@@ -21,6 +21,8 @@ type adhesionIntervalObj = {
     channel: TextChannel | null,
     member: GuildMember | null,
     role: Role | null,
+    /** Membres du rôle, lus à la résolution des cibles ; `null` sans rôle. */
+    roleMembers: GuildMember[] | null,
     author: User,
     interval_days: number,
     nextTransmission: Date,
