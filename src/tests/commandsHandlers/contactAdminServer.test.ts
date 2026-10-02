@@ -232,12 +232,20 @@ test("cache vide après redémarrage : les membres du serveur sont récupérés 
   ]);
 });
 
-test("@everyone administrateur : lu dans le seul cache, sans récupérer tout le serveur", async () => {
+test("@everyone administrateur : écarté, même après récupération d'un autre rôle", async () => {
   await setAdminRole("g9", null);
   const trace: string[] = [];
-  const client = fakeClient(trace, { roles: [{ id: "g9", admin: true, members: ["k1", "x1", "x2"] }], memberFetch: "ok" });
+  const client = fakeClient(trace, {
+    roles: [{ id: "admin", admin: true, members: ["a1"] }, { id: "g9", admin: true, members: ["k1", "x1", "x2"] }],
+    memberFetch: "ok",
+  });
   assert.equal(await contactAdminServer(client, undefined, "g9", "Alerte"), true);
-  assert.deepEqual(trace, ["guilds.fetch g9", "dm:k1 Alerte"]);
+  const alone = fakeClient(trace, { roles: [{ id: "g9", admin: true, members: ["k1", "x1"] }] });
+  assert.equal(await contactAdminServer(alone, undefined, "g9", "Alerte"), true);
+  assert.deepEqual(trace, [
+    "guilds.fetch g9", "members.fetch *", "dm:a1 Alerte",
+    "guilds.fetch g9", "users.fetch proprio", "dm:proprio Alerte",
+  ]);
 });
 
 test("bots des rôles d'administration : écartés, ni MP ni échec ; le propriétaire si seuls des bots", async () => {
