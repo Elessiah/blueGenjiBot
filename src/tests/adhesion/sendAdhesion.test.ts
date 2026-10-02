@@ -73,6 +73,8 @@ type RoleSetup = {
   cached?: boolean;
   /** La récupération des membres du serveur lève. */
   fetchFails?: boolean;
+  /** Le rôle est `@everyone` (même identifiant que le serveur). */
+  everyone?: boolean;
 };
 
 /** Faux rôle et compteur des récupérations complètes de son serveur. */
@@ -91,8 +93,10 @@ function fakeRole(users: User[], setup: RoleSetup = {}): FakeRole {
   };
   if (setup.cached) load();
   const role = {
+    id: setup.everyone ? "guild-1" : "role-1",
     fetches: 0,
     guild: {
+      id: "guild-1",
       memberCount: users.length + 1,
       members: {
         cache,
@@ -307,6 +311,16 @@ test("beaucoup d'échecs : l'avis à l'auteur reste sous 2000 caractères et com
   assert.ok((notice?.content.length ?? 0) <= 2000);
   const shown = (notice?.content.match(/^Echec de l'envoi pour /gm) ?? []).length;
   assert.ok((notice?.content ?? "").endsWith("Et " + (150 - shown) + " autre(s) échec(s).\n"));
+});
+
+test("@everyone : lu dans le seul cache, sans récupération du serveur entier", async () => {
+  validPaths();
+  const rec = recorder();
+  const role = fakeRole([fakeUser(rec, "Bob")], { everyone: true });
+  const ok = await sendAdhesion(fakeClient(rec), null, null, null, role, false, author(rec));
+  assert.equal(ok, false);
+  assert.equal(role.fetches, 0);
+  assert.deepEqual(rec.trace, [log(NO_RECIPIENT_LOG), dm("author", NO_RECIPIENT_NOTICE)]);
 });
 
 test("membres du rôle déjà lus (rappel) : servis tels quels, sans seconde lecture qui pourrait échouer", async () => {

@@ -13,11 +13,13 @@ function setup(opts: { cached: number; memberCount?: number; fails?: boolean }) 
   fill(opts.cached);
   let fetches = 0;
   const guild = {
+    id: "guild-1",
     memberCount: opts.memberCount,
     members: {
       cache,
       fetch: async () => {
         fetches++;
+        await new Promise((resolve) => setImmediate(resolve));
         if (opts.fails) throw new Error("Members didn't arrive in time.");
         fill(opts.memberCount ?? 3);
       },
@@ -50,4 +52,19 @@ test("nombre de membres inconnu : la récupération est demandée", async () => 
 test("récupération en échec : l'erreur remonte à l'appelant", async () => {
   const s = setup({ cached: 0, memberCount: 3, fails: true });
   await assert.rejects(fetchRoleMembers(s.guild, s.role), /arrive in time/);
+});
+
+test("lectures simultanées d'un même serveur : une seule récupération partagée", async () => {
+  const s = setup({ cached: 0, memberCount: 3 });
+  const [a, b] = await Promise.all([fetchRoleMembers(s.guild, s.role), fetchRoleMembers(s.guild, s.role)]);
+  assert.equal(s.fetches(), 1);
+  assert.equal(a.length, 3);
+  assert.equal(b.length, 3);
+});
+
+test("après un échec partagé, la lecture suivante retente la récupération", async () => {
+  const s = setup({ cached: 0, memberCount: 3, fails: true });
+  await assert.rejects(fetchRoleMembers(s.guild, s.role));
+  await assert.rejects(fetchRoleMembers(s.guild, s.role));
+  assert.equal(s.fetches(), 2);
 });
