@@ -69,9 +69,9 @@ function roleUnreadableNotice(roleName: string | null): string {
  * @returns Le texte de l'avis.
  */
 function reminderPostponedNotice(intervalId: number, roleName: string | null): string {
-    const role = roleName === null ? "du rôle visé" : "du rôle « " + escapeMarkdown(roleName) + " »";
-    return "Rappel d'adhésion n°" + intervalId + " reporté : Discord n'a pas permis de lire les membres " +
-        role + ". Rien n'est parti, nouvel essai à la prochaine vérification " +
+    const what = roleName === null ? "le rôle visé" : "les membres du rôle « " + escapeMarkdown(roleName) + " »";
+    return "Rappel d'adhésion n°" + intervalId + " reporté : Discord n'a pas permis de lire " +
+        what + ". Rien n'est parti, nouvel essai à la prochaine vérification " +
         "(/delete-rappel-adhesion pour l'arrêter).";
 }
 
