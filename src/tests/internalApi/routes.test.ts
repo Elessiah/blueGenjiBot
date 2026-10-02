@@ -293,8 +293,27 @@ test("/internal/health : latence négative bornée à 0, client en panne signal�
   assert.equal((res.body.checks as Record<string, unknown>).discord, "error");
 });
 
-test("/internal/status : forme de la réponse et état OPERATIONAL / DEGRADED / DOWN", async () => {
-  let res = await call("/internal/status");
+/**
+ * `/internal/status` mesure le CPU sur 100 ms (`setTimeout`) : l'horloge est
+ * simulée et avancée jusqu'à la réponse, plutôt que d'attendre en vrai.
+ */
+async function callStatus(t: test.TestContext): Promise<Awaited<ReturnType<typeof call>>> {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: Date.now() });
+  try {
+    let settled = false;
+    const pending = call("/internal/status").finally(() => { settled = true; });
+    for (let i = 0; i < 1000 && !settled; i++) {
+      t.mock.timers.tick(10);
+      await new Promise((r) => setImmediate(r));
+    }
+    return await pending;
+  } finally {
+    t.mock.timers.reset();
+  }
+}
+
+test("/internal/status : forme de la réponse et état OPERATIONAL / DEGRADED / DOWN", async (t) => {
+  let res = await callStatus(t);
   assert.equal(res.status, 200);
   for (const field of ["startupTs", "uptimeMs", "version", "buildHash", "buildDate", "gatewayLatency", "cpuUsage", "ramUsage"]) {
     assert.ok(field in res.body, `${field} absent`);
@@ -305,17 +324,17 @@ test("/internal/status : forme de la réponse et état OPERATIONAL / DEGRADED / 
   assert.equal(res.body.status, "OPERATIONAL");
 
   state.ping = 600;
-  res = await call("/internal/status");
+  res = await callStatus(t);
   assert.equal(res.body.status, "DEGRADED");
 
   state.ready = false;
-  res = await call("/internal/status");
+  res = await callStatus(t);
   assert.equal(res.body.status, "DOWN");
 });
 
-test("/internal/status : client en panne, 500 INTERNAL_STATUS_ERROR et détail au journal", async () => {
+test("/internal/status : client en panne, 500 INTERNAL_STATUS_ERROR et détail au journal", async (t) => {
   state.ready = "throw";
-  const res = await call("/internal/status");
+  const res = await callStatus(t);
   assert.equal(res.status, 500);
   assert.deepEqual(res.body, { error: "INTERNAL_STATUS_ERROR" });
   assert.ok(state.logs.some((l) => l.startsWith("/internal/status error: client détruit")));
@@ -774,7 +793,7 @@ async function readStream(reader: ReadableStreamDefaultReader<Uint8Array>, until
   return text;
 }
 
-test("/internal/feed/stream : en-têtes SSE, arriéré puis événement en direct", async () => {
+test("/internal/feed/stream : en-têtes SSE, arriéré puis événement en direct", { timeout: 5000 }, async () => {
   await recordEvent(null, "relay", "arriere-1");
   const controller = new AbortController();
   const response = await fetch(baseUrl + "/internal/feed/stream", { headers: { "x-internal-token": TOKEN }, signal: controller.signal });
@@ -794,7 +813,7 @@ test("/internal/feed/stream : en-têtes SSE, arriéré puis événement en direc
   }
 });
 
-test("/internal/feed/stream : Last-Event-ID ne rejoue que la suite", async () => {
+test("/internal/feed/stream : Last-Event-ID ne rejoue que la suite", { timeout: 5000 }, async () => {
   await recordEvent(null, "warn", "avant-reprise");
   const bdd = await getBddInstance();
   const [{ id }] = await bdd.raw<{ id: number }>("SELECT MAX(id) AS id FROM FeedEvent");

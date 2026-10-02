@@ -26,6 +26,11 @@ async function freshBdd(t: test.TestContext): Promise<Bdd> {
   return bdd;
 }
 
+/** Base jamais ouverte : les chemins « base fermée » sans schéma à bâtir. */
+function closedBdd(): Bdd {
+  return new Bdd(path.join(TMP_DIR, "jamais-ouverte.sqlite"));
+}
+
 async function count(bdd: Bdd, query: string, values: unknown[] = []): Promise<number> {
   const [row] = await bdd.raw<{ n: number }>(query, values);
   return Number(row.n);
@@ -179,8 +184,7 @@ test("deleteChannelServices retire le salon et ses services, et seulement lui", 
 });
 
 test("deleteChannelServices : base fermée, statut d'échec au lieu d'une exception", async (t) => {
-  const bdd = await freshBdd(t);
-  await bdd.close();
+  const bdd = closedBdd();
   t.mock.method(console, "error", () => {});
   assert.deepEqual(await bdd.deleteChannelServices("chan-1"), { success: false, message: "Failed to delete channel services." });
 });
@@ -225,9 +229,8 @@ test("getCurrentTimestamp rend une date valide proche de maintenant", async (t) 
 
 // --- Invitation et rôle arbitre -----------------------------------------------
 
-test("setServerInvite : base fermée, statut d'échec", async (t) => {
-  const bdd = await freshBdd(t);
-  await bdd.close();
+test("setServerInvite : base fermée, statut d'échec", async () => {
+  const bdd = closedBdd();
   const status = await bdd.setServerInvite("g1", "https://discord.gg/a", "u1");
   assert.equal(status.success, false);
   assert.match(status.message, /^Error while setting server invite: /);
@@ -250,9 +253,8 @@ test("rôle arbitre : absent, posé, remplacé sans doublon, retiré", async (t)
   assert.equal(await bdd.removeRefereeRole("g1"), false);
 });
 
-test("setRefereeRole : base fermée, statut d'échec", async (t) => {
-  const bdd = await freshBdd(t);
-  await bdd.close();
+test("setRefereeRole : base fermée, statut d'échec", async () => {
+  const bdd = closedBdd();
   const status = await bdd.setRefereeRole("g1", "r", "u");
   assert.equal(status.success, false);
   assert.match(status.message, /^Error while setting referee role: /);
@@ -268,9 +270,8 @@ test("anonymizeActivityAuthors : une étape en échec annule tout le repli", asy
   assert.equal(await count(bdd, "SELECT COUNT(*) AS n FROM Scrim"), 1, "rien d'effacé");
 });
 
-test("anonymizeActivityAuthors / normalizeLegacyActivityDetails : base fermée, refus explicite", async (t) => {
-  const bdd = await freshBdd(t);
-  await bdd.close();
+test("anonymizeActivityAuthors / normalizeLegacyActivityDetails : base fermée, refus explicite", async () => {
+  const bdd = closedBdd();
   await assert.rejects(bdd.anonymizeActivityAuthors(30), /Base fermée/);
   await assert.rejects(bdd.normalizeLegacyActivityDetails(), /Base fermée/);
 });
@@ -284,9 +285,8 @@ test("normalizeLegacyActivityDetails : une table absente annule toute la normali
   assert.equal(row.level, "texte libre", "réécriture des scrims annulée");
 });
 
-test("forgetGuild et claimOwnerApplication : base fermée, rien de fait", async (t) => {
-  const bdd = await freshBdd(t);
-  await bdd.close();
+test("forgetGuild et claimOwnerApplication : base fermée, rien de fait", async () => {
+  const bdd = closedBdd();
   assert.deepEqual(await bdd.forgetGuild("g1"), {});
   assert.equal(await bdd.claimOwnerApplication("app"), null);
   await assert.rejects(bdd.listConfiguredGuildIds(), /Base fermée/);
