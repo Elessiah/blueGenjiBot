@@ -13,6 +13,7 @@ import {
     EVERYONE_REFUSED_NOTICE,
     PERMISSION_WARNING,
     recipientCapNotice,
+    reminderRefusedSuffix,
 } from "@/adhesion/adhesionNotices.js";
 import type {adhesionIntervalObj} from "@/adhesion/types.js";
 
@@ -23,6 +24,8 @@ type AdhesionTargets = {
     role: Role | null,
     /** Membres du rôle déjà lus (rappel automatique), ou `null` pour les lire à l'envoi. */
     roleMembers: GuildMember[] | null,
+    /** Numéro du rappel servi, ou `null` pour un envoi immédiat. */
+    reminderId: number | null,
 };
 
 /**
@@ -46,7 +49,7 @@ async function sendAdhesion(client: Client,
                             role: Role | null,
                             memberPermMissing: boolean,
                             author: User): Promise<boolean> {
-    return await sendToTargets(client, message, {channel, member, role, roleMembers: null}, memberPermMissing, author);
+    return await sendToTargets(client, message, {channel, member, role, roleMembers: null, reminderId: null}, memberPermMissing, author);
 }
 
 /**
@@ -63,6 +66,7 @@ async function sendAdhesionReminder(client: Client, interval: adhesionIntervalOb
         member: interval.member,
         role: interval.role,
         roleMembers: interval.roleMembers,
+        reminderId: interval.id,
     };
     return await sendToTargets(client, interval.message, targets, false, interval.author);
 }
@@ -141,8 +145,9 @@ async function deliverToRecipients(client: Client,
                                    content: string,
                                    author: User): Promise<boolean> {
     const roleName = targets.role?.name ?? null;
+    const suffix = targets.reminderId === null ? "" : reminderRefusedSuffix(targets.reminderId);
     if (targets.role !== null && isEveryoneRole(targets.role)) {
-        await refuseRecipients(client, author, "sendAdhesion: rôle @everyone visé, envoi en MP refusé.", EVERYONE_REFUSED_NOTICE);
+        await refuseRecipients(client, author, "sendAdhesion: rôle @everyone visé, envoi en MP refusé.", EVERYONE_REFUSED_NOTICE + suffix);
         return false;
     }
     const {recipients, roleCount, roleUnreadable} = await collectRecipients(client, targets.role, targets.member, targets.roleMembers);
@@ -154,7 +159,7 @@ async function deliverToRecipients(client: Client,
     if (recipients.length > MAX_ADHESION_DMS) {
         await refuseRecipients(client, author,
             "sendAdhesion: " + recipients.length + " destinataires au-delà du plafond de " + MAX_ADHESION_DMS + ", envoi en MP refusé.",
-            recipientCapNotice(roleName, roleCount, recipients.length, MAX_ADHESION_DMS));
+            recipientCapNotice(roleName, roleCount, recipients.length, MAX_ADHESION_DMS) + suffix);
         return false;
     }
     return (await deliverToMembers(client, recipients, files, content, author, roleName)) && !roleUnreadable;

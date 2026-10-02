@@ -116,6 +116,17 @@ function recipientCapNotice(roleName: string | null, roleCount: number, total: n
         "Visez un rôle plus restreint, ou envoyez-les dans un salon !";
 }
 
+/**
+ * Suite d'un refus prononcé à l'échéance d'un rappel enregistré : il ne peut
+ * pas être modifié, et sera refusé de même à chaque échéance.
+ * @param intervalId Numéro du rappel, tel que l'affiche `/show-rappel-adhesion`.
+ * @returns Le texte à ajouter à l'avis de refus.
+ */
+function reminderRefusedSuffix(intervalId: number): string {
+    return " (Rappel n°" + intervalId + " : il sera refusé de même à chaque échéance, " +
+        "/delete-rappel-adhesion pour l'arrêter.)";
+}
+
 /** Longueur maximale d'un message Discord. */
 const DISCORD_MESSAGE_MAX = 2000;
 
@@ -163,6 +174,7 @@ export {
     EVERYONE_REFUSED_NOTICE,
     noRecipientNotice,
     recipientCapNotice,
+    reminderRefusedSuffix,
     roleUnreadableNotice,
     reminderPostponedNotice,
     memberFailedLine,

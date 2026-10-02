@@ -11,6 +11,9 @@ import {EVERYONE_REFUSED_NOTICE, recipientCapNotice, roleUnreadableNotice} from 
 /** Ajouté à un refus prononcé à la création d'un rappel. */
 const REMINDER_NOT_SAVED = " Aucun rappel n'a été enregistré.";
 
+/** Ajouté à un refus quand un salon était aussi demandé : il n'a rien reçu. */
+const CHANNEL_NOT_SERVED = " Rien n'est parti, pas même dans le salon demandé : relancez la commande sans ce rôle.";
+
 /**
  * Récupère et envoie les fichiers d'adhésion configurés.
  * @param client Client Discord utilisé pour les appels API.
@@ -45,7 +48,7 @@ async function getAdhesion(client: Client,
         return;
     }
     // Sans permission, rien ne part vers le rôle : l'auteur reçoit sa copie.
-    if (!memberPermMissing && role !== null && await refusedRole(client, interaction, role, member, intInterval)) {
+    if (!memberPermMissing && role !== null && await refusedRole(client, interaction, role, member, intInterval, channel !== null)) {
         return;
     }
     if (await sendAdhesion(client, message, channel, member, role, memberPermMissing, interaction.user))
@@ -74,15 +77,19 @@ async function getAdhesion(client: Client,
  * @param role Rôle visé.
  * @param member Membre désigné en même temps, ou `null`.
  * @param intInterval Intervalle du rappel demandé, `0` sans rappel.
+ * @param withChannel Un salon était aussi demandé : le refus dit qu'il n'a
+ *   rien reçu.
  * @returns `true` si l'envoi est refusé (l'auteur en est avisé).
  */
 async function refusedRole(client: Client,
                            interaction: ChatInputCommandInteraction,
                            role: Role,
                            member: GuildMember | null,
-                           intInterval: number): Promise<boolean> {
+                           intInterval: number,
+                           withChannel: boolean): Promise<boolean> {
+    const channelNote = withChannel ? CHANNEL_NOT_SERVED : "";
     if (isEveryoneRole(role)) {
-        await safeFollowUp(interaction, EVERYONE_REFUSED_NOTICE, true, []);
+        await safeFollowUp(interaction, EVERYONE_REFUSED_NOTICE + channelNote, true, []);
         return true;
     }
     // Un intervalle illisible (`NaN`) n'est pas un rappel, pas plus que `0`.
@@ -91,12 +98,12 @@ async function refusedRole(client: Client,
     // Rôle illisible : le plafond ne peut pas être vérifié, le rappel n'est pas
     // enregistré (la lecture en échec est déjà journalisée).
     if (roleUnreadable) {
-        await safeFollowUp(interaction, roleUnreadableNotice(role.name) + REMINDER_NOT_SAVED, true, []);
+        await safeFollowUp(interaction, roleUnreadableNotice(role.name) + REMINDER_NOT_SAVED + channelNote, true, []);
         return true;
     }
     if (recipients.length <= MAX_ADHESION_DMS) return false;
     await safeFollowUp(interaction,
-        recipientCapNotice(role.name, roleCount, recipients.length, MAX_ADHESION_DMS) + REMINDER_NOT_SAVED,
+        recipientCapNotice(role.name, roleCount, recipients.length, MAX_ADHESION_DMS) + REMINDER_NOT_SAVED + channelNote,
         true, []);
     return true;
 }
