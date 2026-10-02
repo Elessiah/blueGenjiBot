@@ -67,8 +67,45 @@ function fakeMember(user: User): GuildMember {
   return { user } as unknown as GuildMember;
 }
 
-function fakeRole(users: User[]): Role {
-  return { members: { map: <T>(fn: (m: { user: User }) => T) => users.map((user) => fn({ user })) } } as unknown as Role;
+/** Comportement du serveur d'un faux rôle. */
+type RoleSetup = {
+  /** Le cache est déjà complet : aucune récupération n'est attendue. */
+  cached?: boolean;
+  /** La récupération des membres du serveur lève. */
+  fetchFails?: boolean;
+};
+
+/** Faux rôle et compteur des récupérations complètes de son serveur. */
+type FakeRole = Role & { fetches: number };
+
+/**
+ * Faux rôle dont les membres ne sont lisibles qu'une fois le serveur récupéré,
+ * comme après un redémarrage du bot. Le serveur compte un membre de plus que
+ * le rôle : un rôle vide n'y passe pas pour un cache complet.
+ */
+function fakeRole(users: User[], setup: RoleSetup = {}): FakeRole {
+  const cache = new Map<string, { user: User }>();
+  const load = () => {
+    cache.set("hors-role", { user: { id: "hors-role" } as unknown as User });
+    for (const user of users) cache.set(user.id, { user });
+  };
+  if (setup.cached) load();
+  const role = {
+    fetches: 0,
+    guild: {
+      memberCount: users.length + 1,
+      members: {
+        cache,
+        fetch: async () => {
+          role.fetches++;
+          if (setup.fetchFails) throw new Error("Members didn't arrive in time.");
+          load();
+        },
+      },
+    },
+    members: { values: () => [...cache.values()].filter((m) => m.user.id !== "hors-role").values() },
+  };
+  return role as unknown as FakeRole;
 }
 
 function fakeChannel(rec: Rec, opts: { fails?: boolean; noGuild?: boolean } = {}): TextChannel {
@@ -221,17 +258,57 @@ test("rôle vide sans membre : l'auteur est avisé, le journal sans nom, échec"
   assert.deepEqual(rec.trace, [log(NO_RECIPIENT_LOG), dm("author", NO_RECIPIENT_NOTICE)]);
 });
 
-test("membres du rôle illisibles : journalisé, le membre direct n'est pas ajouté, l'auteur avisé, échec", async () => {
+const UNREADABLE_LOG = "sendAdhesion membres du rôle illisibles: Members didn't arrive in time.";
+const unreadableNotice = (role: string) => "Echec de l'envoi des adhésions en message privé aux membres " + role +
+  " : Discord n'a pas permis de les lire, aucun ne les a reçus. Réessayez plus tard !";
+
+test("cache vide après redémarrage : les membres du serveur sont récupérés, le rôle servi", async () => {
   validPaths();
   const rec = recorder();
-  const role = { members: { map: () => { throw new Error("kaboom"); } } } as unknown as Role;
+  const role = fakeRole([fakeUser(rec, "Bob"), fakeUser(rec, "Carol")]);
+  const ok = await sendAdhesion(fakeClient(rec), null, null, null, role, false, author(rec));
+  assert.equal(ok, true);
+  assert.equal(role.fetches, 1);
+  assert.deepEqual(rec.trace, [
+    dm("Bob", DEFAULT_MESSAGE, FILES),
+    dm("Carol", DEFAULT_MESSAGE, FILES),
+    dm("author", "Adhésions envoyés avec succès à plusieurs membres !"),
+  ]);
+});
+
+test("cache déjà complet : aucune récupération (limite de débit), le rôle servi", async () => {
+  validPaths();
+  const rec = recorder();
+  const role = fakeRole([fakeUser(rec, "Bob")], { cached: true });
+  const ok = await sendAdhesion(fakeClient(rec), null, null, null, role, false, author(rec));
+  assert.equal(ok, true);
+  assert.equal(role.fetches, 0);
+  assert.deepEqual(rec.trace, [dm("Bob", DEFAULT_MESSAGE, FILES), dm("author", "Adhésion envoyée avec succès à Bob !")]);
+});
+
+test("membres du rôle illisibles : journalisé sans nom, le membre désigné servi quand même, échec", async () => {
+  validPaths();
+  const rec = recorder();
+  const role = Object.assign(fakeRole([fakeUser(rec, "Bob")], { fetchFails: true }), { name: "Bureau" });
   const ok = await sendAdhesion(fakeClient(rec), null, null, fakeMember(fakeUser(rec, "Alice")), role, false, author(rec));
   assert.equal(ok, false);
+  assert.equal(role.fetches, 1);
   assert.deepEqual(rec.trace, [
-    log("sendAdhesion targets: kaboom"),
-    log(NO_RECIPIENT_LOG),
-    dm("author", NO_RECIPIENT_NOTICE),
+    log(UNREADABLE_LOG),
+    dm("author", unreadableNotice("du rôle « Bureau »")),
+    dm("Alice", DEFAULT_MESSAGE, FILES),
+    dm("author", "Adhésion envoyée avec succès à Alice !"),
   ]);
+  assert.ok(!rec.trace.some((t) => t.to === "log" && /Bob|Alice/.test(t.content)), "aucun pseudo au journal");
+});
+
+test("membres du rôle illisibles sans membre désigné : un seul avis, pas celui du rôle vide, échec", async () => {
+  validPaths();
+  const rec = recorder();
+  const role = fakeRole([fakeUser(rec, "Bob")], { fetchFails: true });
+  const ok = await sendAdhesion(fakeClient(rec), null, null, null, role, false, author(rec));
+  assert.equal(ok, false);
+  assert.deepEqual(rec.trace, [log(UNREADABLE_LOG), dm("author", unreadableNotice("du rôle visé"))]);
 });
 
 test("rôle vide nommé : l'avis nomme le rôle, sans mise en forme Discord", async () => {
