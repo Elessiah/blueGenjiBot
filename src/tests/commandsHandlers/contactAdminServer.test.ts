@@ -331,6 +331,14 @@ test("message absent : refus en réponse, ou au journal en appel interne", async
   ]);
 });
 
+test("message vide sur un cache incomplet : refusé avant toute récupération des membres", async () => {
+  await setAdminRole("g9", null);
+  const trace: string[] = [];
+  const client = fakeClient(trace, { roles: [{ id: "admin", admin: true, members: ["a1"] }], memberFetch: "ok" });
+  assert.equal(await contactAdminServer(client, undefined, "g9", ""), false);
+  assert.deepEqual(trace, ["guilds.fetch g9", "log Parameter 'message' not found. Please try again."]);
+});
+
 test("un administrateur aux MP fermés : journalisé par identifiant, l'envoi reste un succès", async () => {
   await setAdminRole("g1", null);
   const trace: string[] = [];
