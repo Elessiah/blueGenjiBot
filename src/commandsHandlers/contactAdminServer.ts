@@ -75,7 +75,10 @@ type AdminTargets = {
  */
 type RoleReader = {
     read: (role: Role) => Promise<GuildMember[]>,
-    failed: () => boolean,
+    /** Note un rôle d'administration resté illisible hors du lecteur (rôle configuré). */
+    markIncomplete: () => void,
+    /** Un rôle d'administration, ou ses membres, sont restés illisibles. */
+    incomplete: () => boolean,
 };
 
 /**
@@ -86,6 +89,7 @@ type RoleReader = {
  */
 function roleReader(client: Client, server: Guild): RoleReader {
     let failed = false;
+    let skipped = false;
     return {
         read: async (role: Role) => {
             if (!failed) {
@@ -99,7 +103,8 @@ function roleReader(client: Client, server: Guild): RoleReader {
             }
             return [...role.members.values()];
         },
-        failed: () => failed,
+        markIncomplete: () => { skipped = true; },
+        incomplete: () => failed || skipped,
     };
 }
 
@@ -161,12 +166,13 @@ async function collectAdmins(client: Client, server: Guild): Promise<AdminTarget
     if (targetsArray.length === 0) {
         targetsArray.push(await client.users.fetch(server.ownerId));
     }
-    return {targets: targetsArray, incomplete: reader.failed()};
+    return {targets: targetsArray, incomplete: reader.incomplete()};
 }
 
 /**
  * Ajoute les membres du rôle admin configuré par `/set-admin-role`, s'il y en
- * a un ; un rôle introuvable ou illisible est journalisé. `@everyone` configuré
+ * a un ; un rôle introuvable ou illisible est journalisé (illisible, l'envoi
+ * est signalé incomplet). `@everyone` configuré
  * est écarté et journalisé, pour la même raison que parmi les rôles
  * Administrateur : le message partirait en MP au serveur entier.
  */
@@ -183,6 +189,8 @@ async function addConfiguredAdmins(client: Client, server: Guild, targets: Map<s
     try {
         configuredRole = await server.roles.fetch(adminRoleId);
     } catch (err) {
+        // Ses membres manquent à l'envoi : la confirmation le dira.
+        reader.markIncomplete();
         await sendLog(client, "Failed to fetch configured admin role : " + (err as TypeError).message);
         return;
     }
