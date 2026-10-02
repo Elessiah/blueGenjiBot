@@ -85,8 +85,8 @@ async function refusedRole(client: Client,
         await safeFollowUp(interaction, EVERYONE_REFUSED_NOTICE, true, []);
         return true;
     }
-    // `!(… > 0)` et non `<= 0` : un intervalle illisible (`NaN`) n'est pas un rappel.
-    if (!(intInterval > 0)) return false;
+    // Un intervalle illisible (`NaN`) n'est pas un rappel, pas plus que `0`.
+    if (Number.isNaN(intInterval) || intInterval <= 0) return false;
     const {recipients, roleCount, roleUnreadable} = await collectRecipients(client, role, member);
     // Rôle illisible : le plafond ne peut pas être vérifié, le rappel n'est pas
     // enregistré (la lecture en échec est déjà journalisée).
