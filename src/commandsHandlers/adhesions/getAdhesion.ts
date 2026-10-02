@@ -56,7 +56,7 @@ async function getAdhesion(client: Client,
         roleMembers = check;
     }
     const refusals: string[] = [];
-    if (await sendAdhesion(client, message, channel, member, role, memberPermMissing, interaction.user, {refusals, roleMembers}))
+    if (await sendAdhesion(client, message, {channel, member, role}, memberPermMissing, interaction.user, {refusals, roleMembers}))
         await safeFollowUp(interaction, "Envoi réussi !", true, []);
     else
         await safeFollowUp(interaction, ["Echec de l'envoi !", ...refusals].join("\n"), true, []);
