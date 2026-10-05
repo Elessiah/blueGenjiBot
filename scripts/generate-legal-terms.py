@@ -32,7 +32,7 @@ from xml.sax.saxutils import escape
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SITE = "https://bluegenji-esport.fr"
-if len(sys.argv) > 1:
+if len(sys.argv) > 1 or sys.stdin.isatty():
     sys.exit("Usage : python scripts/generate-legal-terms.py < legal.json")
 data = json.load(io.TextIOWrapper(sys.stdin.buffer, encoding="utf-8"))
 HOST = data["HEBERGEUR_HREF"]

@@ -132,7 +132,9 @@ async function resolveTargetRegions(client: Client,
     if (targetedRegions !== null) {
         return targetedRegions;
     }
-    await answerTmp(client, message, NO_REGION_NOTICE, 30000);
+    // Non attendue : l'avis à l'auteur ne doit pas retarder le relais.
+    answerTmp(client, message, NO_REGION_NOTICE, 30000)
+        .catch((error: unknown) => console.error("Réponse temporaire impossible :", describeError(error)));
     return {query: "ChannelPartner.region = 0", requestedRegions: [0]};
 }
 
