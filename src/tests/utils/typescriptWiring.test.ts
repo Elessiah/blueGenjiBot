@@ -42,7 +42,7 @@ test("aucun alias de chemin : les imports restent relatifs, sans réécriture au
   const SRC = path.join(ROOT, "src");
   const offenders = (fs.readdirSync(SRC, { recursive: true }) as string[])
     .filter((f) => f.endsWith(".ts"))
-    .filter((f) => /(?:from\s+|import\(\s*)["']@\//.test(fs.readFileSync(path.join(SRC, f), "utf8")));
+    .filter((f) => /(?:from\s+|import\s*\(?\s*)["']@\//.test(fs.readFileSync(path.join(SRC, f), "utf8")));
   assert.deepEqual(offenders, []);
 });
 
