@@ -9,6 +9,8 @@ import {deleteSetupAdhesion} from "../commandsHandlers/adhesions/deleteSetupAdhe
 import {loadAdhesionFiles} from "../commandsHandlers/adhesions/loadAdhesionFiles.js";
 import {adhesionValide} from "../commandsHandlers/adhesions/adhesionValide.js";
 import { adhesionPerimee } from "../commandsHandlers/adhesions/adhesionPerimee.js";
+import {setTournamentLink} from "../commandsHandlers/admin/setTournamentLink.js";
+import {MAX_TOURNAMENT_LINK_LENGTH, TOURNAMENT_LINK_KINDS, TOURNAMENT_LINK_LABELS} from "../tournament/tournamentLinks.js";
 
 /**
  * Construit la liste des commandes slash Blue et les enregistre côté client Discord.
@@ -180,6 +182,28 @@ async function fillBlueCommands(client: Client) {
                         description: "Message à envoyer pour l'annonce de bulletin d'adhésion périmée",
                         type: ApplicationCommandOptionType.String,
                         required: false,
+                    }
+                ]
+            }
+        },
+        "set-tournoi-lien": {
+            handler: setTournamentLink,
+            parameters: {
+                description: "Modifie un lien affiché par /tournoi (ADMINS BLUEGENJI)",
+                options: [
+                    {
+                        name: "lien",
+                        description: "Lien à modifier",
+                        type: ApplicationCommandOptionType.String,
+                        required: true,
+                        choices: TOURNAMENT_LINK_KINDS.map((kind) => ({name: TOURNAMENT_LINK_LABELS[kind], value: kind})),
+                    },
+                    {
+                        name: "url",
+                        description: "Nouvelle adresse https ; vide = lien par défaut",
+                        type: ApplicationCommandOptionType.String,
+                        required: false,
+                        max_length: MAX_TOURNAMENT_LINK_LENGTH,
                     }
                 ]
             }

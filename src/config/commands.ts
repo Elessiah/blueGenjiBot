@@ -35,6 +35,7 @@ import {relay} from "../commandsHandlers/admin/relay.js";
 import {configModule} from "../commandsHandlers/admin/configModule.js";
 import {restoreBackup} from "../commandsHandlers/admin/restoreBackup.js";
 import {backupCheck} from "../commandsHandlers/admin/backupCheck.js";
+import {tournoi} from "../commandsHandlers/tournoi.js";
 
 /**
  * Registre statique des commandes slash : handler, description et options de chacune.
@@ -432,6 +433,12 @@ const commands = {
                     choices: [...RECRUIT_ROLE_CHOICES]
                 }
             ]
+        }
+    },
+    "tournoi": {
+        handler: tournoi,
+        parameters: {
+            description: "Donne le reglement du tournoi (FR/EN) et le formulaire pour caster (TOUS)"
         }
     },
     "stats-site": {

@@ -46,13 +46,13 @@ const sha256 = (value: unknown): string => createHash("sha256").update(JSON.stri
 test("instructions envoyées : mêmes textes, même ordre, mêmes paramètres", async (t) => {
   const { calls, errors } = await play(t);
   assert.deepEqual(errors, []);
-  // 29 `exec` (25 créations ou réglages, PRAGMA et ALTER de ChannelPartner,
+  // 30 `exec` (26 créations ou réglages, PRAGMA et ALTER de ChannelPartner,
   // 2 ALTER de Ban), 3 `get` (une colonne vérifiée chacun), puis un `all` et
   // un `run` par service et par rang semés.
   assert.equal(calls.filter(([m]) => m === "all").length, services.length + ranks.length);
   assert.equal(calls.filter(([m]) => m === "run").length, services.length + ranks.length);
-  assert.equal(calls.length, 29 + 3 + 2 * (services.length + ranks.length));
-  assert.equal(sha256(calls), "8af07e7317c444d4661255e43ab9748e578a93dac41148a8b5d09af577f3ef80");
+  assert.equal(calls.length, 30 + 3 + 2 * (services.length + ranks.length));
+  assert.equal(sha256(calls), "c0ec0a6839db978fd5c96fe8b11ac5e8d8fb7485640c3b0c6b911c14234d18a9");
 });
 
 test("chaque étape en échec : son libellé, dans l'ordre, une fois", async (t) => {
@@ -63,12 +63,12 @@ test("chaque étape en échec : son libellé, dans l'ordre, une fois", async (t)
     "ChannelPartnerRank: ", "AdhesionInterval error: ", "RoleAdmin error: ", "ServerModule error: ",
     "FeedEvent error: ", "DailySnapshot error: ", "Scrim error: ", "Recrute error: ", "UserLink error: ",
     "ServerModule oauth cleanup error: ", "ServerInvite error: ", "RefereeRole error: ", "SiteVisit error: ",
-    "ActivityDaily error: ", "BotOwner error: ",
+    "ActivityDaily error: ", "BotOwner error: ", "TournamentLink error: ",
   ]);
   // Seule l'étape des services joint l'erreur entière à son message.
   assert.deepEqual(errors.map((parts) => parts.length), errors.map((parts) => (parts[0] === "Service&Co" ? 3 : 2)));
   assert.ok(errors.every((parts) => parts[1] === "exec refusé"));
   // Une étape qui échoue s'arrête à sa première instruction.
   assert.deepEqual(calls.map(([m]) => m), errors.map(() => "exec"));
-  assert.equal(sha256(calls), "e00ad08d0d747be7ab072e382a16e873ed9e71ac1f93d518680ddf8836e42745");
+  assert.equal(sha256(calls), "5f9aaceaa19aee22936e8eceaad58024bbdc172f34be0e3a3e5d21b61d74bb56");
 });

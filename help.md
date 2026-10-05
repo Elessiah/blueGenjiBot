@@ -52,6 +52,7 @@ Everyone:
 - `/recrute <role>`: posts a player or staff search, **Marvel Rivals only** — role chosen from a list (Tank, DPS, Heal, Coach, Manager).
 - `/stats`: shows **your own** recent activity (only you see the reply): partner messages from the last 7 days, scrims and searches from the last 30 days. Nobody can look up another player's activity.
 - `/stats-site`: shows BlueGenji website traffic (total visits, and unique visitors over the last 25 months).
+- `/tournoi`: posts the BlueGenji tournament links in the channel: rules in French and in English, and the form to apply as a caster.
 
 Bans are **network-wide**: this is community moderation, decided by the admins of servers with 50+ members. `/ban-list` therefore shows the admin of any partner server the full list of network bans (banned player, moderator, reason, date), so they know who can no longer post through the bot and why.
 
@@ -74,6 +75,9 @@ Moderation (servers with 50+ members):
 - `/ban-user-of-this-server user:<user> reason:<reason>`
 - `/ban-user-of-another-server username:<username> reason:<reason>`
 - `/unban id_ban:<id>`
+
+BlueGenji admins (BlueGenji servers only):
+- `/set-tournoi-lien lien:<link> [url]`: replaces a link shown by `/tournoi` (`https` address); without `url`, restores the default link.
 
 ## Support
 Need help, have feedback, or found an issue?
