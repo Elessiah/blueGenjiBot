@@ -73,7 +73,7 @@ async function manageDistribution(message: Message,
         const messageContentLower: string = message.content.toLowerCase();
         const targetedRegions = await resolveTargetRegions(client, bdd, message, channelId, messageContentLower);
         if (message.guildId && !await isModuleEnabled(message.guildId, 'annonces')) {
-            await answerTmp(client, message, 'Le module Annonces est desactive sur ce serveur.', 10);
+            await answerTmp(client, message, 'Le module Annonces est desactive sur ce serveur.', 10000);
             return false;
         }
         const targetedService = await selectTargetedService(client, message, services, messageContentLower);
