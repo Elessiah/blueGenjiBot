@@ -1,9 +1,9 @@
-import {sendLog} from "@/safe/sendLog.js";
-import {safeReply} from "@/safe/safeReply.js";
+import {sendLog} from "../../safe/sendLog.js";
+import {safeReply} from "../../safe/safeReply.js";
 
-import {Bdd, getBddInstance} from "@/bdd/Bdd.js";
+import {Bdd, getBddInstance} from "../../bdd/Bdd.js";
 
-import {formatRawRanks} from "@/utils/formatRawRanks.js";
+import {formatRawRanks} from "../../utils/formatRawRanks.js";
 
 import {ChatInputCommandInteraction, Client, MessageFlags, TextChannel} from "discord.js";
 

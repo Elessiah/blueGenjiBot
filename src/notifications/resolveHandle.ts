@@ -1,5 +1,5 @@
 import type { Client, Guild, GuildMember } from "discord.js";
-import { homeGuildIds } from "@/notifications/notifications.js";
+import { homeGuildIds } from "./notifications.js";
 
 /**
  * Résolution d'un identifiant Discord fourni par l'app web.

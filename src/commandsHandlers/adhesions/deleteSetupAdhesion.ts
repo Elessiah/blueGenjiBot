@@ -1,6 +1,6 @@
 import {ChatInputCommandInteraction, Client} from "discord.js";
-import {safeReply} from "@/safe/safeReply.js";
-import {Bdd, getBddInstance} from "@/bdd/Bdd.js";
+import {safeReply} from "../../safe/safeReply.js";
+import {Bdd, getBddInstance} from "../../bdd/Bdd.js";
 
 /**
  * Supprime la configuration d'adhésion enregistrée pour le serveur.

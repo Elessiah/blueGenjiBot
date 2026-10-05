@@ -1,8 +1,8 @@
 import {ChatInputCommandInteraction, Client} from "discord.js";
-import {safeReply} from "@/safe/safeReply.js";
-import {checkPermissions} from "@/check/checkPermissions.js";
-import {Bdd, getBddInstance} from "@/bdd/Bdd.js";
-import {sendLog} from "@/safe/sendLog.js";
+import {safeReply} from "../../safe/safeReply.js";
+import {checkPermissions} from "../../check/checkPermissions.js";
+import {Bdd, getBddInstance} from "../../bdd/Bdd.js";
+import {sendLog} from "../../safe/sendLog.js";
 
 /**
  * Retire le rôle arbitre du serveur courant.

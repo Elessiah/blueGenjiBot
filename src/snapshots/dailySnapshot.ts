@@ -9,8 +9,8 @@
  */
 
 import type { Client } from "discord.js";
-import { getBddInstance } from "@/bdd/Bdd.js";
-import { sendLog } from "@/safe/sendLog.js";
+import { getBddInstance } from "../bdd/Bdd.js";
+import { sendLog } from "../safe/sendLog.js";
 
 /**
  * Calcule et enregistre l'instantane du jour, en ecrasant celui deja pris aujourd'hui.

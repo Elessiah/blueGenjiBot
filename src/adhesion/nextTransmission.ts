@@ -11,7 +11,7 @@
  * L'heure est donc nommée ici, une fois, et résolue dans son fuseau.
  */
 
-import { parisDaysLater } from "@/utils/parisTime.js";
+import { parisDaysLater } from "../utils/parisTime.js";
 
 /** L'heure parisienne à laquelle partent les rappels, telle que la doc l'annonce. */
 const ADHESION_REMINDER_HOUR = 10;

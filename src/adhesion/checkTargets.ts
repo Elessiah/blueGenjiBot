@@ -1,7 +1,7 @@
 import {Client, User} from "discord.js";
-import {Bdd} from "@/bdd/Bdd.js";
-import {adhesionIntervalIds} from "@/adhesion/types.js";
-import {removeIntervalle} from "@/adhesion/removeIntervalle.js";
+import {Bdd} from "../bdd/Bdd.js";
+import {adhesionIntervalIds} from "./types.js";
+import {removeIntervalle} from "./removeIntervalle.js";
 
 /**
  * Contrôle si une intervalle possède encore au moins une cible valide.

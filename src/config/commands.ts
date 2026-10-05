@@ -18,14 +18,14 @@ import {areaFilter} from "../utils/globals.js";
 import {rankChoices} from "./rankChoices.js";
 import {servicesChoices} from "./servicesChoices.js";
 import {RECRUIT_ROLE_CHOICES, SCRIM_LEVEL_CHOICES} from "./searchChoices.js";
-import {setBotAdminRole} from "@/commandsHandlers/admin/setBotAdminRole.js";
-import {showBotAdminRole} from "@/commandsHandlers/admin/showBotAdminRole.js";
-import {setServerInvite} from "@/commandsHandlers/admin/setServerInvite.js";
-import {showServerInvite} from "@/commandsHandlers/admin/showServerInvite.js";
-import {resetServerInvite} from "@/commandsHandlers/admin/resetServerInvite.js";
-import {setRefereeRole} from "@/commandsHandlers/admin/setRefereeRole.js";
-import {showRefereeRole} from "@/commandsHandlers/admin/showRefereeRole.js";
-import {resetRefereeRole} from "@/commandsHandlers/admin/resetRefereeRole.js";
+import {setBotAdminRole} from "../commandsHandlers/admin/setBotAdminRole.js";
+import {showBotAdminRole} from "../commandsHandlers/admin/showBotAdminRole.js";
+import {setServerInvite} from "../commandsHandlers/admin/setServerInvite.js";
+import {showServerInvite} from "../commandsHandlers/admin/showServerInvite.js";
+import {resetServerInvite} from "../commandsHandlers/admin/resetServerInvite.js";
+import {setRefereeRole} from "../commandsHandlers/admin/setRefereeRole.js";
+import {showRefereeRole} from "../commandsHandlers/admin/showRefereeRole.js";
+import {resetRefereeRole} from "../commandsHandlers/admin/resetRefereeRole.js";
 import {ping} from "../commandsHandlers/ping.js";
 import {scrim} from "../commandsHandlers/scrim.js";
 import {recrute} from "../commandsHandlers/recrute.js";
@@ -33,8 +33,8 @@ import {statsPlayer} from "../commandsHandlers/statsPlayer.js";
 import {statsSite} from "../commandsHandlers/statsSite.js";
 import {relay} from "../commandsHandlers/admin/relay.js";
 import {configModule} from "../commandsHandlers/admin/configModule.js";
-import {restoreBackup} from "@/commandsHandlers/admin/restoreBackup.js";
-import {backupCheck} from "@/commandsHandlers/admin/backupCheck.js";
+import {restoreBackup} from "../commandsHandlers/admin/restoreBackup.js";
+import {backupCheck} from "../commandsHandlers/admin/backupCheck.js";
 
 /**
  * Registre statique des commandes slash : handler, description et options de chacune.

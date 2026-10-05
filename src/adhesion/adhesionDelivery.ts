@@ -1,7 +1,7 @@
 import type {AttachmentBuilder, Client, TextChannel, User} from "discord.js";
-import {safeChannel} from "@/safe/safeChannel.js";
-import {safeUser} from "@/safe/safeUser.js";
-import {logAdhesion, logAdhesionError} from "@/adhesion/adhesionLog.js";
+import {safeChannel} from "../safe/safeChannel.js";
+import {safeUser} from "../safe/safeUser.js";
+import {logAdhesion, logAdhesionError} from "./adhesionLog.js";
 import {
     CHANNEL_FAILED_NOTICE,
     MEMBERS_DELIVERED_NOTICE,
@@ -11,7 +11,7 @@ import {
     membersFailedNotice,
     noRecipientNotice,
     roleUnreadableNotice,
-} from "@/adhesion/adhesionNotices.js";
+} from "./adhesionNotices.js";
 
 /**
  * Remise des papiers d'adhésion à chaque type de cible.

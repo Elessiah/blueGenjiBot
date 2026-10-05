@@ -1,12 +1,12 @@
 import {Attachment, ChatInputCommandInteraction, Client, MessageFlags} from "discord.js";
 import {unlink, writeFile} from "node:fs/promises";
-import {adhesionFilePath} from "@/adhesion/adhesionPath.js";
-import {safeFollowUp} from "@/safe/safeFollowUp.js";
-import {PathsAdhesions} from "@/adhesion/types.js";
-import {loadAdhesionPaths} from "@/adhesion/loadAdhesionPaths.js";
-import {saveAdhesionPaths} from "@/adhesion/saveAdhesionPaths.js";
-import {safeReply} from "@/safe/safeReply.js";
-import {sendLog} from "@/safe/sendLog.js";
+import {adhesionFilePath} from "../../adhesion/adhesionPath.js";
+import {safeFollowUp} from "../../safe/safeFollowUp.js";
+import {PathsAdhesions} from "../../adhesion/types.js";
+import {loadAdhesionPaths} from "../../adhesion/loadAdhesionPaths.js";
+import {saveAdhesionPaths} from "../../adhesion/saveAdhesionPaths.js";
+import {safeReply} from "../../safe/safeReply.js";
+import {sendLog} from "../../safe/sendLog.js";
 
 const ADHESION_FILES = Object.freeze({
     ADHESION: 0,

@@ -8,10 +8,10 @@
  */
 
 import { Attachment, AttachmentBuilder, ChatInputCommandInteraction, Client, GuildMember, MessageFlags } from "discord.js";
-import { safeReply } from "@/safe/safeReply.js";
-import { safeUser } from "@/safe/safeUser.js";
-import { setupIntervalAdhesion } from "@/adhesion/setupIntervalAdhesion.js";
-import { checkPermissions } from "@/check/checkPermissions.js";
+import { safeReply } from "../../safe/safeReply.js";
+import { safeUser } from "../../safe/safeUser.js";
+import { setupIntervalAdhesion } from "../../adhesion/setupIntervalAdhesion.js";
+import { checkPermissions } from "../../check/checkPermissions.js";
 
 /**
  * @param client Client Discord.

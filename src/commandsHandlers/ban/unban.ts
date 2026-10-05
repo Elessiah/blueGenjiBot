@@ -1,9 +1,9 @@
-import {safeReply} from "@/safe/safeReply.js";
-import {checkPermissions} from "@/check/checkPermissions.js";
-import {Bdd, getBddInstance} from "@/bdd/Bdd.js";
+import {safeReply} from "../../safe/safeReply.js";
+import {checkPermissions} from "../../check/checkPermissions.js";
+import {Bdd, getBddInstance} from "../../bdd/Bdd.js";
 import type {ChatInputCommandInteraction, Client, Guild} from "discord.js";
-import {Ban} from "@/bdd/types.js";
-import {deleteBanMessages} from "@/privacy/staffLogRetention.js";
+import {Ban} from "../../bdd/types.js";
+import {deleteBanMessages} from "../../privacy/staffLogRetention.js";
 
 /**
  * Retire un utilisateur de la liste de bannissement.

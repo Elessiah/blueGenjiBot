@@ -1,7 +1,7 @@
 import {Client, User} from "discord.js";
-import {Bdd} from "@/bdd/Bdd.js";
-import {safeUser} from "@/safe/safeUser.js";
-import {sendLog} from "@/safe/sendLog.js";
+import {Bdd} from "../bdd/Bdd.js";
+import {safeUser} from "../safe/safeUser.js";
+import {sendLog} from "../safe/sendLog.js";
 
 /**
  * Supprime une intervalle d'adhésion de la base et enregistre l'événement.

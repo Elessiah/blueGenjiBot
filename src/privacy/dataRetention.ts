@@ -31,15 +31,15 @@
 import { DiscordAPIError, type Client, type Guild } from "discord.js";
 import { RESTJSONErrorCodes } from "discord-api-types/v10";
 
-import { getBddInstance, type Bdd } from "@/bdd/Bdd.js";
-import { manageMsgExpiration } from "@/messages/manageMsgExpiration.js";
-import { reportError } from "@/safe/processGuards.js";
-import { sendLog } from "@/safe/sendLog.js";
+import { getBddInstance, type Bdd } from "../bdd/Bdd.js";
+import { manageMsgExpiration } from "../messages/manageMsgExpiration.js";
+import { reportError } from "../safe/processGuards.js";
+import { sendLog } from "../safe/sendLog.js";
 
-import { purgeOldRollbacks } from "@/backup/restoreDatabase.js";
-import { purgeOldFeedEvents } from "@/feed/feedBus.js";
-import { purgeStaffLogs } from "@/privacy/staffLogRetention.js";
-import { ACTIVITY_AUTHOR_RETENTION_DAYS, FEED_EVENT_RETENTION_DAYS } from "@/privacy/retentionPeriods.js";
+import { purgeOldRollbacks } from "../backup/restoreDatabase.js";
+import { purgeOldFeedEvents } from "../feed/feedBus.js";
+import { purgeStaffLogs } from "./staffLogRetention.js";
+import { ACTIVITY_AUTHOR_RETENTION_DAYS, FEED_EVENT_RETENTION_DAYS } from "./retentionPeriods.js";
 
 /**
  * Efface l'auteur des scrims et recherches plus vieux que la durée de

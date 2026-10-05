@@ -1,12 +1,12 @@
-import {Bdd, getBddInstance} from "@/bdd/Bdd.js";
+import {Bdd, getBddInstance} from "../../bdd/Bdd.js";
 
-import {defineRankRange} from "@/utils/defineRankRange.js";
-import {setRankFilter} from "@/utils/setRankFilter.js";
+import {defineRankRange} from "../../utils/defineRankRange.js";
+import {setRankFilter} from "../../utils/setRankFilter.js";
 
-import {sendLog} from "@/safe/sendLog.js";
-import {safeReply} from "@/safe/safeReply.js";
+import {sendLog} from "../../safe/sendLog.js";
+import {safeReply} from "../../safe/safeReply.js";
 
-import {checkPermissions} from "@/check/checkPermissions.js";
+import {checkPermissions} from "../../check/checkPermissions.js";
 
 import {MessageFlags} from "discord.js";
 import type {Client, ChatInputCommandInteraction, TextChannel} from "discord.js";

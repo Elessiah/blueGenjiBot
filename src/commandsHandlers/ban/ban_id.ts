@@ -2,7 +2,7 @@ import type {APIInteractionDataResolvedGuildMember, ChatInputCommandInteraction,
 
 import {ban} from "./ban.js";
 
-import {safeReply} from "@/safe/safeReply.js";
+import {safeReply} from "../../safe/safeReply.js";
 
 /**
  * Ban un utilisateur des services du bot discord à partir d'un id

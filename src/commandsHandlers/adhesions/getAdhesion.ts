@@ -1,13 +1,13 @@
 import {type ChatInputCommandInteraction, type Client, GuildMember, type Role, type TextChannel} from "discord.js";
-import {checkPermissions} from "@/check/checkPermissions.js";
-import {safeFollowUp} from "@/safe/safeFollowUp.js";
-import {safeReply} from "@/safe/safeReply.js";
-import {sendAdhesion} from "@/adhesion/sendAdhesion.js";
-import {setupIntervalAdhesion} from "@/adhesion/setupIntervalAdhesion.js";
-import {nextTransmissionAfter} from "@/adhesion/nextTransmission.js";
-import {collectRecipients, isEveryoneRole, MAX_ADHESION_DMS, readAdhesionRoleMembers} from "@/adhesion/adhesionRecipients.js";
-import {logAdhesionError} from "@/adhesion/adhesionLog.js";
-import {EVERYONE_REFUSED_NOTICE, recipientCapNotice, roleUnreadableNotice} from "@/adhesion/adhesionNotices.js";
+import {checkPermissions} from "../../check/checkPermissions.js";
+import {safeFollowUp} from "../../safe/safeFollowUp.js";
+import {safeReply} from "../../safe/safeReply.js";
+import {sendAdhesion} from "../../adhesion/sendAdhesion.js";
+import {setupIntervalAdhesion} from "../../adhesion/setupIntervalAdhesion.js";
+import {nextTransmissionAfter} from "../../adhesion/nextTransmission.js";
+import {collectRecipients, isEveryoneRole, MAX_ADHESION_DMS, readAdhesionRoleMembers} from "../../adhesion/adhesionRecipients.js";
+import {logAdhesionError} from "../../adhesion/adhesionLog.js";
+import {EVERYONE_REFUSED_NOTICE, recipientCapNotice, roleUnreadableNotice} from "../../adhesion/adhesionNotices.js";
 
 /** Ajouté à un refus prononcé à la création d'un rappel. */
 const REMINDER_NOT_SAVED = " Aucun rappel n'a été enregistré.";

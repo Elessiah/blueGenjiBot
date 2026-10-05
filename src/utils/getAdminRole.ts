@@ -8,7 +8,7 @@
  */
 
 import {Guild} from "discord.js";
-import {Bdd, getBddInstance} from "@/bdd/Bdd.js";
+import {Bdd, getBddInstance} from "../bdd/Bdd.js";
 
 /**
  * @param guild Serveur dont on cherche le role admin du bot.

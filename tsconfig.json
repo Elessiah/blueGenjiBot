@@ -4,11 +4,8 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
 
-    // Pas de `baseUrl` : TypeScript 7 l'a retiré (TS5102). `paths` se résout
-    // depuis ce fichier, d'où le `./src/` explicite — lu pareil par TS 5 et 7.
-    "paths": {
-      "@/*": ["./src/*"]
-    },
+    // Ni `baseUrl` (retiré de TypeScript 7, TS5102) ni `paths` : les imports
+    // sont relatifs, que Node résout seul — aucune réécriture après compilation.
 
     "lib": ["ESNext"],
     "types": ["node"],

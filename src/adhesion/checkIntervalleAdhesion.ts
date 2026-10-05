@@ -1,13 +1,13 @@
-import {Bdd, getBddInstance} from "@/bdd/Bdd.js";
-import {adhesionIntervalIds, adhesionIntervalObj} from "@/adhesion/types.js";
+import {Bdd, getBddInstance} from "../bdd/Bdd.js";
+import {adhesionIntervalIds, adhesionIntervalObj} from "./types.js";
 import {Client} from "discord.js";
-import {sendAdhesionReminder} from "@/adhesion/sendAdhesion.js";
-import {fetchTargets} from "@/adhesion/fetchTargets.js";
-import {sendLog} from "@/safe/sendLog.js";
+import {sendAdhesionReminder} from "./sendAdhesion.js";
+import {fetchTargets} from "./fetchTargets.js";
+import {sendLog} from "../safe/sendLog.js";
 import { removeIntervalle } from "./removeIntervalle.js";
-import { toSQLiteDate } from "@/utils/toSQLiteDatetime.js";
-import { remainingIteration } from "@/adhesion/iteration.js";
-import { nextTransmissionAfter } from "@/adhesion/nextTransmission.js";
+import { toSQLiteDate } from "../utils/toSQLiteDatetime.js";
+import { remainingIteration } from "./iteration.js";
+import { nextTransmissionAfter } from "./nextTransmission.js";
 
 /**
  * Vérifie les rappels d'adhésion arrives a échéance puis les envoie.

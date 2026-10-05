@@ -1,6 +1,6 @@
 import {ChatInputCommandInteraction, Client} from "discord.js";
-import {safeReply} from "@/safe/safeReply.js";
-import {Bdd, getBddInstance} from "@/bdd/Bdd.js";
+import {safeReply} from "../../safe/safeReply.js";
+import {Bdd, getBddInstance} from "../../bdd/Bdd.js";
 
 /**
  * Affiche le lien d'invitation personnalisé configuré pour le serveur courant.

@@ -1,9 +1,9 @@
 import {AttachmentBuilder, type Client, type User} from "discord.js";
-import {PathsAdhesions} from "@/adhesion/types.js";
-import {loadAdhesionPaths} from "@/adhesion/loadAdhesionPaths.js";
-import {safeUser} from "@/safe/safeUser.js";
-import {logAdhesion, logAdhesionError} from "@/adhesion/adhesionLog.js";
-import {MISSING_FILES_NOTICE} from "@/adhesion/adhesionNotices.js";
+import {PathsAdhesions} from "./types.js";
+import {loadAdhesionPaths} from "./loadAdhesionPaths.js";
+import {safeUser} from "../safe/safeUser.js";
+import {logAdhesion, logAdhesionError} from "./adhesionLog.js";
+import {MISSING_FILES_NOTICE} from "./adhesionNotices.js";
 
 /**
  * Lit la configuration des fichiers d'adhésion.

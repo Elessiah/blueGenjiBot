@@ -1,9 +1,9 @@
-﻿import {Bdd, getBddInstance} from "@/bdd/Bdd.js";
-import {checkPermissions} from "@/check/checkPermissions.js";
-import {sendLog} from "@/safe/sendLog.js";
-import {safeReply} from "@/safe/safeReply.js";
+﻿import {Bdd, getBddInstance} from "../../bdd/Bdd.js";
+import {checkPermissions} from "../../check/checkPermissions.js";
+import {sendLog} from "../../safe/sendLog.js";
+import {safeReply} from "../../safe/safeReply.js";
 import {type ChatInputCommandInteraction, type Client, MessageFlags, type TextChannel} from "discord.js";
-import {status} from "@/types.js";
+import {status} from "../../types.js";
 
 /** Essais de la suppression avant d'abandonner (base occupée, par exemple). */
 const MAX_ATTEMPTS = 10;

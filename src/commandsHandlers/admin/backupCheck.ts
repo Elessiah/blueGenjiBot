@@ -1,7 +1,7 @@
 import { MessageFlags, type ChatInputCommandInteraction, type Client } from "discord.js";
 
-import { formatBackupChecks, runBackupChecks, type BackupCheckReport } from "@/backup/backupCheck.js";
-import { safeReply } from "@/safe/safeReply.js";
+import { formatBackupChecks, runBackupChecks, type BackupCheckReport } from "../../backup/backupCheck.js";
+import { safeReply } from "../../safe/safeReply.js";
 
 /**
  * Joue à la demande les contrôles du rapport hebdomadaire de sauvegarde

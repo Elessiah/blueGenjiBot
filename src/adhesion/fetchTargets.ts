@@ -1,13 +1,13 @@
 import {Client, Guild, GuildBasedChannel, GuildMember, Role, TextChannel, User} from "discord.js";
-import {Bdd} from "@/bdd/Bdd.js";
-import {adhesionIntervalIds, adhesionIntervalObj} from "@/adhesion/types.js";
-import {sendLog} from "@/safe/sendLog.js";
-import {safeUser} from "@/safe/safeUser.js";
-import {removeIntervalle} from "@/adhesion/removeIntervalle.js";
-import {checkTargets} from "@/adhesion/checkTargets.js";
-import {isGone} from "@/adhesion/isGone.js";
-import {readAdhesionRoleMembers} from "@/adhesion/adhesionRecipients.js";
-import {reminderPostponedNotice} from "@/adhesion/adhesionNotices.js";
+import {Bdd} from "../bdd/Bdd.js";
+import {adhesionIntervalIds, adhesionIntervalObj} from "./types.js";
+import {sendLog} from "../safe/sendLog.js";
+import {safeUser} from "../safe/safeUser.js";
+import {removeIntervalle} from "./removeIntervalle.js";
+import {checkTargets} from "./checkTargets.js";
+import {isGone} from "./isGone.js";
+import {readAdhesionRoleMembers} from "./adhesionRecipients.js";
+import {reminderPostponedNotice} from "./adhesionNotices.js";
 
 /**
  * Lecture reportée au prochain passage : Discord a échoué sans dire que l'objet

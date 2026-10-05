@@ -8,8 +8,8 @@
  * programmee.
  */
 
-import { safeUser } from "@/safe/safeUser.js";
-import { safeReply } from "@/safe/safeReply.js";
+import { safeUser } from "../../safe/safeUser.js";
+import { safeReply } from "../../safe/safeReply.js";
 import type { ChatInputCommandInteraction, Client } from "discord.js";
 
 /**

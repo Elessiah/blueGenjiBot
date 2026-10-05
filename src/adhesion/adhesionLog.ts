@@ -1,5 +1,5 @@
 import type {Client} from "discord.js";
-import {sendLog} from "@/safe/sendLog.js";
+import {sendLog} from "../safe/sendLog.js";
 
 /**
  * Journalisation de l'envoi des adhésions.

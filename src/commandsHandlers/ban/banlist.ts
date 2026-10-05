@@ -1,11 +1,11 @@
 import type {ChatInputCommandInteraction, Client, TextChannel} from "discord.js";
 
-import type {Bdd} from "@/bdd/Bdd.js";
-import {getBddInstance} from '@/bdd/Bdd.js';
-import type {Ban} from "@/bdd/types.js";
-import {checkPermissions} from "@/check/checkPermissions.js";
-import {safeReply} from "@/safe/safeReply.js";
-import {sendLog} from "@/safe/sendLog.js";
+import type {Bdd} from "../../bdd/Bdd.js";
+import {getBddInstance} from '../../bdd/Bdd.js';
+import type {Ban} from "../../bdd/types.js";
+import {checkPermissions} from "../../check/checkPermissions.js";
+import {safeReply} from "../../safe/safeReply.js";
+import {sendLog} from "../../safe/sendLog.js";
 
 /**
  * Affiche la liste paginée des utilisateurs bannis.

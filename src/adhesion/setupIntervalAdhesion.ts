@@ -1,10 +1,10 @@
 import type { ChatInputCommandInteraction, Client, GuildMember, Role, TextChannel } from "discord.js";
-import { sendLog } from "@/safe/sendLog.js";
-import { safeFollowUp } from "@/safe/safeFollowUp.js";
-import { Bdd, getBddInstance } from "@/bdd/Bdd.js";
-import type { status } from "@/types.js";
-import { toSQLiteDate } from "@/utils/toSQLiteDatetime.js";
-import { ITERATION_UNLIMITED, initialIteration } from "@/adhesion/iteration.js";
+import { sendLog } from "../safe/sendLog.js";
+import { safeFollowUp } from "../safe/safeFollowUp.js";
+import { Bdd, getBddInstance } from "../bdd/Bdd.js";
+import type { status } from "../types.js";
+import { toSQLiteDate } from "../utils/toSQLiteDatetime.js";
+import { ITERATION_UNLIMITED, initialIteration } from "./iteration.js";
 
 /** Destinataires d'un rappel : au moins l'un des trois, ou un message seul. */
 export interface ReminderTarget {

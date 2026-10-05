@@ -9,9 +9,9 @@
 
 import { PermissionFlagsBits } from "discord.js";
 import type { Client, ChatInputCommandInteraction, GuildMember } from "discord.js";
-import { safeReply } from "@/safe/safeReply.js";
-import { sendLog } from "@/safe/sendLog.js";
-import { isValidModule, isModuleEnabled, setModuleEnabled } from "@/modules/moduleGuard.js";
+import { safeReply } from "../../safe/safeReply.js";
+import { sendLog } from "../../safe/sendLog.js";
+import { isValidModule, isModuleEnabled, setModuleEnabled } from "../../modules/moduleGuard.js";
 
 /**
  * @param client Client Discord, utilise pour journaliser le changement.
