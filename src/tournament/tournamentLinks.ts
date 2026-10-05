@@ -47,7 +47,7 @@ export function isTournamentLinkKind(value: string): value is TournamentLinkKind
  */
 export function normalizeTournamentLink(raw: string): string | null {
     const trimmed = raw.trim();
-    if (trimmed.length === 0 || trimmed.length > MAX_TOURNAMENT_LINK_LENGTH || /[\s<>()]/.test(trimmed)) {
+    if (trimmed.length === 0 || /[\s<>()]/.test(trimmed)) {
         return null;
     }
     let url: URL;
@@ -59,7 +59,11 @@ export function normalizeTournamentLink(raw: string): string | null {
     if (url.protocol !== "https:" || !url.hostname || url.username || url.password) {
         return null;
     }
-    return url.toString();
+    // Longueur mesurée après normalisation : l'encodage des caractères non
+    // ASCII (`é` → `%C3%A9`) allonge l'adresse, et une adresse acceptée ici
+    // puis refusée à la relecture serait remplacée en silence par le défaut.
+    const normalized = url.toString();
+    return normalized.length > MAX_TOURNAMENT_LINK_LENGTH ? null : normalized;
 }
 
 /**

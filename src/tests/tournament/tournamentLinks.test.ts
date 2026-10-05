@@ -35,6 +35,12 @@ test("normalizeTournamentLink accepte une adresse https et refuse le reste", () 
     }
 });
 
+test("normalizeTournamentLink mesure la longueur après encodage", () => {
+    const accented = "https://exemple.fr/" + "é".repeat(200);
+    assert.ok(accented.length <= MAX_TOURNAMENT_LINK_LENGTH);
+    assert.equal(normalizeTournamentLink(accented), null);
+});
+
 test("les liens par défaut passent la validation", () => {
     for (const url of Object.values(DEFAULT_TOURNAMENT_LINKS)) {
         assert.equal(normalizeTournamentLink(url), url);
