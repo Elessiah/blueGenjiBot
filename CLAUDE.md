@@ -9,7 +9,7 @@ Chargé à chaque session : règles transverses seulement. Le détail et le pour
 ## Commands
 
 ```bash
-npm run dev          # node --watch-path=src + ts-node ESM loader (sans nodemon)
+npm run dev          # node --watch-path=src --watch-preserve-output + ts-node ESM loader (sans nodemon)
 npm run build        # TypeScript 7 (imports relatifs, aucune réécriture)
 npm run typecheck:ts5 # même contrôle avec TypeScript 5 (ESLint, ts-node)
 npm start            # node dist/main.js

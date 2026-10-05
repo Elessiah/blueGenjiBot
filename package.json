@@ -31,7 +31,7 @@
     "build": "node node_modules/typescript-native/bin/tsc",
     "typecheck:ts5": "node node_modules/typescript/bin/tsc --noEmit",
     "start": "node dist/main.js",
-    "dev": "node --watch-path=src --loader ts-node/esm src/main.ts",
+    "dev": "node --watch-path=src --watch-preserve-output --loader ts-node/esm src/main.ts",
     "genToken": "node dist/genToken.js",
     "lint": "eslint .",
     "docs:gen": "jsdoc -c jsdoc.json",
