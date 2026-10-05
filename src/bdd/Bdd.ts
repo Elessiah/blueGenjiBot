@@ -34,6 +34,7 @@ import {
     SERVER_MODULE_TABLE,
     SERVICE_TABLE,
     SITE_VISIT_TABLE,
+    TOURNAMENT_LINK_TABLE,
 } from './schema.js';
 
 import type {
@@ -316,6 +317,7 @@ class Bdd {
       ["SiteVisit error: ", SITE_VISIT_TABLE],
       ["ActivityDaily error: ", ACTIVITY_DAILY_TABLE],
       ["BotOwner error: ", BOT_OWNER_TABLE],
+      ["TournamentLink error: ", TOURNAMENT_LINK_TABLE],
     ];
   }
 
@@ -727,6 +729,38 @@ class Bdd {
     }
     await this.rm("ServerInvite", {}, {query: "id_guild = ?", values: [guildId]});
     return true;
+  }
+
+  /**
+   * Liens de tournoi remplacés par `/set-tournoi-lien`.
+   * @returns Une entrée par lien modifié (clé → URL) ; un lien absent garde sa valeur par défaut.
+   */
+  async getTournamentLinks(): Promise<Record<string, string>> {
+    const rows = await this.get("TournamentLink", ["kind", "url"]) as { kind: string; url: string }[];
+    return Object.fromEntries(rows.map((row) => [row.kind, row.url]));
+  }
+
+  /**
+   * Remplace un lien de tournoi, ou le rend à sa valeur par défaut.
+   * @param kind Clé du lien (validée par l'appelant).
+   * @param url Nouvelle URL (validée par l'appelant), ou `null` pour revenir au lien par défaut.
+   * @returns Objet `status` indiquant le succès de l'écriture.
+   */
+  async setTournamentLink(kind: string, url: string | null): Promise<status> {
+    try {
+      if (url === null) {
+        await this.rm("TournamentLink", {}, {query: "kind = ?", values: [kind]});
+        return {success: true, message: "Tournament link reset."};
+      }
+      await this.Database?.run(
+        "INSERT INTO TournamentLink (kind, url, updated_at) VALUES (?, ?, ?) " +
+        "ON CONFLICT(kind) DO UPDATE SET url = excluded.url, updated_at = excluded.updated_at",
+        [kind, url, toSQLiteDate(new Date())],
+      );
+      return {success: true, message: "Tournament link updated."};
+    } catch (e) {
+      return {success: false, message: `Error while setting tournament link: ${(e as TypeError).message}`};
+    }
   }
 
   /**

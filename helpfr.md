@@ -75,12 +75,16 @@ Publiques :
 - `/recrute <role>` : publie une recherche de joueurs ou staff, **Marvel Rivals uniquement** — rôle choisi dans une liste (Tank, DPS, Heal, Coach, Manager).
 - `/stats` : affiche **votre propre** activité récente (réponse visible de vous seul) : messages partenaires des 7 derniers jours, scrims et recherches des 30 derniers jours. On ne consulte pas l'activité d'un autre joueur.
 - `/stats-site` : affiche la fréquentation du site BlueGenji (visites totales, et visiteurs uniques des 25 derniers mois).
+- `/tournoi` : publie dans le salon les liens du tournoi BlueGenji : règlement en français et en anglais, et formulaire pour candidater comme caster.
 
 Pour lier votre compte Discord au site, connectez-vous au site avec Discord, ou utilisez « Applications connectées » sur votre profil.
 
 Admin :
 - `/relay <channel>` : ajoute ou retire un salon de relais inter-serveurs.
 - `/config <module>` : active/désactive un module (annonces, scrims, recrutement).
+
+Admins BlueGenji (serveurs BlueGenji uniquement) :
+- `/set-tournoi-lien lien:<lien> [url]` : remplace un lien affiché par `/tournoi` (adresse `https`) ; sans `url`, rétablit le lien par défaut.
 
 ## Durées de conservation
 - Suivi des messages relayés (identifiants, date) : 7 jours, effacé au plus tard dans la nuit qui suit. Les copies publiées dans les salons partenaires restent ensuite sur Discord (voir « Effacer un message retransmis »).

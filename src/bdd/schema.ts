@@ -327,3 +327,17 @@ export const BOT_OWNER_TABLE = `CREATE TABLE IF NOT EXISTS BotOwner
             application_id TEXT NOT NULL
           );
         `;
+
+/**
+ * Liens d'un tournoi BlueGenji (règlements, formulaire de cast) remplacés
+ * par `/set-tournoi-lien`. Une ligne par lien modifié : un lien absent vaut
+ * sa valeur par défaut (`tournament/tournamentLinks.ts`). Ni serveur ni
+ * auteur : ce réglage appartient au réseau, pas à un serveur.
+ */
+export const TOURNAMENT_LINK_TABLE = `CREATE TABLE IF NOT EXISTS TournamentLink
+          (
+            kind TEXT PRIMARY KEY,
+            url TEXT NOT NULL,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          );
+        `;
