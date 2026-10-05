@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>JSDoc: Source: utils/escapeLinkLabel.js</title>
+    <title>JSDoc: Source: commandsHandlers/admin/setTournamentLink.js</title>
 
     <script src="scripts/prettify/prettify.js"> </script>
     <script src="scripts/prettify/lang-css.js"> </script>
@@ -17,7 +17,7 @@
 
 <div id="main">
 
-    <h1 class="page-title">Source: utils/escapeLinkLabel.js</h1>
+    <h1 class="page-title">Source: commandsHandlers/admin/setTournamentLink.js</h1>
 
     
 
@@ -27,31 +27,68 @@
     <section>
         <article>
             <pre class="prettyprint source linenums"><code>/**
- * Neutralise les caractères qui referment un lien Markdown dans son libellé.
+ * Handler de `/set-tournoi-lien` : remplace un lien affiché par `/tournoi`,
+ * ou le rend à sa valeur par défaut quand `url` est omis.
  *
- * Le nom d'un serveur partenaire est choisi par son propriétaire, et il finit
- * dans le libellé du lien « Sent from : [nom](invitation) » relayé à tous les
- * autres serveurs. Un crochet fermant y met fin au libellé, une parenthèse
- * ouvrante à l'adresse : un serveur nommé `](https://exemple.invalid)[` fait
- * pointer le lien de chaque message relayé où il veut, sous le nom du bot.
- *
- * Discord rend littéralement un caractère précédé d'une barre oblique
- * inverse. La barre elle-même fait donc partie des caractères traités — sans
- * quoi un nom se terminant par une barre échapperait le crochet que l'on
- * vient d'écrire. Une passe unique les couvre tous, donc chacun est échappé
- * exactement une fois.
+ * Réservé aux admins BlueGenji : la commande n'est enregistrée que sur les
+ * serveurs BlueGenji (`fillBlueCommands`), et le handler le revérifie avant
+ * `checkPermissions` (propriétaire, président, rôle admin du bot ou
+ * administrateur du serveur) — un administrateur d'un serveur partenaire ne
+ * doit pas pouvoir changer un lien publié sur tout le réseau.
  */
-/** Délimiteurs d'un lien Markdown, plus le caractère d'échappement lui-même. */
-const MARKDOWN_LINK_SPECIALS = /[\\[\]()]/g;
+import { getBddInstance } from "../../bdd/Bdd.js";
+import { checkPermissions } from "../../check/checkPermissions.js";
+import { safeReply } from "../../safe/safeReply.js";
+import { sendLog } from "../../safe/sendLog.js";
+import { DEFAULT_TOURNAMENT_LINKS, MAX_TOURNAMENT_LINK_LENGTH, TOURNAMENT_LINK_LABELS, isTournamentLinkKind, normalizeTournamentLink, } from "../../tournament/tournamentLinks.js";
 /**
- * @param label Libellé brut, tel qu'il vient de Discord.
- * @returns Le même libellé, dont aucun caractère ne peut plus refermer le lien.
+ * @param guildId Serveur où la commande est lancée.
+ * @returns `true` pour un serveur BlueGenji (`SERV_GENJI`, `SERV_RIVALS`).
  */
-function escapeLinkLabel(label) {
-    return label.replace(MARKDOWN_LINK_SPECIALS, (char) => "\\" + char);
+export function isBlueGenjiGuild(guildId) {
+    const { SERV_GENJI, SERV_RIVALS } = process.env;
+    return !!guildId &amp;&amp; (guildId === SERV_GENJI || guildId === SERV_RIVALS);
 }
-export { escapeLinkLabel };
-//# sourceMappingURL=escapeLinkLabel.js.map</code></pre>
+/**
+ * @param client Client Discord, utilisé pour journaliser.
+ * @param interaction Interaction `/set-tournoi-lien` (option `lien` requise, `url` facultative).
+ */
+export async function setTournamentLink(client, interaction) {
+    try {
+        if (!isBlueGenjiGuild(interaction.guildId) || !(await checkPermissions(interaction))) {
+            await safeReply(interaction, "❌ Commande réservée aux admins BlueGenji.");
+            return;
+        }
+        const kind = interaction.options.getString("lien", true);
+        if (!isTournamentLinkKind(kind)) {
+            await safeReply(interaction, "❌ Lien inconnu.");
+            return;
+        }
+        const raw = interaction.options.getString("url");
+        const url = raw === null ? null : normalizeTournamentLink(raw);
+        if (raw !== null &amp;&amp; url === null) {
+            await safeReply(interaction, `❌ Lien invalide : une adresse \`https://\` complète, sans espace, de ${MAX_TOURNAMENT_LINK_LENGTH} caractères au plus.`);
+            return;
+        }
+        const result = await (await getBddInstance()).setTournamentLink(kind, url);
+        if (!result.success) {
+            await safeReply(interaction, "❌ Échec de l'enregistrement du lien. Réessayez plus tard.");
+            await sendLog(client, `setTournamentLink error (${kind}): ${result.message}`);
+            return;
+        }
+        const label = TOURNAMENT_LINK_LABELS[kind];
+        const shown = url ?? DEFAULT_TOURNAMENT_LINKS[kind];
+        await safeReply(interaction, url === null
+            ? `✅ ${label} : lien par défaut rétabli (&lt;${shown}>).`
+            : `✅ ${label} : nouveau lien enregistré (&lt;${shown}>).`);
+        await sendLog(client, `/set-tournoi-lien: ${kind} ${url === null ? "rétabli par défaut" : "modifié"} par ${interaction.user.id}`);
+    }
+    catch (err) {
+        await sendLog(client, `setTournamentLink handler error: ${err.message}`);
+        await safeReply(interaction, "❌ Erreur inattendue, voir le journal du bot.");
+    }
+}
+//# sourceMappingURL=setTournamentLink.js.map</code></pre>
         </article>
     </section>
 

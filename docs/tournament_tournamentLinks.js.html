@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>JSDoc: Source: utils/escapeLinkLabel.js</title>
+    <title>JSDoc: Source: tournament/tournamentLinks.js</title>
 
     <script src="scripts/prettify/prettify.js"> </script>
     <script src="scripts/prettify/lang-css.js"> </script>
@@ -17,7 +17,7 @@
 
 <div id="main">
 
-    <h1 class="page-title">Source: utils/escapeLinkLabel.js</h1>
+    <h1 class="page-title">Source: tournament/tournamentLinks.js</h1>
 
     
 
@@ -27,31 +27,88 @@
     <section>
         <article>
             <pre class="prettyprint source linenums"><code>/**
- * Neutralise les caractères qui referment un lien Markdown dans son libellé.
+ * Liens d'un tournoi BlueGenji : règlement en français, en anglais, et
+ * formulaire de candidature des casters.
  *
- * Le nom d'un serveur partenaire est choisi par son propriétaire, et il finit
- * dans le libellé du lien « Sent from : [nom](invitation) » relayé à tous les
- * autres serveurs. Un crochet fermant y met fin au libellé, une parenthèse
- * ouvrante à l'adresse : un serveur nommé `](https://exemple.invalid)[` fait
- * pointer le lien de chaque message relayé où il veut, sous le nom du bot.
- *
- * Discord rend littéralement un caractère précédé d'une barre oblique
- * inverse. La barre elle-même fait donc partie des caractères traités — sans
- * quoi un nom se terminant par une barre échapperait le crochet que l'on
- * vient d'écrire. Une passe unique les couvre tous, donc chacun est échappé
- * exactement une fois.
+ * Les valeurs par défaut vivent ici ; `/set-tournoi-lien` en remplace une
+ * dans la table `TournamentLink`, que `/tournoi` superpose à ces défauts.
  */
-/** Délimiteurs d'un lien Markdown, plus le caractère d'échappement lui-même. */
-const MARKDOWN_LINK_SPECIALS = /[\\[\]()]/g;
+/** Clés des liens de tournoi, dans l'ordre d'affichage. */
+export const TOURNAMENT_LINK_KINDS = ["reglement-fr", "reglement-en", "cast"];
+/** Texte de chaque lien (sans crochet : il est inséré dans un lien masqué). */
+export const TOURNAMENT_LINK_LABELS = {
+    "reglement-fr": "Règlement (français)",
+    "reglement-en": "Rules (English)",
+    "cast": "Formulaire pour caster",
+};
+/** Liens tant qu'aucun n'a été remplacé. */
+export const DEFAULT_TOURNAMENT_LINKS = {
+    "reglement-fr": "https://docs.google.com/document/d/1CchCLJI2QaaVM1SB3X1OFDJr0jD1KGm-/edit",
+    "reglement-en": "https://docs.google.com/document/d/1XHv8qYZe-yQ3qoHOcWFXrRSXpYb1TwSE/edit?usp=sharing&amp;ouid=114574181631804082850&amp;rtpof=true&amp;sd=true",
+    "cast": "https://docs.google.com/forms/d/e/1FAIpQLSfn1BGmT3YUXpAwehDSo47xfQk01jObC1qgJA3J8Gd6QCLQpw/viewform",
+};
+/** Longueur maximale d'un lien enregistré. */
+export const MAX_TOURNAMENT_LINK_LENGTH = 500;
 /**
- * @param label Libellé brut, tel qu'il vient de Discord.
- * @returns Le même libellé, dont aucun caractère ne peut plus refermer le lien.
+ * @param value Valeur reçue d'une option de commande.
+ * @returns `true` si c'est une clé de lien de tournoi connue.
  */
-function escapeLinkLabel(label) {
-    return label.replace(MARKDOWN_LINK_SPECIALS, (char) => "\\" + char);
+export function isTournamentLinkKind(value) {
+    return TOURNAMENT_LINK_KINDS.includes(value);
 }
-export { escapeLinkLabel };
-//# sourceMappingURL=escapeLinkLabel.js.map</code></pre>
+/**
+ * Valide un lien proposé par `/set-tournoi-lien`.
+ *
+ * `https` seul, sans espace ni caractère qui romprait le lien masqué
+ * `[libellé](&lt;url>)` de `/tournoi` (`&lt;`, `>`, parenthèses) : le message est
+ * publié tel quel dans un salon.
+ * @param raw Texte saisi.
+ * @returns L'URL normalisée, ou `null` si elle est refusée.
+ */
+export function normalizeTournamentLink(raw) {
+    const trimmed = raw.trim();
+    if (trimmed.length === 0 || trimmed.length > MAX_TOURNAMENT_LINK_LENGTH || /[\s&lt;>()]/.test(trimmed)) {
+        return null;
+    }
+    let url;
+    try {
+        url = new URL(trimmed);
+    }
+    catch {
+        return null;
+    }
+    if (url.protocol !== "https:" || !url.hostname || url.username || url.password) {
+        return null;
+    }
+    return url.toString();
+}
+/**
+ * Superpose les liens enregistrés aux liens par défaut ; une clé inconnue
+ * ou une URL devenue invalide en base est ignorée.
+ * @param stored Liens lus dans `TournamentLink` (clé → URL).
+ * @returns Les trois liens à afficher.
+ */
+export function resolveTournamentLinks(stored) {
+    const links = { ...DEFAULT_TOURNAMENT_LINKS };
+    for (const kind of TOURNAMENT_LINK_KINDS) {
+        const url = stored[kind] ? normalizeTournamentLink(stored[kind]) : null;
+        if (url) {
+            links[kind] = url;
+        }
+    }
+    return links;
+}
+/**
+ * Message de `/tournoi`. Liens masqués entre chevrons : Discord n'en
+ * déploie pas l'aperçu, trois cartes Google Docs noieraient le salon.
+ * @param links Liens à afficher.
+ * @returns Le texte du message.
+ */
+export function formatTournamentLinks(links) {
+    const lines = TOURNAMENT_LINK_KINDS.map((kind) => `- [${TOURNAMENT_LINK_LABELS[kind]}](&lt;${links[kind]}>)`);
+    return ["🏆 **Tournoi BlueGenji**", ...lines].join("\n");
+}
+//# sourceMappingURL=tournamentLinks.js.map</code></pre>
         </article>
     </section>
 
