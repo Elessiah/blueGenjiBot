@@ -8,11 +8,11 @@ import {
     Message,
     MessageFlags
 } from "discord.js";
-import {Bdd, getBddInstance} from "@/bdd/Bdd.js";
-import {safeReply} from "@/safe/safeReply.js";
-import {adhesionIntervalIds} from "@/adhesion/types.js"
-import {ITERATION_UNLIMITED} from "@/adhesion/iteration.js";
-import {sendLog} from "@/safe/sendLog.js";
+import {Bdd, getBddInstance} from "../../bdd/Bdd.js";
+import {safeReply} from "../../safe/safeReply.js";
+import {adhesionIntervalIds} from "../../adhesion/types.js"
+import {ITERATION_UNLIMITED} from "../../adhesion/iteration.js";
+import {sendLog} from "../../safe/sendLog.js";
 
 /**
  * Formate une cible pour l'embed, à partir de son **identifiant brut**.

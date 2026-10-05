@@ -6,8 +6,8 @@
  */
 
 import type { Client, ChatInputCommandInteraction } from "discord.js";
-import { safeReply } from "@/safe/safeReply.js";
-import { sendLog } from "@/safe/sendLog.js";
+import { safeReply } from "../safe/safeReply.js";
+import { sendLog } from "../safe/sendLog.js";
 
 /**
  * @param client Client Discord, dont on lit la latence WebSocket (`client.ws.ping`).

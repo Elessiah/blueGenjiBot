@@ -1,10 +1,10 @@
 import type { Client, Guild, GuildMember, Role } from "discord.js";
-import { getBddInstance } from "@/bdd/Bdd.js";
-import { sendLog } from "@/safe/sendLog.js";
-import { fetchRoleMembers } from "@/utils/fetchRoleMembers.js";
-import { findGuildMemberByHandle, parseDiscordHandle } from "@/notifications/resolveHandle.js";
-import { capRefereeTargets, homeGuildIds, leadershipIds, MAX_REFEREE_DMS } from "@/notifications/notifications.js";
-import type { DirectMessageRecipient } from "@/notifications/notifications.js";
+import { getBddInstance } from "../bdd/Bdd.js";
+import { sendLog } from "../safe/sendLog.js";
+import { fetchRoleMembers } from "../utils/fetchRoleMembers.js";
+import { findGuildMemberByHandle, parseDiscordHandle } from "./resolveHandle.js";
+import { capRefereeTargets, homeGuildIds, leadershipIds, MAX_REFEREE_DMS } from "./notifications.js";
+import type { DirectMessageRecipient } from "./notifications.js";
 
 /**
  * Distribution effective des messages poussés par l'app web.

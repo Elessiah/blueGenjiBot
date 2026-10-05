@@ -7,8 +7,8 @@
  */
 
 import {ChatInputCommandInteraction, Client} from "discord.js";
-import {safeReply} from "@/safe/safeReply.js";
-import {Bdd, getBddInstance} from "@/bdd/Bdd.js";
+import {safeReply} from "../../safe/safeReply.js";
+import {Bdd, getBddInstance} from "../../bdd/Bdd.js";
 
 /**
  * @param client Client Discord (non utilise directement, garde pour la signature commune des handlers).

@@ -7,7 +7,7 @@
  */
 
 import {Guild, GuildMember} from "discord.js";
-import {getAdminRole} from "@/utils/getAdminRole.js";
+import {getAdminRole} from "../utils/getAdminRole.js";
 
 /**
  * @param member Membre a verifier.

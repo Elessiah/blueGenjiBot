@@ -1,8 +1,8 @@
 import { type Client, type User } from "discord.js";
-import { formatDiskUsage, getDiskUsage } from "@/backup/diskSpace.js";
-import { formatBackupStatus, isBackupFresh, readBackupStatus } from "@/backup/backupStatus.js";
-import { resolveBddPath } from "@/bdd/Bdd.js";
-import { backupChecksPassed, formatBackupChecks, runBackupChecks } from "@/backup/backupCheck.js";
+import { formatDiskUsage, getDiskUsage } from "./diskSpace.js";
+import { formatBackupStatus, isBackupFresh, readBackupStatus } from "./backupStatus.js";
+import { resolveBddPath } from "../bdd/Bdd.js";
+import { backupChecksPassed, formatBackupChecks, runBackupChecks } from "./backupCheck.js";
 
 /**
  * Envoie au propriétaire (OWNER_ID) le rapport hebdomadaire de sauvegarde.

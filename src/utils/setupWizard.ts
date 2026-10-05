@@ -8,7 +8,7 @@
  */
 
 import type { Client, Guild } from "discord.js";
-import { sendLog } from "@/safe/sendLog.js";
+import { sendLog } from "../safe/sendLog.js";
 
 /**
  * @param guild Serveur qui vient d'accueillir le bot.

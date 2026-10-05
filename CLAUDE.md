@@ -9,8 +9,8 @@ Chargé à chaque session : règles transverses seulement. Le détail et le pour
 ## Commands
 
 ```bash
-npm run dev          # nodemon + ts-node ESM loader
-npm run build        # TypeScript 7 puis tsc-alias (résout les @/*)
+npm run dev          # node --watch-path=src --watch-preserve-output + ts-node ESM loader (sans nodemon)
+npm run build        # TypeScript 7 (imports relatifs, aucune réécriture)
 npm run typecheck:ts5 # même contrôle avec TypeScript 5 (ESLint, ts-node)
 npm start            # node dist/main.js
 npm run lint         # ESLint (src/ seul)
@@ -21,7 +21,7 @@ node --test "dist/tests/path/to/file.test.js"  # un seul fichier, après build
 
 ## Stack → `dev-notes/STACK.md`
 
-- **Node.js + TypeScript ESM** strict ; imports **toujours suffixés `.js`**. Alias `@/*` → `src/*` (`tsc-alias`).
+- **Node.js + TypeScript ESM** strict ; imports **toujours suffixés `.js`**. Imports **relatifs**, aucun alias de chemin (`@/*` et `tsc-alias` retirés : chaîne `braces` sans correctif).
 - **Deux TypeScript** : `typescript-native` (7) produit `dist/`, `typescript` (5) sert ESLint et ts-node — les scripts désignent leur `tsc` **par chemin**, jamais `tsc` ni `npx tsc`.
 - discord.js 14, Express 4 (`/internal`, en-tête `x-internal-token`), SQLite via le singleton `Bdd` (`getBddInstance()` / `closeBddInstance()`), node-cron. pm2 est global sur le serveur, **pas** une dépendance.
 - **`allowScripts`** (npm 12) : `sqlite3` approuvé (sans lui le bot meurt au démarrage), `unrs-resolver` refusé ; tout nouveau paquet à script annoncé par `npm ci` se relit puis s'approuve ou se refuse.

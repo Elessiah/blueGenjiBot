@@ -8,7 +8,7 @@
  * marcher partout sans migration retroactive de chaque serveur existant.
  */
 
-import { getBddInstance } from "@/bdd/Bdd.js";
+import { getBddInstance } from "../bdd/Bdd.js";
 
 /**
  * Clés des modules. `oauth`, `notifications` et `stats` sont **réservées** :

@@ -1,6 +1,6 @@
 import {ChatInputCommandInteraction, Client, Role} from "discord.js";
-import {safeReply} from "@/safe/safeReply.js";
-import {Bdd, getBddInstance} from "@/bdd/Bdd.js";
+import {safeReply} from "../../safe/safeReply.js";
+import {Bdd, getBddInstance} from "../../bdd/Bdd.js";
 
 /**
  * Affiche le rôle arbitre configuré sur le serveur courant.

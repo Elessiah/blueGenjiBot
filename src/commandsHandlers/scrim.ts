@@ -12,12 +12,12 @@
  */
 
 import type { Client, ChatInputCommandInteraction } from "discord.js";
-import { safeReply } from "@/safe/safeReply.js";
-import { sendLog } from "@/safe/sendLog.js";
-import { getBddInstance } from "@/bdd/Bdd.js";
-import { recordEvent } from "@/feed/feedBus.js";
-import { isModuleEnabled } from "@/modules/moduleGuard.js";
-import { choiceLabel, SCRIM_LEVEL_CHOICES } from "@/config/searchChoices.js";
+import { safeReply } from "../safe/safeReply.js";
+import { sendLog } from "../safe/sendLog.js";
+import { getBddInstance } from "../bdd/Bdd.js";
+import { recordEvent } from "../feed/feedBus.js";
+import { isModuleEnabled } from "../modules/moduleGuard.js";
+import { choiceLabel, SCRIM_LEVEL_CHOICES } from "../config/searchChoices.js";
 
 /** Seul jeu accepte par `/scrim`, tel que stocke dans `Scrim.game`. */
 export const SCRIM_GAME = "marvel_rivals";

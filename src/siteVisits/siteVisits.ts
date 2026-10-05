@@ -6,7 +6,7 @@
  * le bot le conserve dans une ligne unique de `SiteVisit` et la commande
  * `/stats-site` la relit localement — sans jamais appeler le site en retour.
  */
-import { getBddInstance } from "@/bdd/Bdd.js";
+import { getBddInstance } from "../bdd/Bdd.js";
 
 /** Instantané de fréquentation. Miroir de `SiteVisitStats` côté app web. */
 export interface SiteVisitStats {

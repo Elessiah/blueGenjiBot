@@ -1,5 +1,5 @@
 import {escapeMarkdown, type User} from "discord.js";
-import {displayNameLabel} from "@/utils/displayNameLabel.js";
+import {displayNameLabel} from "../utils/displayNameLabel.js";
 
 /**
  * Textes de l'envoi des adhésions : le message joint aux papiers et les avis

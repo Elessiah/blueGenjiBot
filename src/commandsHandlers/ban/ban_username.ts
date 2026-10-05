@@ -1,6 +1,6 @@
 import type {ChatInputCommandInteraction, Client, User} from "discord.js";
 
-import {safeReply} from "@/safe/safeReply.js";
+import {safeReply} from "../../safe/safeReply.js";
 
 import {ban} from "./ban.js";
 

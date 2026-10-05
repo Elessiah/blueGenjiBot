@@ -3,8 +3,8 @@ import path from "node:path";
 import sqlite3 from "sqlite3";
 import { open } from "sqlite";
 
-import { getBddInstance, resetBddInstance, resolveBddPath } from "@/bdd/Bdd.js";
-import { ROLLBACK_RETENTION_DAYS } from "@/privacy/retentionPeriods.js";
+import { getBddInstance, resetBddInstance, resolveBddPath } from "../bdd/Bdd.js";
+import { ROLLBACK_RETENTION_DAYS } from "../privacy/retentionPeriods.js";
 
 /** En-tête que tout fichier SQLite valide porte sur ses seize premiers octets. */
 const SQLITE_MAGIC = "SQLite format 3\0";

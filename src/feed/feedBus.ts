@@ -11,9 +11,9 @@
 
 import { EventEmitter } from "node:events";
 import type { Client } from "discord.js";
-import { getBddInstance } from "@/bdd/Bdd.js";
-import { scrubFeedField, scrubFeedText } from "@/feed/feedPrivacy.js";
-import { sendLog } from "@/safe/sendLog.js";
+import { getBddInstance } from "../bdd/Bdd.js";
+import { scrubFeedField, scrubFeedText } from "./feedPrivacy.js";
+import { sendLog } from "../safe/sendLog.js";
 
 export type FeedEventType = "relay" | "scrim" | "recr" | "auth" | "warn";
 export interface FeedEventRow {

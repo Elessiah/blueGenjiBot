@@ -1,21 +1,21 @@
 import type {AttachmentBuilder, Client, GuildMember, Role, TextChannel, User} from "discord.js";
-import {loadAdhesionAttachments} from "@/adhesion/adhesionAttachments.js";
-import {collectRecipients, isEveryoneRole, MAX_ADHESION_DMS} from "@/adhesion/adhesionRecipients.js";
+import {loadAdhesionAttachments} from "./adhesionAttachments.js";
+import {collectRecipients, isEveryoneRole, MAX_ADHESION_DMS} from "./adhesionRecipients.js";
 import {
     deliverToAuthor,
     deliverToChannel,
     deliverToMembers,
     notifyRoleUnreadable,
     refuseRecipients,
-} from "@/adhesion/adhesionDelivery.js";
+} from "./adhesionDelivery.js";
 import {
     DEFAULT_ADHESION_MESSAGE,
     EVERYONE_REFUSED_NOTICE,
     PERMISSION_WARNING,
     recipientCapNotice,
     reminderRefusedSuffix,
-} from "@/adhesion/adhesionNotices.js";
-import type {adhesionIntervalObj} from "@/adhesion/types.js";
+} from "./adhesionNotices.js";
+import type {adhesionIntervalObj} from "./types.js";
 
 /** Cibles d'un envoi ; `null` pour une cible non demandée. */
 type AdhesionTargets = {

@@ -1,10 +1,10 @@
 import {type ChatInputCommandInteraction, type Client, type Guild, MessageFlags} from "discord.js";
 
-import {Bdd, getBddInstance} from "@/bdd/Bdd.js";
-import {checkPermissions} from "@/check/checkPermissions.js";
-import {sendLog} from "@/safe/sendLog.js";
-import {safeReply} from "@/safe/safeReply.js";
-import {status} from "@/types.js";
+import {Bdd, getBddInstance} from "../../bdd/Bdd.js";
+import {checkPermissions} from "../../check/checkPermissions.js";
+import {sendLog} from "../../safe/sendLog.js";
+import {safeReply} from "../../safe/safeReply.js";
+import {status} from "../../types.js";
 
 /**
  * Réinitialise en base la configuration d'un serveur complet.

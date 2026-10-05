@@ -1,7 +1,7 @@
 import type {Client, Message, OmitPartialGroupDMChannel} from "discord.js";
 
-import {describeError} from "@/safe/errorGuards.js";
-import {safeMsgReply} from "@/safe/safeMsgReply.js";
+import {describeError} from "../safe/errorGuards.js";
+import {safeMsgReply} from "../safe/safeMsgReply.js";
 
 /**
  * Supprime un message temporaire si celui-ci existe encore.

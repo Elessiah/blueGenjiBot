@@ -15,12 +15,12 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import express, { type Request, type Response, type NextFunction } from "express";
 import type { Client } from "discord.js";
-import { getBddInstance } from "@/bdd/Bdd.js";
-import { sendLog } from "@/safe/sendLog.js";
-import { describeError } from "@/safe/errorGuards.js";
-import { recordEvent, getBacklog, subscribe } from "@/feed/feedBus.js";
-import { getSnapshotsBetween } from "@/snapshots/dailySnapshot.js";
-import { listModules, isValidModule, setModuleEnabled, MODULE_KEYS, type ModuleKey } from "@/modules/moduleGuard.js";
+import { getBddInstance } from "./bdd/Bdd.js";
+import { sendLog } from "./safe/sendLog.js";
+import { describeError } from "./safe/errorGuards.js";
+import { recordEvent, getBacklog, subscribe } from "./feed/feedBus.js";
+import { getSnapshotsBetween } from "./snapshots/dailySnapshot.js";
+import { listModules, isValidModule, setModuleEnabled, MODULE_KEYS, type ModuleKey } from "./modules/moduleGuard.js";
 import {
   absDelta,
   deterministicColor,
@@ -30,12 +30,12 @@ import {
   sparklineFromBuckets,
   SPARKLINE_POINTS,
   type RelayStatus,
-} from "@/internalApi/helpers.js";
-import { parseSiteVisitStats, saveSiteVisitStats } from "@/siteVisits/siteVisits.js";
-import { parseDirectMessageRequest, parseRefereeAlert } from "@/notifications/notifications.js";
-import { deliverDirectMessages, alertLeadership, alertReferees, HomeGuildUnavailableError } from "@/notifications/deliver.js";
-import { HandleResolutionTimeoutError, resolveDiscordHandle } from "@/notifications/resolveHandle.js";
-import { MESSAGE_RETENTION_DAYS } from "@/privacy/retentionPeriods.js";
+} from "./internalApi/helpers.js";
+import { parseSiteVisitStats, saveSiteVisitStats } from "./siteVisits/siteVisits.js";
+import { parseDirectMessageRequest, parseRefereeAlert } from "./notifications/notifications.js";
+import { deliverDirectMessages, alertLeadership, alertReferees, HomeGuildUnavailableError } from "./notifications/deliver.js";
+import { HandleResolutionTimeoutError, resolveDiscordHandle } from "./notifications/resolveHandle.js";
+import { MESSAGE_RETENTION_DAYS } from "./privacy/retentionPeriods.js";
 
 /**
  * Fenetre des compteurs tires de `OGMsg` / `DPMsg` (`/internal/stats`,

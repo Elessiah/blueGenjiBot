@@ -1,10 +1,10 @@
 import {ChatInputCommandInteraction, Client} from "discord.js";
-import {PathsAdhesions} from "@/adhesion/types.js";
+import {PathsAdhesions} from "./types.js";
 import {readFile} from "node:fs/promises";
-import {adhesionFilePath} from "@/adhesion/adhesionPath.js";
-import {safeFollowUp} from "@/safe/safeFollowUp.js";
-import {sendLog} from "@/safe/sendLog.js";
-import {saveAdhesionPaths} from "@/adhesion/saveAdhesionPaths.js";
+import {adhesionFilePath} from "./adhesionPath.js";
+import {safeFollowUp} from "../safe/safeFollowUp.js";
+import {sendLog} from "../safe/sendLog.js";
+import {saveAdhesionPaths} from "./saveAdhesionPaths.js";
 
 /**
  * Charge la configuration des fichiers d'adhésion depuis `paths.json`.

@@ -7,11 +7,11 @@
  */
 
 import {ChatInputCommandInteraction, Client, Role} from "discord.js";
-import {safeReply} from "@/safe/safeReply.js";
-import {checkPermissions} from "@/check/checkPermissions.js";
-import {Bdd, getBddInstance} from "@/bdd/Bdd.js";
-import {status} from "@/types.js";
-import {sendLog} from "@/safe/sendLog.js";
+import {safeReply} from "../../safe/safeReply.js";
+import {checkPermissions} from "../../check/checkPermissions.js";
+import {Bdd, getBddInstance} from "../../bdd/Bdd.js";
+import {status} from "../../types.js";
+import {sendLog} from "../../safe/sendLog.js";
 
 /**
  * @param client Client Discord, utilise pour journaliser un echec d'ecriture en base.

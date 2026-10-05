@@ -1,7 +1,7 @@
 import type { Client, ChatInputCommandInteraction } from "discord.js";
-import { safeReply } from "@/safe/safeReply.js";
-import { sendLog } from "@/safe/sendLog.js";
-import { formatSiteVisitStats, readSiteVisitStats } from "@/siteVisits/siteVisits.js";
+import { safeReply } from "../safe/safeReply.js";
+import { sendLog } from "../safe/sendLog.js";
+import { formatSiteVisitStats, readSiteVisitStats } from "../siteVisits/siteVisits.js";
 
 /**
  * Commande `/stats-site` : frequentation du site BlueGenji (visites totales et

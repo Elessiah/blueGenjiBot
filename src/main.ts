@@ -14,7 +14,7 @@ import { checkBan } from "./check/checkBan.js";
 import { _resetChannel } from "./commandsHandlers/services/resetChannel.js";
 import { commands } from "./config/commands.js";
 import { fillBlueCommands } from "./config/fillBlueCommands.js";
-import { checkIntervalleAdhesion } from "@/adhesion/checkIntervalleAdhesion.js";
+import { checkIntervalleAdhesion } from "./adhesion/checkIntervalleAdhesion.js";
 import { buildServiceMessage } from "./messages/buildServiceMessage.js";
 import { manageDistribution } from "./messages/manageDistribution.js";
 import { sendLog } from "./safe/sendLog.js";
@@ -22,11 +22,11 @@ import { installProcessGuards, reportError } from "./safe/processGuards.js";
 import { safeReact } from "./safe/safeReact.js";
 import { safeReply } from "./safe/safeReply.js";
 import { updateCommands } from "./utils/updateCommands.js";
-import { startInternalApi } from "@/internalApi.js";
-import { purgeFeedIdentifiers } from "@/feed/feedBus.js";
-import { eraseLeftGuild, runDataRetention } from "@/privacy/dataRetention.js";
-import { recordDailySnapshot } from "@/snapshots/dailySnapshot.js";
-import { sendDatabaseBackup } from "@/backup/weeklyBackup.js";
+import { startInternalApi } from "./internalApi.js";
+import { purgeFeedIdentifiers } from "./feed/feedBus.js";
+import { eraseLeftGuild, runDataRetention } from "./privacy/dataRetention.js";
+import { recordDailySnapshot } from "./snapshots/dailySnapshot.js";
+import { sendDatabaseBackup } from "./backup/weeklyBackup.js";
 
 /**
  * Point d'entree du bot : client Discord, listeners d'evenements et taches cron.
@@ -279,7 +279,7 @@ client.on("guildCreate", async (guild) => {
     for (const currentGuild of client.guilds.cache.values()) {
       await updateCommands(client, currentGuild.id);
     }
-    const { runSetupWizard } = await import("@/utils/setupWizard.js");
+    const { runSetupWizard } = await import("./utils/setupWizard.js");
     await runSetupWizard(guild, client);
     await sendLog(client, `Bot has join : ${guild.name}`);
   } catch (error) {

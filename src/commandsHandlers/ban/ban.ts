@@ -1,14 +1,14 @@
 import type {ChatInputCommandInteraction, Client, Guild, User} from "discord.js";
 import { MessageFlags } from "discord.js";
 
-import {getBddInstance} from "@/bdd/Bdd.js";
-import {deleteDPMsgs} from "@/bdd/deleteDPMsgs.js";
-import {checkBan} from "@/check/checkBan.js";
-import {checkPermissions} from "@/check/checkPermissions.js";
-import {safeReply} from "@/safe/safeReply.js";
-import {sendLog} from "@/safe/sendLog.js";
-import type {idSendLogMsg} from "@/safe/types.js";
-import {deleteBanMessages} from "@/privacy/staffLogRetention.js";
+import {getBddInstance} from "../../bdd/Bdd.js";
+import {deleteDPMsgs} from "../../bdd/deleteDPMsgs.js";
+import {checkBan} from "../../check/checkBan.js";
+import {checkPermissions} from "../../check/checkPermissions.js";
+import {safeReply} from "../../safe/safeReply.js";
+import {sendLog} from "../../safe/sendLog.js";
+import type {idSendLogMsg} from "../../safe/types.js";
+import {deleteBanMessages} from "../../privacy/staffLogRetention.js";
 
 /**
  * Ban un utilisateur des utilisations du bot discord.

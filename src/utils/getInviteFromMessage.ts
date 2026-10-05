@@ -1,5 +1,5 @@
-﻿import {describeError} from "@/safe/errorGuards.js";
-import {sendLog} from "@/safe/sendLog.js";
+﻿import {describeError} from "../safe/errorGuards.js";
+import {sendLog} from "../safe/sendLog.js";
 import type {Client, Message, TextChannel} from "discord.js";
 import {PermissionsBitField} from "discord.js";
 import {getInviteFromChannel} from "./getInviteFromChannel.js";

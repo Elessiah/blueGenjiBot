@@ -11,9 +11,9 @@
 
 import { PermissionFlagsBits, ChannelType } from "discord.js";
 import type { Client, ChatInputCommandInteraction, GuildMember } from "discord.js";
-import { safeReply } from "@/safe/safeReply.js";
-import { sendLog } from "@/safe/sendLog.js";
-import { getBddInstance } from "@/bdd/Bdd.js";
+import { safeReply } from "../../safe/safeReply.js";
+import { sendLog } from "../../safe/sendLog.js";
+import { getBddInstance } from "../../bdd/Bdd.js";
 
 /**
  * @param client Client Discord, utilise pour journaliser le changement.

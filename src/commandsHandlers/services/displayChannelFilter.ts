@@ -1,7 +1,7 @@
-import {sendLog} from "@/safe/sendLog.js";
-import {Bdd, getBddInstance} from "@/bdd/Bdd.js";
-import {safeReply} from "@/safe/safeReply.js";
-import {regions} from "@/utils/globals.js";
+import {sendLog} from "../../safe/sendLog.js";
+import {Bdd, getBddInstance} from "../../bdd/Bdd.js";
+import {safeReply} from "../../safe/safeReply.js";
+import {regions} from "../../utils/globals.js";
 import type {Channel, ChatInputCommandInteraction, Client} from "discord.js";
 
 /**

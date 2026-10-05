@@ -13,12 +13,12 @@ import {
   listArchives,
   missingCommandText,
   pickArchive,
-} from "@/backup/archiveSource.js";
-import { restoreDatabase, type RestoreResult } from "@/backup/restoreDatabase.js";
-import { runDataRetention } from "@/privacy/dataRetention.js";
-import { purgeFeedIdentifiers } from "@/feed/feedBus.js";
-import { safeReply } from "@/safe/safeReply.js";
-import { sendLog } from "@/safe/sendLog.js";
+} from "../../backup/archiveSource.js";
+import { restoreDatabase, type RestoreResult } from "../../backup/restoreDatabase.js";
+import { runDataRetention } from "../../privacy/dataRetention.js";
+import { purgeFeedIdentifiers } from "../../feed/feedBus.js";
+import { safeReply } from "../../safe/safeReply.js";
+import { sendLog } from "../../safe/sendLog.js";
 
 /** Nombre d'archives montrées quand la commande est lancée sans `archive`. */
 const LISTED_ARCHIVES = 10;

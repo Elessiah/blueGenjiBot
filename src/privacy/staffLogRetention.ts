@@ -18,9 +18,9 @@
 
 import type { Client, DMChannel, Message, TextChannel } from "discord.js";
 
-import { getBddInstance } from "@/bdd/Bdd.js";
-import type { Ban } from "@/bdd/types.js";
-import { STAFF_LOG_RETENTION_DAYS } from "@/privacy/retentionPeriods.js";
+import { getBddInstance } from "../bdd/Bdd.js";
+import type { Ban } from "../bdd/types.js";
+import { STAFF_LOG_RETENTION_DAYS } from "./retentionPeriods.js";
 
 /** Ce que la purge lit d'un message : de quoi décider, rien de son contenu. */
 export interface LogMessageLike {

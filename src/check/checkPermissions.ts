@@ -1,5 +1,5 @@
 import { GuildMember, TextChannel,type ChatInputCommandInteraction} from "discord.js";
-import {checkAdminRole} from "@/check/checkAdminRole.js";
+import {checkAdminRole} from "./checkAdminRole.js";
 
 /**
  * Contrôle que l'utilisateur et le bot possèdent les permissions requises.

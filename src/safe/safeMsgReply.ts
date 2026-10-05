@@ -1,6 +1,6 @@
 import type {Client, Message, OmitPartialGroupDMChannel} from "discord.js";
 
-import {sendLog} from "@/safe/sendLog.js";
+import {sendLog} from "./sendLog.js";
 
 /**
  * Répond à un message avec garde-fous pour éviter les erreurs bloquantes.

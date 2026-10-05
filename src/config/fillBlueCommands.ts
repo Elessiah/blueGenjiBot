@@ -4,11 +4,11 @@ import {buildServerChoices} from "../utils/buildServerChoices.js";
 import {contactAdminServer} from "../commandsHandlers/contactAdminServer.js";
 import {remoteServerReset} from "../commandsHandlers/services/remoteServerReset.js";
 import {ApplicationCommandOptionType, Client} from "discord.js";
-import {displaySetupAdhesion} from "@/commandsHandlers/adhesions/displaySetupAdhesion.js";
-import {deleteSetupAdhesion} from "@/commandsHandlers/adhesions/deleteSetupAdhesion.js";
-import {loadAdhesionFiles} from "@/commandsHandlers/adhesions/loadAdhesionFiles.js";
-import {adhesionValide} from "@/commandsHandlers/adhesions/adhesionValide.js";
-import { adhesionPerimee } from "@/commandsHandlers/adhesions/adhesionPerimee.js";
+import {displaySetupAdhesion} from "../commandsHandlers/adhesions/displaySetupAdhesion.js";
+import {deleteSetupAdhesion} from "../commandsHandlers/adhesions/deleteSetupAdhesion.js";
+import {loadAdhesionFiles} from "../commandsHandlers/adhesions/loadAdhesionFiles.js";
+import {adhesionValide} from "../commandsHandlers/adhesions/adhesionValide.js";
+import { adhesionPerimee } from "../commandsHandlers/adhesions/adhesionPerimee.js";
 
 /**
  * Construit la liste des commandes slash Blue et les enregistre côté client Discord.

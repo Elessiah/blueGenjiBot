@@ -1,10 +1,10 @@
 import {ChatInputCommandInteraction, Client} from "discord.js";
-import {safeReply} from "@/safe/safeReply.js";
-import {checkPermissions} from "@/check/checkPermissions.js";
-import {Bdd, getBddInstance} from "@/bdd/Bdd.js";
-import {status} from "@/types.js";
-import {sendLog} from "@/safe/sendLog.js";
-import {isDiscordInvite, normalizeInvite} from "@/utils/isDiscordInvite.js";
+import {safeReply} from "../../safe/safeReply.js";
+import {checkPermissions} from "../../check/checkPermissions.js";
+import {Bdd, getBddInstance} from "../../bdd/Bdd.js";
+import {status} from "../../types.js";
+import {sendLog} from "../../safe/sendLog.js";
+import {isDiscordInvite, normalizeInvite} from "../../utils/isDiscordInvite.js";
 
 /**
  * Associe un lien d'invitation personnalisé au serveur courant.

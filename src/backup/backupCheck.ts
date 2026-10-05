@@ -56,7 +56,7 @@ import {
   stopProcess,
   type ArchiveSources,
   type CommandRunner,
-} from "@/backup/archiveSource.js";
+} from "./archiveSource.js";
 
 /** Fichiers qu'une archive complète doit contenir. */
 export const EXPECTED_ARCHIVE_ENTRIES = ["database.sqlite", "appbluegenji.sql"] as const;

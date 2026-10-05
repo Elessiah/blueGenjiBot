@@ -5,10 +5,10 @@ import {
     TextChannel
 } from "discord.js";
 
-import {Bdd, getBddInstance} from "@/bdd/Bdd.js";
-import {sendLog} from "@/safe/sendLog.js";
-import {checkPermissions} from "@/check/checkPermissions.js";
-import {safeReply} from "@/safe/safeReply.js";
+import {Bdd, getBddInstance} from "../../bdd/Bdd.js";
+import {sendLog} from "../../safe/sendLog.js";
+import {checkPermissions} from "../../check/checkPermissions.js";
+import {safeReply} from "../../safe/safeReply.js";
 
 /**
  * Configure la liste des services autorisés pour un salon.

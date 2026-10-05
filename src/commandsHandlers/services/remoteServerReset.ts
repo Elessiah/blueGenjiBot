@@ -1,9 +1,9 @@
 import {type ChatInputCommandInteraction, type Client, MessageFlags} from "discord.js";
 
-import {checkPermissions} from "@/check/checkPermissions.js";
-import {safeReply} from "@/safe/safeReply.js";
+import {checkPermissions} from "../../check/checkPermissions.js";
+import {safeReply} from "../../safe/safeReply.js";
 import {_resetServer} from "./resetServer.js";
-import {status} from "@/types.js";
+import {status} from "../../types.js";
 
 /**
  * Réinitialise la configuration d'un serveur partenaire distant.

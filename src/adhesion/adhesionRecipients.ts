@@ -1,6 +1,6 @@
 import type {Client, Guild, GuildMember, Role, User} from "discord.js";
-import {logAdhesionError} from "@/adhesion/adhesionLog.js";
-import {fetchRoleMembers} from "@/utils/fetchRoleMembers.js";
+import {logAdhesionError} from "./adhesionLog.js";
+import {fetchRoleMembers} from "../utils/fetchRoleMembers.js";
 
 /**
  * Plafond de messages privés par envoi d'adhésion. Au-delà, rien ne part :

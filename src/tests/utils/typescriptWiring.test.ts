@@ -21,7 +21,7 @@ const TSCONFIG = fs.readFileSync(path.join(ROOT, "tsconfig.json"), "utf8");
 test("le build compile avec TypeScript 7, désigné par chemin", () => {
   // Les deux paquets fournissent un binaire `tsc` : celui que retient
   // `node_modules/.bin` dépend de l'ordre d'installation.
-  assert.match(pkg.scripts.build, /^node node_modules\/typescript-native\/bin\/tsc && tsc-alias$/);
+  assert.match(pkg.scripts.build, /^node node_modules\/typescript-native\/bin\/tsc$/);
   assert.match(pkg.scripts["typecheck:ts5"], /^node node_modules\/typescript\/bin\/tsc /);
 });
 
@@ -32,5 +32,21 @@ test("TypeScript 7 est installé à côté de TypeScript 5, sans le remplacer", 
 
 test("tsconfig.json ne pose aucune option retirée de TypeScript 7", () => {
   assert.doesNotMatch(TSCONFIG, /"baseUrl"/);
-  assert.match(TSCONFIG, /"@\/\*": \["\.\/src\/\*"\]/);
+});
+
+test("aucun alias de chemin : les imports restent relatifs, sans réécriture au build", () => {
+  // Un alias (`paths`) exigeait tsc-alias après la compilation ; tsc-alias
+  // tirait chokidar et globby, donc `braces` (GHSA-vfj7-8cjw-p6xm, sans correctif).
+  assert.doesNotMatch(TSCONFIG, /"paths"/);
+  assert.equal(pkg.devDependencies["tsc-alias"], undefined);
+  const SRC = path.join(ROOT, "src");
+  const offenders = (fs.readdirSync(SRC, { recursive: true }) as string[])
+    .filter((f) => f.endsWith(".ts"))
+    .filter((f) => /(?:from\s+|import\s*\(?\s*)["']@\//.test(fs.readFileSync(path.join(SRC, f), "utf8")));
+  assert.deepEqual(offenders, []);
+});
+
+test("le mode dev surveille src/ avec Node seul, sans nodemon", () => {
+  assert.match(pkg.scripts.dev, /^node --watch-path=src /);
+  assert.equal(pkg.devDependencies.nodemon, undefined);
 });

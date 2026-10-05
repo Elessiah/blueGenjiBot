@@ -9,12 +9,12 @@
  */
 
 import type { Client, ChatInputCommandInteraction } from "discord.js";
-import { safeReply } from "@/safe/safeReply.js";
-import { sendLog } from "@/safe/sendLog.js";
-import { getBddInstance } from "@/bdd/Bdd.js";
-import { recordEvent } from "@/feed/feedBus.js";
-import { isModuleEnabled } from "@/modules/moduleGuard.js";
-import { choiceLabel, RECRUIT_ROLE_CHOICES } from "@/config/searchChoices.js";
+import { safeReply } from "../safe/safeReply.js";
+import { sendLog } from "../safe/sendLog.js";
+import { getBddInstance } from "../bdd/Bdd.js";
+import { recordEvent } from "../feed/feedBus.js";
+import { isModuleEnabled } from "../modules/moduleGuard.js";
+import { choiceLabel, RECRUIT_ROLE_CHOICES } from "../config/searchChoices.js";
 
 /**
  * @param client Client Discord, utilise pour le feed d'evenements et les logs.
