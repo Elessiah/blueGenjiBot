@@ -37,9 +37,11 @@ jobs:
       IS_MINOR: ${{ contains(github.event.pull_request.labels.*.name, 'release:minor') }}
       PR_NUMBER: ${{ github.event.pull_request.number }}
     steps:
+      # Sans `ref` : sous pull_request_target, checkout extrait la branche de base
+      # (main) du dépôt, jamais la tête de la PR ; l'étape de bump se recale
+      # ensuite sur origin/main à jour.
       - uses: actions/checkout@v4
         with:
-          ref: main
           fetch-depth: 0
           token: ${{ secrets.RELEASE_TOKEN || github.token }}
 

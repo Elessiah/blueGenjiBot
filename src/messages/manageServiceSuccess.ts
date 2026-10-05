@@ -32,7 +32,7 @@ async function manageServiceSuccess(client: Client,
     const notifiedRegions: string[] = [];
     for (const region of targetedRegions)
         notifiedRegions.push(regions[region]);
-    answerTmp(client, message, "Your message has been sent to " + nbPartner + " channels of " + notifiedRegions.join('/') + "/ALL region as " + service, 30000);
+    await answerTmp(client, message, "Your message has been sent to " + nbPartner + " channels of " + notifiedRegions.join('/') + "/ALL region as " + service, 30000);
     for (const region of targetedRegions)
         await nextTips(client, service, region);
 }

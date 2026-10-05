@@ -1,6 +1,7 @@
 import {ranksMatch, ranks} from './globals.js';
 import {normalizeText} from "./normalizeText.js";
 import {answerTmp} from "./answerTmp.js";
+import {describeError} from "../safe/errorGuards.js";
 import type {Client, Message} from "discord.js";
 
 /**
@@ -24,10 +25,11 @@ async function extractRanks(client: Client,
     }
     if (matchs.length === 0) {
         if (!silence) {
+            // Non attendue : l'avis à l'auteur ne doit pas retarder le relais.
             answerTmp(client,
                 message,
                 "It seems that you didn't specify any rank. To get more responses from other users, I recommend specifying the rank range you're looking for.",
-                30000);
+                30000).catch((error: unknown) => console.error("Réponse temporaire impossible :", describeError(error)));
         }
         matchs = [...ranks];
     }
