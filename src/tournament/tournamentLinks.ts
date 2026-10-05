@@ -41,13 +41,14 @@ export function isTournamentLinkKind(value: string): value is TournamentLinkKind
  *
  * `https` seul, sans espace ni caractère qui romprait le lien masqué
  * `[libellé](<url>)` de `/tournoi` (`<`, `>`, parenthèses) : le message est
- * publié tel quel dans un salon.
+ * publié tel quel dans un salon. `@everyone` et `@here` sont refusés : la
+ * réponse publique de `/tournoi` ne désamorce pas les mentions.
  * @param raw Texte saisi.
  * @returns L'URL normalisée, ou `null` si elle est refusée.
  */
 export function normalizeTournamentLink(raw: string): string | null {
     const trimmed = raw.trim();
-    if (trimmed.length === 0 || /[\s<>()]/.test(trimmed)) {
+    if (trimmed.length === 0 || /[\s<>()]/.test(trimmed) || /@(everyone|here)/i.test(trimmed)) {
         return null;
     }
     let url: URL;

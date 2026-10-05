@@ -28,6 +28,8 @@ test("normalizeTournamentLink accepte une adresse https et refuse le reste", () 
         "https://exemple.fr/a>b",
         "https://exemple.fr/(a)",
         "https://user:pass@exemple.fr/",
+        "https://exemple.fr/@everyone",
+        "https://exemple.fr/a?x=@Here",
         "",
         "https://exemple.fr/" + "a".repeat(MAX_TOURNAMENT_LINK_LENGTH),
     ]) {

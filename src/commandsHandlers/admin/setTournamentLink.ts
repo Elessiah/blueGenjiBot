@@ -50,7 +50,7 @@ export async function setTournamentLink(client: Client, interaction: ChatInputCo
         const raw = interaction.options.getString("url");
         const url = raw === null ? null : normalizeTournamentLink(raw);
         if (raw !== null && url === null) {
-            await safeReply(interaction, `❌ Lien invalide : une adresse \`https://\` complète, sans espace, de ${MAX_TOURNAMENT_LINK_LENGTH} caractères au plus.`);
+            await safeReply(interaction, `❌ Lien invalide : une adresse \`https://\` complète, sans espace ni caractère \`< > ( )\` ni \`@everyone\` / \`@here\`, de ${MAX_TOURNAMENT_LINK_LENGTH} caractères au plus.`);
             return;
         }
         const result = await (await getBddInstance()).setTournamentLink(kind, url);
