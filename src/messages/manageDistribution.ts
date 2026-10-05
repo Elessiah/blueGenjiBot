@@ -73,7 +73,7 @@ async function manageDistribution(message: Message,
         const messageContentLower: string = message.content.toLowerCase();
         const targetedRegions = await resolveTargetRegions(client, bdd, message, channelId, messageContentLower);
         if (message.guildId && !await isModuleEnabled(message.guildId, 'annonces')) {
-            answerTmp(client, message, 'Le module Annonces est desactive sur ce serveur.', 10);
+            await answerTmp(client, message, 'Le module Annonces est desactive sur ce serveur.', 10);
             return false;
         }
         const targetedService = await selectTargetedService(client, message, services, messageContentLower);
@@ -81,7 +81,7 @@ async function manageDistribution(message: Message,
             return false;
         }
         if (!targetedService) {
-            answerTmp(client, message, NO_KEYWORD_NOTICE, 120000);
+            await answerTmp(client, message, NO_KEYWORD_NOTICE, 120000);
             return false;
         }
         await bdd.set('MessageService', ['id_msg', 'id_service'], [message.id, targetedService.id_service]);
@@ -102,10 +102,11 @@ async function manageDistribution(message: Message,
  */
 function pickAttachment(client: Client, message: Message): Attachment | undefined | typeof TOO_MANY_ATTACHMENTS {
     if (message.attachments.size > 1) {
+        // Fonction synchrone : la réponse part sans être attendue, mais un échec est journalisé.
         answerTmp(client,
             message,
             "You cannot send more than one attachment ! Cancel your Distribution.",
-            30000);
+            30000).catch((error: unknown) => console.error("Réponse temporaire impossible :", describeError(error)));
         return TOO_MANY_ATTACHMENTS;
     }
     if (message.attachments.size === 1) {
@@ -131,7 +132,7 @@ async function resolveTargetRegions(client: Client,
     if (targetedRegions !== null) {
         return targetedRegions;
     }
-    answerTmp(client, message, NO_REGION_NOTICE, 30000);
+    await answerTmp(client, message, NO_REGION_NOTICE, 30000);
     return {query: "ChannelPartner.region = 0", requestedRegions: [0]};
 }
 
@@ -182,7 +183,7 @@ async function reportDistribution(client: Client,
         await manageServiceSuccess(client, bdd, message, regions.requestedRegions, nbPartner, service.name);
         await recordEvent(client, 'relay', `${service.name} vers ${nbPartner} salon(s)`, message.guild?.name ?? null, null);
     } else {
-        answerTmp(client, message, NOT_DELIVERED_NOTICE, 30000);
+        await answerTmp(client, message, NOT_DELIVERED_NOTICE, 30000);
     }
 }
 

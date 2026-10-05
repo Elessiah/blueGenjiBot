@@ -15,11 +15,13 @@ writeFileSync(process.argv[2], JSON.stringify({ TERMS_OF_SERVICE, PRIVACY_POLICY
 TS
 npx tsx __dump.ts /chemin/legal.json && rm __dump.ts
 
-2. Ici :  python scripts/generate-legal-terms.py /chemin/legal.json
+2. Ici :  python scripts/generate-legal-terms.py < /chemin/legal.json
+   Le JSON est lu sur l'entrée standard et la sortie va toujours dans
+   LegalTerms/ du dépôt : aucun chemin n'est pris en argument.
    (dépend de `reportlab` ; polices Arial par défaut, `LEGAL_FONT_DIR` pour
    désigner un dossier contenant arial.ttf, arialbd.ttf et ariali.ttf).
 """
-import json, re, sys, os
+import io, json, re, sys, os
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.fonts import addMapping
@@ -30,9 +32,11 @@ from xml.sax.saxutils import escape
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SITE = "https://bluegenji-esport.fr"
-data = json.load(open(sys.argv[1], encoding="utf-8"))
+if len(sys.argv) > 1:
+    sys.exit("Usage : python scripts/generate-legal-terms.py < legal.json")
+data = json.load(io.TextIOWrapper(sys.stdin.buffer, encoding="utf-8"))
 HOST = data["HEBERGEUR_HREF"]
-out = sys.argv[2] if len(sys.argv) > 2 else os.path.join(ROOT, "LegalTerms")
+out = os.path.join(ROOT, "LegalTerms")
 os.makedirs(out, exist_ok=True)
 
 def absu(u): return SITE + u if u.startswith("/") else u
