@@ -163,9 +163,9 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     confirmer la publication — salon introuvable, permission manquante, refus
     explicite de Discord (règle AutoMod du serveur…), mode lent du salon qui
     retiendrait l'envoi (le bot y a déjà posté pendant le délai et ne peut pas
-    l'ignorer : l'envoi resterait en attente, il est refusé d'emblée —
-    désactiver ou raccourcir le mode lent, ou donner au bot « Gérer les
-    messages »), ou panne passagère de Discord (réseau, `5xx`, limite de débit) ; le canal de
+    l'ignorer : l'envoi resterait en attente, il est refusé d'emblée et le
+    site réessaie ; signalé au staff seulement s'il reste plus d'une minute
+    d'attente), ou panne passagère de Discord (réseau, `5xx`, limite de débit) ; le canal de
     logs dit laquelle (« non publiée », ou « non confirmée » pour une panne de
     Discord pendant l'envoi, avec la consigne de supprimer un éventuel
     doublon ; une panne en lisant le salon, avant tout envoi, reste « non
