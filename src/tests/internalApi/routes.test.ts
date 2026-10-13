@@ -780,6 +780,25 @@ test("/internal/notify/leadership : propriétaire et président prévenus, éche
   assert.deepEqual(state.logs, ["[AppBlueGenji] Contestation reçue"]);
 });
 
+test("/internal/announce/live : corps ou lien invalide 400, sinon publié avec @everyone", async () => {
+  let res = await call("/internal/announce/live", { body: { message: "Alpha contre Beta" } });
+  assert.equal(res.status, 400);
+  assert.deepEqual(res.body, { error: "INVALID_LIVE_ANNOUNCEMENT" });
+
+  res = await call("/internal/announce/live", { body: { message: "Alpha contre Beta", streamUrl: "https://evil.example/x" } });
+  assert.equal(res.status, 400);
+  assert.equal(state.logs.length, 0);
+
+  res = await call("/internal/announce/live", {
+    body: { message: "Alpha contre Beta", streamUrl: "https://twitch.tv/bluegenji", context: "live-announce match-1" },
+  });
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body, { posted: true, mentionEveryone: true });
+  assert.deepEqual(state.logs, [
+    { content: "@everyone Alpha contre Beta\nhttps://twitch.tv/bluegenji", allowedMentions: { parse: ["everyone"] } },
+  ] as unknown as string[]);
+});
+
 // --- Flux SSE ---------------------------------------------------------------
 
 /** Lit le flux jusqu'à ce que `until` soit vrai sur le texte reçu. */
