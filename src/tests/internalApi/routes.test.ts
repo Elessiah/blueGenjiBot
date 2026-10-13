@@ -852,7 +852,7 @@ test("/internal/announce/live : un texte d'erreur démesuré ne fait pas débord
 });
 
 test("/internal/announce/live : le signalement d'une longue annonce groupée tient dans un message Discord", async () => {
-  state.liveSendError = Object.assign(new Error("Service Unavailable"), { code: 0 });
+  state.liveSendError = Object.assign(new Error("Missing Permissions"), { code: 50013 });
   const lines = Array.from({ length: 40 }, (_, i) => `• ${"A".repeat(30)}${i} contre ${"B".repeat(30)}${i}`);
   const body = {
     message: ["🔴 En direct — Coupe :", ...lines].join("\n"),
@@ -866,17 +866,25 @@ test("/internal/announce/live : le signalement d'une longue annonce groupée tie
   assert.ok(state.logs[0].length <= 1900);
   assert.ok(state.logs[0].includes(body.context), "toute la liste des matchs, sans coupe");
   assert.ok(state.logs[0].endsWith(`<${body.streamUrl}>`), "le lien reste entier");
-  // Panne passagère de Discord : l'envoi a pu réussir, le staff lit « non confirmée ».
-  assert.ok(state.logs[0].startsWith("[AppBlueGenji] Annonce de live non confirmée (live-announce match-"));
-  assert.ok(state.logs[0].includes("l'annonce a pu partir malgré tout : vérifier #live, et la poster à la main seulement si elle n'y est pas"));
-  // Le site ne réessaie pas un envoi peut-être parti : le signalement ne le promet pas.
-  assert.ok(state.logs[0].includes("Le site ne la réessaie pas"));
-  assert.ok(!state.logs[0].includes("Le site la réessaie seul"));
-  assert.ok(!state.logs[0].includes("une fois par heure"));
   // La citation reste un bloc cité, coupée à l'intérieur : chaque ligne commence par « > ».
   const quote = state.logs[0].split("Annonce concernée :\n")[1].split("\n<")[0];
   assert.ok(quote.split("\n").every((line) => line.startsWith("> ")));
   assert.ok(quote.endsWith("…"));
+});
+
+test("/internal/announce/live : envoi incertain — « non confirmée », vérifier #live, pas de nouvel essai promis", async () => {
+  state.liveSendError = Object.assign(new Error("Service Unavailable"), { code: 0 });
+  const body = { message: "Alpha contre Beta — Coupe", streamUrl: "https://twitch.tv/bluegenji", context: "live-announce match-5" };
+  const res = await call("/internal/announce/live", { body });
+  assert.equal(res.status, 503);
+  for (let i = 0; i < 50 && state.logs.length === 0; i++) { await new Promise((r) => setTimeout(r, 5)); }
+  assert.equal(state.logs.length, 1);
+  assert.ok(state.logs[0].startsWith("[AppBlueGenji] Annonce de live non confirmée (live-announce match-5)"));
+  assert.ok(state.logs[0].includes("l'annonce a pu partir malgré tout : vérifier #live, et la poster à la main seulement si elle n'y est pas"));
+  assert.ok(state.logs[0].includes("Le site ne la réessaie pas"));
+  assert.ok(!state.logs[0].includes("Le site la réessaie seul"));
+  assert.ok(!state.logs[0].includes("une fois par heure"));
+  assert.ok(state.logs[0].endsWith("> Alpha contre Beta — Coupe\n<https://twitch.tv/bluegenji>"));
 });
 
 test("/internal/announce/live : chaque envoi incertain est signalé, même dans l'heure", async () => {
@@ -891,6 +899,21 @@ test("/internal/announce/live : chaque envoi incertain est signalé, même dans 
   for (let i = 0; i < 50 && state.logs.length < 2; i++) { await new Promise((r) => setTimeout(r, 5)); }
   assert.equal(state.logs.length, 2);
   assert.ok(state.logs[0].includes("match-12") && state.logs[1].includes("match-31"));
+});
+
+test("/internal/announce/live : un envoi incertain cite l'annonce entière, en deux messages s'il le faut", async () => {
+  state.liveSendError = Object.assign(new Error("Service Unavailable"), { code: 0 });
+  const lines = Array.from({ length: 24 }, (_, i) => `• ${"A".repeat(25)}${i} contre ${"B".repeat(25)}${i}`);
+  const message = ["🔴 En direct — Coupe :", ...lines].join("\n");
+  const body = { message, streamUrl: "https://twitch.tv/bluegenji", context: "live-announce match-77" };
+  const res = await call("/internal/announce/live", { body });
+  assert.equal(res.status, 503);
+  for (let i = 0; i < 50 && state.logs.length < 2; i++) { await new Promise((r) => setTimeout(r, 5)); }
+  assert.equal(state.logs.length, 2);
+  assert.ok(state.logs[0].includes("texte entier dans le message suivant"));
+  assert.ok(state.logs.every((log) => log.length <= 1900));
+  const quoted = state.logs[1].replace("[AppBlueGenji] ", "");
+  assert.equal(quoted, message.split("\n").map((line) => "> " + line).join("\n"), "le texte entier, sans coupe");
 });
 
 // --- Flux SSE ---------------------------------------------------------------
