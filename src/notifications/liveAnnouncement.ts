@@ -68,6 +68,28 @@ function discordCode(error: unknown): number | undefined {
 }
 
 /**
+ * Échec d'un `channel.send`, classé : un refus explicite de Discord (erreur
+ * d'API portant un code) dit que rien n'est parti — faute de permission
+ * (`send-denied`) ou pour une autre raison (`send-rejected` : AutoMod, mode
+ * lent…) ; sans code, c'est une panne pendant l'envoi (`discord-down`, réseau,
+ * `5xx`, limite de débit) qui a pu cacher une publication réussie.
+ *
+ * @param error Erreur levée par l'envoi.
+ * @returns L'erreur à lever.
+ */
+function sendFailure(error: unknown): LiveChannelUnavailableError {
+  const detail = (error as Error).message;
+  const code = discordCode(error);
+  if (code === MISSING_ACCESS || code === MISSING_PERMISSIONS) {
+    return new LiveChannelUnavailableError("send-denied", `envoi refusé faute de permission (${detail})`, detail);
+  }
+  if (code !== undefined && code > 0) {
+    return new LiveChannelUnavailableError("send-rejected", `envoi refusé par Discord (${detail})`, detail);
+  }
+  return new LiveChannelUnavailableError("discord-down", `envoi sans réponse claire de Discord (${detail})`, detail);
+}
+
+/**
  * Coupe un texte à `max` unités au plus, terminé par « … », sans jamais
  * couper un caractère en deux (émoji, lettre hors du plan de base) : un « � »
  * sous `@everyone` aurait l'air d'une panne.
@@ -151,7 +173,8 @@ export function resetLiveLogThrottle(): void {
  *
  * @param key Nature de l'incident : `missing` (salon introuvable ou invisible),
  *   `no-view`, `no-send` (permission manquante), `send-denied` (envoi refusé
- *   faute de permission), `discord-unreachable` (panne passagère de Discord
+ *   faute de permission), `send-rejected` (envoi refusé pour une autre raison
+ *   explicite : AutoMod, mode lent…), `discord-unreachable` (panne passagère de Discord
  *   avant l'envoi : rien n'est parti), `discord-down` (panne pendant l'envoi :
  *   l'annonce a pu partir), autre.
  * @param rawDetail Texte d'erreur brut de Discord, cité pour le diagnostic,
@@ -170,6 +193,8 @@ export function describeLiveIssue(key: string, rawDetail: string): string {
       return "le bot n'a pas la permission « Envoyer des messages » dans #live — la lui rendre";
     case "send-denied":
       return `Discord a refusé l'envoi faute de permission (${detail}) — vérifier les permissions du bot dans #live`;
+    case "send-rejected":
+      return `Discord a refusé l'annonce (${detail}) — vérifier les réglages du salon #live (AutoMod, mode lent…)`;
     case "discord-unreachable":
       return `Discord n'a pas répondu ou a limité le bot en lisant le salon (${detail}) — rien n'est parti, rien à régler sur le salon`;
     case "discord-down":
@@ -404,10 +429,7 @@ export async function announceLive(client: Client, request: LiveAnnouncementRequ
       enforceNonce: true,
     });
   } catch (error) {
-    const detail = (error as Error).message;
-    const code = discordCode(error);
-    const key = code === MISSING_ACCESS || code === MISSING_PERMISSIONS ? "send-denied" : "discord-down";
-    throw new LiveChannelUnavailableError(key, `envoi refusé (${detail})`, detail);
+    throw sendFailure(error);
   }
   return { posted: true, mentionEveryone: canMentionEveryone, embedLinks: canEmbedLinks };
 }
