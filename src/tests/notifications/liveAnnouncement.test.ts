@@ -326,4 +326,6 @@ test("liveFailureReport : dit quand une annonce abandonnée peut être postée �
   assert.match(automod, /une fois la règle corrigée, elle peut être postée à la main/);
   assert.doesNotMatch(automod, /Alpha contre Beta/);
   assert.ok(automod.endsWith("<https://twitch.tv/bg>"));
+  // Site parti puis AutoMod : la condition de la règle corrigée reste dite.
+  assert.match(liveFailureReport(request, "automod", "x", { siteGaveUp: true }), /une fois la règle corrigée/);
 });
