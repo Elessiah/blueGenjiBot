@@ -576,7 +576,8 @@ export function startInternalApi(client: Client) {
         res.status(500).json({ error: "LIVE_ANNOUNCEMENT_FAILED" });
       }
       const detail = unavailable ? error.detail : (error as Error).message;
-      reportLiveIssue(key, liveFailureReport(request, key, detail));
+      // Un mode lent presque écoulé se règle seul au prochain essai du site.
+      if (key !== "slowmode-short") { reportLiveIssue(key, liveFailureReport(request, key, detail)); }
     }
   });
 

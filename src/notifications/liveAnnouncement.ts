@@ -60,6 +60,13 @@ const MISSING_ACCESS = 50001;
 const MISSING_PERMISSIONS = 50013;
 /** Code Discord d'un salon inconnu (supprimé, identifiant périmé). */
 const UNKNOWN_CHANNEL = 10003;
+/**
+ * Attente de mode lent en deçà de laquelle un refus n'est pas signalé au
+ * staff : le site réessaie toutes les dix secondes environ, l'annonce partira
+ * d'elle-même.
+ */
+export const SLOWMODE_SILENT_MS = 60 * 1000;
+
 /** Codes Discord d'un message bloqué par une règle AutoMod du serveur. */
 const AUTOMOD_BLOCKED = new Set([200000, 200001]);
 
@@ -207,7 +214,7 @@ export function describeLiveIssue(key: string, rawDetail: string): string {
       return "le salon #live est introuvable ou invisible pour le bot — vérifier qu'il existe et que le bot a la permission « Voir le salon » ; " +
         "s'il a été supprimé puis recréé, son nouvel identifiant doit être reporté dans le code du bot (LIVE_ANNOUNCE_CHANNEL_ID)";
     case "slowmode":
-      return "le mode lent de #live retiendrait l'annonce (le bot y a déjà posté pendant le délai) — le désactiver ou le raccourcir, ou donner au bot la permission « Gérer les messages » dans #live";
+      return `le mode lent de #live retient l'annonce (${detail} : le bot y a déjà posté pendant le délai) — elle partira à la fin du délai si le match a commencé depuis moins de deux heures ; s'il est long, le raccourcir ou donner au bot la permission « Gérer les messages » dans #live`;
     case "no-view":
       return "le bot n'a pas la permission « Voir le salon » dans #live — la lui rendre";
     case "no-send":
@@ -397,9 +404,9 @@ type SendableChannel = {
 function readPermissions(
   client: Client,
   channel: SendableChannel,
-): { canView: boolean; canSend: boolean; canMentionEveryone: boolean; canEmbedLinks: boolean; slowed: boolean } {
+): { canView: boolean; canSend: boolean; canMentionEveryone: boolean; canEmbedLinks: boolean; slowWaitMs: number } {
   const permissions = client.user && channel.permissionsFor ? channel.permissionsFor(client.user) : null;
-  if (!permissions) { return { canView: true, canSend: true, canMentionEveryone: true, canEmbedLinks: true, slowed: false }; }
+  if (!permissions) { return { canView: true, canSend: true, canMentionEveryone: true, canEmbedLinks: true, slowWaitMs: 0 }; }
   // Le mode lent retient un envoi fait moins de `rateLimitPerUser` secondes
   // après le précédent du bot (discord.js attend la fin du délai, jusqu'à six
   // heures), sauf pour qui gère les messages ou le salon : l'annonce partirait
@@ -407,9 +414,9 @@ function readPermissions(
   const bypassesSlowmode =
     permissions.has(PermissionFlagsBits.ManageMessages) || permissions.has(PermissionFlagsBits.ManageChannels);
   const delayMs = (channel.rateLimitPerUser ?? 0) * 1000;
-  const heldBack = delayMs > 0 && lastLivePostAt !== null && Date.now() - lastLivePostAt < delayMs;
+  const waitMs = delayMs > 0 && lastLivePostAt !== null ? delayMs - (Date.now() - lastLivePostAt) : 0;
   return {
-    slowed: heldBack && !bypassesSlowmode,
+    slowWaitMs: bypassesSlowmode ? 0 : Math.max(0, waitMs),
     canView: permissions.has(PermissionFlagsBits.ViewChannel),
     canSend: permissions.has(PermissionFlagsBits.SendMessages),
     canMentionEveryone: permissions.has(PermissionFlagsBits.MentionEveryone),
@@ -448,10 +455,16 @@ export async function announceLive(client: Client, request: LiveAnnouncementRequ
     throw new LiveChannelUnavailableError("missing", "salon introuvable ou non textuel");
   }
 
-  const { canView, canSend, canMentionEveryone, canEmbedLinks, slowed } = readPermissions(client, channel);
+  const { canView, canSend, canMentionEveryone, canEmbedLinks, slowWaitMs } = readPermissions(client, channel);
   if (!canView) { throw new LiveChannelUnavailableError("no-view", "permission de voir le salon absente"); }
   if (!canSend) { throw new LiveChannelUnavailableError("no-send", "permission d'écrire absente"); }
-  if (slowed) { throw new LiveChannelUnavailableError("slowmode", "mode lent actif sur le salon"); }
+  if (slowWaitMs > 0) {
+    // Une courte attente se règle seule au nouvel essai du site : pas de quoi
+    // alerter le staff (`slowmode-short`, jamais signalé).
+    const seconds = Math.ceil(slowWaitMs / 1000);
+    const key = slowWaitMs <= SLOWMODE_SILENT_MS ? "slowmode-short" : "slowmode";
+    throw new LiveChannelUnavailableError(key, `mode lent actif sur le salon (encore ${seconds} s)`, `encore ${seconds} s`);
+  }
 
   try {
     // `parse: ["everyone"]` et rien d'autre ; toute mention de masse du texte
