@@ -160,8 +160,9 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     sans « Intégrer des liens », il part sans aperçu de la chaîne
     (`embedLinks: false`). Le canal de logs le signale dans les deux cas.
   - `503 LIVE_CHANNEL_UNAVAILABLE` : le bot n'a pas pu publier, ou pas pu
-    confirmer la publication — salon introuvable, permission manquante, ou
-    panne passagère de Discord (réseau, `5xx`, limite de débit) ; le canal de
+    confirmer la publication — salon introuvable, permission manquante, refus
+    explicite de Discord (AutoMod, mode lent… : « vérifier les réglages du
+    salon »), ou panne passagère de Discord (réseau, `5xx`, limite de débit) ; le canal de
     logs dit laquelle (« non publiée », ou « non confirmée » pour une panne de
     Discord pendant l'envoi, avec la consigne de supprimer un éventuel
     doublon ; une panne en lisant le salon, avant tout envoi, reste « non
