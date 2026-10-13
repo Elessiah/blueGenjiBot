@@ -173,32 +173,34 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     - `discord-down` — Discord a lâché **pendant** l'envoi : le message a pu
       partir malgré tout.
   - `500 LIVE_ANNOUNCEMENT_FAILED` pour toute autre panne.
-  - Ce que fait le site : il garde l'annonce sur un succès ; sur un `400` (la
-    requête elle-même est refusée, la renvoyer n'y changerait rien) ; et sur
-    un délai dépassé ou un `503` `discord-down` — le bot a pu publier, elle
-    n'est pas réessayée, pour ne jamais notifier deux fois tout le serveur. Sur tout
+  - Ce que fait le site : il garde l'annonce sur un succès ; sur un `400` ou
+    un `503` `automod` / `send-rejected` (le même message serait refusé de
+    nouveau, le renvoyer n'y changerait rien) ; et sur un délai dépassé ou un
+    `503` `discord-down` — le bot a pu publier, elle n'est pas réessayée, pour
+    ne jamais notifier deux fois tout le serveur. Sur tout
     autre `503`, un `500` ou un bot injoignable, il la reprend et réessaie
     tant que le match a commencé depuis moins de deux heures.
   - Le canal de logs : la réponse part **avant** le signalement (un canal lent
     ne fait pas dépasser le délai du site). Il dit la cause, l'action à mener
     et cite l'annonce concernée et son lien pour la reconnaître, en tenant
     toujours dans un message Discord (citation raccourcie au besoin). Une
-    annonce « non publiée » est réessayée par le site : la reposter à la main
+    annonce « non publiée » pour une cause passagère (salon, permission, mode
+    lent, Discord injoignable) est réessayée par le site : la reposter à la main
     pendant ces deux heures notifierait deux fois tout le serveur ; comme le
     site réessaie à chaque balayage, une même cause n'est signalée qu'**une
     fois par heure** (d'autres annonces peuvent alors échouer pour elle sans
     nouveau signalement). Une annonce « non confirmée » (`discord-down`) n'est
-    pas réessayée : chacune est signalée, avec la consigne de vérifier #live
-    et de ne la poster à la main que si elle n'y est pas — son texte entier
-    est alors cité, dans un second message s'il le faut. Une attente de mode
+    pas réessayée : chacune est signalée (vérifier #live), comme chaque refus
+    d'AutoMod ou autre refus explicite, et toute annonce dont le site avait
+    déjà coupé la requête (délai dépassé) — le signalement le dit alors, au
+    lieu de promettre un nouvel essai. Une attente de mode
     lent d'une minute au plus n'est pas signalée : le nouvel essai la règle.
     Un signalement que le canal de logs n'a pas reçu ne compte pas : le
     suivant partira.
   - Chaque envoi porte un jeton d'unicité (`nonce`, `enforceNonce`) tiré de
     l'étiquette et du lien : Discord ne crée pas deux fois ce même envoi s'il
     est rejoué dans les quelques minutes (nouvel essai interne de discord.js
-    après une réponse perdue). Il n'arrête pas une annonce postée à la main :
-    d'où la consigne de vérifier #live d'abord.
+    après une réponse perdue). Il n'arrête pas une annonce postée à la main.
   - Le mode lent n'est connu que depuis le dernier démarrage du bot : juste
     après un redémarrage, un envoi peut attendre la fin du délai — si #live a
     un mode lent, donner au bot « Gérer les messages » dans le salon.
