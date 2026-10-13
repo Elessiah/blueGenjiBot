@@ -6,8 +6,11 @@ import {
   formatLiveAnnouncement,
   isAllowedStreamUrl,
   LIVE_ANNOUNCE_CHANNEL_ID,
+  LIVE_LOG_COOLDOWN_MS,
   LiveChannelUnavailableError,
   parseLiveAnnouncement,
+  resetLiveLogThrottle,
+  shouldLogLiveIssue,
 } from "../../notifications/liveAnnouncement.js";
 import { MAX_MESSAGE_LENGTH } from "../../notifications/notifications.js";
 
@@ -105,4 +108,16 @@ test("announceLive : salon absent, illisible, fermé ou envoi refusé → LiveCh
     await assert.rejects(announceLive(fakeClient(options), REQUEST), LiveChannelUnavailableError);
     assert.equal(options.sent.length, 0);
   }
+});
+
+test("shouldLogLiveIssue : un même incident signalé une fois par heure, chaque incident pour lui-même", () => {
+  resetLiveLogThrottle();
+  const now = 1_000_000;
+  assert.equal(shouldLogLiveIssue("LIVE_CHANNEL_UNAVAILABLE: permission d'écrire absente", now), true);
+  // Le site réessaie toutes les dix secondes : pas de deuxième signalement.
+  assert.equal(shouldLogLiveIssue("LIVE_CHANNEL_UNAVAILABLE: permission d'écrire absente", now + 10_000), false);
+  assert.equal(shouldLogLiveIssue("mention-everyone", now + 10_000), true);
+  assert.equal(shouldLogLiveIssue("LIVE_CHANNEL_UNAVAILABLE: permission d'écrire absente", now + LIVE_LOG_COOLDOWN_MS - 1), false);
+  assert.equal(shouldLogLiveIssue("LIVE_CHANNEL_UNAVAILABLE: permission d'écrire absente", now + LIVE_LOG_COOLDOWN_MS), true);
+  resetLiveLogThrottle();
 });
