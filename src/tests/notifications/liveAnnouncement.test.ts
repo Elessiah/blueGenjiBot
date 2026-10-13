@@ -351,3 +351,12 @@ test("liveFailureReport : ne promet un nouvel essai que si le site en fera un", 
   assert.equal(isLiveIssueFinal("automod"), true);
   assert.equal(isLiveIssueFinal("slowmode"), false);
 });
+
+test("liveFailureReport : site parti, le mode lent est dit sans promettre de départ plus tard", () => {
+  const request = { message: "Alpha contre Beta", streamUrl: "https://twitch.tv/bg", context: "live-announce match-1" };
+  for (const key of ["slowmode", "slowmode-short"]) {
+    const text = liveFailureReport(request, key, "encore 40 s", { siteGaveUp: true });
+    assert.match(text, /le mode lent de #live retient l'annonce \(encore 40 s/);
+    assert.doesNotMatch(text, /erreur inattendue|ne partira plus/);
+  }
+});
