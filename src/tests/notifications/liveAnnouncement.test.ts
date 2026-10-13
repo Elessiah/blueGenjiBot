@@ -192,7 +192,7 @@ test("describeLiveIssue : le staff lit l'action à mener, en français", () => {
     describeLiveIssue("send-denied", "Missing Access"),
     "Discord a refusé l'envoi faute de permission (Missing Access) — vérifier les permissions du bot dans #live",
   );
-  assert.match(describeLiveIssue("discord-down", "503 Service Unavailable"), /rien à régler sur le salon$/);
+  assert.match(describeLiveIssue("discord-down", "503 Service Unavailable"), /rien à régler sur le salon ; l'annonce a pu partir malgré tout, vérifier #live$/);
   // La route ajoute déjà que le site réessaie : la cause ne le répète pas.
   for (const key of ["missing", "no-view", "no-send", "send-denied", "discord-down", "failed"]) {
     assert.ok(!describeLiveIssue(key, "x").includes("réessaie"), key);
