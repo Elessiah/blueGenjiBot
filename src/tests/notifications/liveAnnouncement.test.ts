@@ -10,6 +10,8 @@ import {
   LiveChannelUnavailableError,
   MAX_LIVE_MESSAGE_LENGTH,
   formatWait,
+  isLiveIssueFinal,
+  liveFailureReport,
   liveFailureVerdict,
   liveAnnouncementNonce,
   describeLiveIssue,
@@ -196,7 +198,7 @@ test("describeLiveIssue : le staff lit l'action à mener, en français", () => {
     describeLiveIssue("send-denied", "Missing Access"),
     "Discord a refusé l'envoi faute de permission (Missing Access) — vérifier les permissions du bot dans #live",
   );
-  assert.match(describeLiveIssue("discord-down", "503 Service Unavailable"), /l'annonce a pu partir malgré tout : vérifier #live, et la poster à la main seulement si elle n'y est pas$/);
+  assert.match(describeLiveIssue("discord-down", "503 Service Unavailable"), /l'annonce a pu partir malgré tout \(vérifier #live\)$/);
   assert.match(describeLiveIssue("discord-unreachable", "ECONNRESET"), /rien n'est parti/);
   assert.match(describeLiveIssue("automod", "x"), /Paramètres du serveur → AutoMod/);
   assert.doesNotMatch(describeLiveIssue("send-rejected", "x"), /AutoMod/);
@@ -335,4 +337,17 @@ test("formatWait : secondes, minutes, heures", () => {
   assert.equal(formatWait(61_000), "2 min");
   assert.equal(formatWait(3_600_000), "1 h");
   assert.equal(formatWait(21_540_000), "5 h 59 min");
+});
+
+test("liveFailureReport : ne promet un nouvel essai que si le site en fera un", () => {
+  const request = { message: "Alpha contre Beta", streamUrl: "https://twitch.tv/bg", context: "live-announce match-1" };
+  assert.match(liveFailureReport(request, "no-send", "x"), /Le site la réessaie seul/);
+  assert.match(liveFailureReport(request, "automod", "x"), /Le site ne la réessaie pas : Discord refuserait/);
+  assert.match(liveFailureReport(request, "discord-down", "x"), /pour ne pas notifier deux fois/);
+  // Le site a coupé la requête avant la réponse : aucune cause n'est réessayée.
+  const late = liveFailureReport(request, "no-send", "x", { siteGaveUp: true });
+  assert.match(late, /avait déjà cessé d'attendre/);
+  assert.doesNotMatch(late, /réessaie seul/);
+  assert.equal(isLiveIssueFinal("automod"), true);
+  assert.equal(isLiveIssueFinal("slowmode"), false);
 });

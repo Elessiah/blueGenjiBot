@@ -880,11 +880,24 @@ test("/internal/announce/live : envoi incertain — « non confirmée », vérif
   for (let i = 0; i < 50 && state.logs.length === 0; i++) { await new Promise((r) => setTimeout(r, 5)); }
   assert.equal(state.logs.length, 1);
   assert.ok(state.logs[0].startsWith("[AppBlueGenji] Annonce de live non confirmée (live-announce match-5)"));
-  assert.ok(state.logs[0].includes("l'annonce a pu partir malgré tout : vérifier #live, et la poster à la main seulement si elle n'y est pas"));
+  assert.ok(state.logs[0].includes("l'annonce a pu partir malgré tout (vérifier #live)"));
+  assert.ok(!state.logs[0].includes("à la main seulement"), "aucune consigne de la poster à la main");
   assert.ok(state.logs[0].includes("Le site ne la réessaie pas"));
   assert.ok(!state.logs[0].includes("Le site la réessaie seul"));
   assert.ok(!state.logs[0].includes("une fois par heure"));
   assert.ok(state.logs[0].endsWith("> Alpha contre Beta — Coupe\n<https://twitch.tv/bluegenji>"));
+});
+
+test("/internal/announce/live : un refus d'AutoMod n'est pas promis au nouvel essai, et chaque annonce est signalée", async () => {
+  state.liveSendError = Object.assign(new Error("Message blocked by AutoMod"), { code: 200000 });
+  for (const context of ["live-announce match-8", "live-announce match-9"]) {
+    const res = await call("/internal/announce/live", { body: { message: "Alpha contre Beta", streamUrl: "https://twitch.tv/bg", context } });
+    assert.equal(res.status, 503);
+    assert.deepEqual(res.body, { error: "LIVE_CHANNEL_UNAVAILABLE", reason: "automod" });
+  }
+  for (let i = 0; i < 50 && state.logs.length < 2; i++) { await new Promise((r) => setTimeout(r, 5)); }
+  assert.equal(state.logs.length, 2);
+  assert.ok(state.logs.every((log) => log.includes("Le site ne la réessaie pas : Discord refuserait de nouveau le même message.")));
 });
 
 test("/internal/announce/live : chaque envoi incertain est signalé, même dans l'heure", async () => {
@@ -899,21 +912,6 @@ test("/internal/announce/live : chaque envoi incertain est signalé, même dans 
   for (let i = 0; i < 50 && state.logs.length < 2; i++) { await new Promise((r) => setTimeout(r, 5)); }
   assert.equal(state.logs.length, 2);
   assert.ok(state.logs[0].includes("match-12") && state.logs[1].includes("match-31"));
-});
-
-test("/internal/announce/live : un envoi incertain cite l'annonce entière, en deux messages s'il le faut", async () => {
-  state.liveSendError = Object.assign(new Error("Service Unavailable"), { code: 0 });
-  const lines = Array.from({ length: 24 }, (_, i) => `• ${"A".repeat(25)}${i} contre ${"B".repeat(25)}${i}`);
-  const message = ["🔴 En direct — Coupe :", ...lines].join("\n");
-  const body = { message, streamUrl: "https://twitch.tv/bluegenji", context: "live-announce match-77" };
-  const res = await call("/internal/announce/live", { body });
-  assert.equal(res.status, 503);
-  for (let i = 0; i < 50 && state.logs.length < 2; i++) { await new Promise((r) => setTimeout(r, 5)); }
-  assert.equal(state.logs.length, 2);
-  assert.ok(state.logs[0].includes("texte entier dans le message suivant"));
-  assert.ok(state.logs.every((log) => log.length <= 1900));
-  const quoted = state.logs[1].replace("[AppBlueGenji] ", "");
-  assert.equal(quoted, message.split("\n").map((line) => "> " + line).join("\n"), "le texte entier, sans coupe");
 });
 
 // --- Flux SSE ---------------------------------------------------------------
