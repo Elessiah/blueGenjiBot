@@ -175,6 +175,40 @@ export function describeLiveIssue(key: string, rawDetail: string): string {
   }
 }
 
+/** Préfixe que `sendLog` ajoute devant chaque signalement de l'app. */
+const LOG_PREFIX = "[AppBlueGenji] ";
+
+/**
+ * Signalement au canal de logs d'une annonce qui n'est pas partie, sans le
+ * préfixe `[AppBlueGenji]` : la cause et l'action à mener, puis l'annonce
+ * concernée (équipes et tournoi, jamais un pseudo) et son lien, cités pour la
+ * reconnaître — le site la réessaie seul, la reposter à la main pendant ce
+ * temps notifierait deux fois tout le serveur. Une panne passagère de Discord
+ * peut cacher un envoi réussi : elle est dite « non confirmée », pas « non
+ * publiée ». Le tout tient sous {@link MAX_LIVE_LOG_LENGTH} caractères,
+ * préfixe compris : la citation est raccourcie au besoin, le lien reste entier.
+ *
+ * @param request Demande validée.
+ * @param key Nature de l'incident ({@link describeLiveIssue}).
+ * @param detail Texte d'erreur brut de Discord.
+ * @returns Le texte du signalement.
+ */
+export function liveFailureReport(request: LiveAnnouncementRequest, key: string, detail: string): string {
+  const verdict = key === "discord-down" ? "non confirmée" : "non publiée";
+  const head =
+    `Annonce de live ${verdict} (${request.context}) : ${describeLiveIssue(key, detail)}. ` +
+    "Le site la réessaie seul pendant les deux heures qui suivent le début du direct : ne pas la " +
+    "reposter à la main avant. Signalé au plus une fois par heure, d'autres annonces peuvent échouer " +
+    "pour la même raison. Annonce concernée :";
+  const link = `\n<${request.streamUrl}>`;
+  // Place restante pour la citation : chaque ligne y gagne « > » (deux caractères).
+  const room = MAX_LIVE_LOG_LENGTH - LOG_PREFIX.length - head.length - link.length - 1;
+  const lineCount = request.message.split("\n").length;
+  const text = room > 2 * lineCount + 1 ? cutText(request.message, room - 2 * lineCount) : "";
+  const quoted = text ? "\n" + text.split("\n").map((line) => "> " + line).join("\n") : "";
+  return `${head}${quoted}${link}`;
+}
+
 /** Corps normalisé de `POST /internal/announce/live`. */
 export interface LiveAnnouncementRequest {
   /** Texte rédigé par l'app (équipes, tournoi), sans la mention ni le lien. */
