@@ -37,6 +37,7 @@ import { getBddInstance, resetBddInstance } from "../../bdd/Bdd.js";
 import { recordEvent } from "../../feed/feedBus.js";
 import { readSiteVisitStats } from "../../siteVisits/siteVisits.js";
 import { RESOLVE_BUDGET_MS } from "../../notifications/resolveHandle.js";
+import { liveAnnouncementNonce, resetLiveLogThrottle } from "../../notifications/liveAnnouncement.js";
 
 const TOKEN = "jeton-de-test";
 const OWNER = process.env.OWNER_ID as string;
@@ -72,6 +73,8 @@ const state = {
   onSearch: () => {},
   /** Lire le cache des serveurs lève (panne de résolution). */
   cacheThrows: false,
+  /** L'envoi d'une annonce de live (message à options) lève cette erreur. */
+  liveSendError: null as Error | null,
 };
 
 function member(id: string, username: string): FakeMember {
@@ -138,6 +141,7 @@ const fakeClient = {
   channels: {
     fetch: async () => ({
       send: async (text: string) => {
+        if (typeof text !== "string" && state.liveSendError) { throw state.liveSendError; }
         state.logs.push(text);
         return { id: "log" };
       },
@@ -175,6 +179,8 @@ test.beforeEach(() => {
   state.searchHangs = false;
   state.onSearch = () => {};
   state.cacheThrows = false;
+  state.liveSendError = null;
+  resetLiveLogThrottle();
   process.env.INTERNAL_API_TOKEN = TOKEN;
   process.env.INTERNAL_API_HOST = "127.0.0.1";
   process.env.CLIENT_ID = "600000000000000001";
@@ -795,8 +801,42 @@ test("/internal/announce/live : corps ou lien invalide 400, sinon publié avec @
   assert.equal(res.status, 200);
   assert.deepEqual(res.body, { posted: true, mentionEveryone: true, embedLinks: true });
   assert.deepEqual(state.logs, [
-    { content: "@everyone Alpha contre Beta\nhttps://twitch.tv/bluegenji", allowedMentions: { parse: ["everyone"] } },
+    {
+      content: "@everyone Alpha contre Beta\nhttps://twitch.tv/bluegenji",
+      allowedMentions: { parse: ["everyone"] },
+      nonce: liveAnnouncementNonce({
+        message: "Alpha contre Beta",
+        streamUrl: "https://twitch.tv/bluegenji",
+        context: "live-announce match-1",
+      }),
+      enforceNonce: true,
+    },
   ] as unknown as string[]);
+});
+
+test("/internal/announce/live : envoi refusé → 503, puis un seul signalement au staff, avec texte et lien", async () => {
+  state.liveSendError = Object.assign(new Error("Missing Permissions"), { code: 50013 });
+  const body = { message: "Alpha contre Beta — Coupe", streamUrl: "https://twitch.tv/bluegenji", context: "live-announce match-2" };
+
+  let res = await call("/internal/announce/live", { body });
+  assert.equal(res.status, 503);
+  assert.deepEqual(res.body, { error: "LIVE_CHANNEL_UNAVAILABLE" });
+  // Le signalement part après la réponse : on lui laisse le temps d'arriver.
+  for (let i = 0; i < 50 && state.logs.length === 0; i++) { await new Promise((r) => setTimeout(r, 5)); }
+  assert.equal(state.logs.length, 1);
+  assert.equal(
+    state.logs[0],
+    "[AppBlueGenji] Annonce de live non publiée (live-announce match-2) : Discord a refusé l'envoi faute de " +
+    "permission (Missing Permissions) — vérifier les permissions du bot dans #live. Le site réessaie tant que " +
+    "le match a commencé depuis moins de deux heures ; signalé au plus une fois par heure, d'autres annonces " +
+    "peuvent échouer pour la même raison.\n> Alpha contre Beta — Coupe\n<https://twitch.tv/bluegenji>",
+  );
+
+  // Le site réessaie dix secondes plus tard : pas de second signalement.
+  res = await call("/internal/announce/live", { body });
+  assert.equal(res.status, 503);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(state.logs.length, 1);
 });
 
 // --- Flux SSE ---------------------------------------------------------------
