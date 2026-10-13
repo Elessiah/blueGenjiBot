@@ -80,6 +80,10 @@ function discordCode(error: unknown): number | undefined {
 function sendFailure(error: unknown): LiveChannelUnavailableError {
   const detail = (error as Error).message;
   const code = discordCode(error);
+  if (code === UNKNOWN_CHANNEL) {
+    // Salon supprimé ou recréé alors que le cache le gardait.
+    return new LiveChannelUnavailableError("missing", `salon introuvable à l'envoi (${detail})`, detail);
+  }
   if (code === MISSING_ACCESS || code === MISSING_PERMISSIONS) {
     return new LiveChannelUnavailableError("send-denied", `envoi refusé faute de permission (${detail})`, detail);
   }
@@ -194,7 +198,7 @@ export function describeLiveIssue(key: string, rawDetail: string): string {
     case "send-denied":
       return `Discord a refusé l'envoi faute de permission (${detail}) — vérifier les permissions du bot dans #live`;
     case "send-rejected":
-      return `Discord a refusé l'annonce (${detail}) — vérifier les réglages du salon #live (AutoMod, mode lent…)`;
+      return `Discord a refusé l'annonce (${detail}) — vérifier les règles AutoMod du serveur (Paramètres du serveur → AutoMod) et le mode lent du salon #live`;
     case "discord-unreachable":
       return `Discord n'a pas répondu ou a limité le bot en lisant le salon (${detail}) — rien n'est parti, rien à régler sur le salon`;
     case "discord-down":
@@ -270,8 +274,8 @@ export interface LiveAnnouncementReport {
 }
 
 /**
- * L'annonce n'a pas été publiée : salon introuvable, permission manquante, ou
- * panne passagère de Discord ({@link LiveChannelUnavailableError.key}). La
+ * L'annonce n'a pas été publiée : salon introuvable, permission manquante,
+ * refus explicite de Discord (AutoMod, mode lent…), ou panne passagère de Discord ({@link LiveChannelUnavailableError.key}). La
  * route en fait un `503`, et le site rend sa réservation pour réessayer au
  * balayage suivant ; si une réponse perdue cachait un envoi réussi, le jeton
  * d'unicité ({@link liveAnnouncementNonce}) écarte le doublon d'un même envoi
