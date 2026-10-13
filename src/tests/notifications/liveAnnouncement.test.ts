@@ -199,7 +199,7 @@ test("describeLiveIssue : le staff lit l'action à mener, en français", () => {
   assert.match(describeLiveIssue("discord-unreachable", "ECONNRESET"), /rien n'est parti/);
   assert.match(describeLiveIssue("automod", "x"), /Paramètres du serveur → AutoMod/);
   assert.doesNotMatch(describeLiveIssue("send-rejected", "x"), /AutoMod/);
-  assert.match(describeLiveIssue("slowmode", "x"), /« Gérer les messages »/);
+  assert.match(describeLiveIssue("slowmode", "encore 3600 s"), /elle partira à la fin du délai/);
   assert.match(describeLiveIssue("missing", "x"), /LIVE_ANNOUNCE_CHANNEL_ID/);
   // La route ajoute déjà que le site réessaie : la cause ne le répète pas.
   for (const key of ["missing", "no-view", "no-send", "slowmode", "send-denied", "automod", "send-rejected", "discord-unreachable", "discord-down", "failed"]) {
@@ -312,11 +312,17 @@ test("announceLive : le mode lent ne bloque que s'il retiendrait l'envoi", async
   // Première annonce (ou après un redémarrage) : rien ne la retient.
   await announceLive(fakeClient({ sent, slowmode: 30, denied: noBypass }), REQUEST);
   assert.equal(sent.length, 1);
-  // Une seconde dans le délai attendrait la fin du mode lent : refusée d'emblée.
+  // Une seconde dans le délai attendrait la fin du mode lent : refusée d'emblée,
+  // sans alerte au staff quand l'attente est courte.
   const error = await announceLive(fakeClient({ sent, slowmode: 30, denied: noBypass }), REQUEST).catch((e: unknown) => e);
   assert.ok(error instanceof LiveChannelUnavailableError);
-  assert.equal(error.key, "slowmode");
+  assert.equal(error.key, "slowmode-short");
   assert.equal(sent.length, 1);
+  // Longue attente : signalée.
+  const long = await announceLive(fakeClient({ sent, slowmode: 3600, denied: noBypass }), REQUEST).catch((e: unknown) => e);
+  assert.ok(long instanceof LiveChannelUnavailableError);
+  assert.equal(long.key, "slowmode");
+  assert.match(describeLiveIssue("slowmode", long.detail), /encore \d+ s/);
   // Sans mode lent, elle part.
   await announceLive(fakeClient({ sent, slowmode: 0, denied: noBypass }), REQUEST);
   assert.equal(sent.length, 2);
