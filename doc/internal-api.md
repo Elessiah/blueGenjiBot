@@ -173,9 +173,10 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     - `discord-down` — Discord a lâché **pendant** l'envoi : le message a pu
       partir malgré tout.
   - `500 LIVE_ANNOUNCEMENT_FAILED` pour toute autre panne.
-  - Ce que fait le site : il garde l'annonce sur un succès, un `400`, un délai
-    dépassé ou un `503` `discord-down` — le bot a pu publier, elle n'est pas
-    réessayée, pour ne jamais notifier deux fois tout le serveur. Sur tout
+  - Ce que fait le site : il garde l'annonce sur un succès ; sur un `400` (la
+    requête elle-même est refusée, la renvoyer n'y changerait rien) ; et sur
+    un délai dépassé ou un `503` `discord-down` — le bot a pu publier, elle
+    n'est pas réessayée, pour ne jamais notifier deux fois tout le serveur. Sur tout
     autre `503`, un `500` ou un bot injoignable, il la reprend et réessaie
     tant que le match a commencé depuis moins de deux heures.
   - Le canal de logs : la réponse part **avant** le signalement (un canal lent
@@ -188,7 +189,8 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     fois par heure** (d'autres annonces peuvent alors échouer pour elle sans
     nouveau signalement). Une annonce « non confirmée » (`discord-down`) n'est
     pas réessayée : chacune est signalée, avec la consigne de vérifier #live
-    et de ne la poster à la main que si elle n'y est pas. Une attente de mode
+    et de ne la poster à la main que si elle n'y est pas — son texte entier
+    est alors cité, dans un second message s'il le faut. Une attente de mode
     lent d'une minute au plus n'est pas signalée : le nouvel essai la règle.
     Un signalement que le canal de logs n'a pas reçu ne compte pas : le
     suivant partira.
