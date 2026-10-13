@@ -192,10 +192,12 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     pas réessayée : chacune est signalée (vérifier #live), comme chaque blocage
     par AutoMod, et toute annonce dont le site avait
     déjà coupé la requête (délai dépassé) — le signalement le dit alors, au
-    lieu de promettre un nouvel essai. Hors panne pendant l'envoi, rien n'est
-    parti : le signalement dit qu'elle peut être postée à la main sans
-    doublon (après un blocage AutoMod, une fois la règle corrigée — le texte
-    bloqué n'y est pas cité, la même règle bloquerait le signalement).
+    lieu de promettre un nouvel essai. Pour ces annonces que le site ne
+    réessaie pas, hors panne pendant l'envoi, rien n'est parti : le
+    signalement dit qu'elle peut être postée à la main sans doublon (après un
+    blocage AutoMod, une fois la règle corrigée — le texte bloqué n'y est pas
+    cité, la même règle bloquerait le signalement). Une annonce que le site
+    réessaie ne se poste jamais à la main.
     Un signalement que le canal de logs n'a pas reçu ne compte pas : le
     suivant partira.
   - Chaque envoi porte un jeton d'unicité (`nonce`, `enforceNonce`) tiré de
