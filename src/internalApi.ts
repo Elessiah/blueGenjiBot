@@ -39,6 +39,7 @@ import { MESSAGE_RETENTION_DAYS } from "./privacy/retentionPeriods.js";
 import {
   announceLive,
   isLiveIssueFinal,
+  neutralizeMassMentions,
   liveFailureReport,
   liveFailureVerdict,
   forgetLiveIssue,
@@ -544,7 +545,9 @@ export function startInternalApi(client: Client) {
     /** Signale au staff, au plus une fois par heure par incident ; un envoi raté ne compte pas. */
     const reportLiveIssue = (key: string, text: string): void => {
       if (!shouldLogLiveIssue(key)) { return; }
-      void sendLog(client, `[AppBlueGenji] ${text}`)
+      // Jamais de mention de masse dans le canal de logs : le bot qui peut
+      // notifier tout #live pourrait aussi notifier tout le canal du staff.
+      void sendLog(client, `[AppBlueGenji] ${neutralizeMassMentions(text)}`)
         .then((sent) => { if (!sent) { forgetLiveIssue(key); } })
         .catch(() => forgetLiveIssue(key));
     };

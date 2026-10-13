@@ -118,7 +118,7 @@ export function cutText(text: string, max: number): string {
  * `everyone`, qui couvre aussi `@here`). Le site neutralise déjà les noms ;
  * c'est la seconde barrière.
  */
-function neutralizeMassMentions(text: string): string {
+export function neutralizeMassMentions(text: string): string {
   return text.replace(/@(everyone|here)/gi, "@\u200B$1");
 }
 
@@ -281,8 +281,9 @@ export function liveFailureReport(
   const link = `\n<${request.streamUrl}>`;
   const intro = `Annonce de live ${liveFailureVerdict(key)} (${request.context}) : ${describeLiveIssue(key, detail)}. `;
   if (key === "automod") {
-    // Citer le texte bloqué ferait bloquer le signalement par la même règle.
-    return `${intro}${retrySentence(key, siteGaveUp, true)} Texte non cité ici (la même règle le bloquerait) ; lien :${link}`;
+    // Citer le texte ou le lien bloqués ferait bloquer le signalement par la
+    // même règle (une règle peut viser les liens de diffusion).
+    return `${intro}${retrySentence(key, siteGaveUp, true)} Texte et lien non cités ici (la même règle pourrait les bloquer).`;
   }
   const max = MAX_LIVE_LOG_LENGTH - LOG_PREFIX.length;
   const lineCount = request.message.split("\n").length;
@@ -310,9 +311,9 @@ function manualPostSentence(key: string, shortened: boolean): string {
   if (key === "discord-down") { return ""; }
   const when = key === "automod" ? "une fois la règle corrigée, " : "";
   const whole = shortened
-    ? " (texte cité raccourci ou absent : reprendre toutes les affiches depuis la fiche du tournoi sur le site)"
+    ? " (texte cité raccourci ou absent : reprendre toutes les affiches depuis la fiche du tournoi, /tournois/<n° de « tournoi- » dans l'étiquette>)"
     : "";
-  return ` Rien n'est parti : ${when}elle peut être postée à la main sans doublon, avec « @everyone » en tête${whole}.`;
+  return ` Rien n'est parti : ${when}elle peut être postée à la main sans doublon, avec la mention de tout le serveur en tête${whole}.`;
 }
 
 /** Ce que fera le site après cet échec, et ce que le staff peut faire. */
