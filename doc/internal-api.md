@@ -134,24 +134,34 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
   - Body: `{ "message": "...", "streamUrl": "https://twitch.tv/...", "context": "live-announce match-42" }`
   - Annonce un **live** au début d'un match diffusé : le bot publie
     `@everyone <message>` puis le lien, seul sur sa ligne, dans le salon #live
-    du serveur BlueGenji (`LIVE_ANNOUNCE_CHANNEL_ID`). C'est le seul message du
-    bot qui notifie tout le serveur : la mention n'est autorisée
-    (`allowedMentions: { parse: ["everyone"] }`) que pour cet envoi.
+    du serveur BlueGenji. Ce salon est fixé dans le code (constante
+    `LIVE_ANNOUNCE_CHANNEL_ID`), pas par une variable d'environnement. C'est le
+    seul message du bot qui notifie tout le serveur : la mention n'est
+    autorisée (`allowedMentions: { parse: ["everyone"] }`) que pour cet envoi.
   - Le site décide du moment (une annonce par match et par affiche) et rédige
     le texte : les deux équipes et le tournoi, noms neutralisés — jamais le
     pseudo d'un joueur (une entrée individuelle s'écrit « un joueur »).
   - `streamUrl` doit être un lien `https` vers Twitch, YouTube ou Kick, sans
     identifiants ni port, 255 caractères au plus : sinon `400
-    INVALID_LIVE_ANNOUNCEMENT`, comme pour un message vide.
-  - Retour `{ "posted": true, "mentionEveryone": boolean }`. Sans la permission
-    « Mentionner everyone » dans le salon, le message part sans notifier
-    (`mentionEveryone: false`) et le canal de logs le signale.
+    INVALID_LIVE_ANNOUNCEMENT`, comme pour un message vide. Le message est
+    raccourci pour que mention, texte et lien tiennent dans les 2 000
+    caractères d'un message Discord.
+  - Retour `{ "posted": true, "mentionEveryone": boolean, "embedLinks": boolean }`.
+    Sans la permission « Mentionner @everyone, @here et tous les rôles » dans
+    le salon, le message part **sans** la mention (`mentionEveryone: false`) ;
+    sans « Intégrer des liens », il part sans aperçu de la chaîne
+    (`embedLinks: false`). Le canal de logs le signale dans les deux cas.
   - `503 LIVE_CHANNEL_UNAVAILABLE` : salon introuvable, ou le bot ne peut pas
-    y écrire — rien n'est parti, le site réessaiera. `500
-    LIVE_ANNOUNCEMENT_FAILED` pour toute autre panne.
-  - Le canal de logs ne reçoit chaque incident (même raison de refus,
-    permission « Mentionner everyone » absente) qu'**une fois par heure** : le
-    site réessaie à chaque balayage, et le staff n'a pas à être inondé.
+    y écrire — rien n'est parti. `500 LIVE_ANNOUNCEMENT_FAILED` pour toute
+    autre panne. Le site garde l'annonce sur un succès ou un `400` ; sur toute
+    autre issue (`503`, `500`, délai dépassé, bot injoignable), il la reprend et
+    réessaie tant que le match a commencé depuis moins de deux heures.
+  - La réponse part avant les signalements au canal de logs : un canal lent ne
+    fait pas croire au site que rien n'est parti. Chaque incident (même nature
+    de refus, permission absente) n'y est signalé qu'**une fois par heure** :
+    le site réessaie à chaque balayage, et le staff n'a pas à être inondé ;
+    d'autres annonces peuvent alors échouer pour la même raison sans nouveau
+    signalement.
 
 - `GET /internal/feed/stream`
   - Flux SSE des évènements d'activité (`FeedEvent`) : le backlog récent
