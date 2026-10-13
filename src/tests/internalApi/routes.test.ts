@@ -866,6 +866,9 @@ test("/internal/announce/live : le signalement d'une longue annonce groupée tie
   assert.ok(state.logs[0].length <= 1900);
   assert.ok(state.logs[0].includes(body.context), "toute la liste des matchs, sans coupe");
   assert.ok(state.logs[0].endsWith(`<${body.streamUrl}>`), "le lien reste entier");
+  // Panne passagère de Discord : l'envoi a pu réussir, le staff lit « non confirmée ».
+  assert.ok(state.logs[0].startsWith("[AppBlueGenji] Annonce de live non confirmée (live-announce match-"));
+  assert.ok(state.logs[0].includes("l'annonce a pu partir malgré tout, vérifier #live"));
   // La citation reste un bloc cité, coupée à l'intérieur : chaque ligne commence par « > ».
   const quote = state.logs[0].split("Annonce concernée :\n")[1].split("\n<")[0];
   assert.ok(quote.split("\n").every((line) => line.startsWith("> ")));
