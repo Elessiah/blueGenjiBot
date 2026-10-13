@@ -8,6 +8,9 @@ import {
   LIVE_ANNOUNCE_CHANNEL_ID,
   LIVE_LOG_COOLDOWN_MS,
   LiveChannelUnavailableError,
+  MAX_LIVE_MESSAGE_LENGTH,
+  describeLiveIssue,
+  forgetLiveIssue,
   parseLiveAnnouncement,
   resetLiveLogThrottle,
   shouldLogLiveIssue,
@@ -154,4 +157,43 @@ test("shouldLogLiveIssue : un même incident signalé une fois par heure, chaque
   assert.equal(shouldLogLiveIssue("LIVE_CHANNEL_UNAVAILABLE: permission d'écrire absente", now + LIVE_LOG_COOLDOWN_MS - 1), false);
   assert.equal(shouldLogLiveIssue("LIVE_CHANNEL_UNAVAILABLE: permission d'écrire absente", now + LIVE_LOG_COOLDOWN_MS), true);
   resetLiveLogThrottle();
+});
+
+test("parseLiveAnnouncement : un texte trop long est coupé d'un « … », sans la mention des messages privés", () => {
+  const request = parseLiveAnnouncement({ ...REQUEST, message: "x".repeat(5000) });
+  assert.ok(request);
+  assert.equal(request.message.length, MAX_LIVE_MESSAGE_LENGTH);
+  assert.ok(request.message.endsWith("…"));
+  assert.ok(!request.message.includes("message tronqué"));
+});
+
+test("parseLiveAnnouncement : un texte de plusieurs lignes (annonce groupée) est gardé tel quel", () => {
+  const message = "🔴 En direct — Coupe :\n• Alpha contre Beta\n• Gamma contre Delta";
+  assert.equal(parseLiveAnnouncement({ ...REQUEST, message })?.message, message);
+});
+
+test("describeLiveIssue : le staff lit l'action à mener, en français", () => {
+  assert.match(describeLiveIssue("no-send", "x"), /« Envoyer des messages »/);
+  assert.match(describeLiveIssue("missing", "x"), /« Voir le salon »/);
+  assert.match(describeLiveIssue("unreadable", "x"), /introuvable ou invisible/);
+  assert.equal(
+    describeLiveIssue("send-failed", "Missing Access"),
+    "Discord a refusé l'envoi (Missing Access) — vérifier les permissions du bot dans #live",
+  );
+  assert.equal(describeLiveIssue("failed", "boom"), "erreur inattendue (boom)");
+});
+
+test("forgetLiveIssue : un signalement qui n'est pas parti ne fait pas taire l'heure suivante", () => {
+  resetLiveLogThrottle();
+  assert.equal(shouldLogLiveIssue("no-send", 1000), true);
+  assert.equal(shouldLogLiveIssue("no-send", 2000), false);
+  forgetLiveIssue("no-send");
+  assert.equal(shouldLogLiveIssue("no-send", 3000), true);
+  resetLiveLogThrottle();
+});
+
+test("LiveChannelUnavailableError : le détail brut de Discord est gardé à part", async () => {
+  const error = await announceLive(fakeClient({ sent: [], channel: "send-fails" }), REQUEST).catch((e: unknown) => e);
+  assert.ok(error instanceof LiveChannelUnavailableError);
+  assert.equal(error.detail, "Missing Permissions");
 });
