@@ -827,9 +827,10 @@ test("/internal/announce/live : envoi refusé → 503, puis un seul signalement 
   assert.equal(
     state.logs[0],
     "[AppBlueGenji] Annonce de live non publiée (live-announce match-2) : Discord a refusé l'envoi faute de " +
-    "permission (Missing Permissions) — vérifier les permissions du bot dans #live. Le site réessaie tant que " +
-    "le match a commencé depuis moins de deux heures ; signalé au plus une fois par heure, d'autres annonces " +
-    "peuvent échouer pour la même raison.\n> Alpha contre Beta — Coupe\n<https://twitch.tv/bluegenji>",
+    "permission (Missing Permissions) — vérifier les permissions du bot dans #live. Le site la réessaie seul " +
+    "tant que le match a commencé depuis moins de deux heures : ne pas la reposter à la main avant. Signalé au " +
+    "plus une fois par heure, d'autres annonces peuvent échouer pour la même raison. Annonce concernée :" +
+    "\n> Alpha contre Beta — Coupe\n<https://twitch.tv/bluegenji>",
   );
 
   // Le site réessaie dix secondes plus tard : pas de second signalement.
@@ -837,6 +838,24 @@ test("/internal/announce/live : envoi refusé → 503, puis un seul signalement 
   assert.equal(res.status, 503);
   await new Promise((r) => setTimeout(r, 20));
   assert.equal(state.logs.length, 1);
+});
+
+test("/internal/announce/live : le signalement d'une longue annonce groupée tient dans un message Discord", async () => {
+  state.liveSendError = Object.assign(new Error("Service Unavailable"), { code: 0 });
+  const lines = Array.from({ length: 40 }, (_, i) => `• ${"A".repeat(30)}${i} contre ${"B".repeat(30)}${i}`);
+  const body = {
+    message: ["🔴 En direct — Coupe :", ...lines].join("\n"),
+    streamUrl: "https://twitch.tv/" + "c".repeat(230),
+    context: "live-announce match-" + Array.from({ length: 30 }, (_, i) => 10_000 + i).join(","),
+  };
+  const res = await call("/internal/announce/live", { body });
+  assert.equal(res.status, 503);
+  for (let i = 0; i < 50 && state.logs.length === 0; i++) { await new Promise((r) => setTimeout(r, 5)); }
+  assert.equal(state.logs.length, 1);
+  assert.ok(state.logs[0].length <= 1900);
+  assert.ok(state.logs[0].includes(body.context), "toute la liste des matchs, sans coupe");
+  assert.ok(state.logs[0].endsWith(`<${body.streamUrl}>`), "le lien reste entier");
+  assert.ok(!state.logs[0].includes("le site réessaie —"), "pas de « réessaie » répété");
 });
 
 // --- Flux SSE ---------------------------------------------------------------

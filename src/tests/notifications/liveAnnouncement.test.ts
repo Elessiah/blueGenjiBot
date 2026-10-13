@@ -192,7 +192,7 @@ test("describeLiveIssue : le staff lit l'action à mener, en français", () => {
     describeLiveIssue("send-denied", "Missing Access"),
     "Discord a refusé l'envoi faute de permission (Missing Access) — vérifier les permissions du bot dans #live",
   );
-  assert.match(describeLiveIssue("discord-down", "503 Service Unavailable"), /rien à régler, le site réessaie/);
+  assert.match(describeLiveIssue("discord-down", "503 Service Unavailable"), /rien à régler sur le salon$/);
   assert.equal(describeLiveIssue("failed", "boom"), "erreur inattendue (boom)");
 });
 
