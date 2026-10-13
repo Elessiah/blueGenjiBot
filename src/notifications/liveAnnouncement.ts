@@ -240,7 +240,7 @@ export function describeLiveIssue(key: string, rawDetail: string): string {
       return `Discord n'a pas répondu ou a limité le bot en lisant le salon (${detail}) — rien n'est parti, rien à régler sur le salon`;
     case "discord-down":
       return `Discord n'a pas répondu ou a limité le bot pendant l'envoi (${detail}) — rien à régler sur le salon ; ` +
-        "l'annonce a pu partir malgré tout : vérifier #live, et la poster à la main seulement si elle n'y est pas";
+        "l'annonce a pu partir malgré tout (vérifier #live)";
     default:
       return `erreur inattendue (${detail})`;
   }
@@ -273,43 +273,63 @@ export function liveFailureVerdict(key: string): string {
  * @param request Demande validée.
  * @param key Nature de l'incident ({@link describeLiveIssue}).
  * @param detail Texte d'erreur brut de Discord.
- * @returns Le ou les messages du signalement (deux quand le texte entier d'un
- *   envoi incertain ne tient pas dans le premier).
+ * @param options `siteGaveUp` : le site avait coupé la requête avant la
+ *   réponse (délai dépassé) — il ne réessaiera pas, quelle que soit la cause.
+ * @returns Le texte du signalement.
  */
 /** Le texte cité, ligne à ligne (« > »). */
 function quoteLines(text: string): string {
   return text.split("\n").map((line) => "> " + line).join("\n");
 }
 
-export function liveFailureReport(request: LiveAnnouncementRequest, key: string, detail: string): string[] {
+/**
+ * Causes que le site ne réessaie pas : un envoi peut-être parti (un second
+ * `@everyone` serait pire qu'une annonce perdue), ou un message que Discord
+ * refuserait de nouveau tel quel (AutoMod, autre refus explicite).
+ */
+const NOT_RETRIED_KEYS = new Set(["discord-down", "automod", "send-rejected"]);
+
+/**
+ * Vrai si le site ne réessaiera pas l'annonce après cette cause. Chacune de
+ * ces annonces est signalée à part (pas de nouvel essai, donc pas de rafale).
+ *
+ * @param key Nature de l'incident.
+ */
+export function isLiveIssueFinal(key: string): boolean {
+  return NOT_RETRIED_KEYS.has(key);
+}
+
+export function liveFailureReport(
+  request: LiveAnnouncementRequest,
+  key: string,
+  detail: string,
+  options: { siteGaveUp?: boolean } = {},
+): string {
   const verdict = liveFailureVerdict(key);
-  // Un envoi peut-être parti n'est pas réessayé par le site (un second
-  // `@everyone` serait pire qu'une annonce perdue) ; les autres le sont.
-  // Chaque envoi incertain est signalé (pas de nouvel essai, donc pas de rafale) ;
-  // les autres causes, une fois par heure.
-  const retry = key === "discord-down"
-    ? "Le site ne la réessaie pas, pour ne pas notifier deux fois tout le serveur."
-    : "Le site la réessaie seul pendant les deux heures qui suivent le début du direct : ne pas la " +
+  let retry: string;
+  if (options.siteGaveUp) {
+    // Le site a cessé d'attendre la réponse : il garde sa réservation.
+    retry = "Le site avait déjà cessé d'attendre la réponse du bot : il ne la réessaie pas.";
+  } else if (key === "discord-down") {
+    retry = "Le site ne la réessaie pas, pour ne pas notifier deux fois tout le serveur.";
+  } else if (isLiveIssueFinal(key)) {
+    retry = "Le site ne la réessaie pas : Discord refuserait de nouveau le même message.";
+  } else {
+    retry = "Le site la réessaie seul pendant les deux heures qui suivent le début du direct : ne pas la " +
       "reposter à la main avant. Signalé au plus une fois par heure, d'autres annonces peuvent échouer " +
       "pour la même raison.";
-  const intro = `Annonce de live ${verdict} (${request.context}) : ${describeLiveIssue(key, detail)}. ${retry} `;
-  const head = intro + "Annonce concernée :";
+  }
+  const head = `Annonce de live ${verdict} (${request.context}) : ${describeLiveIssue(key, detail)}. ${retry} ` +
+    "Annonce concernée :";
   const link = `\n<${request.streamUrl}>`;
   const max = MAX_LIVE_LOG_LENGTH - LOG_PREFIX.length;
-  if (key === "discord-down") {
-    // Le staff peut avoir à la poster à la main : le texte entier, quitte à
-    // l'envoyer dans un second message.
-    const whole = `${head}\n${quoteLines(request.message)}${link}`;
-    if (whole.length <= max) { return [whole]; }
-    return [`${intro}Annonce concernée (texte entier dans le message suivant) :${link}`, cutText(quoteLines(request.message), max)];
-  }
-  // Ailleurs, la citation sert à reconnaître l'annonce : raccourcie au besoin.
+  // La citation sert à reconnaître l'annonce : raccourcie au besoin.
   // Place restante : chaque ligne y gagne « > » (deux caractères).
   const room = max - head.length - link.length - 1;
   const lineCount = request.message.split("\n").length;
   const text = room > 2 * lineCount + 1 ? cutText(request.message, room - 2 * lineCount) : "";
   const quoted = text ? "\n" + quoteLines(text) : "";
-  return [`${head}${quoted}${link}`];
+  return `${head}${quoted}${link}`;
 }
 
 /** Corps normalisé de `POST /internal/announce/live`. */

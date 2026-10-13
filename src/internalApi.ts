@@ -38,6 +38,7 @@ import { HandleResolutionTimeoutError, resolveDiscordHandle } from "./notificati
 import { MESSAGE_RETENTION_DAYS } from "./privacy/retentionPeriods.js";
 import {
   announceLive,
+  isLiveIssueFinal,
   liveFailureReport,
   liveFailureVerdict,
   forgetLiveIssue,
@@ -540,14 +541,11 @@ export function startInternalApi(client: Client) {
     }
 
     /** Signale au staff, au plus une fois par heure par incident ; un envoi raté ne compte pas. */
-    const reportLiveIssue = (key: string, texts: string | string[]): void => {
+    const reportLiveIssue = (key: string, text: string): void => {
       if (!shouldLogLiveIssue(key)) { return; }
-      const parts = Array.isArray(texts) ? texts : [texts];
-      void (async () => {
-        for (const text of parts) {
-          if (!(await sendLog(client, `[AppBlueGenji] ${text}`))) { forgetLiveIssue(key); return; }
-        }
-      })().catch(() => forgetLiveIssue(key));
+      void sendLog(client, `[AppBlueGenji] ${text}`)
+        .then((sent) => { if (!sent) { forgetLiveIssue(key); } })
+        .catch(() => forgetLiveIssue(key));
     };
 
     try {
@@ -581,10 +579,16 @@ export function startInternalApi(client: Client) {
       }
       const detail = unavailable ? error.detail : (error as Error).message;
       // Un mode lent presque écoulé se règle seul au prochain essai du site.
-      // Un envoi incertain n'est pas réessayé par le site : chacun est signalé
-      // (clé propre à l'annonce), pour qu'aucun ne se perde sans trace.
-      const throttleKey = key === "discord-down" ? `${key} ${request.context}` : key;
-      if (key !== "slowmode-short") { reportLiveIssue(throttleKey, liveFailureReport(request, key, detail)); }
+      // Le site a coupé la requête (délai dépassé) : il garde sa réservation et
+      // ne réessaiera pas, quelle que soit la cause.
+      const siteGaveUp = req.socket.destroyed;
+      // Une annonce que le site ne réessaie pas est signalée à part (clé
+      // propre à l'annonce), pour qu'aucune ne se perde sans trace.
+      const final = siteGaveUp || isLiveIssueFinal(key);
+      const throttleKey = final ? `${key} ${request.context}` : key;
+      if (key !== "slowmode-short" || siteGaveUp) {
+        reportLiveIssue(throttleKey, liveFailureReport(request, key, detail, { siteGaveUp }));
+      }
     }
   });
 
