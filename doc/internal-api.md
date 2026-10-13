@@ -149,6 +149,9 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
   - `503 LIVE_CHANNEL_UNAVAILABLE` : salon introuvable, ou le bot ne peut pas
     y écrire — rien n'est parti, le site réessaiera. `500
     LIVE_ANNOUNCEMENT_FAILED` pour toute autre panne.
+  - Le canal de logs ne reçoit chaque incident (même raison de refus,
+    permission « Mentionner everyone » absente) qu'**une fois par heure** : le
+    site réessaie à chaque balayage, et le staff n'a pas à être inondé.
 
 - `GET /internal/feed/stream`
   - Flux SSE des évènements d'activité (`FeedEvent`) : le backlog récent
