@@ -130,6 +130,26 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
   - Même bilan de retour que `/internal/notify/dm` (`failed` liste les
     identifiants injoignables).
 
+- `POST /internal/announce/live`
+  - Body: `{ "message": "...", "streamUrl": "https://twitch.tv/...", "context": "live-announce match-42" }`
+  - Annonce un **live** au début d'un match diffusé : le bot publie
+    `@everyone <message>` puis le lien, seul sur sa ligne, dans le salon #live
+    du serveur BlueGenji (`LIVE_ANNOUNCE_CHANNEL_ID`). C'est le seul message du
+    bot qui notifie tout le serveur : la mention n'est autorisée
+    (`allowedMentions: { parse: ["everyone"] }`) que pour cet envoi.
+  - Le site décide du moment (une annonce par match et par affiche) et rédige
+    le texte : les deux équipes et le tournoi, noms neutralisés — jamais le
+    pseudo d'un joueur (une entrée individuelle s'écrit « un joueur »).
+  - `streamUrl` doit être un lien `https` vers Twitch, YouTube ou Kick, sans
+    identifiants ni port, 255 caractères au plus : sinon `400
+    INVALID_LIVE_ANNOUNCEMENT`, comme pour un message vide.
+  - Retour `{ "posted": true, "mentionEveryone": boolean }`. Sans la permission
+    « Mentionner everyone » dans le salon, le message part sans notifier
+    (`mentionEveryone: false`) et le canal de logs le signale.
+  - `503 LIVE_CHANNEL_UNAVAILABLE` : salon introuvable, ou le bot ne peut pas
+    y écrire — rien n'est parti, le site réessaiera. `500
+    LIVE_ANNOUNCEMENT_FAILED` pour toute autre panne.
+
 - `GET /internal/feed/stream`
   - Flux SSE des évènements d'activité (`FeedEvent`) : le backlog récent
     d'abord, puis le direct. `Last-Event-ID` reprend là où le lecteur s'était
