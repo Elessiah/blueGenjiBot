@@ -578,7 +578,6 @@ export function startInternalApi(client: Client) {
         res.status(500).json({ error: "LIVE_ANNOUNCEMENT_FAILED" });
       }
       const detail = unavailable ? error.detail : (error as Error).message;
-      // Un mode lent presque écoulé se règle seul au prochain essai du site.
       // Le site a coupé la requête (délai dépassé) : il garde sa réservation et
       // ne réessaiera pas, quelle que soit la cause.
       const siteGaveUp = req.socket.destroyed;
@@ -586,9 +585,7 @@ export function startInternalApi(client: Client) {
       // propre à l'annonce), pour qu'aucune ne se perde sans trace.
       const final = siteGaveUp || isLiveIssueFinal(key);
       const throttleKey = final ? `${key} ${request.context}` : key;
-      if (key !== "slowmode-short" || siteGaveUp) {
-        reportLiveIssue(throttleKey, liveFailureReport(request, key, detail, { siteGaveUp }));
-      }
+      reportLiveIssue(throttleKey, liveFailureReport(request, key, detail, { siteGaveUp }));
     }
   });
 

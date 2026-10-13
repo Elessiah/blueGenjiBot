@@ -60,24 +60,6 @@ const MISSING_ACCESS = 50001;
 const MISSING_PERMISSIONS = 50013;
 /** Code Discord d'un salon inconnu (supprimé, identifiant périmé). */
 const UNKNOWN_CHANNEL = 10003;
-/**
- * Attente de mode lent en deçà de laquelle un refus n'est pas signalé au
- * staff : le site réessaie toutes les dix secondes environ, l'annonce partira
- * d'elle-même.
- */
-export const SLOWMODE_SILENT_MS = 60 * 1000;
-
-/** « 45 s », « 12 min », « 5 h 59 min » : une attente lisible par le staff. */
-export function formatWait(ms: number): string {
-  const seconds = Math.ceil(ms / 1000);
-  if (seconds < 60) { return `${seconds} s`; }
-  const minutes = Math.ceil(seconds / 60);
-  if (minutes < 60) { return `${minutes} min`; }
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  return rest === 0 ? `${hours} h` : `${hours} h ${rest} min`;
-}
-
 /** Codes Discord d'un message bloqué par une règle AutoMod du serveur. */
 const AUTOMOD_BLOCKED = new Set([200000, 200001]);
 
@@ -192,15 +174,7 @@ export function forgetLiveIssue(key: string): void {
 /** Oublie les signalements déjà faits. Réservé aux tests. */
 export function resetLiveLogThrottle(): void {
   lastLiveLogAt.clear();
-  lastLivePostAt = null;
 }
-
-/**
- * Instant de la dernière annonce publiée par ce processus (mémoire seule : au
- * redémarrage, inconnu). Le mode lent ne retient un envoi que si le bot a déjà
- * posté dans le salon pendant le délai.
- */
-let lastLivePostAt: number | null = null;
 
 /**
  * Ce que le staff doit faire, selon la nature de l'incident
@@ -208,9 +182,9 @@ let lastLivePostAt: number | null = null;
  *
  * @param key Nature de l'incident : `missing` (salon introuvable ou invisible),
  *   `no-view`, `no-send` (permission manquante), `send-denied` (envoi refusé
- *   faute de permission), `slowmode` (mode lent qui retiendrait l'envoi),
- *   `automod` (message bloqué par AutoMod), `send-rejected` (autre refus
- *   explicite de Discord), `discord-unreachable` (panne passagère de Discord
+ *   faute de permission), `automod` (message bloqué par AutoMod),
+ *   `send-rejected` (autre refus explicite de Discord, souvent l'état du
+ *   salon), `discord-unreachable` (panne passagère de Discord
  *   avant l'envoi : rien n'est parti), `discord-down` (panne pendant l'envoi :
  *   l'annonce a pu partir), autre.
  * @param rawDetail Texte d'erreur brut de Discord, cité pour le diagnostic,
@@ -224,10 +198,6 @@ export function describeLiveIssue(key: string, rawDetail: string): string {
     case "missing":
       return "le salon #live est introuvable ou invisible pour le bot — vérifier qu'il existe et que le bot a la permission « Voir le salon » ; " +
         "s'il a été supprimé puis recréé, son nouvel identifiant doit être reporté dans le code du bot (LIVE_ANNOUNCE_CHANNEL_ID)";
-    case "slowmode-short":
-      return `le mode lent de #live retient l'annonce (${detail} ; le bot y a déjà posté pendant le délai)`;
-    case "slowmode":
-      return `le mode lent de #live retient l'annonce (${detail} ; le bot y a déjà posté pendant le délai) — passé deux heures après le début du direct, elle ne partira plus : si l'attente est longue, raccourcir le mode lent ou donner au bot la permission « Gérer les messages » dans #live`;
     case "no-view":
       return "le bot n'a pas la permission « Voir le salon » dans #live — la lui rendre";
     case "no-send":
@@ -237,7 +207,7 @@ export function describeLiveIssue(key: string, rawDetail: string): string {
     case "automod":
       return `une règle AutoMod du serveur a bloqué l'annonce (${detail}) — la revoir dans Paramètres du serveur → AutoMod`;
     case "send-rejected":
-      return `Discord a refusé l'annonce (${detail}) — vérifier le salon #live et les permissions du bot`;
+      return `Discord a refusé l'annonce (${detail}) — vérifier le salon #live (type, verrouillage) et les permissions du bot`;
     case "discord-unreachable":
       return `Discord n'a pas répondu ou a limité le bot en lisant le salon (${detail}) — rien n'est parti, rien à régler sur le salon`;
     case "discord-down":
@@ -286,10 +256,10 @@ function quoteLines(text: string): string {
  */
 /**
  * Causes que le site ne réessaie pas : un envoi peut-être parti (un second
- * `@everyone` serait pire qu'une annonce perdue), ou un message que Discord
- * refuserait de nouveau tel quel (AutoMod, autre refus explicite).
+ * `@everyone` serait pire qu'une annonce perdue), ou un message qu'AutoMod
+ * bloquerait de nouveau tel quel (chaque essai alerterait la modération).
  */
-const NOT_RETRIED_KEYS = new Set(["discord-down", "automod", "send-rejected"]);
+const NOT_RETRIED_KEYS = new Set(["discord-down", "automod"]);
 
 /**
  * Vrai si le site ne réessaiera pas l'annonce après cette cause. Chacune de
@@ -315,15 +285,13 @@ export function liveFailureReport(
   } else if (key === "discord-down") {
     retry = "Le site ne la réessaie pas, pour ne pas notifier deux fois tout le serveur.";
   } else if (isLiveIssueFinal(key)) {
-    retry = "Le site ne la réessaie pas : Discord refuserait de nouveau le même message.";
+    retry = "Le site ne la réessaie pas : AutoMod bloquerait de nouveau le même message.";
   } else {
     retry = "Le site la réessaie seul pendant les deux heures qui suivent le début du direct : ne pas la " +
       "reposter à la main avant. Signalé au plus une fois par heure, d'autres annonces peuvent échouer " +
       "pour la même raison.";
   }
-  // Le site ne réessaiera pas : la cause est dite sans promettre de départ plus tard.
-  const describeKey = options.siteGaveUp && key === "slowmode" ? "slowmode-short" : key;
-  const head = `Annonce de live ${verdict} (${request.context}) : ${describeLiveIssue(describeKey, detail)}. ${retry} ` +
+  const head = `Annonce de live ${verdict} (${request.context}) : ${describeLiveIssue(key, detail)}. ${retry} ` +
     "Annonce concernée :";
   const link = `\n<${request.streamUrl}>`;
   const max = MAX_LIVE_LOG_LENGTH - LOG_PREFIX.length;
@@ -357,7 +325,8 @@ export interface LiveAnnouncementReport {
 
 /**
  * L'annonce n'a pas été publiée : salon introuvable, permission manquante,
- * mode lent, refus explicite de Discord (AutoMod…), ou panne passagère de Discord ({@link LiveChannelUnavailableError.key}). La
+ * refus explicite de Discord (AutoMod…), ou panne passagère de Discord
+ * ({@link LiveChannelUnavailableError.key}). La
  * route en fait un `503`, et le site rend sa réservation pour réessayer au
  * balayage suivant ; si une réponse perdue cachait un envoi réussi, le jeton
  * d'unicité ({@link liveAnnouncementNonce}) écarte le doublon d'un même envoi
@@ -449,8 +418,6 @@ type SendableChannel = {
     enforceNonce: boolean;
   }) => Promise<{ id: string }>;
   permissionsFor?: (user: unknown) => { has: (flag: bigint) => boolean } | null;
-  /** Mode lent du salon, en secondes (0 : désactivé). */
-  rateLimitPerUser?: number | null;
 };
 
 /**
@@ -460,19 +427,11 @@ type SendableChannel = {
 function readPermissions(
   client: Client,
   channel: SendableChannel,
-): { canView: boolean; canSend: boolean; canMentionEveryone: boolean; canEmbedLinks: boolean; slowWaitMs: number } {
+): { canView: boolean; canSend: boolean; canMentionEveryone: boolean; canEmbedLinks: boolean } {
   const permissions = client.user && channel.permissionsFor ? channel.permissionsFor(client.user) : null;
-  if (!permissions) { return { canView: true, canSend: true, canMentionEveryone: true, canEmbedLinks: true, slowWaitMs: 0 }; }
-  // Le mode lent retient un envoi fait moins de `rateLimitPerUser` secondes
-  // après le précédent du bot (discord.js attend la fin du délai, jusqu'à six
-  // heures), sauf pour qui gère les messages ou le salon : l'annonce partirait
-  // bien après le début du match.
-  const bypassesSlowmode =
-    permissions.has(PermissionFlagsBits.ManageMessages) || permissions.has(PermissionFlagsBits.ManageChannels);
-  const delayMs = (channel.rateLimitPerUser ?? 0) * 1000;
-  const waitMs = delayMs > 0 && lastLivePostAt !== null ? delayMs - (Date.now() - lastLivePostAt) : 0;
+  if (!permissions) { return { canView: true, canSend: true, canMentionEveryone: true, canEmbedLinks: true }; }
+  // Pas de mode lent à surveiller : Discord n'y soumet pas les bots.
   return {
-    slowWaitMs: bypassesSlowmode ? 0 : Math.max(0, waitMs),
     canView: permissions.has(PermissionFlagsBits.ViewChannel),
     canSend: permissions.has(PermissionFlagsBits.SendMessages),
     canMentionEveryone: permissions.has(PermissionFlagsBits.MentionEveryone),
@@ -511,16 +470,9 @@ export async function announceLive(client: Client, request: LiveAnnouncementRequ
     throw new LiveChannelUnavailableError("missing", "salon introuvable ou non textuel");
   }
 
-  const { canView, canSend, canMentionEveryone, canEmbedLinks, slowWaitMs } = readPermissions(client, channel);
+  const { canView, canSend, canMentionEveryone, canEmbedLinks } = readPermissions(client, channel);
   if (!canView) { throw new LiveChannelUnavailableError("no-view", "permission de voir le salon absente"); }
   if (!canSend) { throw new LiveChannelUnavailableError("no-send", "permission d'écrire absente"); }
-  if (slowWaitMs > 0) {
-    // Une courte attente se règle seule au nouvel essai du site : pas de quoi
-    // alerter le staff (`slowmode-short`, jamais signalé).
-    const key = slowWaitMs <= SLOWMODE_SILENT_MS ? "slowmode-short" : "slowmode";
-    const wait = `encore ${formatWait(slowWaitMs)}`;
-    throw new LiveChannelUnavailableError(key, `mode lent actif sur le salon (${wait})`, wait);
-  }
 
   try {
     // `parse: ["everyone"]` et rien d'autre ; toute mention de masse du texte
@@ -535,6 +487,5 @@ export async function announceLive(client: Client, request: LiveAnnouncementRequ
   } catch (error) {
     throw sendFailure(error);
   }
-  lastLivePostAt = Date.now();
   return { posted: true, mentionEveryone: canMentionEveryone, embedLinks: canEmbedLinks };
 }
