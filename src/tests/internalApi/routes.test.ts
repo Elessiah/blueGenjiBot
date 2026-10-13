@@ -897,7 +897,7 @@ test("/internal/announce/live : un refus d'AutoMod n'est pas promis au nouvel es
   }
   for (let i = 0; i < 50 && state.logs.length < 2; i++) { await new Promise((r) => setTimeout(r, 5)); }
   assert.equal(state.logs.length, 2);
-  assert.ok(state.logs.every((log) => log.includes("Le site ne la réessaie pas : Discord refuserait de nouveau le même message.")));
+  assert.ok(state.logs.every((log) => log.includes("Le site ne la réessaie pas : AutoMod bloquerait de nouveau le même message.")));
 });
 
 test("/internal/announce/live : chaque envoi incertain est signalé, même dans l'heure", async () => {

@@ -9,7 +9,6 @@ import {
   LIVE_LOG_COOLDOWN_MS,
   LiveChannelUnavailableError,
   MAX_LIVE_MESSAGE_LENGTH,
-  formatWait,
   isLiveIssueFinal,
   liveFailureReport,
   liveFailureVerdict,
@@ -41,7 +40,6 @@ function fakeClient(options: {
   denied?: bigint[];
   fetchError?: Error;
   sendError?: Error;
-  slowmode?: number;
 }): Client {
   return {
     user: { id: "bot" },
@@ -52,7 +50,6 @@ function fakeClient(options: {
         if (options.channel === "missing") { return null; }
         return {
           permissionsFor: () => ({ has: (flag: bigint) => !(options.denied ?? []).includes(flag) }),
-          rateLimitPerUser: options.slowmode ?? 0,
           send: async (payload: Omit<Sent, "channelId">) => {
             if (options.sendError) { throw options.sendError; }
             if (options.channel === "send-fails") { throw new Error("Missing Permissions"); }
@@ -202,10 +199,9 @@ test("describeLiveIssue : le staff lit l'action à mener, en français", () => {
   assert.match(describeLiveIssue("discord-unreachable", "ECONNRESET"), /rien n'est parti/);
   assert.match(describeLiveIssue("automod", "x"), /Paramètres du serveur → AutoMod/);
   assert.doesNotMatch(describeLiveIssue("send-rejected", "x"), /AutoMod/);
-  assert.match(describeLiveIssue("slowmode", "encore 6 h"), /passé deux heures après le début du direct, elle ne partira plus/);
   assert.match(describeLiveIssue("missing", "x"), /LIVE_ANNOUNCE_CHANNEL_ID/);
   // La route ajoute déjà que le site réessaie : la cause ne le répète pas.
-  for (const key of ["missing", "no-view", "no-send", "slowmode", "send-denied", "automod", "send-rejected", "discord-unreachable", "discord-down", "failed"]) {
+  for (const key of ["missing", "no-view", "no-send", "send-denied", "automod", "send-rejected", "discord-unreachable", "discord-down", "failed"]) {
     assert.ok(!describeLiveIssue(key, "x").includes("réessaie"), key);
   }
   assert.ok(describeLiveIssue("failed", "y".repeat(5000)).length < 400, "texte brut borné");
@@ -290,7 +286,7 @@ test("parseLiveAnnouncement : une étiquette trop longue est coupée d'un « …
 
 test("liveFailureVerdict : seule une panne pendant l'envoi est « non confirmée »", () => {
   assert.equal(liveFailureVerdict("discord-down"), "non confirmée");
-  for (const key of ["discord-unreachable", "missing", "no-view", "no-send", "slowmode", "send-denied", "automod", "send-rejected", "failed"]) {
+  for (const key of ["discord-unreachable", "missing", "no-view", "no-send", "send-denied", "automod", "send-rejected", "failed"]) {
     assert.equal(liveFailureVerdict(key), "non publiée", key);
   }
 });
@@ -302,61 +298,18 @@ test("announceLive : la raison d'une panne pendant l'envoi ne dit pas « refusé
   assert.match(error.message, /sans réponse claire/);
 });
 
-test("announceLive : un bot qui gère les messages passe outre le mode lent", async () => {
-  const sent: Sent[] = [];
-  await announceLive(fakeClient({ sent, slowmode: 30 }), REQUEST);
-  assert.equal(sent.length, 1);
-});
-
-test("announceLive : le mode lent ne bloque que s'il retiendrait l'envoi", async () => {
-  resetLiveLogThrottle();
-  const noBypass = [PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ManageChannels];
-  const sent: Sent[] = [];
-  // Première annonce (ou après un redémarrage) : rien ne la retient.
-  await announceLive(fakeClient({ sent, slowmode: 30, denied: noBypass }), REQUEST);
-  assert.equal(sent.length, 1);
-  // Une seconde dans le délai attendrait la fin du mode lent : refusée d'emblée,
-  // sans alerte au staff quand l'attente est courte.
-  const error = await announceLive(fakeClient({ sent, slowmode: 30, denied: noBypass }), REQUEST).catch((e: unknown) => e);
-  assert.ok(error instanceof LiveChannelUnavailableError);
-  assert.equal(error.key, "slowmode-short");
-  assert.equal(sent.length, 1);
-  // Longue attente : signalée.
-  const long = await announceLive(fakeClient({ sent, slowmode: 3600, denied: noBypass }), REQUEST).catch((e: unknown) => e);
-  assert.ok(long instanceof LiveChannelUnavailableError);
-  assert.equal(long.key, "slowmode");
-  assert.match(describeLiveIssue("slowmode", long.detail), /encore 1 h/);
-  // Sans mode lent, elle part.
-  await announceLive(fakeClient({ sent, slowmode: 0, denied: noBypass }), REQUEST);
-  assert.equal(sent.length, 2);
-  resetLiveLogThrottle();
-});
-
-test("formatWait : secondes, minutes, heures", () => {
-  assert.equal(formatWait(45_000), "45 s");
-  assert.equal(formatWait(61_000), "2 min");
-  assert.equal(formatWait(3_600_000), "1 h");
-  assert.equal(formatWait(21_540_000), "5 h 59 min");
-});
-
 test("liveFailureReport : ne promet un nouvel essai que si le site en fera un", () => {
   const request = { message: "Alpha contre Beta", streamUrl: "https://twitch.tv/bg", context: "live-announce match-1" };
   assert.match(liveFailureReport(request, "no-send", "x"), /Le site la réessaie seul/);
-  assert.match(liveFailureReport(request, "automod", "x"), /Le site ne la réessaie pas : Discord refuserait/);
+  assert.match(liveFailureReport(request, "automod", "x"), /Le site ne la réessaie pas : AutoMod bloquerait/);
+  // Un refus lié à l'état du salon se règle : le site réessaie.
+  assert.match(liveFailureReport(request, "send-rejected", "x"), /Le site la réessaie seul/);
   assert.match(liveFailureReport(request, "discord-down", "x"), /pour ne pas notifier deux fois/);
   // Le site a coupé la requête avant la réponse : aucune cause n'est réessayée.
   const late = liveFailureReport(request, "no-send", "x", { siteGaveUp: true });
   assert.match(late, /avait déjà cessé d'attendre/);
   assert.doesNotMatch(late, /réessaie seul/);
   assert.equal(isLiveIssueFinal("automod"), true);
-  assert.equal(isLiveIssueFinal("slowmode"), false);
+  assert.equal(isLiveIssueFinal("send-rejected"), false);
 });
 
-test("liveFailureReport : site parti, le mode lent est dit sans promettre de départ plus tard", () => {
-  const request = { message: "Alpha contre Beta", streamUrl: "https://twitch.tv/bg", context: "live-announce match-1" };
-  for (const key of ["slowmode", "slowmode-short"]) {
-    const text = liveFailureReport(request, key, "encore 40 s", { siteGaveUp: true });
-    assert.match(text, /le mode lent de #live retient l'annonce \(encore 40 s/);
-    assert.doesNotMatch(text, /erreur inattendue|ne partira plus/);
-  }
-});
