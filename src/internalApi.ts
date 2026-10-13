@@ -578,7 +578,10 @@ export function startInternalApi(client: Client) {
       }
       const detail = unavailable ? error.detail : (error as Error).message;
       // Un mode lent presque écoulé se règle seul au prochain essai du site.
-      if (key !== "slowmode-short") { reportLiveIssue(key, liveFailureReport(request, key, detail)); }
+      // Un envoi incertain n'est pas réessayé par le site : chacun est signalé
+      // (clé propre à l'annonce), pour qu'aucun ne se perde sans trace.
+      const throttleKey = key === "discord-down" ? `${key} ${request.context}` : key;
+      if (key !== "slowmode-short") { reportLiveIssue(throttleKey, liveFailureReport(request, key, detail)); }
     }
   });
 

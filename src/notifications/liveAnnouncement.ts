@@ -279,13 +279,15 @@ export function liveFailureReport(request: LiveAnnouncementRequest, key: string,
   const verdict = liveFailureVerdict(key);
   // Un envoi peut-être parti n'est pas réessayé par le site (un second
   // `@everyone` serait pire qu'une annonce perdue) ; les autres le sont.
+  // Chaque envoi incertain est signalé (pas de nouvel essai, donc pas de rafale) ;
+  // les autres causes, une fois par heure.
   const retry = key === "discord-down"
     ? "Le site ne la réessaie pas, pour ne pas notifier deux fois tout le serveur."
     : "Le site la réessaie seul pendant les deux heures qui suivent le début du direct : ne pas la " +
-      "reposter à la main avant.";
+      "reposter à la main avant. Signalé au plus une fois par heure, d'autres annonces peuvent échouer " +
+      "pour la même raison.";
   const head =
     `Annonce de live ${verdict} (${request.context}) : ${describeLiveIssue(key, detail)}. ${retry} ` +
-    "Signalé au plus une fois par heure, d'autres annonces peuvent échouer pour la même raison. " +
     "Annonce concernée :";
   const link = `\n<${request.streamUrl}>`;
   // Place restante pour la citation : chaque ligne y gagne « > » (deux caractères).
