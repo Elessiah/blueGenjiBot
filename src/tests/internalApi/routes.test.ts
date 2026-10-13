@@ -872,10 +872,25 @@ test("/internal/announce/live : le signalement d'une longue annonce groupée tie
   // Le site ne réessaie pas un envoi peut-être parti : le signalement ne le promet pas.
   assert.ok(state.logs[0].includes("Le site ne la réessaie pas"));
   assert.ok(!state.logs[0].includes("Le site la réessaie seul"));
+  assert.ok(!state.logs[0].includes("une fois par heure"));
   // La citation reste un bloc cité, coupée à l'intérieur : chaque ligne commence par « > ».
   const quote = state.logs[0].split("Annonce concernée :\n")[1].split("\n<")[0];
   assert.ok(quote.split("\n").every((line) => line.startsWith("> ")));
   assert.ok(quote.endsWith("…"));
+});
+
+test("/internal/announce/live : chaque envoi incertain est signalé, même dans l'heure", async () => {
+  state.liveSendError = Object.assign(new Error("Service Unavailable"), { code: 0 });
+  const first = { message: "Alpha contre Beta — Coupe A", streamUrl: "https://twitch.tv/a", context: "live-announce match-12" };
+  const second = { message: "Gamma contre Delta — Coupe B", streamUrl: "https://twitch.tv/b", context: "live-announce match-31" };
+  for (const body of [first, second]) {
+    const res = await call("/internal/announce/live", { body });
+    assert.equal(res.status, 503);
+    assert.deepEqual(res.body, { error: "LIVE_CHANNEL_UNAVAILABLE", reason: "discord-down" });
+  }
+  for (let i = 0; i < 50 && state.logs.length < 2; i++) { await new Promise((r) => setTimeout(r, 5)); }
+  assert.equal(state.logs.length, 2);
+  assert.ok(state.logs[0].includes("match-12") && state.logs[1].includes("match-31"));
 });
 
 // --- Flux SSE ---------------------------------------------------------------
