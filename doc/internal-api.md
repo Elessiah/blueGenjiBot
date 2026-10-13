@@ -132,8 +132,8 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
 
 - `POST /internal/announce/live`
   - Body: `{ "message": "...", "streamUrl": "https://twitch.tv/...", "context": "live-announce match-42" }`
-    (`context`, étiquette des journaux, 200 caractères au plus — coupée au-delà
-    d'un « … » visible)
+    (`context`, étiquette des journaux : 200 caractères au plus, au-delà elle
+    est coupée et se termine par « … »)
   - Annonce un **live** au début d'un match diffusé : le bot publie
     `@everyone <message>` puis le lien, seul sur sa ligne, dans le salon #live
     du serveur BlueGenji. Ce salon est fixé dans le code (constante
@@ -159,9 +159,12 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     le salon, le message part **sans** la mention (`mentionEveryone: false`) ;
     sans « Intégrer des liens », il part sans aperçu de la chaîne
     (`embedLinks: false`). Le canal de logs le signale dans les deux cas.
-  - `503 LIVE_CHANNEL_UNAVAILABLE` : salon introuvable, ou le bot ne peut pas
-    y écrire — rien n'est parti. `500 LIVE_ANNOUNCEMENT_FAILED` pour toute
-    autre panne. Le site garde l'annonce sur un succès, un `400` ou un délai
+  - `503 LIVE_CHANNEL_UNAVAILABLE` : le message n'a pas été publié — salon
+    introuvable, permission manquante, ou panne passagère de Discord (réseau,
+    `5xx`, limite de débit) ; le canal de logs dit laquelle. Dans ce dernier
+    cas, un envoi dont la réponse s'est perdue a pu partir : le jeton
+    d'unicité empêche alors un doublon au nouvel essai. `500
+    LIVE_ANNOUNCEMENT_FAILED` pour toute autre panne. Le site garde l'annonce sur un succès, un `400` ou un délai
     dépassé (le bot a pu publier : elle n'est pas réessayée, pour ne jamais
     notifier deux fois tout le serveur) ; sur un `503`, un `500` ou un bot
     injoignable, il la reprend et réessaie tant que le match a commencé depuis
