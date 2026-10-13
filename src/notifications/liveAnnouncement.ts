@@ -277,43 +277,59 @@ export function liveFailureReport(
   detail: string,
   options: { siteGaveUp?: boolean } = {},
 ): string {
-  const verdict = liveFailureVerdict(key);
-  // Rien n'est parti (toute cause sauf une panne pendant l'envoi) : une
-  // annonce que le site ne réessaie pas peut alors être postée à la main.
-  let manual = " Rien n'est parti : elle peut être postée à la main sans doublon.";
-  if (key === "discord-down") { manual = ""; }
-  if (key === "automod") {
-    manual = " Rien n'est parti : une fois la règle corrigée, elle peut être postée à la main sans doublon.";
-  }
-  let retry: string;
-  if (options.siteGaveUp) {
-    // Le site a cessé d'attendre la réponse : il garde sa réservation.
-    retry = "Le site avait déjà cessé d'attendre la réponse du bot : il ne la réessaie pas." + manual;
-  } else if (key === "discord-down") {
-    retry = "Le site ne la réessaie pas, pour ne pas notifier deux fois tout le serveur.";
-  } else if (isLiveIssueFinal(key)) {
-    retry = "Le site ne la réessaie pas : AutoMod bloquerait de nouveau le même message." + manual;
-  } else {
-    retry = "Le site la réessaie seul pendant les deux heures qui suivent le début du direct : ne pas la " +
-      "reposter à la main avant. Signalé au plus une fois par heure, d'autres annonces peuvent échouer " +
-      "pour la même raison.";
-  }
+  const siteGaveUp = options.siteGaveUp === true;
   const link = `\n<${request.streamUrl}>`;
+  const intro = `Annonce de live ${liveFailureVerdict(key)} (${request.context}) : ${describeLiveIssue(key, detail)}. `;
   if (key === "automod") {
     // Citer le texte bloqué ferait bloquer le signalement par la même règle.
-    return `Annonce de live ${verdict} (${request.context}) : ${describeLiveIssue(key, detail)}. ${retry} ` +
-      `Texte non cité ici (la même règle le bloquerait) ; lien :${link}`;
+    return `${intro}${retrySentence(key, siteGaveUp, false)} Texte non cité ici (la même règle le bloquerait) ; lien :${link}`;
   }
-  const head = `Annonce de live ${verdict} (${request.context}) : ${describeLiveIssue(key, detail)}. ${retry} ` +
-    "Annonce concernée :";
   const max = MAX_LIVE_LOG_LENGTH - LOG_PREFIX.length;
-  // La citation sert à reconnaître l'annonce : raccourcie au besoin.
-  // Place restante : chaque ligne y gagne « > » (deux caractères).
-  const room = max - head.length - link.length - 1;
   const lineCount = request.message.split("\n").length;
-  const text = room > 2 * lineCount + 1 ? cutText(request.message, room - 2 * lineCount) : "";
+  // La citation sert à reconnaître l'annonce, raccourcie au besoin ; si elle
+  // l'est, la consigne de la poster à la main le dit.
+  const build = (shortened: boolean): { head: string; text: string } => {
+    const head = `${intro}${retrySentence(key, siteGaveUp, shortened)} Annonce concernée :`;
+    // Place restante : chaque ligne y gagne « > » (deux caractères).
+    const room = max - head.length - link.length - 1;
+    const text = room > 2 * lineCount + 1 ? cutText(request.message, room - 2 * lineCount) : "";
+    return { head, text };
+  };
+  let { head, text } = build(false);
+  if (text !== request.message) { ({ head, text } = build(true)); }
   const quoted = text ? "\n" + quoteLines(text) : "";
   return `${head}${quoted}${link}`;
+}
+
+/**
+ * Consigne d'une annonce que le site ne réessaie pas, quand rien n'est parti
+ * (toute cause sauf une panne pendant l'envoi) : elle peut être postée à la
+ * main, avec la mention, et le texte entier si la citation est raccourcie.
+ */
+function manualPostSentence(key: string, shortened: boolean): string {
+  if (key === "discord-down") { return ""; }
+  const when = key === "automod" ? "une fois la règle corrigée, " : "";
+  const whole = shortened ? " (le texte cité ici est raccourci : reprendre toutes les affiches depuis le site)" : "";
+  return ` Rien n'est parti : ${when}elle peut être postée à la main sans doublon, avec « @everyone » en tête${whole}.`;
+}
+
+/** Ce que fera le site après cet échec, et ce que le staff peut faire. */
+function retrySentence(key: string, siteGaveUp: boolean, shortened: boolean): string {
+  if (siteGaveUp) {
+    // Le site a cessé d'attendre la réponse : il garde sa réservation.
+    return "Le site avait déjà cessé d'attendre la réponse du bot : il ne la réessaie pas." +
+      manualPostSentence(key, shortened);
+  }
+  if (key === "discord-down") {
+    return "Le site ne la réessaie pas, pour ne pas notifier deux fois tout le serveur.";
+  }
+  if (isLiveIssueFinal(key)) {
+    return "Le site ne la réessaie pas : AutoMod bloquerait de nouveau le même message." +
+      manualPostSentence(key, shortened);
+  }
+  return "Le site la réessaie seul pendant les deux heures qui suivent le début du direct : ne pas la " +
+    "reposter à la main avant. Signalé au plus une fois par heure, d'autres annonces peuvent échouer " +
+    "pour la même raison.";
 }
 
 /** Corps normalisé de `POST /internal/announce/live`. */
