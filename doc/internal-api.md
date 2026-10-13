@@ -163,19 +163,17 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     bot n'a pas pu publier, ou pas pu confirmer la publication. `reason` :
     - `missing`, `no-view`, `no-send`, `send-denied` — salon introuvable ou
       permission manquante ;
-    - `slowmode`, `slowmode-short` — le mode lent du salon retiendrait
-      l'envoi (le bot y a déjà posté pendant le délai et ne peut pas
-      l'ignorer : l'envoi resterait en attente, il est refusé d'emblée) ;
-    - `automod`, `send-rejected` — Discord a refusé le message (règle AutoMod
-      du serveur, autre refus) ;
+    - `automod` — une règle AutoMod du serveur a bloqué le message ;
+    - `send-rejected` — Discord a refusé le message pour une autre raison,
+      souvent l'état du salon (type, verrouillage) ;
     - `discord-unreachable` — Discord n'a pas répondu en lisant le salon,
       avant tout envoi ;
     - `discord-down` — Discord a lâché **pendant** l'envoi : le message a pu
       partir malgré tout.
   - `500 LIVE_ANNOUNCEMENT_FAILED` pour toute autre panne.
   - Ce que fait le site : il garde l'annonce sur un succès ; sur un `400` ou
-    un `503` `automod` / `send-rejected` (le même message serait refusé de
-    nouveau, le renvoyer n'y changerait rien) ; et sur un délai dépassé ou un
+    un `503` `automod` (AutoMod bloquerait de nouveau le même message, et
+    chaque essai alerterait la modération) ; et sur un délai dépassé ou un
     `503` `discord-down` — le bot a pu publier, elle n'est pas réessayée, pour
     ne jamais notifier deux fois tout le serveur. Sur tout
     autre `503`, un `500` ou un bot injoignable, il la reprend et réessaie
@@ -184,26 +182,22 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     ne fait pas dépasser le délai du site). Il dit la cause, l'action à mener
     et cite l'annonce concernée et son lien pour la reconnaître, en tenant
     toujours dans un message Discord (citation raccourcie au besoin). Une
-    annonce « non publiée » pour une cause passagère (salon, permission, mode
-    lent, Discord injoignable) est réessayée par le site : la reposter à la main
+    annonce « non publiée » pour une cause qui peut se régler (salon,
+    permission, refus lié à l'état du salon, Discord injoignable) est réessayée par le site : la reposter à la main
     pendant ces deux heures notifierait deux fois tout le serveur ; comme le
     site réessaie à chaque balayage, une même cause n'est signalée qu'**une
     fois par heure** (d'autres annonces peuvent alors échouer pour elle sans
     nouveau signalement). Une annonce « non confirmée » (`discord-down`) n'est
-    pas réessayée : chacune est signalée (vérifier #live), comme chaque refus
-    d'AutoMod ou autre refus explicite, et toute annonce dont le site avait
+    pas réessayée : chacune est signalée (vérifier #live), comme chaque blocage
+    par AutoMod, et toute annonce dont le site avait
     déjà coupé la requête (délai dépassé) — le signalement le dit alors, au
-    lieu de promettre un nouvel essai. Une attente de mode
-    lent d'une minute au plus n'est pas signalée : le nouvel essai la règle.
+    lieu de promettre un nouvel essai.
     Un signalement que le canal de logs n'a pas reçu ne compte pas : le
     suivant partira.
   - Chaque envoi porte un jeton d'unicité (`nonce`, `enforceNonce`) tiré de
     l'étiquette et du lien : Discord ne crée pas deux fois ce même envoi s'il
     est rejoué dans les quelques minutes (nouvel essai interne de discord.js
     après une réponse perdue). Il n'arrête pas une annonce postée à la main.
-  - Le mode lent n'est connu que depuis le dernier démarrage du bot : juste
-    après un redémarrage, un envoi peut attendre la fin du délai — si #live a
-    un mode lent, donner au bot « Gérer les messages » dans le salon.
   - Une mention `@everyone` ou `@here` glissée dans le texte est neutralisée :
     seule celle de tête notifie.
 
