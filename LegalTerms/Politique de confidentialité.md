@@ -2,7 +2,7 @@
 
 # Politique de Confidentialité — BlueGenji Bot
 
-**Dernière mise à jour** : 14 octobre 2026
+**Dernière mise à jour** : 16 octobre 2026
 
 > Copie du texte publié sur [https://bluegenji-esport.fr/privacy-policy-bot](https://bluegenji-esport.fr/privacy-policy-bot), **qui fait foi** en cas de divergence. Ne modifiez pas ce fichier à la main : il est régénéré depuis le site (`lib/shared/bot-legal-content.ts` d'AppBlueGenji).
 
@@ -43,7 +43,7 @@ Identifiants des serveurs, salons et rôles configurés, invitation du serveur, 
 
 ### Messages du site BlueGenji
 
-Le site transmet au Bot un identifiant ou un pseudo Discord, le pseudo BlueGenji du destinataire et le message à remettre (code de connexion, horaire ou rappel de match, alerte d'arbitrage, signalement ; avis de modération — signalement vous désignant, logo d'équipe masqué, retiré ou supprimé — ; demande d'adhésion à une équipe que vous gérez ; information sur les données) ; le Bot remet les messages personnels (code, horaire, rappel, avis de modération, demande d'adhésion, information) en message privé **sans les enregistrer**. Les alertes d'arbitrage et les signalements, qui ne nomment aucun joueur (noms d'équipe et liens de tournoi seulement), sont en outre publiés dans le salon de journal privé du staff ; les alertes d'arbitrage partent aussi en message privé aux membres du rôle d'arbitrage de chaque serveur qui en a défini un (**/set-referee-role**), les signalements à la direction de l'association. Ces traitements relèvent de la [politique de confidentialité du site](https://bluegenji-esport.fr/rgpd).
+Le site transmet au Bot un identifiant ou un pseudo Discord, le pseudo BlueGenji du destinataire et le message à remettre (code de connexion, horaire ou rappel de match, alerte d'arbitrage, signalement ; avis de modération — signalement vous désignant, logo d'équipe masqué, retiré ou supprimé — ; demande d'adhésion à une équipe que vous gérez ; information sur les données) ; le Bot remet les messages personnels (code, horaire, rappel, avis de modération, demande d'adhésion, information) en message privé **sans les enregistrer**. Les alertes d'arbitrage et les signalements, qui ne nomment aucun joueur (noms d'équipe et liens de tournoi seulement), sont en outre publiés dans le salon de journal privé du staff ; les alertes d'arbitrage partent aussi en message privé aux membres du rôle d'arbitrage de chaque serveur qui en a défini un (**/set-referee-role**), les signalements à la direction de l'association. Au début d'un match diffusé, le site transmet aussi au Bot une annonce (noms des deux équipes — « un joueur » en tournoi individuel, jamais un pseudo —, nom du tournoi et lien de la diffusion), que le Bot publie dans le salon #live du serveur Discord de l'association avec une mention @everyone. Ces traitements relèvent de la [politique de confidentialité du site](https://bluegenji-esport.fr/rgpd).
 
 ### Journaux
 
@@ -77,6 +77,7 @@ Ces traitements reposent sur l'**intérêt légitime** de l'association (article
 - Les membres du salon où **/scrim** ou **/recrute** est utilisée : la commande y répond publiquement, et Discord y affiche qui l'a utilisée.
 - Les membres des serveurs partenaires, qui lisent les annonces relayées.
 - Les membres du rôle d'arbitrage de chaque serveur qui en a défini un, pour les alertes d'arbitrage du site.
+- Les membres du serveur Discord de l'association, qui lisent dans le salon #live l'annonce des matchs diffusés.
 - Les administrateurs de tout serveur où le Bot est installé, et les titulaires du rôle d'administration du Bot que chaque serveur désigne (**/set-bot-admin**), qui peuvent lire la liste des exclusions (commande **/ban-list**, réponse visible du seul demandeur).
 - L'hébergeur technique, Keryan Houssin, qui fournit la machine sur laquelle tourne le Bot (un Raspberry Pi, à Caen) : sous-traitant.
 - Discord, plateforme sur laquelle le Bot fonctionne.
