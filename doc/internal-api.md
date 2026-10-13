@@ -170,19 +170,20 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     site réessaie ; signalé au staff seulement s'il reste plus d'une minute
     d'attente), ou panne passagère de Discord (réseau, `5xx`, limite de débit) ; le canal de
     logs dit laquelle (« non publiée », ou « non confirmée » pour une panne de
-    Discord pendant l'envoi, avec la consigne de supprimer un éventuel
-    doublon ; une panne en lisant le salon, avant tout envoi, reste « non
+    Discord pendant l'envoi ; une panne en lisant le salon, avant tout envoi, reste « non
     publiée »). Lors d'une panne pendant l'envoi, un envoi dont la réponse
     s'est perdue a pu partir : le jeton d'unicité
     réduit alors le risque de doublon, sans l'écarter : Discord ne le vérifie
     que quelques minutes, et seulement pour un envoi identique (même
     étiquette, même lien) — un nouvel essai tardif, ou regroupé avec un autre
     match, peut publier une seconde fois. `500
-    LIVE_ANNOUNCEMENT_FAILED` pour toute autre panne. Le site garde l'annonce sur un succès, un `400` ou un délai
-    dépassé (le bot a pu publier : elle n'est pas réessayée, pour ne jamais
-    notifier deux fois tout le serveur) ; sur un `503`, un `500` ou un bot
-    injoignable, il la reprend et réessaie tant que le match a commencé depuis
-    moins de deux heures.
+    LIVE_ANNOUNCEMENT_FAILED` pour toute autre panne. Le site garde l'annonce sur un succès, un `400`, un délai
+    dépassé ou un `503` `discord-down` (le bot a pu publier : elle n'est pas
+    réessayée, pour ne jamais notifier deux fois tout le serveur — le canal de
+    logs demande de vérifier #live et de ne la poster à la main que si elle
+    n'y est pas) ; sur tout autre `503`, un `500` ou un bot injoignable, il la
+    reprend et réessaie tant que le match a commencé depuis moins de deux
+    heures.
   - La réponse part avant les signalements au canal de logs : un canal lent ne
     fait pas dépasser le délai du site. Le site réessayant à chaque balayage,
     chaque incident (même nature de refus, permission absente) n'y est signalé
