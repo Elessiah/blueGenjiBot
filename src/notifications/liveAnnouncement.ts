@@ -224,6 +224,8 @@ export function describeLiveIssue(key: string, rawDetail: string): string {
     case "missing":
       return "le salon #live est introuvable ou invisible pour le bot — vérifier qu'il existe et que le bot a la permission « Voir le salon » ; " +
         "s'il a été supprimé puis recréé, son nouvel identifiant doit être reporté dans le code du bot (LIVE_ANNOUNCE_CHANNEL_ID)";
+    case "slowmode-short":
+      return `le mode lent de #live retient l'annonce (${detail} ; le bot y a déjà posté pendant le délai)`;
     case "slowmode":
       return `le mode lent de #live retient l'annonce (${detail} ; le bot y a déjà posté pendant le délai) — passé deux heures après le début du direct, elle ne partira plus : si l'attente est longue, raccourcir le mode lent ou donner au bot la permission « Gérer les messages » dans #live`;
     case "no-view":
@@ -260,6 +262,11 @@ export function liveFailureVerdict(key: string): string {
   return key === "discord-down" ? "non confirmée" : "non publiée";
 }
 
+/** Le texte cité, ligne à ligne (« > »). */
+function quoteLines(text: string): string {
+  return text.split("\n").map((line) => "> " + line).join("\n");
+}
+
 /**
  * Signalement au canal de logs d'une annonce qui n'est pas partie, sans le
  * préfixe `[AppBlueGenji]` : la cause et l'action à mener, puis l'annonce
@@ -277,11 +284,6 @@ export function liveFailureVerdict(key: string): string {
  *   réponse (délai dépassé) — il ne réessaiera pas, quelle que soit la cause.
  * @returns Le texte du signalement.
  */
-/** Le texte cité, ligne à ligne (« > »). */
-function quoteLines(text: string): string {
-  return text.split("\n").map((line) => "> " + line).join("\n");
-}
-
 /**
  * Causes que le site ne réessaie pas : un envoi peut-être parti (un second
  * `@everyone` serait pire qu'une annonce perdue), ou un message que Discord
@@ -319,7 +321,9 @@ export function liveFailureReport(
       "reposter à la main avant. Signalé au plus une fois par heure, d'autres annonces peuvent échouer " +
       "pour la même raison.";
   }
-  const head = `Annonce de live ${verdict} (${request.context}) : ${describeLiveIssue(key, detail)}. ${retry} ` +
+  // Le site ne réessaiera pas : la cause est dite sans promettre de départ plus tard.
+  const describeKey = options.siteGaveUp && key === "slowmode" ? "slowmode-short" : key;
+  const head = `Annonce de live ${verdict} (${request.context}) : ${describeLiveIssue(describeKey, detail)}. ${retry} ` +
     "Annonce concernée :";
   const link = `\n<${request.streamUrl}>`;
   const max = MAX_LIVE_LOG_LENGTH - LOG_PREFIX.length;
