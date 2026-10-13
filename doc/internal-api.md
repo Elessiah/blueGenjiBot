@@ -159,9 +159,11 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     le salon, le message part **sans** la mention (`mentionEveryone: false`) ;
     sans « Intégrer des liens », il part sans aperçu de la chaîne
     (`embedLinks: false`). Le canal de logs le signale dans les deux cas.
-  - `503 LIVE_CHANNEL_UNAVAILABLE` : le message n'a pas été publié — salon
-    introuvable, permission manquante, ou panne passagère de Discord (réseau,
-    `5xx`, limite de débit) ; le canal de logs dit laquelle. Dans ce dernier
+  - `503 LIVE_CHANNEL_UNAVAILABLE` : le bot n'a pas pu publier, ou pas pu
+    confirmer la publication — salon introuvable, permission manquante, ou
+    panne passagère de Discord (réseau, `5xx`, limite de débit) ; le canal de
+    logs dit laquelle (« non publiée », ou « non confirmée » pour une panne de
+    Discord). Dans ce dernier
     cas, un envoi dont la réponse s'est perdue a pu partir : le jeton d'unicité
     réduit alors le risque de doublon, sans l'écarter : Discord ne le vérifie
     que quelques minutes, et seulement pour un envoi identique (même
