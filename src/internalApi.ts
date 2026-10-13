@@ -36,6 +36,7 @@ import { parseDirectMessageRequest, parseRefereeAlert } from "./notifications/no
 import { deliverDirectMessages, alertLeadership, alertReferees, HomeGuildUnavailableError } from "./notifications/deliver.js";
 import { HandleResolutionTimeoutError, resolveDiscordHandle } from "./notifications/resolveHandle.js";
 import { MESSAGE_RETENTION_DAYS } from "./privacy/retentionPeriods.js";
+import { announceLive, LiveChannelUnavailableError, parseLiveAnnouncement } from "./notifications/liveAnnouncement.js";
 
 /**
  * Fenetre des compteurs tires de `OGMsg` / `DPMsg` (`/internal/stats`,
@@ -510,6 +511,41 @@ export function startInternalApi(client: Client) {
     } catch (error) {
       await sendLog(client, `notify/leadership error (${request.context}): ${(error as Error).message}`);
       res.status(500).json({ error: "NOTIFICATION_DELIVERY_FAILED" });
+    }
+  });
+
+  /**
+   * Annonce d'un live au debut d'un match diffuse : message `@everyone` dans le
+   * salon #live du serveur BlueGenji (`LIVE_ANNOUNCE_CHANNEL_ID`). L'app decide
+   * du moment et redige le texte ; elle reserve l'annonce avant l'appel et ne
+   * la rend que sur un `503` (rien n'est parti), si bien qu'un match n'est
+   * annonce qu'une fois.
+   */
+  app.post("/internal/announce/live", async (req: Request, res: Response) => {
+    const request = parseLiveAnnouncement(req.body);
+    if (!request) {
+      res.status(400).json({ error: "INVALID_LIVE_ANNOUNCEMENT" });
+      return;
+    }
+
+    try {
+      const report = await announceLive(client, request);
+      console.log(`[live-announce] annonce publiee (${request.context})`);
+      if (!report.mentionEveryone) {
+        await sendLog(
+          client,
+          "[AppBlueGenji] Annonce de live publiee sans notifier : le bot n'a pas la permission " +
+          "« Mentionner everyone » dans le salon #live (action requise sur Discord).",
+        );
+      }
+      res.json(report);
+    } catch (error) {
+      await sendLog(client, `[AppBlueGenji] Annonce de live non publiee (${request.context}) : ${(error as Error).message}`);
+      if (error instanceof LiveChannelUnavailableError) {
+        res.status(503).json({ error: "LIVE_CHANNEL_UNAVAILABLE" });
+        return;
+      }
+      res.status(500).json({ error: "LIVE_ANNOUNCEMENT_FAILED" });
     }
   });
 
