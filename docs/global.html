@@ -10504,7 +10504,7 @@ pour que la route le journalise ; de même sans « Intégrer des liens »
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="notifications_liveAnnouncement.js.html">notifications/liveAnnouncement.js</a>, <a href="notifications_liveAnnouncement.js.html#line269">line 269</a>
+        <a href="notifications_liveAnnouncement.js.html">notifications/liveAnnouncement.js</a>, <a href="notifications_liveAnnouncement.js.html#line274">line 274</a>
     </li></ul></dd>
     
 
@@ -21534,7 +21534,7 @@ d'une `Error`, lui, est rendu tel quel.
     
 
     
-    <h4 class="name" id="describeLiveIssue"><span class="type-signature"></span>describeLiveIssue<span class="signature">(key, detail)</span><span class="type-signature"></span></h4>
+    <h4 class="name" id="describeLiveIssue"><span class="type-signature"></span>describeLiveIssue<span class="signature">(key, rawDetail)</span><span class="type-signature"></span></h4>
     
 
     
@@ -21590,14 +21590,16 @@ d'une `Error`, lui, est rendu tel quel.
 
             
 
-            <td class="description last">Nature de l'incident (`unreadable`, `missing`, `no-send`, `send-failed`, autre).</td>
+            <td class="description last">Nature de l'incident : `missing` (salon introuvable ou invisible),
+  `no-view`, `no-send` (permission manquante), `send-denied` (envoi refusé
+  faute de permission), `discord-down` (panne passagère de Discord), autre.</td>
         </tr>
 
     
 
         <tr>
             
-                <td class="name"><code>detail</code></td>
+                <td class="name"><code>rawDetail</code></td>
             
 
             <td class="type">
@@ -21608,7 +21610,8 @@ d'une `Error`, lui, est rendu tel quel.
 
             
 
-            <td class="description last">Texte d'erreur brut de Discord, cité pour le diagnostic.</td>
+            <td class="description last">Texte d'erreur brut de Discord, cité pour le diagnostic,
+  coupé à <a href="global.html#MAX_LIVE_DETAIL_LENGTH">MAX_LIVE_DETAIL_LENGTH</a> caractères.</td>
         </tr>
 
     
@@ -21649,7 +21652,7 @@ d'une `Error`, lui, est rendu tel quel.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="notifications_liveAnnouncement.js.html">notifications/liveAnnouncement.js</a>, <a href="notifications_liveAnnouncement.js.html#line139">line 139</a>
+        <a href="notifications_liveAnnouncement.js.html">notifications/liveAnnouncement.js</a>, <a href="notifications_liveAnnouncement.js.html#line142">line 142</a>
     </li></ul></dd>
     
 
@@ -27848,7 +27851,7 @@ l'ensemble tienne dans les 2 000 caractères d'un message Discord.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="notifications_liveAnnouncement.js.html">notifications/liveAnnouncement.js</a>, <a href="notifications_liveAnnouncement.js.html#line234">line 234</a>
+        <a href="notifications_liveAnnouncement.js.html">notifications/liveAnnouncement.js</a>, <a href="notifications_liveAnnouncement.js.html#line239">line 239</a>
     </li></ul></dd>
     
 
@@ -31232,7 +31235,7 @@ blanche, sans identifiants ni port, 255 caractères au plus. Seconde barrière
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="notifications_liveAnnouncement.js.html">notifications/liveAnnouncement.js</a>, <a href="notifications_liveAnnouncement.js.html#line185">line 185</a>
+        <a href="notifications_liveAnnouncement.js.html">notifications/liveAnnouncement.js</a>, <a href="notifications_liveAnnouncement.js.html#line190">line 190</a>
     </li></ul></dd>
     
 
@@ -40083,7 +40086,7 @@ retirés, commentaires et lignes vides ignorés.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="notifications_liveAnnouncement.js.html">notifications/liveAnnouncement.js</a>, <a href="notifications_liveAnnouncement.js.html#line208">line 208</a>
+        <a href="notifications_liveAnnouncement.js.html">notifications/liveAnnouncement.js</a>, <a href="notifications_liveAnnouncement.js.html#line213">line 213</a>
     </li></ul></dd>
     
 
@@ -43766,7 +43769,7 @@ un client sans utilisateur) est tenu pour accessible : l'envoi dira le reste.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="notifications_liveAnnouncement.js.html">notifications/liveAnnouncement.js</a>, <a href="notifications_liveAnnouncement.js.html#line243">line 243</a>
+        <a href="notifications_liveAnnouncement.js.html">notifications/liveAnnouncement.js</a>, <a href="notifications_liveAnnouncement.js.html#line248">line 248</a>
     </li></ul></dd>
     
 
@@ -60807,7 +60810,7 @@ production avec un fichier corrompu serait pire que l'absence de restauration.
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Tue Oct 13 2026 23:46:11 GMT+0200 (heure d’été d’Europe centrale)
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Tue Oct 13 2026 23:54:56 GMT+0200 (heure d’été d’Europe centrale)
 </footer>
 
 <script> prettyPrint(); </script>
