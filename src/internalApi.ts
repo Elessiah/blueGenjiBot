@@ -580,8 +580,10 @@ export function startInternalApi(client: Client) {
       // L'annonce concernée (équipes et tournoi, jamais un pseudo) et son lien,
       // cités pour la reconnaître. Le site la réessaie seul : la reposter à la
       // main pendant ce temps notifierait deux fois tout le serveur.
+      // Une panne passagère de Discord peut cacher un envoi réussi : « non confirmée », pas « non publiée ».
+      const verdict = key === "discord-down" ? "non confirmée" : "non publiée";
       const head =
-        `Annonce de live non publiée (${request.context}) : ${describeLiveIssue(key, detail)}. ` +
+        `Annonce de live ${verdict} (${request.context}) : ${describeLiveIssue(key, detail)}. ` +
         "Le site la réessaie seul pendant les deux heures qui suivent le début du direct : ne pas la " +
         "reposter à la main avant. Signalé au plus une fois par heure, d'autres annonces peuvent échouer " +
         "pour la même raison. Annonce concernée :";

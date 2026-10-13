@@ -169,7 +169,7 @@ export function describeLiveIssue(key: string, rawDetail: string): string {
     case "send-denied":
       return `Discord a refusé l'envoi faute de permission (${detail}) — vérifier les permissions du bot dans #live`;
     case "discord-down":
-      return `Discord n'a pas répondu ou a limité le bot (${detail}) — rien à régler sur le salon`;
+      return `Discord n'a pas répondu ou a limité le bot (${detail}) — rien à régler sur le salon ; l'annonce a pu partir malgré tout, vérifier #live`;
     default:
       return `erreur inattendue (${detail})`;
   }
