@@ -193,6 +193,11 @@ test("describeLiveIssue : le staff lit l'action à mener, en français", () => {
     "Discord a refusé l'envoi faute de permission (Missing Access) — vérifier les permissions du bot dans #live",
   );
   assert.match(describeLiveIssue("discord-down", "503 Service Unavailable"), /rien à régler sur le salon$/);
+  // La route ajoute déjà que le site réessaie : la cause ne le répète pas.
+  for (const key of ["missing", "no-view", "no-send", "send-denied", "discord-down", "failed"]) {
+    assert.ok(!describeLiveIssue(key, "x").includes("réessaie"), key);
+  }
+  assert.ok(describeLiveIssue("failed", "y".repeat(5000)).length < 400, "texte brut borné");
   assert.equal(describeLiveIssue("failed", "boom"), "erreur inattendue (boom)");
 });
 
@@ -254,4 +259,12 @@ test("formatLiveAnnouncement : jamais un émoji coupé en deux", () => {
   assert.ok(content.length <= 2000);
   assert.ok(!content.includes("\ud83d…"));
   assert.ok(/x…\n/.test(content), "l'émoji entier est retiré, pas sa moitié");
+});
+
+test("parseLiveAnnouncement : une étiquette trop longue est coupée d'un « … » visible", () => {
+  const context = "live-announce match-" + Array.from({ length: 40 }, (_, i) => 10_000 + i).join(",");
+  const request = parseLiveAnnouncement({ ...REQUEST, context });
+  assert.ok(request);
+  assert.equal(request.context.length, 200);
+  assert.ok(request.context.endsWith("…"));
 });
