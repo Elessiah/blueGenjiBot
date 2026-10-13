@@ -30,6 +30,12 @@ const LIVE_HOSTS = new Set([
 /** Longueur maximale d'un lien de diffusion (celle du site). */
 const MAX_STREAM_URL_LENGTH = 255;
 
+/** Plafond Discord d'un message, mention et lien compris. */
+const DISCORD_MAX_CONTENT_LENGTH = 2000;
+
+/** Mention de tête, posée seulement quand le bot peut notifier tout le serveur. */
+const EVERYONE_PREFIX = "@everyone ";
+
 /**
  * Délai entre deux signalements d'un même incident au canal de logs. Le site
  * réessaie une annonce refusée à chaque balayage (toutes les dix secondes au
@@ -75,6 +81,8 @@ export interface LiveAnnouncementReport {
   posted: true;
   /** `false` : le bot n'a pas la permission de mentionner tout le monde dans le salon. */
   mentionEveryone: boolean;
+  /** `false` : le bot n'a pas la permission d'intégrer des liens (pas d'aperçu de la chaîne). */
+  embedLinks: boolean;
 }
 
 /**
@@ -83,9 +91,16 @@ export interface LiveAnnouncementReport {
  * réessayer au balayage suivant.
  */
 export class LiveChannelUnavailableError extends Error {
-  constructor(reason: string) {
+  /**
+   * Nature stable de l'incident (sans le texte d'erreur de Discord), clé de
+   * l'étranglement des signalements au staff.
+   */
+  readonly key: string;
+
+  constructor(key: string, reason: string) {
     super(`LIVE_CHANNEL_UNAVAILABLE: ${reason}`);
     this.name = "LiveChannelUnavailableError";
+    this.key = key;
   }
 }
 
@@ -130,17 +145,26 @@ export function parseLiveAnnouncement(payload: unknown): LiveAnnouncementRequest
 
 /**
  * Texte publié : la mention, le message de l'app, puis le lien seul sur sa
- * ligne (Discord en tire l'aperçu de la chaîne).
+ * ligne (Discord en tire l'aperçu de la chaîne). Sans la permission de
+ * mentionner, la mention n'est pas écrite : un « @everyone » gris qui ne
+ * notifie personne aurait l'air d'une panne. Le message est raccourci pour que
+ * l'ensemble tienne dans les 2 000 caractères d'un message Discord.
  *
  * @param request Demande validée.
+ * @param mentionEveryone `false` : le bot ne peut pas notifier tout le serveur.
  * @returns Le contenu du message Discord.
  */
-export function formatLiveAnnouncement(request: LiveAnnouncementRequest): string {
-  return `@everyone ${request.message}\n${request.streamUrl}`;
+export function formatLiveAnnouncement(request: LiveAnnouncementRequest, mentionEveryone = true): string {
+  const prefix = mentionEveryone ? EVERYONE_PREFIX : "";
+  const budget = DISCORD_MAX_CONTENT_LENGTH - prefix.length - 1 - request.streamUrl.length;
+  const message = request.message.length <= budget ? request.message : `${request.message.slice(0, budget - 1)}…`;
+  return `${prefix}${message}\n${request.streamUrl}`;
 }
 
+type AllowedMentions = { parse: "everyone"[] };
+
 type SendableChannel = {
-  send: (options: { content: string; allowedMentions: { parse: ["everyone"] } }) => Promise<{ id: string }>;
+  send: (options: { content: string; allowedMentions: AllowedMentions }) => Promise<{ id: string }>;
   permissionsFor?: (user: unknown) => { has: (flag: bigint) => boolean } | null;
 };
 
@@ -148,21 +172,27 @@ type SendableChannel = {
  * Lit les permissions du bot dans le salon. Un salon qui ne les expose pas (ou
  * un client sans utilisateur) est tenu pour accessible : l'envoi dira le reste.
  */
-function readPermissions(client: Client, channel: SendableChannel): { canSend: boolean; canMentionEveryone: boolean } {
+function readPermissions(
+  client: Client,
+  channel: SendableChannel,
+): { canSend: boolean; canMentionEveryone: boolean; canEmbedLinks: boolean } {
   const permissions = client.user && channel.permissionsFor ? channel.permissionsFor(client.user) : null;
-  if (!permissions) { return { canSend: true, canMentionEveryone: true }; }
+  if (!permissions) { return { canSend: true, canMentionEveryone: true, canEmbedLinks: true }; }
   return {
     canSend: permissions.has(PermissionFlagsBits.ViewChannel) && permissions.has(PermissionFlagsBits.SendMessages),
     canMentionEveryone: permissions.has(PermissionFlagsBits.MentionEveryone),
+    canEmbedLinks: permissions.has(PermissionFlagsBits.EmbedLinks),
   };
 }
 
 /**
  * Publie l'annonce dans le salon #live.
  *
- * Sans la permission « Mentionner @everyone », le message part quand même —
- * une annonce sans notification vaut mieux que pas d'annonce — et le bilan le
- * dit (`mentionEveryone: false`) pour que la route le journalise.
+ * Sans la permission « Mentionner @everyone, @here et tous les rôles », le
+ * message part quand même, sans la mention — une annonce sans notification
+ * vaut mieux que pas d'annonce — et le bilan le dit (`mentionEveryone: false`)
+ * pour que la route le journalise ; de même sans « Intégrer des liens »
+ * (`embedLinks: false`, pas d'aperçu de la chaîne).
  *
  * @param client Client Discord.
  * @param request Demande validée.
@@ -174,20 +204,23 @@ export async function announceLive(client: Client, request: LiveAnnouncementRequ
   try {
     channel = await client.channels.fetch(LIVE_ANNOUNCE_CHANNEL_ID) as unknown as SendableChannel | null;
   } catch {
-    throw new LiveChannelUnavailableError("salon illisible");
+    throw new LiveChannelUnavailableError("unreadable", "salon illisible");
   }
   if (!channel || typeof channel.send !== "function") {
-    throw new LiveChannelUnavailableError("salon introuvable ou non textuel");
+    throw new LiveChannelUnavailableError("missing", "salon introuvable ou non textuel");
   }
 
-  const { canSend, canMentionEveryone } = readPermissions(client, channel);
-  if (!canSend) { throw new LiveChannelUnavailableError("permission d'écrire absente"); }
+  const { canSend, canMentionEveryone, canEmbedLinks } = readPermissions(client, channel);
+  if (!canSend) { throw new LiveChannelUnavailableError("no-send", "permission d'écrire absente"); }
 
   try {
     // `parse: ["everyone"]` et rien d'autre : seule la mention de tête notifie.
-    await channel.send({ content: formatLiveAnnouncement(request), allowedMentions: { parse: ["everyone"] } });
+    await channel.send({
+      content: formatLiveAnnouncement(request, canMentionEveryone),
+      allowedMentions: { parse: canMentionEveryone ? ["everyone"] : [] },
+    });
   } catch (error) {
-    throw new LiveChannelUnavailableError(`envoi refusé (${(error as Error).message})`);
+    throw new LiveChannelUnavailableError("send-failed", `envoi refusé (${(error as Error).message})`);
   }
-  return { posted: true, mentionEveryone: canMentionEveryone };
+  return { posted: true, mentionEveryone: canMentionEveryone, embedLinks: canEmbedLinks };
 }
