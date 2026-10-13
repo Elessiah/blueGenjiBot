@@ -131,7 +131,7 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     identifiants injoignables).
 
 - `POST /internal/announce/live`
-  - Body: `{ "message": "...", "streamUrl": "https://twitch.tv/...", "context": "live-announce match-42" }`
+  - Body: `{ "message": "...", "streamUrl": "https://twitch.tv/...", "context": "live-announce tournoi-7 match-42" }`
     (`context`, étiquette des journaux : 200 caractères au plus, au-delà elle
     est coupée et se termine par « … »)
   - Annonce un **live** au début d'un match diffusé : le bot publie
@@ -147,7 +147,7 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     matchs d'un même tournoi passés à l'antenne ensemble sur le même lien
     partent en un seul message de plusieurs lignes (« 🔴 En direct — Tournoi : »
     puis « • A contre B » par match) ; `context` les cite alors tous
-    (`live-announce match-12,13`).
+    (`live-announce tournoi-7 match-12,13`).
   - `streamUrl` doit être un lien `https` vers Twitch, YouTube ou Kick, sans
     identifiants ni port, 255 caractères au plus : sinon `400
     INVALID_LIVE_ANNOUNCEMENT`, comme pour un message vide. Le message est
@@ -196,9 +196,13 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     réessaie pas, hors panne pendant l'envoi, rien n'est parti : le
     signalement dit qu'elle peut être postée à la main sans doublon, avec
     « @everyone » en tête et le texte entier si la citation est raccourcie (après un
-    blocage AutoMod, une fois la règle corrigée — le texte bloqué n'y est pas
-    cité, la même règle bloquerait le signalement). Une annonce que le site
-    réessaie ne se poste jamais à la main.
+    blocage AutoMod, une fois la règle corrigée — ni le texte ni le lien n'y
+    sont cités, la même règle pourrait bloquer le signalement : le staff
+    reprend les affiches depuis la fiche du tournoi, dont le numéro suit
+    « tournoi- » dans l'étiquette). Une annonce que le site
+    réessaie ne se poste pas à la main pendant ces deux heures. Le canal de
+    logs ne reçoit jamais de mention de masse : « @everyone » et « @here » y
+    sont neutralisés.
     Un signalement que le canal de logs n'a pas reçu ne compte pas : le
     suivant partira.
   - Chaque envoi porte un jeton d'unicité (`nonce`, `enforceNonce`) tiré de
