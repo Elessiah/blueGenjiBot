@@ -93,9 +93,11 @@ function neutralizeMassMentions(text: string): string {
 
 /**
  * Jeton d'unicité de l'envoi (`nonce`, 25 caractères au plus), tiré de
- * l'annonce : Discord ne crée pas deux messages de même jeton à quelques
- * minutes d'écart — un envoi rejoué (réponse perdue, nouvel essai du site)
- * ne notifie pas deux fois tout le serveur.
+ * l'étiquette et du lien : Discord ne crée pas deux messages de même jeton à
+ * quelques minutes d'écart — le même envoi rejoué peu après (réponse perdue,
+ * nouvel essai du site) ne notifie pas deux fois tout le serveur. Il réduit
+ * le risque sans l'écarter : un essai plus tardif, ou regroupé avec un autre
+ * match (autre étiquette), n'est pas reconnu.
  */
 export function liveAnnouncementNonce(request: LiveAnnouncementRequest): string {
   const seed = `${request.context}\n${request.streamUrl}`;
@@ -197,7 +199,8 @@ export interface LiveAnnouncementReport {
  * panne passagère de Discord ({@link LiveChannelUnavailableError.key}). La
  * route en fait un `503`, et le site rend sa réservation pour réessayer au
  * balayage suivant ; si une réponse perdue cachait un envoi réussi, le jeton
- * d'unicité ({@link liveAnnouncementNonce}) évite le doublon.
+ * d'unicité ({@link liveAnnouncementNonce}) écarte le doublon d'un même envoi
+ * rejoué dans les quelques minutes.
  */
 export class LiveChannelUnavailableError extends Error {
   /**

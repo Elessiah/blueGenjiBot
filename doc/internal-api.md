@@ -162,8 +162,11 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
   - `503 LIVE_CHANNEL_UNAVAILABLE` : le message n'a pas été publié — salon
     introuvable, permission manquante, ou panne passagère de Discord (réseau,
     `5xx`, limite de débit) ; le canal de logs dit laquelle. Dans ce dernier
-    cas, un envoi dont la réponse s'est perdue a pu partir : le jeton
-    d'unicité empêche alors un doublon au nouvel essai. `500
+    cas, un envoi dont la réponse s'est perdue a pu partir : le jeton d'unicité
+    réduit alors le risque de doublon, sans l'écarter : Discord ne le vérifie
+    que quelques minutes, et seulement pour un envoi identique (même
+    étiquette, même lien) — un nouvel essai tardif, ou regroupé avec un autre
+    match, peut publier une seconde fois. `500
     LIVE_ANNOUNCEMENT_FAILED` pour toute autre panne. Le site garde l'annonce sur un succès, un `400` ou un délai
     dépassé (le bot a pu publier : elle n'est pas réessayée, pour ne jamais
     notifier deux fois tout le serveur) ; sur un `503`, un `500` ou un bot
@@ -182,8 +185,9 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     canal de logs n'a pas reçu ne compte pas : le suivant partira.
   - Une panne passagère de Discord (réseau, `5xx`, limite de débit) est dite
     comme telle, pas comme une permission manquante. Chaque envoi porte un
-    jeton d'unicité (`nonce`, `enforceNonce`) tiré de l'annonce : Discord ne
-    crée pas deux fois le même message, même rejoué après une réponse perdue.
+    jeton d'unicité (`nonce`, `enforceNonce`) tiré de l'étiquette et du lien :
+    Discord ne crée pas deux fois ce même envoi s'il est rejoué dans les
+    quelques minutes (réponse perdue puis nouvel essai du site).
     Une mention `@everyone` ou `@here` glissée dans le texte est neutralisée :
     seule celle de tête notifie.
 
