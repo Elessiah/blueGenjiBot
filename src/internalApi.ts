@@ -540,11 +540,14 @@ export function startInternalApi(client: Client) {
     }
 
     /** Signale au staff, au plus une fois par heure par incident ; un envoi raté ne compte pas. */
-    const reportLiveIssue = (key: string, text: string): void => {
+    const reportLiveIssue = (key: string, texts: string | string[]): void => {
       if (!shouldLogLiveIssue(key)) { return; }
-      void sendLog(client, `[AppBlueGenji] ${text}`)
-        .then((sent) => { if (!sent) { forgetLiveIssue(key); } })
-        .catch(() => forgetLiveIssue(key));
+      const parts = Array.isArray(texts) ? texts : [texts];
+      void (async () => {
+        for (const text of parts) {
+          if (!(await sendLog(client, `[AppBlueGenji] ${text}`))) { forgetLiveIssue(key); return; }
+        }
+      })().catch(() => forgetLiveIssue(key));
     };
 
     try {

@@ -273,9 +273,15 @@ export function liveFailureVerdict(key: string): string {
  * @param request Demande validée.
  * @param key Nature de l'incident ({@link describeLiveIssue}).
  * @param detail Texte d'erreur brut de Discord.
- * @returns Le texte du signalement.
+ * @returns Le ou les messages du signalement (deux quand le texte entier d'un
+ *   envoi incertain ne tient pas dans le premier).
  */
-export function liveFailureReport(request: LiveAnnouncementRequest, key: string, detail: string): string {
+/** Le texte cité, ligne à ligne (« > »). */
+function quoteLines(text: string): string {
+  return text.split("\n").map((line) => "> " + line).join("\n");
+}
+
+export function liveFailureReport(request: LiveAnnouncementRequest, key: string, detail: string): string[] {
   const verdict = liveFailureVerdict(key);
   // Un envoi peut-être parti n'est pas réessayé par le site (un second
   // `@everyone` serait pire qu'une annonce perdue) ; les autres le sont.
@@ -286,16 +292,24 @@ export function liveFailureReport(request: LiveAnnouncementRequest, key: string,
     : "Le site la réessaie seul pendant les deux heures qui suivent le début du direct : ne pas la " +
       "reposter à la main avant. Signalé au plus une fois par heure, d'autres annonces peuvent échouer " +
       "pour la même raison.";
-  const head =
-    `Annonce de live ${verdict} (${request.context}) : ${describeLiveIssue(key, detail)}. ${retry} ` +
-    "Annonce concernée :";
+  const intro = `Annonce de live ${verdict} (${request.context}) : ${describeLiveIssue(key, detail)}. ${retry} `;
+  const head = intro + "Annonce concernée :";
   const link = `\n<${request.streamUrl}>`;
-  // Place restante pour la citation : chaque ligne y gagne « > » (deux caractères).
-  const room = MAX_LIVE_LOG_LENGTH - LOG_PREFIX.length - head.length - link.length - 1;
+  const max = MAX_LIVE_LOG_LENGTH - LOG_PREFIX.length;
+  if (key === "discord-down") {
+    // Le staff peut avoir à la poster à la main : le texte entier, quitte à
+    // l'envoyer dans un second message.
+    const whole = `${head}\n${quoteLines(request.message)}${link}`;
+    if (whole.length <= max) { return [whole]; }
+    return [`${intro}Annonce concernée (texte entier dans le message suivant) :${link}`, cutText(quoteLines(request.message), max)];
+  }
+  // Ailleurs, la citation sert à reconnaître l'annonce : raccourcie au besoin.
+  // Place restante : chaque ligne y gagne « > » (deux caractères).
+  const room = max - head.length - link.length - 1;
   const lineCount = request.message.split("\n").length;
   const text = room > 2 * lineCount + 1 ? cutText(request.message, room - 2 * lineCount) : "";
-  const quoted = text ? "\n" + text.split("\n").map((line) => "> " + line).join("\n") : "";
-  return `${head}${quoted}${link}`;
+  const quoted = text ? "\n" + quoteLines(text) : "";
+  return [`${head}${quoted}${link}`];
 }
 
 /** Corps normalisé de `POST /internal/announce/live`. */
