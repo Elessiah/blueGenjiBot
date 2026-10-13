@@ -164,13 +164,18 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     injoignable, il la reprend et réessaie tant que le match a commencé depuis
     moins de deux heures.
   - La réponse part avant les signalements au canal de logs : un canal lent ne
-    fait pas dépasser le délai du site. Chaque incident (même nature de refus,
-    permission absente) n'y est signalé qu'**une fois par heure**, avec
-    l'action à mener ; un signalement que le canal de logs n'a pas reçu ne
-    compte pas :
-    le site réessaie à chaque balayage, et le staff n'a pas à être inondé ;
-    d'autres annonces peuvent alors échouer pour la même raison sans nouveau
-    signalement.
+    fait pas dépasser le délai du site. Le site réessayant à chaque balayage,
+    chaque incident (même nature de refus, permission absente) n'y est signalé
+    qu'**une fois par heure**, avec l'action à mener, le texte de l'annonce et
+    son lien (pour la reposter à la main) ; d'autres annonces peuvent alors
+    échouer pour la même raison sans nouveau signalement. Un signalement que le
+    canal de logs n'a pas reçu ne compte pas : le suivant partira.
+  - Une panne passagère de Discord (réseau, `5xx`, limite de débit) est dite
+    comme telle, pas comme une permission manquante. Chaque envoi porte un
+    jeton d'unicité (`nonce`, `enforceNonce`) tiré de l'annonce : Discord ne
+    crée pas deux fois le même message, même rejoué après une réponse perdue.
+    Une mention `@everyone` ou `@here` glissée dans le texte est neutralisée :
+    seule celle de tête notifie.
 
 - `GET /internal/feed/stream`
   - Flux SSE des évènements d'activité (`FeedEvent`) : le backlog récent
