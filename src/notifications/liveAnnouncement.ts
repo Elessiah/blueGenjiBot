@@ -1,5 +1,4 @@
 import { PermissionFlagsBits, type Client } from "discord.js";
-import { truncateMessage } from "./notifications.js";
 
 /**
  * Annonce d'un live dans le salon #live du serveur BlueGenji, poussée par l'app
@@ -33,6 +32,13 @@ const MAX_STREAM_URL_LENGTH = 255;
 /** Plafond Discord d'un message, mention et lien compris. */
 const DISCORD_MAX_CONTENT_LENGTH = 2000;
 
+/**
+ * Longueur maximale du texte reçu de l'app. Au-delà, il est coupé d'un simple
+ * « … » : jamais la mention « (message tronqué) » des messages privés, qui
+ * n'a rien à faire dans une annonce publique.
+ */
+export const MAX_LIVE_MESSAGE_LENGTH = 1800;
+
 /** Mention de tête, posée seulement quand le bot peut notifier tout le serveur. */
 const EVERYONE_PREFIX = "@everyone ";
 
@@ -61,9 +67,42 @@ export function shouldLogLiveIssue(key: string, now: number = Date.now()): boole
   return true;
 }
 
+/**
+ * Oublie un signalement qui n'a pas pu partir (canal de logs injoignable) :
+ * le prochain incident de même nature sera signalé, au lieu d'un silence d'une
+ * heure.
+ *
+ * @param key Nature de l'incident.
+ */
+export function forgetLiveIssue(key: string): void {
+  lastLiveLogAt.delete(key);
+}
+
 /** Oublie les signalements déjà faits. Réservé aux tests. */
 export function resetLiveLogThrottle(): void {
   lastLiveLogAt.clear();
+}
+
+/**
+ * Ce que le staff doit faire, selon la nature de l'incident
+ * ({@link LiveChannelUnavailableError.key}) : la phrase du canal de logs.
+ *
+ * @param key Nature de l'incident (`unreadable`, `missing`, `no-send`, `send-failed`, autre).
+ * @param detail Texte d'erreur brut de Discord, cité pour le diagnostic.
+ * @returns Une phrase en français, avec l'action à mener.
+ */
+export function describeLiveIssue(key: string, detail: string): string {
+  switch (key) {
+    case "unreadable":
+    case "missing":
+      return "le salon #live est introuvable ou invisible pour le bot — vérifier qu'il existe et que le bot a la permission « Voir le salon »";
+    case "no-send":
+      return "le bot n'a pas les permissions « Voir le salon » et « Envoyer des messages » dans #live — les lui rendre";
+    case "send-failed":
+      return `Discord a refusé l'envoi (${detail}) — vérifier les permissions du bot dans #live`;
+    default:
+      return `erreur inattendue (${detail})`;
+  }
 }
 
 /** Corps normalisé de `POST /internal/announce/live`. */
@@ -97,10 +136,14 @@ export class LiveChannelUnavailableError extends Error {
    */
   readonly key: string;
 
-  constructor(key: string, reason: string) {
+  /** Texte d'erreur brut (Discord), cité dans le signalement. */
+  readonly detail: string;
+
+  constructor(key: string, reason: string, detail: string = reason) {
     super(`LIVE_CHANNEL_UNAVAILABLE: ${reason}`);
     this.name = "LiveChannelUnavailableError";
     this.key = key;
+    this.detail = detail;
   }
 }
 
@@ -140,7 +183,8 @@ export function parseLiveAnnouncement(payload: unknown): LiveAnnouncementRequest
   const streamUrl = typeof raw.streamUrl === "string" ? raw.streamUrl.trim() : "";
   if (!message || !isAllowedStreamUrl(streamUrl)) { return null; }
   const context = typeof raw.context === "string" && raw.context.trim() ? raw.context.trim().slice(0, 80) : "live-announce";
-  return { message: truncateMessage(message), streamUrl, context };
+  const capped = message.length <= MAX_LIVE_MESSAGE_LENGTH ? message : `${message.slice(0, MAX_LIVE_MESSAGE_LENGTH - 1)}…`;
+  return { message: capped, streamUrl, context };
 }
 
 /**
@@ -220,7 +264,8 @@ export async function announceLive(client: Client, request: LiveAnnouncementRequ
       allowedMentions: { parse: canMentionEveryone ? ["everyone"] : [] },
     });
   } catch (error) {
-    throw new LiveChannelUnavailableError("send-failed", `envoi refusé (${(error as Error).message})`);
+    const detail = (error as Error).message;
+    throw new LiveChannelUnavailableError("send-failed", `envoi refusé (${detail})`, detail);
   }
   return { posted: true, mentionEveryone: canMentionEveryone, embedLinks: canEmbedLinks };
 }

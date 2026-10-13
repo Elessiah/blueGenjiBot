@@ -36,7 +36,14 @@ import { parseDirectMessageRequest, parseRefereeAlert } from "./notifications/no
 import { deliverDirectMessages, alertLeadership, alertReferees, HomeGuildUnavailableError } from "./notifications/deliver.js";
 import { HandleResolutionTimeoutError, resolveDiscordHandle } from "./notifications/resolveHandle.js";
 import { MESSAGE_RETENTION_DAYS } from "./privacy/retentionPeriods.js";
-import { announceLive, LiveChannelUnavailableError, parseLiveAnnouncement, shouldLogLiveIssue } from "./notifications/liveAnnouncement.js";
+import {
+  announceLive,
+  describeLiveIssue,
+  forgetLiveIssue,
+  LiveChannelUnavailableError,
+  parseLiveAnnouncement,
+  shouldLogLiveIssue,
+} from "./notifications/liveAnnouncement.js";
 
 /**
  * Fenetre des compteurs tires de `OGMsg` / `DPMsg` (`/internal/stats`,
@@ -518,10 +525,11 @@ export function startInternalApi(client: Client) {
    * Annonce d'un live au debut d'un match diffuse : message `@everyone` dans le
    * salon #live du serveur BlueGenji (constante `LIVE_ANNOUNCE_CHANNEL_ID`).
    * L'app decide du moment et redige le texte ; elle reserve l'annonce avant
-   * l'appel, la garde sur un succes ou un `400`, et la rend sur toute autre
-   * issue (`503`, `500`, `404`, delai depasse) pour reessayer. La reponse part
-   * donc **avant** les signalements au staff : un canal de logs lent ne doit
-   * pas faire croire au site que rien n'est parti (il reposterait).
+   * l'appel, la garde sur un succes, un `400` ou un delai depasse (le bot a pu
+   * publier : un second `@everyone` serait pire qu'une annonce perdue), et la
+   * rend sur un `503`, un `500` ou un bot injoignable pour reessayer. La
+   * reponse part donc **avant** les signalements au staff : un canal de logs
+   * lent ne doit pas faire depasser le delai du site.
    */
   app.post("/internal/announce/live", async (req: Request, res: Response) => {
     const request = parseLiveAnnouncement(req.body);
@@ -530,25 +538,32 @@ export function startInternalApi(client: Client) {
       return;
     }
 
+    /** Signale au staff, au plus une fois par heure par incident ; un envoi raté ne compte pas. */
+    const reportLiveIssue = (key: string, text: string): void => {
+      if (!shouldLogLiveIssue(key)) { return; }
+      void sendLog(client, `[AppBlueGenji] ${text}`)
+        .then((sent) => { if (!sent) { forgetLiveIssue(key); } })
+        .catch(() => forgetLiveIssue(key));
+    };
+
     try {
       const report = await announceLive(client, request);
       console.log(`[live-announce] annonce publiee (${request.context})`);
       res.json(report);
-      // Un même incident n'est signalé au staff qu'une fois par heure.
-      if (!report.mentionEveryone && shouldLogLiveIssue("mention-everyone")) {
-        void sendLog(
-          client,
-          "[AppBlueGenji] Annonce de live publiée sans notifier : le bot n'a pas la permission " +
+      if (!report.mentionEveryone) {
+        reportLiveIssue(
+          "mention-everyone",
+          "Annonce de live publiée sans notifier : le bot n'a pas la permission " +
           "« Mentionner @everyone, @here et tous les rôles » dans le salon #live " +
           "(action requise sur Discord ; signalé au plus une fois par heure).",
-        ).catch(() => undefined);
+        );
       }
-      if (!report.embedLinks && shouldLogLiveIssue("embed-links")) {
-        void sendLog(
-          client,
-          "[AppBlueGenji] Annonce de live publiée sans aperçu de la chaîne : le bot n'a pas la permission " +
+      if (!report.embedLinks) {
+        reportLiveIssue(
+          "embed-links",
+          "Annonce de live publiée sans aperçu de la chaîne : le bot n'a pas la permission " +
           "« Intégrer des liens » dans le salon #live (action requise sur Discord ; signalé au plus une fois par heure).",
-        ).catch(() => undefined);
+        );
       }
     } catch (error) {
       console.warn(`[live-announce] annonce non publiee (${request.context}) : ${(error as Error).message}`);
@@ -558,14 +573,14 @@ export function startInternalApi(client: Client) {
       } else {
         res.status(500).json({ error: "LIVE_ANNOUNCEMENT_FAILED" });
       }
-      if (shouldLogLiveIssue(unavailable ? error.key : "failed")) {
-        void sendLog(
-          client,
-          `[AppBlueGenji] Annonce de live non publiée (${request.context}) : ${(error as Error).message}. ` +
-          "Le site réessaie tant que le match a commencé depuis moins de deux heures ; signalé au plus une fois " +
-          "par heure, d'autres annonces peuvent échouer pour la même raison.",
-        ).catch(() => undefined);
-      }
+      const key = unavailable ? error.key : "failed";
+      const detail = unavailable ? error.detail : (error as Error).message;
+      reportLiveIssue(
+        key,
+        `Annonce de live non publiée (${request.context}) : ${describeLiveIssue(key, detail)}. ` +
+        "Le site réessaie tant que le match a commencé depuis moins de deux heures ; signalé au plus une fois " +
+        "par heure, d'autres annonces peuvent échouer pour la même raison.",
+      );
     }
   });
 
