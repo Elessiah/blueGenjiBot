@@ -278,22 +278,33 @@ export function liveFailureReport(
   options: { siteGaveUp?: boolean } = {},
 ): string {
   const verdict = liveFailureVerdict(key);
+  // Rien n'est parti (toute cause sauf une panne pendant l'envoi) : une
+  // annonce que le site ne réessaie pas peut alors être postée à la main.
+  const manual = key === "discord-down"
+    ? ""
+    : " Rien n'est parti : elle peut être postée à la main sans doublon.";
   let retry: string;
   if (options.siteGaveUp) {
     // Le site a cessé d'attendre la réponse : il garde sa réservation.
-    retry = "Le site avait déjà cessé d'attendre la réponse du bot : il ne la réessaie pas.";
+    retry = "Le site avait déjà cessé d'attendre la réponse du bot : il ne la réessaie pas." + manual;
   } else if (key === "discord-down") {
     retry = "Le site ne la réessaie pas, pour ne pas notifier deux fois tout le serveur.";
   } else if (isLiveIssueFinal(key)) {
-    retry = "Le site ne la réessaie pas : AutoMod bloquerait de nouveau le même message.";
+    retry = "Le site ne la réessaie pas : AutoMod bloquerait de nouveau le même message. Rien n'est parti : " +
+      "une fois la règle corrigée, elle peut être postée à la main sans doublon.";
   } else {
     retry = "Le site la réessaie seul pendant les deux heures qui suivent le début du direct : ne pas la " +
       "reposter à la main avant. Signalé au plus une fois par heure, d'autres annonces peuvent échouer " +
       "pour la même raison.";
   }
+  const link = `\n<${request.streamUrl}>`;
+  if (key === "automod") {
+    // Citer le texte bloqué ferait bloquer le signalement par la même règle.
+    return `Annonce de live ${verdict} (${request.context}) : ${describeLiveIssue(key, detail)}. ${retry} ` +
+      `Texte non cité ici (la même règle le bloquerait) ; lien :${link}`;
+  }
   const head = `Annonce de live ${verdict} (${request.context}) : ${describeLiveIssue(key, detail)}. ${retry} ` +
     "Annonce concernée :";
-  const link = `\n<${request.streamUrl}>`;
   const max = MAX_LIVE_LOG_LENGTH - LOG_PREFIX.length;
   // La citation sert à reconnaître l'annonce : raccourcie au besoin.
   // Place restante : chaque ligne y gagne « > » (deux caractères).
