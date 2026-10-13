@@ -9,6 +9,7 @@ import {
   LIVE_LOG_COOLDOWN_MS,
   LiveChannelUnavailableError,
   MAX_LIVE_MESSAGE_LENGTH,
+  liveFailureVerdict,
   liveAnnouncementNonce,
   describeLiveIssue,
   forgetLiveIssue,
@@ -192,9 +193,10 @@ test("describeLiveIssue : le staff lit l'action à mener, en français", () => {
     describeLiveIssue("send-denied", "Missing Access"),
     "Discord a refusé l'envoi faute de permission (Missing Access) — vérifier les permissions du bot dans #live",
   );
-  assert.match(describeLiveIssue("discord-down", "503 Service Unavailable"), /rien à régler sur le salon ; l'annonce a pu partir malgré tout, vérifier #live$/);
+  assert.match(describeLiveIssue("discord-down", "503 Service Unavailable"), /l'annonce a pu partir malgré tout : si elle est déjà dans #live, un nouvel essai du site peut la doubler, supprimer alors le doublon$/);
+  assert.match(describeLiveIssue("discord-unreachable", "ECONNRESET"), /rien n'est parti/);
   // La route ajoute déjà que le site réessaie : la cause ne le répète pas.
-  for (const key of ["missing", "no-view", "no-send", "send-denied", "discord-down", "failed"]) {
+  for (const key of ["missing", "no-view", "no-send", "send-denied", "discord-unreachable", "discord-down", "failed"]) {
     assert.ok(!describeLiveIssue(key, "x").includes("réessaie"), key);
   }
   assert.ok(describeLiveIssue("failed", "y".repeat(5000)).length < 400, "texte brut borné");
@@ -220,7 +222,8 @@ test("announceLive : une permission manquante se distingue d'une panne passagèr
   const cases: [Parameters<typeof fakeClient>[0], string][] = [
     [{ sent: [], fetchError: discordError("Unknown Channel", 10003) }, "missing"],
     [{ sent: [], fetchError: discordError("Missing Access", 50001) }, "missing"],
-    [{ sent: [], fetchError: new Error("ECONNRESET") }, "discord-down"],
+    // Panne en lisant le salon : rien n'est parti.
+    [{ sent: [], fetchError: new Error("ECONNRESET") }, "discord-unreachable"],
     [{ sent: [], denied: [PermissionFlagsBits.ViewChannel] }, "no-view"],
     [{ sent: [], denied: [PermissionFlagsBits.SendMessages] }, "no-send"],
     [{ sent: [], sendError: discordError("Missing Permissions", 50013) }, "send-denied"],
@@ -267,4 +270,11 @@ test("parseLiveAnnouncement : une étiquette trop longue est coupée d'un « …
   assert.ok(request);
   assert.equal(request.context.length, 200);
   assert.ok(request.context.endsWith("…"));
+});
+
+test("liveFailureVerdict : seule une panne pendant l'envoi est « non confirmée »", () => {
+  assert.equal(liveFailureVerdict("discord-down"), "non confirmée");
+  for (const key of ["discord-unreachable", "missing", "no-view", "no-send", "send-denied", "failed"]) {
+    assert.equal(liveFailureVerdict(key), "non publiée", key);
+  }
 });
