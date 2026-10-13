@@ -23,7 +23,7 @@ export const LIVE_ANNOUNCE_CHANNEL_ID = "678961388030394401";
 const LIVE_HOSTS = new Set([
   "twitch.tv", "www.twitch.tv", "m.twitch.tv",
   "youtube.com", "www.youtube.com", "m.youtube.com",
-  "youtu.be", "www.youtu.be",
+  "youtu.be", "www.youtu.be", "m.youtu.be",
   "kick.com", "www.kick.com", "m.kick.com",
 ]);
 
