@@ -313,3 +313,17 @@ test("liveFailureReport : ne promet un nouvel essai que si le site en fera un", 
   assert.equal(isLiveIssueFinal("send-rejected"), false);
 });
 
+
+test("liveFailureReport : dit quand une annonce abandonnée peut être postée à la main", () => {
+  const request = { message: "Alpha contre Beta", streamUrl: "https://twitch.tv/bg", context: "live-announce match-1" };
+  // Site parti, rien d'envoyé : poster à la main est sans risque.
+  assert.match(liveFailureReport(request, "discord-unreachable", "x", { siteGaveUp: true }), /peut être postée à la main sans doublon/);
+  // Panne pendant l'envoi : elle a pu partir, aucune consigne de la poster.
+  assert.doesNotMatch(liveFailureReport(request, "discord-down", "x"), /à la main/);
+  assert.doesNotMatch(liveFailureReport(request, "discord-down", "x", { siteGaveUp: true }), /à la main/);
+  // AutoMod : le texte bloqué n'est pas cité (le signalement serait bloqué aussi).
+  const automod = liveFailureReport(request, "automod", "x");
+  assert.match(automod, /une fois la règle corrigée, elle peut être postée à la main/);
+  assert.doesNotMatch(automod, /Alpha contre Beta/);
+  assert.ok(automod.endsWith("<https://twitch.tv/bg>"));
+});
