@@ -140,12 +140,17 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     autorisée (`allowedMentions: { parse: ["everyone"] }`) que pour cet envoi.
   - Le site décide du moment (une annonce par match et par affiche) et rédige
     le texte : les deux équipes et le tournoi, noms neutralisés — jamais le
-    pseudo d'un joueur (une entrée individuelle s'écrit « un joueur »).
+    pseudo d'un joueur (une entrée individuelle s'écrit « un joueur »). Des
+    matchs d'un même tournoi passés à l'antenne ensemble sur le même lien
+    partent en un seul message de plusieurs lignes (« 🔴 En direct — Tournoi : »
+    puis « • A contre B » par match) ; `context` les cite alors tous
+    (`live-announce match-12,13`).
   - `streamUrl` doit être un lien `https` vers Twitch, YouTube ou Kick, sans
     identifiants ni port, 255 caractères au plus : sinon `400
     INVALID_LIVE_ANNOUNCEMENT`, comme pour un message vide. Le message est
-    raccourci pour que mention, texte et lien tiennent dans les 2 000
-    caractères d'un message Discord.
+    raccourci d'un « … » (1 800 caractères au plus, puis ce qu'il faut pour que
+    mention, texte et lien tiennent dans les 2 000 caractères d'un message
+    Discord).
   - Retour `{ "posted": true, "mentionEveryone": boolean, "embedLinks": boolean }`.
     Sans la permission « Mentionner @everyone, @here et tous les rôles » dans
     le salon, le message part **sans** la mention (`mentionEveryone: false`) ;
@@ -153,12 +158,16 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     (`embedLinks: false`). Le canal de logs le signale dans les deux cas.
   - `503 LIVE_CHANNEL_UNAVAILABLE` : salon introuvable, ou le bot ne peut pas
     y écrire — rien n'est parti. `500 LIVE_ANNOUNCEMENT_FAILED` pour toute
-    autre panne. Le site garde l'annonce sur un succès ou un `400` ; sur toute
-    autre issue (`503`, `500`, délai dépassé, bot injoignable), il la reprend et
-    réessaie tant que le match a commencé depuis moins de deux heures.
+    autre panne. Le site garde l'annonce sur un succès, un `400` ou un délai
+    dépassé (le bot a pu publier : elle n'est pas réessayée, pour ne jamais
+    notifier deux fois tout le serveur) ; sur un `503`, un `500` ou un bot
+    injoignable, il la reprend et réessaie tant que le match a commencé depuis
+    moins de deux heures.
   - La réponse part avant les signalements au canal de logs : un canal lent ne
-    fait pas croire au site que rien n'est parti. Chaque incident (même nature
-    de refus, permission absente) n'y est signalé qu'**une fois par heure** :
+    fait pas dépasser le délai du site. Chaque incident (même nature de refus,
+    permission absente) n'y est signalé qu'**une fois par heure**, avec
+    l'action à mener ; un signalement que le canal de logs n'a pas reçu ne
+    compte pas :
     le site réessaie à chaque balayage, et le staff n'a pas à être inondé ;
     d'autres annonces peuvent alors échouer pour la même raison sans nouveau
     signalement.
