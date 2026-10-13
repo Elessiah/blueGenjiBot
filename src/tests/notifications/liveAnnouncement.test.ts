@@ -195,7 +195,7 @@ test("describeLiveIssue : le staff lit l'action à mener, en français", () => {
   );
   assert.match(describeLiveIssue("discord-down", "503 Service Unavailable"), /l'annonce a pu partir malgré tout : si elle est déjà dans #live, un nouvel essai du site peut la doubler, supprimer alors le doublon$/);
   assert.match(describeLiveIssue("discord-unreachable", "ECONNRESET"), /rien n'est parti/);
-  assert.match(describeLiveIssue("send-rejected", "AutoMod"), /AutoMod, mode lent/);
+  assert.match(describeLiveIssue("send-rejected", "AutoMod"), /Paramètres du serveur → AutoMod/);
   // La route ajoute déjà que le site réessaie : la cause ne le répète pas.
   for (const key of ["missing", "no-view", "no-send", "send-denied", "send-rejected", "discord-unreachable", "discord-down", "failed"]) {
     assert.ok(!describeLiveIssue(key, "x").includes("réessaie"), key);
@@ -233,6 +233,8 @@ test("announceLive : une permission manquante se distingue d'une panne passagèr
     // Refus explicite (AutoMod, mode lent…) : rien n'est parti, ce n'est pas une panne.
     [{ sent: [], sendError: discordError("Message blocked by AutoMod", 200000) }, "send-rejected"],
     [{ sent: [], sendError: discordError("Slowmode rate limit", 20016) }, "send-rejected"],
+    // Salon supprimé alors que le cache le gardait : introuvable, pas un réglage.
+    [{ sent: [], sendError: discordError("Unknown Channel", 10003) }, "missing"],
   ];
   for (const [options, key] of cases) {
     const error = await announceLive(fakeClient(options), REQUEST).catch((e: unknown) => e);
