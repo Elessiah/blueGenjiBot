@@ -325,7 +325,8 @@ test("liveFailureReport : dit quand une annonce abandonnée peut être postée �
   const automod = liveFailureReport(request, "automod", "x");
   assert.match(automod, /une fois la règle corrigée, elle peut être postée à la main/);
   assert.doesNotMatch(automod, /Alpha contre Beta/);
-  assert.ok(automod.endsWith("<https://twitch.tv/bg>"));
+  // Ni le texte ni le lien : une règle AutoMod peut viser les liens de diffusion.
+  assert.doesNotMatch(automod, /twitch\.tv/);
   // Site parti puis AutoMod : la condition de la règle corrigée reste dite.
   assert.match(liveFailureReport(request, "automod", "x", { siteGaveUp: true }), /une fois la règle corrigée/);
 });
@@ -333,13 +334,14 @@ test("liveFailureReport : dit quand une annonce abandonnée peut être postée �
 test("liveFailureReport : poster à la main — avec la mention, et le texte entier s'il est raccourci", () => {
   const short = { message: "Alpha contre Beta", streamUrl: "https://twitch.tv/bg", context: "live-announce match-1" };
   const plain = liveFailureReport(short, "send-rejected", "x", { siteGaveUp: true });
-  assert.match(plain, /avec « @everyone » en tête\./);
+  assert.match(plain, /avec la mention de tout le serveur en tête\./);
+  assert.doesNotMatch(plain, /@everyone/);
   assert.doesNotMatch(plain, /raccourci/);
   const lines = Array.from({ length: 40 }, (_, i) => `• ${"A".repeat(30)}${i} contre ${"B".repeat(30)}${i}`);
   const long = { ...short, message: ["🔴 En direct — Coupe :", ...lines].join("\n") };
   const cut = liveFailureReport(long, "send-rejected", "x", { siteGaveUp: true });
   assert.ok(cut.length <= 1900 - "[AppBlueGenji] ".length);
-  assert.match(cut, /texte cité raccourci ou absent : reprendre toutes les affiches depuis la fiche du tournoi/);
+  assert.match(cut, /texte cité raccourci ou absent : reprendre toutes les affiches depuis la fiche du tournoi, \/tournois\//);
   // AutoMod : rien n'est cité, le staff est renvoyé à la fiche du tournoi.
   assert.match(liveFailureReport(short, "automod", "x"), /reprendre toutes les affiches depuis la fiche du tournoi/);
 });

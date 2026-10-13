@@ -914,6 +914,25 @@ test("/internal/announce/live : chaque envoi incertain est signalé, même dans 
   assert.ok(state.logs[0].includes("match-12") && state.logs[1].includes("match-31"));
 });
 
+test("/internal/announce/live : aucun signalement ne mentionne tout le canal de logs", async () => {
+  // Le bot peut mentionner tout le serveur dans #live, donc peut-être aussi
+  // dans le canal de logs : « @everyone » n'y part jamais tel quel.
+  const res = await call("/internal/announce/live", {
+    body: { message: "Alpha contre Beta", streamUrl: "https://twitch.tv/bluegenji", context: "live-announce match-1" },
+  });
+  assert.equal(res.status, 200);
+  state.liveSendError = Object.assign(new Error("Missing Permissions"), { code: 50013 });
+  await call("/internal/announce/live", {
+    body: { message: "Alpha contre Beta", streamUrl: "https://twitch.tv/bluegenji", context: "live-announce match-2" },
+  });
+  for (let i = 0; i < 50 && state.logs.filter((l) => typeof l === "string").length === 0; i++) {
+    await new Promise((r) => setTimeout(r, 5));
+  }
+  const reports = state.logs.filter((l): l is string => typeof l === "string");
+  assert.ok(reports.length > 0);
+  assert.ok(reports.every((log) => !/@(everyone|here)/.test(log)));
+});
+
 // --- Flux SSE ---------------------------------------------------------------
 
 /** Lit le flux jusqu'à ce que `until` soit vrai sur le texte reçu. */
