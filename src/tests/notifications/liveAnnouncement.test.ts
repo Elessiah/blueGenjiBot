@@ -339,5 +339,7 @@ test("liveFailureReport : poster à la main — avec la mention, et le texte ent
   const long = { ...short, message: ["🔴 En direct — Coupe :", ...lines].join("\n") };
   const cut = liveFailureReport(long, "send-rejected", "x", { siteGaveUp: true });
   assert.ok(cut.length <= 1900 - "[AppBlueGenji] ".length);
-  assert.match(cut, /le texte cité ici est raccourci : reprendre toutes les affiches depuis le site/);
+  assert.match(cut, /texte cité raccourci ou absent : reprendre toutes les affiches depuis la fiche du tournoi/);
+  // AutoMod : rien n'est cité, le staff est renvoyé à la fiche du tournoi.
+  assert.match(liveFailureReport(short, "automod", "x"), /reprendre toutes les affiches depuis la fiche du tournoi/);
 });

@@ -282,7 +282,7 @@ export function liveFailureReport(
   const intro = `Annonce de live ${liveFailureVerdict(key)} (${request.context}) : ${describeLiveIssue(key, detail)}. `;
   if (key === "automod") {
     // Citer le texte bloqué ferait bloquer le signalement par la même règle.
-    return `${intro}${retrySentence(key, siteGaveUp, false)} Texte non cité ici (la même règle le bloquerait) ; lien :${link}`;
+    return `${intro}${retrySentence(key, siteGaveUp, true)} Texte non cité ici (la même règle le bloquerait) ; lien :${link}`;
   }
   const max = MAX_LIVE_LOG_LENGTH - LOG_PREFIX.length;
   const lineCount = request.message.split("\n").length;
@@ -309,7 +309,9 @@ export function liveFailureReport(
 function manualPostSentence(key: string, shortened: boolean): string {
   if (key === "discord-down") { return ""; }
   const when = key === "automod" ? "une fois la règle corrigée, " : "";
-  const whole = shortened ? " (le texte cité ici est raccourci : reprendre toutes les affiches depuis le site)" : "";
+  const whole = shortened
+    ? " (texte cité raccourci ou absent : reprendre toutes les affiches depuis la fiche du tournoi sur le site)"
+    : "";
   return ` Rien n'est parti : ${when}elle peut être postée à la main sans doublon, avec « @everyone » en tête${whole}.`;
 }
 
