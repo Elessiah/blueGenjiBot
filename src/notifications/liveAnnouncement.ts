@@ -240,7 +240,7 @@ export function describeLiveIssue(key: string, rawDetail: string): string {
       return `Discord n'a pas répondu ou a limité le bot en lisant le salon (${detail}) — rien n'est parti, rien à régler sur le salon`;
     case "discord-down":
       return `Discord n'a pas répondu ou a limité le bot pendant l'envoi (${detail}) — rien à régler sur le salon ; ` +
-        "l'annonce a pu partir malgré tout : si elle est déjà dans #live, un nouvel essai du site peut la doubler, supprimer alors le doublon";
+        "l'annonce a pu partir malgré tout : vérifier #live, et la poster à la main seulement si elle n'y est pas";
     default:
       return `erreur inattendue (${detail})`;
   }
@@ -277,11 +277,16 @@ export function liveFailureVerdict(key: string): string {
  */
 export function liveFailureReport(request: LiveAnnouncementRequest, key: string, detail: string): string {
   const verdict = liveFailureVerdict(key);
+  // Un envoi peut-être parti n'est pas réessayé par le site (un second
+  // `@everyone` serait pire qu'une annonce perdue) ; les autres le sont.
+  const retry = key === "discord-down"
+    ? "Le site ne la réessaie pas, pour ne pas notifier deux fois tout le serveur."
+    : "Le site la réessaie seul pendant les deux heures qui suivent le début du direct : ne pas la " +
+      "reposter à la main avant.";
   const head =
-    `Annonce de live ${verdict} (${request.context}) : ${describeLiveIssue(key, detail)}. ` +
-    "Le site la réessaie seul pendant les deux heures qui suivent le début du direct : ne pas la " +
-    "reposter à la main avant. Signalé au plus une fois par heure, d'autres annonces peuvent échouer " +
-    "pour la même raison. Annonce concernée :";
+    `Annonce de live ${verdict} (${request.context}) : ${describeLiveIssue(key, detail)}. ${retry} ` +
+    "Signalé au plus une fois par heure, d'autres annonces peuvent échouer pour la même raison. " +
+    "Annonce concernée :";
   const link = `\n<${request.streamUrl}>`;
   // Place restante pour la citation : chaque ligne y gagne « > » (deux caractères).
   const room = MAX_LIVE_LOG_LENGTH - LOG_PREFIX.length - head.length - link.length - 1;
