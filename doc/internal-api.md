@@ -132,6 +132,7 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
 
 - `POST /internal/announce/live`
   - Body: `{ "message": "...", "streamUrl": "https://twitch.tv/...", "context": "live-announce match-42" }`
+    (`context`, étiquette des journaux, 200 caractères au plus)
   - Annonce un **live** au début d'un match diffusé : le bot publie
     `@everyone <message>` puis le lien, seul sur sa ligne, dans le salon #live
     du serveur BlueGenji. Ce salon est fixé dans le code (constante
@@ -166,9 +167,13 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
   - La réponse part avant les signalements au canal de logs : un canal lent ne
     fait pas dépasser le délai du site. Le site réessayant à chaque balayage,
     chaque incident (même nature de refus, permission absente) n'y est signalé
-    qu'**une fois par heure**, avec l'action à mener, le texte de l'annonce et
-    son lien (pour la reposter à la main) ; d'autres annonces peuvent alors
-    échouer pour la même raison sans nouveau signalement. Un signalement que le
+    qu'**une fois par heure**, avec l'action à mener ; un échec de
+    publication cite aussi l'annonce concernée et son lien, pour la
+    reconnaître — le site la réessaie seul pendant deux heures, la reposter à
+    la main avant notifierait deux fois tout le serveur. Le signalement tient
+    toujours dans un message Discord (texte cité raccourci au besoin).
+    D'autres annonces peuvent échouer pour la même raison sans nouveau
+    signalement. Un signalement que le
     canal de logs n'a pas reçu ne compte pas : le suivant partira.
   - Une panne passagère de Discord (réseau, `5xx`, limite de débit) est dite
     comme telle, pas comme une permission manquante. Chaque envoi porte un
