@@ -820,7 +820,7 @@ test("/internal/announce/live : envoi refusé → 503, puis un seul signalement 
 
   let res = await call("/internal/announce/live", { body });
   assert.equal(res.status, 503);
-  assert.deepEqual(res.body, { error: "LIVE_CHANNEL_UNAVAILABLE" });
+  assert.deepEqual(res.body, { error: "LIVE_CHANNEL_UNAVAILABLE", reason: "send-denied" });
   // Le signalement part après la réponse : on lui laisse le temps d'arriver.
   for (let i = 0; i < 50 && state.logs.length === 0; i++) { await new Promise((r) => setTimeout(r, 5)); }
   assert.equal(state.logs.length, 1);

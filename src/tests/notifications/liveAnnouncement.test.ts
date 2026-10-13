@@ -9,6 +9,7 @@ import {
   LIVE_LOG_COOLDOWN_MS,
   LiveChannelUnavailableError,
   MAX_LIVE_MESSAGE_LENGTH,
+  formatWait,
   liveFailureVerdict,
   liveAnnouncementNonce,
   describeLiveIssue,
@@ -199,7 +200,7 @@ test("describeLiveIssue : le staff lit l'action à mener, en français", () => {
   assert.match(describeLiveIssue("discord-unreachable", "ECONNRESET"), /rien n'est parti/);
   assert.match(describeLiveIssue("automod", "x"), /Paramètres du serveur → AutoMod/);
   assert.doesNotMatch(describeLiveIssue("send-rejected", "x"), /AutoMod/);
-  assert.match(describeLiveIssue("slowmode", "encore 3600 s"), /elle partira à la fin du délai/);
+  assert.match(describeLiveIssue("slowmode", "encore 6 h"), /passé deux heures après le début du direct, elle ne partira plus/);
   assert.match(describeLiveIssue("missing", "x"), /LIVE_ANNOUNCE_CHANNEL_ID/);
   // La route ajoute déjà que le site réessaie : la cause ne le répète pas.
   for (const key of ["missing", "no-view", "no-send", "slowmode", "send-denied", "automod", "send-rejected", "discord-unreachable", "discord-down", "failed"]) {
@@ -322,9 +323,16 @@ test("announceLive : le mode lent ne bloque que s'il retiendrait l'envoi", async
   const long = await announceLive(fakeClient({ sent, slowmode: 3600, denied: noBypass }), REQUEST).catch((e: unknown) => e);
   assert.ok(long instanceof LiveChannelUnavailableError);
   assert.equal(long.key, "slowmode");
-  assert.match(describeLiveIssue("slowmode", long.detail), /encore \d+ s/);
+  assert.match(describeLiveIssue("slowmode", long.detail), /encore 1 h/);
   // Sans mode lent, elle part.
   await announceLive(fakeClient({ sent, slowmode: 0, denied: noBypass }), REQUEST);
   assert.equal(sent.length, 2);
   resetLiveLogThrottle();
+});
+
+test("formatWait : secondes, minutes, heures", () => {
+  assert.equal(formatWait(45_000), "45 s");
+  assert.equal(formatWait(61_000), "2 min");
+  assert.equal(formatWait(3_600_000), "1 h");
+  assert.equal(formatWait(21_540_000), "5 h 59 min");
 });
