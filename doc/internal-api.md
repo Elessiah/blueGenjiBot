@@ -159,48 +159,48 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     le salon, le message part **sans** la mention (`mentionEveryone: false`) ;
     sans « Intégrer des liens », il part sans aperçu de la chaîne
     (`embedLinks: false`). Le canal de logs le signale dans les deux cas.
-  - `503 { "error": "LIVE_CHANNEL_UNAVAILABLE", "reason": "<nature>" }` (`reason` :
-    `missing`, `no-view`, `no-send`, `send-denied`, `slowmode`,
-    `slowmode-short`, `automod`, `send-rejected`, `discord-unreachable`,
-    `discord-down`) : le bot n'a pas pu publier, ou pas pu
-    confirmer la publication — salon introuvable, permission manquante, refus
-    explicite de Discord (règle AutoMod du serveur…), mode lent du salon qui
-    retiendrait l'envoi (le bot y a déjà posté pendant le délai et ne peut pas
-    l'ignorer : l'envoi resterait en attente, il est refusé d'emblée et le
-    site réessaie ; signalé au staff seulement s'il reste plus d'une minute
-    d'attente), ou panne passagère de Discord (réseau, `5xx`, limite de débit) ; le canal de
-    logs dit laquelle (« non publiée », ou « non confirmée » pour une panne de
-    Discord pendant l'envoi ; une panne en lisant le salon, avant tout envoi, reste « non
-    publiée »). Lors d'une panne pendant l'envoi, un envoi dont la réponse
-    s'est perdue a pu partir : le jeton d'unicité
-    réduit alors le risque de doublon, sans l'écarter : Discord ne le vérifie
-    que quelques minutes, et seulement pour un envoi identique (même
-    étiquette, même lien) — un nouvel essai tardif, ou regroupé avec un autre
-    match, peut publier une seconde fois. `500
-    LIVE_ANNOUNCEMENT_FAILED` pour toute autre panne. Le site garde l'annonce sur un succès, un `400`, un délai
-    dépassé ou un `503` `discord-down` (le bot a pu publier : elle n'est pas
-    réessayée, pour ne jamais notifier deux fois tout le serveur — le canal de
-    logs demande de vérifier #live et de ne la poster à la main que si elle
-    n'y est pas) ; sur tout autre `503`, un `500` ou un bot injoignable, il la
-    reprend et réessaie tant que le match a commencé depuis moins de deux
-    heures.
-  - La réponse part avant les signalements au canal de logs : un canal lent ne
-    fait pas dépasser le délai du site. Le site réessayant à chaque balayage,
-    chaque incident (même nature de refus, permission absente) n'y est signalé
-    qu'**une fois par heure**, avec l'action à mener ; un échec de
-    publication cite aussi l'annonce concernée et son lien, pour la
-    reconnaître — le site la réessaie seul pendant deux heures, la reposter à
-    la main avant notifierait deux fois tout le serveur. Le signalement tient
-    toujours dans un message Discord (texte cité raccourci au besoin).
-    D'autres annonces peuvent échouer pour la même raison sans nouveau
-    signalement. Un signalement que le
-    canal de logs n'a pas reçu ne compte pas : le suivant partira.
-  - Une panne passagère de Discord (réseau, `5xx`, limite de débit) est dite
-    comme telle, pas comme une permission manquante. Chaque envoi porte un
-    jeton d'unicité (`nonce`, `enforceNonce`) tiré de l'étiquette et du lien :
-    Discord ne crée pas deux fois ce même envoi s'il est rejoué dans les
-    quelques minutes (réponse perdue puis nouvel essai du site).
-    Une mention `@everyone` ou `@here` glissée dans le texte est neutralisée :
+  - `503 { "error": "LIVE_CHANNEL_UNAVAILABLE", "reason": "<nature>" }` : le
+    bot n'a pas pu publier, ou pas pu confirmer la publication. `reason` :
+    - `missing`, `no-view`, `no-send`, `send-denied` — salon introuvable ou
+      permission manquante ;
+    - `slowmode`, `slowmode-short` — le mode lent du salon retiendrait
+      l'envoi (le bot y a déjà posté pendant le délai et ne peut pas
+      l'ignorer : l'envoi resterait en attente, il est refusé d'emblée) ;
+    - `automod`, `send-rejected` — Discord a refusé le message (règle AutoMod
+      du serveur, autre refus) ;
+    - `discord-unreachable` — Discord n'a pas répondu en lisant le salon,
+      avant tout envoi ;
+    - `discord-down` — Discord a lâché **pendant** l'envoi : le message a pu
+      partir malgré tout.
+  - `500 LIVE_ANNOUNCEMENT_FAILED` pour toute autre panne.
+  - Ce que fait le site : il garde l'annonce sur un succès, un `400`, un délai
+    dépassé ou un `503` `discord-down` — le bot a pu publier, elle n'est pas
+    réessayée, pour ne jamais notifier deux fois tout le serveur. Sur tout
+    autre `503`, un `500` ou un bot injoignable, il la reprend et réessaie
+    tant que le match a commencé depuis moins de deux heures.
+  - Le canal de logs : la réponse part **avant** le signalement (un canal lent
+    ne fait pas dépasser le délai du site). Il dit la cause, l'action à mener
+    et cite l'annonce concernée et son lien pour la reconnaître, en tenant
+    toujours dans un message Discord (citation raccourcie au besoin). Une
+    annonce « non publiée » est réessayée par le site : la reposter à la main
+    pendant ces deux heures notifierait deux fois tout le serveur ; comme le
+    site réessaie à chaque balayage, une même cause n'est signalée qu'**une
+    fois par heure** (d'autres annonces peuvent alors échouer pour elle sans
+    nouveau signalement). Une annonce « non confirmée » (`discord-down`) n'est
+    pas réessayée : chacune est signalée, avec la consigne de vérifier #live
+    et de ne la poster à la main que si elle n'y est pas. Une attente de mode
+    lent d'une minute au plus n'est pas signalée : le nouvel essai la règle.
+    Un signalement que le canal de logs n'a pas reçu ne compte pas : le
+    suivant partira.
+  - Chaque envoi porte un jeton d'unicité (`nonce`, `enforceNonce`) tiré de
+    l'étiquette et du lien : Discord ne crée pas deux fois ce même envoi s'il
+    est rejoué dans les quelques minutes (nouvel essai interne de discord.js
+    après une réponse perdue). Il n'arrête pas une annonce postée à la main :
+    d'où la consigne de vérifier #live d'abord.
+  - Le mode lent n'est connu que depuis le dernier démarrage du bot : juste
+    après un redémarrage, un envoi peut attendre la fin du délai — si #live a
+    un mode lent, donner au bot « Gérer les messages » dans le salon.
+  - Une mention `@everyone` ou `@here` glissée dans le texte est neutralisée :
     seule celle de tête notifie.
 
 - `GET /internal/feed/stream`
