@@ -39,7 +39,11 @@ HOST = data["HEBERGEUR_HREF"]
 out = os.path.join(ROOT, "LegalTerms")
 os.makedirs(out, exist_ok=True)
 
-def absu(u): return SITE + u if u.startswith("/") else u
+# Les pages légales du site existent aussi en anglais sous `/en` : la copie
+# anglaise lie les pages anglaises, la française les françaises.
+LANG = "fr"
+def page(u): return SITE + ("/en" if LANG == "en" and not u.startswith("/en/") else "") + u
+def absu(u): return page(u) if u.startswith("/") else u
 LINK = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 def md_inline(t): return LINK.sub(lambda m: f"[{m.group(1)}]({absu(m.group(2))})", t)
 def pdf_inline(t):
@@ -76,7 +80,8 @@ h3 = ParagraphStyle("h3", parent=ss["Heading3"], fontName="Arial-Bold", fontSize
 small = ParagraphStyle("s", parent=body, fontName="Arial-Italic", fontSize=9, textColor="#555555")
 
 for key, lang, name, path, xref in DOCS:
-    d = data[key][lang]; url = SITE + path; title = d["title"].replace("\n", " ")
+    LANG = lang
+    d = data[key][lang]; url = page(path); title = d["title"].replace("\n", " ")
     sep = " :" if lang == "fr" else ":"
     lines = [xref, "", f"# {title} — BlueGenji Bot", "", f"**{d['lastUpdatedLabel']}**{sep} {d['lastUpdated']}", "",
              "> " + md_inline(NOTE[lang].format(u=url)), "", md_inline(d["intro"]), ""]
@@ -95,7 +100,7 @@ for key, lang, name, path, xref in DOCS:
                 lines += [f"- {md_inline(i)}" for i in b["items"]] + [""]
                 story.append(ListFlowable([ListItem(Paragraph(pdf_inline(i), body), leftIndent=12) for i in b["items"]],
                                           bulletType="bullet", start="•", leftIndent=12))
-    h = d["hosting"]; hl = f"[{h['linkLabel'].rstrip(' →')}]({SITE + HOST})"
+    h = d["hosting"]; hl = f"[{h['linkLabel'].rstrip(' →')}]({page(HOST)})"
     lines += ["---", "", f"## {h['title']}", "", md_inline(h["text"]), "", hl, ""]
     story += [Paragraph(escape(h["title"]), h2), Paragraph(pdf_inline(h["text"]), body), Paragraph(pdf_inline(hl), body)]
     with open(os.path.join(out, name + ".md"), "w", encoding="utf-8", newline="\n") as f:
