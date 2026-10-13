@@ -72,8 +72,8 @@ function discordCode(error: unknown): number | undefined {
 /**
  * Échec d'un `channel.send`, classé : un refus explicite de Discord (erreur
  * d'API portant un code) dit que rien n'est parti — faute de permission
- * (`send-denied`) ou pour une autre raison (`send-rejected` : AutoMod, mode
- * lent…) ; sans code, c'est une panne pendant l'envoi (`discord-down`, réseau,
+ * (`send-denied`), par AutoMod (`automod`) ou pour une autre raison
+ * (`send-rejected`) ; sans code, c'est une panne pendant l'envoi (`discord-down`, réseau,
  * `5xx`, limite de débit) qui a pu cacher une publication réussie.
  *
  * @param error Erreur levée par l'envoi.
@@ -174,7 +174,15 @@ export function forgetLiveIssue(key: string): void {
 /** Oublie les signalements déjà faits. Réservé aux tests. */
 export function resetLiveLogThrottle(): void {
   lastLiveLogAt.clear();
+  lastLivePostAt = null;
 }
+
+/**
+ * Instant de la dernière annonce publiée par ce processus (mémoire seule : au
+ * redémarrage, inconnu). Le mode lent ne retient un envoi que si le bot a déjà
+ * posté dans le salon pendant le délai.
+ */
+let lastLivePostAt: number | null = null;
 
 /**
  * Ce que le staff doit faire, selon la nature de l'incident
@@ -199,7 +207,7 @@ export function describeLiveIssue(key: string, rawDetail: string): string {
       return "le salon #live est introuvable ou invisible pour le bot — vérifier qu'il existe et que le bot a la permission « Voir le salon » ; " +
         "s'il a été supprimé puis recréé, son nouvel identifiant doit être reporté dans le code du bot (LIVE_ANNOUNCE_CHANNEL_ID)";
     case "slowmode":
-      return "le mode lent est actif sur #live et le bot ne peut pas l'ignorer — le désactiver, ou donner au bot la permission « Gérer les messages » dans #live";
+      return "le mode lent de #live retiendrait l'annonce (le bot y a déjà posté pendant le délai) — le désactiver ou le raccourcir, ou donner au bot la permission « Gérer les messages » dans #live";
     case "no-view":
       return "le bot n'a pas la permission « Voir le salon » dans #live — la lui rendre";
     case "no-send":
@@ -392,13 +400,16 @@ function readPermissions(
 ): { canView: boolean; canSend: boolean; canMentionEveryone: boolean; canEmbedLinks: boolean; slowed: boolean } {
   const permissions = client.user && channel.permissionsFor ? channel.permissionsFor(client.user) : null;
   if (!permissions) { return { canView: true, canSend: true, canMentionEveryone: true, canEmbedLinks: true, slowed: false }; }
-  // Le mode lent retient l'envoi (discord.js attend la fin du délai, jusqu'à
-  // six heures) sauf pour qui gère les messages ou le salon : l'annonce
-  // partirait bien après le début du match.
+  // Le mode lent retient un envoi fait moins de `rateLimitPerUser` secondes
+  // après le précédent du bot (discord.js attend la fin du délai, jusqu'à six
+  // heures), sauf pour qui gère les messages ou le salon : l'annonce partirait
+  // bien après le début du match.
   const bypassesSlowmode =
     permissions.has(PermissionFlagsBits.ManageMessages) || permissions.has(PermissionFlagsBits.ManageChannels);
+  const delayMs = (channel.rateLimitPerUser ?? 0) * 1000;
+  const heldBack = delayMs > 0 && lastLivePostAt !== null && Date.now() - lastLivePostAt < delayMs;
   return {
-    slowed: (channel.rateLimitPerUser ?? 0) > 0 && !bypassesSlowmode,
+    slowed: heldBack && !bypassesSlowmode,
     canView: permissions.has(PermissionFlagsBits.ViewChannel),
     canSend: permissions.has(PermissionFlagsBits.SendMessages),
     canMentionEveryone: permissions.has(PermissionFlagsBits.MentionEveryone),
@@ -455,5 +466,6 @@ export async function announceLive(client: Client, request: LiveAnnouncementRequ
   } catch (error) {
     throw sendFailure(error);
   }
+  lastLivePostAt = Date.now();
   return { posted: true, mentionEveryone: canMentionEveryone, embedLinks: canEmbedLinks };
 }
