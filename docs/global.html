@@ -3124,7 +3124,7 @@ sur #live inonderait le canal du staff.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="notifications_liveAnnouncement.js.html">notifications/liveAnnouncement.js</a>, <a href="notifications_liveAnnouncement.js.html#line99">line 99</a>
+        <a href="notifications_liveAnnouncement.js.html">notifications/liveAnnouncement.js</a>, <a href="notifications_liveAnnouncement.js.html#line101">line 101</a>
     </li></ul></dd>
     
 
@@ -10504,7 +10504,7 @@ pour que la route le journalise ; de même sans « Intégrer des liens »
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="notifications_liveAnnouncement.js.html">notifications/liveAnnouncement.js</a>, <a href="notifications_liveAnnouncement.js.html#line274">line 274</a>
+        <a href="notifications_liveAnnouncement.js.html">notifications/liveAnnouncement.js</a>, <a href="notifications_liveAnnouncement.js.html#line277">line 277</a>
     </li></ul></dd>
     
 
@@ -21652,7 +21652,7 @@ d'une `Error`, lui, est rendu tel quel.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="notifications_liveAnnouncement.js.html">notifications/liveAnnouncement.js</a>, <a href="notifications_liveAnnouncement.js.html#line142">line 142</a>
+        <a href="notifications_liveAnnouncement.js.html">notifications/liveAnnouncement.js</a>, <a href="notifications_liveAnnouncement.js.html#line144">line 144</a>
     </li></ul></dd>
     
 
@@ -27012,7 +27012,7 @@ heure.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="notifications_liveAnnouncement.js.html">notifications/liveAnnouncement.js</a>, <a href="notifications_liveAnnouncement.js.html#line124">line 124</a>
+        <a href="notifications_liveAnnouncement.js.html">notifications/liveAnnouncement.js</a>, <a href="notifications_liveAnnouncement.js.html#line126">line 126</a>
     </li></ul></dd>
     
 
@@ -27851,7 +27851,7 @@ l'ensemble tienne dans les 2 000 caractères d'un message Discord.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="notifications_liveAnnouncement.js.html">notifications/liveAnnouncement.js</a>, <a href="notifications_liveAnnouncement.js.html#line239">line 239</a>
+        <a href="notifications_liveAnnouncement.js.html">notifications/liveAnnouncement.js</a>, <a href="notifications_liveAnnouncement.js.html#line242">line 242</a>
     </li></ul></dd>
     
 
@@ -31235,7 +31235,7 @@ blanche, sans identifiants ni port, 255 caractères au plus. Seconde barrière
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="notifications_liveAnnouncement.js.html">notifications/liveAnnouncement.js</a>, <a href="notifications_liveAnnouncement.js.html#line190">line 190</a>
+        <a href="notifications_liveAnnouncement.js.html">notifications/liveAnnouncement.js</a>, <a href="notifications_liveAnnouncement.js.html#line193">line 193</a>
     </li></ul></dd>
     
 
@@ -34382,9 +34382,11 @@ local) ne se verrait qu'une fois l'autre (commande absente) réparée.
 
 <div class="description">
     Jeton d'unicité de l'envoi (`nonce`, 25 caractères au plus), tiré de
-l'annonce : Discord ne crée pas deux messages de même jeton à quelques
-minutes d'écart — un envoi rejoué (réponse perdue, nouvel essai du site)
-ne notifie pas deux fois tout le serveur.
+l'étiquette et du lien : Discord ne crée pas deux messages de même jeton à
+quelques minutes d'écart — le même envoi rejoué peu après (réponse perdue,
+nouvel essai du site) ne notifie pas deux fois tout le serveur. Il réduit
+le risque sans l'écarter : un essai plus tardif, ou regroupé avec un autre
+match (autre étiquette), n'est pas reconnu.
 </div>
 
 
@@ -34428,7 +34430,7 @@ ne notifie pas deux fois tout le serveur.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="notifications_liveAnnouncement.js.html">notifications/liveAnnouncement.js</a>, <a href="notifications_liveAnnouncement.js.html#line89">line 89</a>
+        <a href="notifications_liveAnnouncement.js.html">notifications/liveAnnouncement.js</a>, <a href="notifications_liveAnnouncement.js.html#line91">line 91</a>
     </li></ul></dd>
     
 
@@ -40086,7 +40088,7 @@ retirés, commentaires et lignes vides ignorés.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="notifications_liveAnnouncement.js.html">notifications/liveAnnouncement.js</a>, <a href="notifications_liveAnnouncement.js.html#line213">line 213</a>
+        <a href="notifications_liveAnnouncement.js.html">notifications/liveAnnouncement.js</a>, <a href="notifications_liveAnnouncement.js.html#line216">line 216</a>
     </li></ul></dd>
     
 
@@ -43769,7 +43771,7 @@ un client sans utilisateur) est tenu pour accessible : l'envoi dira le reste.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="notifications_liveAnnouncement.js.html">notifications/liveAnnouncement.js</a>, <a href="notifications_liveAnnouncement.js.html#line248">line 248</a>
+        <a href="notifications_liveAnnouncement.js.html">notifications/liveAnnouncement.js</a>, <a href="notifications_liveAnnouncement.js.html#line251">line 251</a>
     </li></ul></dd>
     
 
@@ -47764,7 +47766,7 @@ sauvegarde a besoin d'en rouvrir une, d'où ce variant.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="notifications_liveAnnouncement.js.html">notifications/liveAnnouncement.js</a>, <a href="notifications_liveAnnouncement.js.html#line128">line 128</a>
+        <a href="notifications_liveAnnouncement.js.html">notifications/liveAnnouncement.js</a>, <a href="notifications_liveAnnouncement.js.html#line130">line 130</a>
     </li></ul></dd>
     
 
@@ -57851,7 +57853,7 @@ première fois, puis au plus une fois par <a href="global.html#LIVE_LOG_COOLDOWN
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="notifications_liveAnnouncement.js.html">notifications/liveAnnouncement.js</a>, <a href="notifications_liveAnnouncement.js.html#line109">line 109</a>
+        <a href="notifications_liveAnnouncement.js.html">notifications/liveAnnouncement.js</a>, <a href="notifications_liveAnnouncement.js.html#line111">line 111</a>
     </li></ul></dd>
     
 
@@ -60810,7 +60812,7 @@ production avec un fichier corrompu serait pire que l'absence de restauration.
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Tue Oct 13 2026 23:54:56 GMT+0200 (heure d’été d’Europe centrale)
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Wed Oct 14 2026 00:00:03 GMT+0200 (heure d’été d’Europe centrale)
 </footer>
 
 <script> prettyPrint(); </script>
