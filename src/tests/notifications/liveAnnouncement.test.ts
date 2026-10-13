@@ -196,7 +196,7 @@ test("describeLiveIssue : le staff lit l'action à mener, en français", () => {
     describeLiveIssue("send-denied", "Missing Access"),
     "Discord a refusé l'envoi faute de permission (Missing Access) — vérifier les permissions du bot dans #live",
   );
-  assert.match(describeLiveIssue("discord-down", "503 Service Unavailable"), /l'annonce a pu partir malgré tout : si elle est déjà dans #live, un nouvel essai du site peut la doubler, supprimer alors le doublon$/);
+  assert.match(describeLiveIssue("discord-down", "503 Service Unavailable"), /l'annonce a pu partir malgré tout : vérifier #live, et la poster à la main seulement si elle n'y est pas$/);
   assert.match(describeLiveIssue("discord-unreachable", "ECONNRESET"), /rien n'est parti/);
   assert.match(describeLiveIssue("automod", "x"), /Paramètres du serveur → AutoMod/);
   assert.doesNotMatch(describeLiveIssue("send-rejected", "x"), /AutoMod/);
