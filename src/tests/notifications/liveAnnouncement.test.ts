@@ -78,10 +78,27 @@ test("formatLiveAnnouncement : mention en tête, lien seul sur sa ligne", () => 
   );
 });
 
+test("formatLiveAnnouncement : sans permission de mentionner, pas de « @everyone » gris", () => {
+  assert.equal(
+    formatLiveAnnouncement(REQUEST, false),
+    "Alpha contre Beta — Coupe d'hiver\nhttps://www.twitch.tv/bluegenji",
+  );
+});
+
+test("formatLiveAnnouncement : message le plus long + lien le plus long tiennent dans 2 000 caractères", () => {
+  const streamUrl = "https://www.twitch.tv/" + "a".repeat(255 - "https://www.twitch.tv/".length);
+  const request = parseLiveAnnouncement({ message: "x".repeat(5000), streamUrl });
+  assert.ok(request);
+  const content = formatLiveAnnouncement(request);
+  assert.equal(content.length, 2000);
+  assert.ok(content.startsWith("@everyone x"));
+  assert.ok(content.endsWith(`…\n${streamUrl}`), "le lien reste entier, seul sur sa ligne");
+});
+
 test("announceLive : publie dans #live, @everyone autorisé pour ce seul message", async () => {
   const sent: Sent[] = [];
   const report = await announceLive(fakeClient({ sent }), REQUEST);
-  assert.deepEqual(report, { posted: true, mentionEveryone: true });
+  assert.deepEqual(report, { posted: true, mentionEveryone: true, embedLinks: true });
   assert.equal(sent.length, 1);
   assert.equal(sent[0].channelId, LIVE_ANNOUNCE_CHANNEL_ID);
   assert.equal(LIVE_ANNOUNCE_CHANNEL_ID, "678961388030394401");
@@ -92,8 +109,25 @@ test("announceLive : publie dans #live, @everyone autorisé pour ce seul message
 test("announceLive : sans la permission de mentionner, publie et le dit", async () => {
   const sent: Sent[] = [];
   const report = await announceLive(fakeClient({ sent, denied: [PermissionFlagsBits.MentionEveryone] }), REQUEST);
-  assert.deepEqual(report, { posted: true, mentionEveryone: false });
+  assert.deepEqual(report, { posted: true, mentionEveryone: false, embedLinks: true });
   assert.equal(sent.length, 1);
+  // Ni mention écrite (elle s'afficherait en gris sans notifier), ni mention autorisée.
+  assert.ok(!sent[0].content.includes("@everyone"));
+  assert.deepEqual(sent[0].allowedMentions, { parse: [] });
+});
+
+test("announceLive : sans « Intégrer des liens », publie et le dit", async () => {
+  const sent: Sent[] = [];
+  const report = await announceLive(fakeClient({ sent, denied: [PermissionFlagsBits.EmbedLinks] }), REQUEST);
+  assert.deepEqual(report, { posted: true, mentionEveryone: true, embedLinks: false });
+  assert.equal(sent.length, 1);
+});
+
+test("LiveChannelUnavailableError : clé stable, indépendante du texte d'erreur de Discord", async () => {
+  const error = await announceLive(fakeClient({ sent: [], channel: "send-fails" }), REQUEST).catch((e: unknown) => e);
+  assert.ok(error instanceof LiveChannelUnavailableError);
+  assert.equal(error.key, "send-failed");
+  assert.match(error.message, /Missing Permissions/);
 });
 
 test("announceLive : salon absent, illisible, fermé ou envoi refusé → LiveChannelUnavailableError", async () => {
