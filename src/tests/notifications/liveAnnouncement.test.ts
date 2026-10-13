@@ -329,3 +329,15 @@ test("liveFailureReport : dit quand une annonce abandonnée peut être postée �
   // Site parti puis AutoMod : la condition de la règle corrigée reste dite.
   assert.match(liveFailureReport(request, "automod", "x", { siteGaveUp: true }), /une fois la règle corrigée/);
 });
+
+test("liveFailureReport : poster à la main — avec la mention, et le texte entier s'il est raccourci", () => {
+  const short = { message: "Alpha contre Beta", streamUrl: "https://twitch.tv/bg", context: "live-announce match-1" };
+  const plain = liveFailureReport(short, "send-rejected", "x", { siteGaveUp: true });
+  assert.match(plain, /avec « @everyone » en tête\./);
+  assert.doesNotMatch(plain, /raccourci/);
+  const lines = Array.from({ length: 40 }, (_, i) => `• ${"A".repeat(30)}${i} contre ${"B".repeat(30)}${i}`);
+  const long = { ...short, message: ["🔴 En direct — Coupe :", ...lines].join("\n") };
+  const cut = liveFailureReport(long, "send-rejected", "x", { siteGaveUp: true });
+  assert.ok(cut.length <= 1900 - "[AppBlueGenji] ".length);
+  assert.match(cut, /le texte cité ici est raccourci : reprendre toutes les affiches depuis le site/);
+});
