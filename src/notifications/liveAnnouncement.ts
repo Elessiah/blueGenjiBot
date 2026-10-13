@@ -40,6 +40,15 @@ const DISCORD_MAX_CONTENT_LENGTH = 2000;
  */
 export const MAX_LIVE_MESSAGE_LENGTH = 1800;
 
+/** Longueur maximale de l'étiquette `context` (journaux pm2 et canal de logs). */
+export const MAX_LIVE_CONTEXT_LENGTH = 200;
+
+/**
+ * Plafond d'un signalement au canal de logs : sous les 2 000 caractères d'un
+ * message Discord, sans quoi il serait refusé — et perdu.
+ */
+export const MAX_LIVE_LOG_LENGTH = 1900;
+
 /** Mention de tête, posée seulement quand le bot peut notifier tout le serveur. */
 const EVERYONE_PREFIX = "@everyone ";
 
@@ -60,7 +69,7 @@ function discordCode(error: unknown): number | undefined {
  * couper un caractère en deux (émoji, lettre hors du plan de base) : un « � »
  * sous `@everyone` aurait l'air d'une panne.
  */
-function cutText(text: string, max: number): string {
+export function cutText(text: string, max: number): string {
   if (text.length <= max) { return text; }
   let end = max - 1;
   const last = text.charCodeAt(end - 1);
@@ -150,7 +159,7 @@ export function describeLiveIssue(key: string, detail: string): string {
     case "send-denied":
       return `Discord a refusé l'envoi faute de permission (${detail}) — vérifier les permissions du bot dans #live`;
     case "discord-down":
-      return `Discord n'a pas répondu ou a limité le bot (${detail}) — rien à régler, le site réessaie`;
+      return `Discord n'a pas répondu ou a limité le bot (${detail}) — rien à régler sur le salon`;
     default:
       return `erreur inattendue (${detail})`;
   }
@@ -233,7 +242,8 @@ export function parseLiveAnnouncement(payload: unknown): LiveAnnouncementRequest
   const message = typeof raw.message === "string" ? raw.message.trim() : "";
   const streamUrl = typeof raw.streamUrl === "string" ? raw.streamUrl.trim() : "";
   if (!message || !isAllowedStreamUrl(streamUrl)) { return null; }
-  const context = typeof raw.context === "string" && raw.context.trim() ? raw.context.trim().slice(0, 80) : "live-announce";
+  // Assez long pour la liste des matchs d'un groupe (`live-announce match-12,13,…`).
+  const context = typeof raw.context === "string" && raw.context.trim() ? raw.context.trim().slice(0, MAX_LIVE_CONTEXT_LENGTH) : "live-announce";
   return { message: cutText(neutralizeMassMentions(message), MAX_LIVE_MESSAGE_LENGTH), streamUrl, context };
 }
 

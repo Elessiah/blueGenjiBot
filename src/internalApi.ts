@@ -38,7 +38,9 @@ import { HandleResolutionTimeoutError, resolveDiscordHandle } from "./notificati
 import { MESSAGE_RETENTION_DAYS } from "./privacy/retentionPeriods.js";
 import {
   announceLive,
+  cutText,
   describeLiveIssue,
+  MAX_LIVE_LOG_LENGTH,
   forgetLiveIssue,
   LiveChannelUnavailableError,
   parseLiveAnnouncement,
@@ -575,15 +577,18 @@ export function startInternalApi(client: Client) {
       }
       const key = unavailable ? error.key : "failed";
       const detail = unavailable ? error.detail : (error as Error).message;
-      // Le texte de l'annonce (équipes et tournoi, jamais un pseudo) et son
-      // lien, cités : le staff peut la reposter à la main si elle est perdue.
-      const quoted = request.message.split("\n").map((line) => `> ${line}`).join("\n");
-      reportLiveIssue(
-        key,
+      // L'annonce concernée (équipes et tournoi, jamais un pseudo) et son lien,
+      // cités pour la reconnaître. Le site la réessaie seul : la reposter à la
+      // main pendant ce temps notifierait deux fois tout le serveur.
+      const head =
         `Annonce de live non publiée (${request.context}) : ${describeLiveIssue(key, detail)}. ` +
-        "Le site réessaie tant que le match a commencé depuis moins de deux heures ; signalé au plus une fois " +
-        `par heure, d'autres annonces peuvent échouer pour la même raison.\n${quoted}\n<${request.streamUrl}>`,
-      );
+        "Le site la réessaie seul tant que le match a commencé depuis moins de deux heures : ne pas la " +
+        "reposter à la main avant. Signalé au plus une fois par heure, d'autres annonces peuvent échouer " +
+        "pour la même raison. Annonce concernée :";
+      const link = `\n<${request.streamUrl}>`;
+      const room = MAX_LIVE_LOG_LENGTH - "[AppBlueGenji] ".length - head.length - link.length;
+      const quoted = cutText(request.message.split("\n").map((line) => `> ${line}`).join("\n"), Math.max(room - 1, 1));
+      reportLiveIssue(key, `${head}\n${quoted}${link}`);
     }
   });
 
