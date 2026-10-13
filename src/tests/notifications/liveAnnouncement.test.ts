@@ -38,6 +38,7 @@ function fakeClient(options: {
   denied?: bigint[];
   fetchError?: Error;
   sendError?: Error;
+  slowmode?: number;
 }): Client {
   return {
     user: { id: "bot" },
@@ -48,6 +49,7 @@ function fakeClient(options: {
         if (options.channel === "missing") { return null; }
         return {
           permissionsFor: () => ({ has: (flag: bigint) => !(options.denied ?? []).includes(flag) }),
+          rateLimitPerUser: options.slowmode ?? 0,
           send: async (payload: Omit<Sent, "channelId">) => {
             if (options.sendError) { throw options.sendError; }
             if (options.channel === "send-fails") { throw new Error("Missing Permissions"); }
@@ -195,9 +197,12 @@ test("describeLiveIssue : le staff lit l'action à mener, en français", () => {
   );
   assert.match(describeLiveIssue("discord-down", "503 Service Unavailable"), /l'annonce a pu partir malgré tout : si elle est déjà dans #live, un nouvel essai du site peut la doubler, supprimer alors le doublon$/);
   assert.match(describeLiveIssue("discord-unreachable", "ECONNRESET"), /rien n'est parti/);
-  assert.match(describeLiveIssue("send-rejected", "AutoMod"), /Paramètres du serveur → AutoMod/);
+  assert.match(describeLiveIssue("automod", "x"), /Paramètres du serveur → AutoMod/);
+  assert.doesNotMatch(describeLiveIssue("send-rejected", "x"), /AutoMod/);
+  assert.match(describeLiveIssue("slowmode", "x"), /« Gérer les messages »/);
+  assert.match(describeLiveIssue("missing", "x"), /LIVE_ANNOUNCE_CHANNEL_ID/);
   // La route ajoute déjà que le site réessaie : la cause ne le répète pas.
-  for (const key of ["missing", "no-view", "no-send", "send-denied", "send-rejected", "discord-unreachable", "discord-down", "failed"]) {
+  for (const key of ["missing", "no-view", "no-send", "slowmode", "send-denied", "automod", "send-rejected", "discord-unreachable", "discord-down", "failed"]) {
     assert.ok(!describeLiveIssue(key, "x").includes("réessaie"), key);
   }
   assert.ok(describeLiveIssue("failed", "y".repeat(5000)).length < 400, "texte brut borné");
@@ -231,8 +236,11 @@ test("announceLive : une permission manquante se distingue d'une panne passagèr
     [{ sent: [], sendError: discordError("Service Unavailable", 0) }, "discord-down"],
     [{ sent: [], sendError: new Error("socket hang up") }, "discord-down"],
     // Refus explicite (AutoMod, mode lent…) : rien n'est parti, ce n'est pas une panne.
-    [{ sent: [], sendError: discordError("Message blocked by AutoMod", 200000) }, "send-rejected"],
-    [{ sent: [], sendError: discordError("Slowmode rate limit", 20016) }, "send-rejected"],
+    [{ sent: [], sendError: discordError("Message blocked by AutoMod", 200000) }, "automod"],
+    [{ sent: [], sendError: discordError("Message blocked by AutoMod", 200001) }, "automod"],
+    [{ sent: [], sendError: discordError("Cannot send messages in a non-text channel", 50008) }, "send-rejected"],
+    // Mode lent que le bot ne peut pas ignorer : refusé avant l'envoi, qui resterait en attente.
+    [{ sent: [], slowmode: 30, denied: [PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ManageChannels] }, "slowmode"],
     // Salon supprimé alors que le cache le gardait : introuvable, pas un réglage.
     [{ sent: [], sendError: discordError("Unknown Channel", 10003) }, "missing"],
   ];
@@ -281,7 +289,7 @@ test("parseLiveAnnouncement : une étiquette trop longue est coupée d'un « …
 
 test("liveFailureVerdict : seule une panne pendant l'envoi est « non confirmée »", () => {
   assert.equal(liveFailureVerdict("discord-down"), "non confirmée");
-  for (const key of ["discord-unreachable", "missing", "no-view", "no-send", "send-denied", "send-rejected", "failed"]) {
+  for (const key of ["discord-unreachable", "missing", "no-view", "no-send", "slowmode", "send-denied", "automod", "send-rejected", "failed"]) {
     assert.equal(liveFailureVerdict(key), "non publiée", key);
   }
 });
@@ -291,4 +299,10 @@ test("announceLive : la raison d'une panne pendant l'envoi ne dit pas « refusé
   assert.ok(error instanceof LiveChannelUnavailableError);
   assert.ok(!/refusé/.test(error.message), error.message);
   assert.match(error.message, /sans réponse claire/);
+});
+
+test("announceLive : un bot qui gère les messages passe outre le mode lent", async () => {
+  const sent: Sent[] = [];
+  await announceLive(fakeClient({ sent, slowmode: 30 }), REQUEST);
+  assert.equal(sent.length, 1);
 });
