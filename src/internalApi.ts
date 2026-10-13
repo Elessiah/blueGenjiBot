@@ -36,7 +36,7 @@ import { parseDirectMessageRequest, parseRefereeAlert } from "./notifications/no
 import { deliverDirectMessages, alertLeadership, alertReferees, HomeGuildUnavailableError } from "./notifications/deliver.js";
 import { HandleResolutionTimeoutError, resolveDiscordHandle } from "./notifications/resolveHandle.js";
 import { MESSAGE_RETENTION_DAYS } from "./privacy/retentionPeriods.js";
-import { announceLive, LiveChannelUnavailableError, parseLiveAnnouncement } from "./notifications/liveAnnouncement.js";
+import { announceLive, LiveChannelUnavailableError, parseLiveAnnouncement, shouldLogLiveIssue } from "./notifications/liveAnnouncement.js";
 
 /**
  * Fenetre des compteurs tires de `OGMsg` / `DPMsg` (`/internal/stats`,
@@ -531,7 +531,8 @@ export function startInternalApi(client: Client) {
     try {
       const report = await announceLive(client, request);
       console.log(`[live-announce] annonce publiee (${request.context})`);
-      if (!report.mentionEveryone) {
+      // Un même incident n'est signalé au staff qu'une fois par heure.
+      if (!report.mentionEveryone && shouldLogLiveIssue("mention-everyone")) {
         await sendLog(
           client,
           "[AppBlueGenji] Annonce de live publiee sans notifier : le bot n'a pas la permission " +
@@ -540,7 +541,10 @@ export function startInternalApi(client: Client) {
       }
       res.json(report);
     } catch (error) {
-      await sendLog(client, `[AppBlueGenji] Annonce de live non publiee (${request.context}) : ${(error as Error).message}`);
+      console.warn(`[live-announce] annonce non publiee (${request.context}) : ${(error as Error).message}`);
+      if (shouldLogLiveIssue((error as Error).message)) {
+        await sendLog(client, `[AppBlueGenji] Annonce de live non publiee (${request.context}) : ${(error as Error).message}`);
+      }
       if (error instanceof LiveChannelUnavailableError) {
         res.status(503).json({ error: "LIVE_CHANNEL_UNAVAILABLE" });
         return;

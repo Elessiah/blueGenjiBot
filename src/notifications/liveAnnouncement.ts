@@ -30,6 +30,36 @@ const LIVE_HOSTS = new Set([
 /** Longueur maximale d'un lien de diffusion (celle du site). */
 const MAX_STREAM_URL_LENGTH = 255;
 
+/**
+ * Délai entre deux signalements d'un même incident au canal de logs. Le site
+ * réessaie une annonce refusée à chaque balayage (toutes les dix secondes au
+ * plus, tant que le match est frais) : sans ce délai, une permission retirée
+ * sur #live inonderait le canal du staff.
+ */
+export const LIVE_LOG_COOLDOWN_MS = 60 * 60 * 1000;
+
+const lastLiveLogAt = new Map<string, number>();
+
+/**
+ * Vrai si l'incident `key` peut être signalé au canal de logs maintenant : la
+ * première fois, puis au plus une fois par {@link LIVE_LOG_COOLDOWN_MS}.
+ *
+ * @param key Nature de l'incident (raison du refus, permission manquante).
+ * @param now Instant de référence, injectable pour les tests.
+ * @returns `true` si le signalement doit partir.
+ */
+export function shouldLogLiveIssue(key: string, now: number = Date.now()): boolean {
+  const last = lastLiveLogAt.get(key);
+  if (last !== undefined && now - last < LIVE_LOG_COOLDOWN_MS) { return false; }
+  lastLiveLogAt.set(key, now);
+  return true;
+}
+
+/** Oublie les signalements déjà faits. Réservé aux tests. */
+export function resetLiveLogThrottle(): void {
+  lastLiveLogAt.clear();
+}
+
 /** Corps normalisé de `POST /internal/announce/live`. */
 export interface LiveAnnouncementRequest {
   /** Texte rédigé par l'app (équipes, tournoi), sans la mention ni le lien. */
