@@ -60,6 +60,8 @@ const MISSING_ACCESS = 50001;
 const MISSING_PERMISSIONS = 50013;
 /** Code Discord d'un salon inconnu (supprimé, identifiant périmé). */
 const UNKNOWN_CHANNEL = 10003;
+/** Codes Discord d'un message bloqué par une règle AutoMod du serveur. */
+const AUTOMOD_BLOCKED = new Set([200000, 200001]);
 
 /** Code d'erreur Discord porté par une `DiscordAPIError`, sinon `undefined`. */
 function discordCode(error: unknown): number | undefined {
@@ -86,6 +88,9 @@ function sendFailure(error: unknown): LiveChannelUnavailableError {
   }
   if (code === MISSING_ACCESS || code === MISSING_PERMISSIONS) {
     return new LiveChannelUnavailableError("send-denied", `envoi refusé faute de permission (${detail})`, detail);
+  }
+  if (code !== undefined && AUTOMOD_BLOCKED.has(code)) {
+    return new LiveChannelUnavailableError("automod", `envoi bloqué par AutoMod (${detail})`, detail);
   }
   if (code !== undefined && code > 0) {
     return new LiveChannelUnavailableError("send-rejected", `envoi refusé par Discord (${detail})`, detail);
@@ -177,8 +182,9 @@ export function resetLiveLogThrottle(): void {
  *
  * @param key Nature de l'incident : `missing` (salon introuvable ou invisible),
  *   `no-view`, `no-send` (permission manquante), `send-denied` (envoi refusé
- *   faute de permission), `send-rejected` (envoi refusé pour une autre raison
- *   explicite : AutoMod, mode lent…), `discord-unreachable` (panne passagère de Discord
+ *   faute de permission), `slowmode` (mode lent qui retiendrait l'envoi),
+ *   `automod` (message bloqué par AutoMod), `send-rejected` (autre refus
+ *   explicite de Discord), `discord-unreachable` (panne passagère de Discord
  *   avant l'envoi : rien n'est parti), `discord-down` (panne pendant l'envoi :
  *   l'annonce a pu partir), autre.
  * @param rawDetail Texte d'erreur brut de Discord, cité pour le diagnostic,
@@ -190,15 +196,20 @@ export function describeLiveIssue(key: string, rawDetail: string): string {
   const detail = cutText(rawDetail, MAX_LIVE_DETAIL_LENGTH);
   switch (key) {
     case "missing":
-      return "le salon #live est introuvable ou invisible pour le bot — vérifier qu'il existe et que le bot a la permission « Voir le salon »";
+      return "le salon #live est introuvable ou invisible pour le bot — vérifier qu'il existe et que le bot a la permission « Voir le salon » ; " +
+        "s'il a été supprimé puis recréé, son nouvel identifiant doit être reporté dans le code du bot (LIVE_ANNOUNCE_CHANNEL_ID)";
+    case "slowmode":
+      return "le mode lent est actif sur #live et le bot ne peut pas l'ignorer — le désactiver, ou donner au bot la permission « Gérer les messages » dans #live";
     case "no-view":
       return "le bot n'a pas la permission « Voir le salon » dans #live — la lui rendre";
     case "no-send":
       return "le bot n'a pas la permission « Envoyer des messages » dans #live — la lui rendre";
     case "send-denied":
       return `Discord a refusé l'envoi faute de permission (${detail}) — vérifier les permissions du bot dans #live`;
+    case "automod":
+      return `une règle AutoMod du serveur a bloqué l'annonce (${detail}) — la revoir dans Paramètres du serveur → AutoMod`;
     case "send-rejected":
-      return `Discord a refusé l'annonce (${detail}) — vérifier les règles AutoMod du serveur (Paramètres du serveur → AutoMod) et le mode lent du salon #live`;
+      return `Discord a refusé l'annonce (${detail}) — vérifier le salon #live et les permissions du bot`;
     case "discord-unreachable":
       return `Discord n'a pas répondu ou a limité le bot en lisant le salon (${detail}) — rien n'est parti, rien à régler sur le salon`;
     case "discord-down":
@@ -275,7 +286,7 @@ export interface LiveAnnouncementReport {
 
 /**
  * L'annonce n'a pas été publiée : salon introuvable, permission manquante,
- * refus explicite de Discord (AutoMod, mode lent…), ou panne passagère de Discord ({@link LiveChannelUnavailableError.key}). La
+ * mode lent, refus explicite de Discord (AutoMod…), ou panne passagère de Discord ({@link LiveChannelUnavailableError.key}). La
  * route en fait un `503`, et le site rend sa réservation pour réessayer au
  * balayage suivant ; si une réponse perdue cachait un envoi réussi, le jeton
  * d'unicité ({@link liveAnnouncementNonce}) écarte le doublon d'un même envoi
@@ -367,6 +378,8 @@ type SendableChannel = {
     enforceNonce: boolean;
   }) => Promise<{ id: string }>;
   permissionsFor?: (user: unknown) => { has: (flag: bigint) => boolean } | null;
+  /** Mode lent du salon, en secondes (0 : désactivé). */
+  rateLimitPerUser?: number | null;
 };
 
 /**
@@ -376,10 +389,16 @@ type SendableChannel = {
 function readPermissions(
   client: Client,
   channel: SendableChannel,
-): { canView: boolean; canSend: boolean; canMentionEveryone: boolean; canEmbedLinks: boolean } {
+): { canView: boolean; canSend: boolean; canMentionEveryone: boolean; canEmbedLinks: boolean; slowed: boolean } {
   const permissions = client.user && channel.permissionsFor ? channel.permissionsFor(client.user) : null;
-  if (!permissions) { return { canView: true, canSend: true, canMentionEveryone: true, canEmbedLinks: true }; }
+  if (!permissions) { return { canView: true, canSend: true, canMentionEveryone: true, canEmbedLinks: true, slowed: false }; }
+  // Le mode lent retient l'envoi (discord.js attend la fin du délai, jusqu'à
+  // six heures) sauf pour qui gère les messages ou le salon : l'annonce
+  // partirait bien après le début du match.
+  const bypassesSlowmode =
+    permissions.has(PermissionFlagsBits.ManageMessages) || permissions.has(PermissionFlagsBits.ManageChannels);
   return {
+    slowed: (channel.rateLimitPerUser ?? 0) > 0 && !bypassesSlowmode,
     canView: permissions.has(PermissionFlagsBits.ViewChannel),
     canSend: permissions.has(PermissionFlagsBits.SendMessages),
     canMentionEveryone: permissions.has(PermissionFlagsBits.MentionEveryone),
@@ -418,9 +437,10 @@ export async function announceLive(client: Client, request: LiveAnnouncementRequ
     throw new LiveChannelUnavailableError("missing", "salon introuvable ou non textuel");
   }
 
-  const { canView, canSend, canMentionEveryone, canEmbedLinks } = readPermissions(client, channel);
+  const { canView, canSend, canMentionEveryone, canEmbedLinks, slowed } = readPermissions(client, channel);
   if (!canView) { throw new LiveChannelUnavailableError("no-view", "permission de voir le salon absente"); }
   if (!canSend) { throw new LiveChannelUnavailableError("no-send", "permission d'écrire absente"); }
+  if (slowed) { throw new LiveChannelUnavailableError("slowmode", "mode lent actif sur le salon"); }
 
   try {
     // `parse: ["everyone"]` et rien d'autre ; toute mention de masse du texte
