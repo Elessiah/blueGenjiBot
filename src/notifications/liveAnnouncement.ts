@@ -151,7 +151,9 @@ export function resetLiveLogThrottle(): void {
  *
  * @param key Nature de l'incident : `missing` (salon introuvable ou invisible),
  *   `no-view`, `no-send` (permission manquante), `send-denied` (envoi refusé
- *   faute de permission), `discord-down` (panne passagère de Discord), autre.
+ *   faute de permission), `discord-unreachable` (panne passagère de Discord
+ *   avant l'envoi : rien n'est parti), `discord-down` (panne pendant l'envoi :
+ *   l'annonce a pu partir), autre.
  * @param rawDetail Texte d'erreur brut de Discord, cité pour le diagnostic,
  *   coupé à {@link MAX_LIVE_DETAIL_LENGTH} caractères.
  * @returns Une phrase en français, avec l'action à mener.
@@ -168,8 +170,11 @@ export function describeLiveIssue(key: string, rawDetail: string): string {
       return "le bot n'a pas la permission « Envoyer des messages » dans #live — la lui rendre";
     case "send-denied":
       return `Discord a refusé l'envoi faute de permission (${detail}) — vérifier les permissions du bot dans #live`;
+    case "discord-unreachable":
+      return `Discord n'a pas répondu ou a limité le bot en lisant le salon (${detail}) — rien n'est parti, rien à régler sur le salon`;
     case "discord-down":
-      return `Discord n'a pas répondu ou a limité le bot (${detail}) — rien à régler sur le salon ; l'annonce a pu partir malgré tout, vérifier #live`;
+      return `Discord n'a pas répondu ou a limité le bot pendant l'envoi (${detail}) — rien à régler sur le salon ; ` +
+        "l'annonce a pu partir malgré tout : si elle est déjà dans #live, un nouvel essai du site peut la doubler, supprimer alors le doublon";
     default:
       return `erreur inattendue (${detail})`;
   }
@@ -177,6 +182,17 @@ export function describeLiveIssue(key: string, rawDetail: string): string {
 
 /** Préfixe que `sendLog` ajoute devant chaque signalement de l'app. */
 const LOG_PREFIX = "[AppBlueGenji] ";
+
+/**
+ * Verdict d'un échec : « non confirmée » quand une panne pendant l'envoi a pu
+ * cacher une publication réussie, « non publiée » sinon.
+ *
+ * @param key Nature de l'incident ({@link describeLiveIssue}).
+ * @returns Le verdict, commun au canal de logs et à pm2.
+ */
+export function liveFailureVerdict(key: string): string {
+  return key === "discord-down" ? "non confirmée" : "non publiée";
+}
 
 /**
  * Signalement au canal de logs d'une annonce qui n'est pas partie, sans le
@@ -194,7 +210,7 @@ const LOG_PREFIX = "[AppBlueGenji] ";
  * @returns Le texte du signalement.
  */
 export function liveFailureReport(request: LiveAnnouncementRequest, key: string, detail: string): string {
-  const verdict = key === "discord-down" ? "non confirmée" : "non publiée";
+  const verdict = liveFailureVerdict(key);
   const head =
     `Annonce de live ${verdict} (${request.context}) : ${describeLiveIssue(key, detail)}. ` +
     "Le site la réessaie seul pendant les deux heures qui suivent le début du direct : ne pas la " +
@@ -365,7 +381,8 @@ export async function announceLive(client: Client, request: LiveAnnouncementRequ
     // Seuls un salon inconnu ou un accès refusé désignent le salon ; le reste
     // est une panne passagère de Discord (réseau, 5xx, limite de débit).
     const code = discordCode(error);
-    const key = code === UNKNOWN_CHANNEL || code === MISSING_ACCESS ? "missing" : "discord-down";
+    // Rien n'est encore envoyé : une panne ici ne cache aucune publication.
+    const key = code === UNKNOWN_CHANNEL || code === MISSING_ACCESS ? "missing" : "discord-unreachable";
     throw new LiveChannelUnavailableError(key, `salon illisible (${detail})`, detail);
   }
   if (!channel || typeof channel.send !== "function") {

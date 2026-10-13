@@ -39,6 +39,7 @@ import { MESSAGE_RETENTION_DAYS } from "./privacy/retentionPeriods.js";
 import {
   announceLive,
   liveFailureReport,
+  liveFailureVerdict,
   forgetLiveIssue,
   LiveChannelUnavailableError,
   parseLiveAnnouncement,
@@ -566,14 +567,14 @@ export function startInternalApi(client: Client) {
         );
       }
     } catch (error) {
-      console.warn(`[live-announce] annonce non publiée (${request.context}) : ${(error as Error).message}`);
       const unavailable = error instanceof LiveChannelUnavailableError;
+      const key = unavailable ? error.key : "failed";
+      console.warn(`[live-announce] annonce ${liveFailureVerdict(key)} (${request.context}) : ${(error as Error).message}`);
       if (unavailable) {
         res.status(503).json({ error: "LIVE_CHANNEL_UNAVAILABLE" });
       } else {
         res.status(500).json({ error: "LIVE_ANNOUNCEMENT_FAILED" });
       }
-      const key = unavailable ? error.key : "failed";
       const detail = unavailable ? error.detail : (error as Error).message;
       reportLiveIssue(key, liveFailureReport(request, key, detail));
     }
