@@ -239,8 +239,6 @@ test("announceLive : une permission manquante se distingue d'une panne passagèr
     [{ sent: [], sendError: discordError("Message blocked by AutoMod", 200000) }, "automod"],
     [{ sent: [], sendError: discordError("Message blocked by AutoMod", 200001) }, "automod"],
     [{ sent: [], sendError: discordError("Cannot send messages in a non-text channel", 50008) }, "send-rejected"],
-    // Mode lent que le bot ne peut pas ignorer : refusé avant l'envoi, qui resterait en attente.
-    [{ sent: [], slowmode: 30, denied: [PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ManageChannels] }, "slowmode"],
     // Salon supprimé alors que le cache le gardait : introuvable, pas un réglage.
     [{ sent: [], sendError: discordError("Unknown Channel", 10003) }, "missing"],
   ];
@@ -305,4 +303,22 @@ test("announceLive : un bot qui gère les messages passe outre le mode lent", as
   const sent: Sent[] = [];
   await announceLive(fakeClient({ sent, slowmode: 30 }), REQUEST);
   assert.equal(sent.length, 1);
+});
+
+test("announceLive : le mode lent ne bloque que s'il retiendrait l'envoi", async () => {
+  resetLiveLogThrottle();
+  const noBypass = [PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ManageChannels];
+  const sent: Sent[] = [];
+  // Première annonce (ou après un redémarrage) : rien ne la retient.
+  await announceLive(fakeClient({ sent, slowmode: 30, denied: noBypass }), REQUEST);
+  assert.equal(sent.length, 1);
+  // Une seconde dans le délai attendrait la fin du mode lent : refusée d'emblée.
+  const error = await announceLive(fakeClient({ sent, slowmode: 30, denied: noBypass }), REQUEST).catch((e: unknown) => e);
+  assert.ok(error instanceof LiveChannelUnavailableError);
+  assert.equal(error.key, "slowmode");
+  assert.equal(sent.length, 1);
+  // Sans mode lent, elle part.
+  await announceLive(fakeClient({ sent, slowmode: 0, denied: noBypass }), REQUEST);
+  assert.equal(sent.length, 2);
+  resetLiveLogThrottle();
 });
