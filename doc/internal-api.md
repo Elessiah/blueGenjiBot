@@ -132,14 +132,16 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
 
 - `POST /internal/announce/live`
   - Body: `{ "message": "...", "streamUrl": "https://twitch.tv/...", "context": "live-announce match-42" }`
-    (`context`, étiquette des journaux, 200 caractères au plus)
+    (`context`, étiquette des journaux, 200 caractères au plus — coupée au-delà
+    d'un « … » visible)
   - Annonce un **live** au début d'un match diffusé : le bot publie
     `@everyone <message>` puis le lien, seul sur sa ligne, dans le salon #live
     du serveur BlueGenji. Ce salon est fixé dans le code (constante
     `LIVE_ANNOUNCE_CHANNEL_ID`), pas par une variable d'environnement. C'est le
     seul message du bot qui notifie tout le serveur : la mention n'est
     autorisée (`allowedMentions: { parse: ["everyone"] }`) que pour cet envoi.
-  - Le site décide du moment (une annonce par match et par affiche) et rédige
+  - Le site décide du moment (un match et son affiche ne sont annoncés
+    qu'une fois, seuls ou dans un message groupé) et rédige
     le texte : les deux équipes et le tournoi, noms neutralisés — jamais le
     pseudo d'un joueur (une entrée individuelle s'écrit « un joueur »). Des
     matchs d'un même tournoi passés à l'antenne ensemble sur le même lien
