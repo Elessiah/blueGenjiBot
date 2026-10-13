@@ -527,9 +527,10 @@ export function startInternalApi(client: Client) {
    * Annonce d'un live au debut d'un match diffuse : message `@everyone` dans le
    * salon #live du serveur BlueGenji (constante `LIVE_ANNOUNCE_CHANNEL_ID`).
    * L'app decide du moment et redige le texte ; elle reserve l'annonce avant
-   * l'appel, la garde sur un succes, un `400` ou un delai depasse (le bot a pu
-   * publier : un second `@everyone` serait pire qu'une annonce perdue), et la
-   * rend sur un `503`, un `500` ou un bot injoignable pour reessayer. La
+   * l'appel, la garde sur un succes, un `400`, un `503` `automod` ou
+   * `discord-down`, ou un delai depasse (le bot a pu publier : un second
+   * `@everyone` serait pire qu'une annonce perdue), et la rend sur tout autre
+   * `503`, un `500` ou un bot injoignable pour reessayer. La
    * reponse part donc **avant** les signalements au staff : un canal de logs
    * lent ne doit pas faire depasser le delai du site.
    */

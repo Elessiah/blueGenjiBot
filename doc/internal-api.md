@@ -171,9 +171,10 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     - `discord-down` — Discord a lâché **pendant** l'envoi : le message a pu
       partir malgré tout.
   - `500 LIVE_ANNOUNCEMENT_FAILED` pour toute autre panne.
-  - Ce que fait le site : il garde l'annonce sur un succès ; sur un `400` ou
-    un `503` `automod` (AutoMod bloquerait de nouveau le même message, et
-    chaque essai alerterait la modération) ; et sur un délai dépassé ou un
+  - Ce que fait le site : il garde l'annonce sur un succès ; sur un `400` (la
+    requête elle-même est refusée avant tout envoi, la renvoyer n'y changerait
+    rien) ; sur un `503` `automod` (AutoMod bloquerait de nouveau le même
+    message, et chaque essai alerterait la modération) ; et sur un délai dépassé ou un
     `503` `discord-down` — le bot a pu publier, elle n'est pas réessayée, pour
     ne jamais notifier deux fois tout le serveur. Sur tout
     autre `503`, un `500` ou un bot injoignable, il la reprend et réessaie

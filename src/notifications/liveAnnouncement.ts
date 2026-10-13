@@ -238,23 +238,6 @@ function quoteLines(text: string): string {
 }
 
 /**
- * Signalement au canal de logs d'une annonce qui n'est pas partie, sans le
- * préfixe `[AppBlueGenji]` : la cause et l'action à mener, puis l'annonce
- * concernée (équipes et tournoi, jamais un pseudo) et son lien, cités pour la
- * reconnaître — le site la réessaie seul, la reposter à la main pendant ce
- * temps notifierait deux fois tout le serveur. Une panne passagère de Discord
- * peut cacher un envoi réussi : elle est dite « non confirmée », pas « non
- * publiée ». Le tout tient sous {@link MAX_LIVE_LOG_LENGTH} caractères,
- * préfixe compris : la citation est raccourcie au besoin, le lien reste entier.
- *
- * @param request Demande validée.
- * @param key Nature de l'incident ({@link describeLiveIssue}).
- * @param detail Texte d'erreur brut de Discord.
- * @param options `siteGaveUp` : le site avait coupé la requête avant la
- *   réponse (délai dépassé) — il ne réessaiera pas, quelle que soit la cause.
- * @returns Le texte du signalement.
- */
-/**
  * Causes que le site ne réessaie pas : un envoi peut-être parti (un second
  * `@everyone` serait pire qu'une annonce perdue), ou un message qu'AutoMod
  * bloquerait de nouveau tel quel (chaque essai alerterait la modération).
@@ -271,6 +254,23 @@ export function isLiveIssueFinal(key: string): boolean {
   return NOT_RETRIED_KEYS.has(key);
 }
 
+/**
+ * Signalement au canal de logs d'une annonce qui n'est pas partie, sans le
+ * préfixe `[AppBlueGenji]` : la cause et l'action à mener, puis l'annonce
+ * concernée (équipes et tournoi, jamais un pseudo) et son lien, cités pour la
+ * reconnaître — le site la réessaie seul, la reposter à la main pendant ce
+ * temps notifierait deux fois tout le serveur. Une panne passagère de Discord
+ * peut cacher un envoi réussi : elle est dite « non confirmée », pas « non
+ * publiée ». Le tout tient sous {@link MAX_LIVE_LOG_LENGTH} caractères,
+ * préfixe compris : la citation est raccourcie au besoin, le lien reste entier.
+ *
+ * @param request Demande validée.
+ * @param key Nature de l'incident ({@link describeLiveIssue}).
+ * @param detail Texte d'erreur brut de Discord.
+ * @param options `siteGaveUp` : le site avait coupé la requête avant la
+ *   réponse (délai dépassé) — il ne réessaiera pas, quelle que soit la cause.
+ * @returns Le texte du signalement.
+ */
 export function liveFailureReport(
   request: LiveAnnouncementRequest,
   key: string,
@@ -327,10 +327,10 @@ export interface LiveAnnouncementReport {
  * L'annonce n'a pas été publiée : salon introuvable, permission manquante,
  * refus explicite de Discord (AutoMod…), ou panne passagère de Discord
  * ({@link LiveChannelUnavailableError.key}). La
- * route en fait un `503`, et le site rend sa réservation pour réessayer au
- * balayage suivant ; si une réponse perdue cachait un envoi réussi, le jeton
- * d'unicité ({@link liveAnnouncementNonce}) écarte le doublon d'un même envoi
- * rejoué dans les quelques minutes.
+ * route en fait un `503` portant la clé (`reason`) ; le site rend sa
+ * réservation pour réessayer, sauf après `automod` et `discord-down`
+ * ({@link isLiveIssueFinal}). Le jeton d'unicité ({@link liveAnnouncementNonce})
+ * écarte le doublon d'un même envoi rejoué dans les quelques minutes.
  */
 export class LiveChannelUnavailableError extends Error {
   /**
