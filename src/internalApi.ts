@@ -548,7 +548,7 @@ export function startInternalApi(client: Client) {
 
     try {
       const report = await announceLive(client, request);
-      console.log(`[live-announce] annonce publiee (${request.context})`);
+      console.log(`[live-announce] annonce publiée (${request.context})`);
       res.json(report);
       if (!report.mentionEveryone) {
         reportLiveIssue(
@@ -566,7 +566,7 @@ export function startInternalApi(client: Client) {
         );
       }
     } catch (error) {
-      console.warn(`[live-announce] annonce non publiee (${request.context}) : ${(error as Error).message}`);
+      console.warn(`[live-announce] annonce non publiée (${request.context}) : ${(error as Error).message}`);
       const unavailable = error instanceof LiveChannelUnavailableError;
       if (unavailable) {
         res.status(503).json({ error: "LIVE_CHANNEL_UNAVAILABLE" });
@@ -575,11 +575,14 @@ export function startInternalApi(client: Client) {
       }
       const key = unavailable ? error.key : "failed";
       const detail = unavailable ? error.detail : (error as Error).message;
+      // Le texte de l'annonce (équipes et tournoi, jamais un pseudo) et son
+      // lien, cités : le staff peut la reposter à la main si elle est perdue.
+      const quoted = request.message.split("\n").map((line) => `> ${line}`).join("\n");
       reportLiveIssue(
         key,
         `Annonce de live non publiée (${request.context}) : ${describeLiveIssue(key, detail)}. ` +
         "Le site réessaie tant que le match a commencé depuis moins de deux heures ; signalé au plus une fois " +
-        "par heure, d'autres annonces peuvent échouer pour la même raison.",
+        `par heure, d'autres annonces peuvent échouer pour la même raison.\n${quoted}\n<${request.streamUrl}>`,
       );
     }
   });

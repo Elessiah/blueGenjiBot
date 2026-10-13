@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { PermissionFlagsBits, type Client } from "discord.js";
 
 /**
@@ -41,6 +42,53 @@ export const MAX_LIVE_MESSAGE_LENGTH = 1800;
 
 /** Mention de tête, posée seulement quand le bot peut notifier tout le serveur. */
 const EVERYONE_PREFIX = "@everyone ";
+
+/** Codes Discord d'un accès refusé : permission manquante, salon invisible. */
+const MISSING_ACCESS = 50001;
+const MISSING_PERMISSIONS = 50013;
+/** Code Discord d'un salon inconnu (supprimé, identifiant périmé). */
+const UNKNOWN_CHANNEL = 10003;
+
+/** Code d'erreur Discord porté par une `DiscordAPIError`, sinon `undefined`. */
+function discordCode(error: unknown): number | undefined {
+  const code = typeof error === "object" && error !== null ? (error as { code?: unknown }).code : undefined;
+  return typeof code === "number" ? code : undefined;
+}
+
+/**
+ * Coupe un texte à `max` unités au plus, terminé par « … », sans jamais
+ * couper un caractère en deux (émoji, lettre hors du plan de base) : un « � »
+ * sous `@everyone` aurait l'air d'une panne.
+ */
+function cutText(text: string, max: number): string {
+  if (text.length <= max) { return text; }
+  let end = max - 1;
+  const last = text.charCodeAt(end - 1);
+  // Moitié haute d'une paire de substitution laissée seule : on la retire.
+  if (last >= 0xd800 && last <= 0xdbff) { end -= 1; }
+  return `${text.slice(0, end)}…`;
+}
+
+/**
+ * Neutralise une mention de masse glissée dans le texte : seule la mention de
+ * tête, posée par le bot, doit notifier (`allowedMentions` autorise
+ * `everyone`, qui couvre aussi `@here`). Le site neutralise déjà les noms ;
+ * c'est la seconde barrière.
+ */
+function neutralizeMassMentions(text: string): string {
+  return text.replace(/@(everyone|here)/gi, "@\u200B$1");
+}
+
+/**
+ * Jeton d'unicité de l'envoi (`nonce`, 25 caractères au plus), tiré de
+ * l'annonce : Discord ne crée pas deux messages de même jeton à quelques
+ * minutes d'écart — un envoi rejoué (réponse perdue, nouvel essai du site)
+ * ne notifie pas deux fois tout le serveur.
+ */
+export function liveAnnouncementNonce(request: LiveAnnouncementRequest): string {
+  const seed = `${request.context}\n${request.streamUrl}`;
+  return "live" + createHash("sha256").update(seed).digest("hex").slice(0, 21);
+}
 
 /**
  * Délai entre deux signalements d'un même incident au canal de logs. Le site
@@ -93,13 +141,16 @@ export function resetLiveLogThrottle(): void {
  */
 export function describeLiveIssue(key: string, detail: string): string {
   switch (key) {
-    case "unreadable":
     case "missing":
       return "le salon #live est introuvable ou invisible pour le bot — vérifier qu'il existe et que le bot a la permission « Voir le salon »";
+    case "no-view":
+      return "le bot n'a pas la permission « Voir le salon » dans #live — la lui rendre";
     case "no-send":
-      return "le bot n'a pas les permissions « Voir le salon » et « Envoyer des messages » dans #live — les lui rendre";
-    case "send-failed":
-      return `Discord a refusé l'envoi (${detail}) — vérifier les permissions du bot dans #live`;
+      return "le bot n'a pas la permission « Envoyer des messages » dans #live — la lui rendre";
+    case "send-denied":
+      return `Discord a refusé l'envoi faute de permission (${detail}) — vérifier les permissions du bot dans #live`;
+    case "discord-down":
+      return `Discord n'a pas répondu ou a limité le bot (${detail}) — rien à régler, le site réessaie`;
     default:
       return `erreur inattendue (${detail})`;
   }
@@ -183,8 +234,7 @@ export function parseLiveAnnouncement(payload: unknown): LiveAnnouncementRequest
   const streamUrl = typeof raw.streamUrl === "string" ? raw.streamUrl.trim() : "";
   if (!message || !isAllowedStreamUrl(streamUrl)) { return null; }
   const context = typeof raw.context === "string" && raw.context.trim() ? raw.context.trim().slice(0, 80) : "live-announce";
-  const capped = message.length <= MAX_LIVE_MESSAGE_LENGTH ? message : `${message.slice(0, MAX_LIVE_MESSAGE_LENGTH - 1)}…`;
-  return { message: capped, streamUrl, context };
+  return { message: cutText(neutralizeMassMentions(message), MAX_LIVE_MESSAGE_LENGTH), streamUrl, context };
 }
 
 /**
@@ -201,14 +251,18 @@ export function parseLiveAnnouncement(payload: unknown): LiveAnnouncementRequest
 export function formatLiveAnnouncement(request: LiveAnnouncementRequest, mentionEveryone = true): string {
   const prefix = mentionEveryone ? EVERYONE_PREFIX : "";
   const budget = DISCORD_MAX_CONTENT_LENGTH - prefix.length - 1 - request.streamUrl.length;
-  const message = request.message.length <= budget ? request.message : `${request.message.slice(0, budget - 1)}…`;
-  return `${prefix}${message}\n${request.streamUrl}`;
+  return `${prefix}${cutText(request.message, budget)}\n${request.streamUrl}`;
 }
 
 type AllowedMentions = { parse: "everyone"[] };
 
 type SendableChannel = {
-  send: (options: { content: string; allowedMentions: AllowedMentions }) => Promise<{ id: string }>;
+  send: (options: {
+    content: string;
+    allowedMentions: AllowedMentions;
+    nonce: string;
+    enforceNonce: boolean;
+  }) => Promise<{ id: string }>;
   permissionsFor?: (user: unknown) => { has: (flag: bigint) => boolean } | null;
 };
 
@@ -219,11 +273,12 @@ type SendableChannel = {
 function readPermissions(
   client: Client,
   channel: SendableChannel,
-): { canSend: boolean; canMentionEveryone: boolean; canEmbedLinks: boolean } {
+): { canView: boolean; canSend: boolean; canMentionEveryone: boolean; canEmbedLinks: boolean } {
   const permissions = client.user && channel.permissionsFor ? channel.permissionsFor(client.user) : null;
-  if (!permissions) { return { canSend: true, canMentionEveryone: true, canEmbedLinks: true }; }
+  if (!permissions) { return { canView: true, canSend: true, canMentionEveryone: true, canEmbedLinks: true }; }
   return {
-    canSend: permissions.has(PermissionFlagsBits.ViewChannel) && permissions.has(PermissionFlagsBits.SendMessages),
+    canView: permissions.has(PermissionFlagsBits.ViewChannel),
+    canSend: permissions.has(PermissionFlagsBits.SendMessages),
     canMentionEveryone: permissions.has(PermissionFlagsBits.MentionEveryone),
     canEmbedLinks: permissions.has(PermissionFlagsBits.EmbedLinks),
   };
@@ -247,25 +302,37 @@ export async function announceLive(client: Client, request: LiveAnnouncementRequ
   let channel: SendableChannel | null;
   try {
     channel = await client.channels.fetch(LIVE_ANNOUNCE_CHANNEL_ID) as unknown as SendableChannel | null;
-  } catch {
-    throw new LiveChannelUnavailableError("unreadable", "salon illisible");
+  } catch (error) {
+    const detail = (error as Error).message;
+    // Seuls un salon inconnu ou un accès refusé désignent le salon ; le reste
+    // est une panne passagère de Discord (réseau, 5xx, limite de débit).
+    const code = discordCode(error);
+    const key = code === UNKNOWN_CHANNEL || code === MISSING_ACCESS ? "missing" : "discord-down";
+    throw new LiveChannelUnavailableError(key, `salon illisible (${detail})`, detail);
   }
   if (!channel || typeof channel.send !== "function") {
     throw new LiveChannelUnavailableError("missing", "salon introuvable ou non textuel");
   }
 
-  const { canSend, canMentionEveryone, canEmbedLinks } = readPermissions(client, channel);
+  const { canView, canSend, canMentionEveryone, canEmbedLinks } = readPermissions(client, channel);
+  if (!canView) { throw new LiveChannelUnavailableError("no-view", "permission de voir le salon absente"); }
   if (!canSend) { throw new LiveChannelUnavailableError("no-send", "permission d'écrire absente"); }
 
   try {
-    // `parse: ["everyone"]` et rien d'autre : seule la mention de tête notifie.
+    // `parse: ["everyone"]` et rien d'autre ; toute mention de masse du texte
+    // est neutralisée (`parseLiveAnnouncement`) : seule celle de tête notifie.
+    // Le jeton d'unicité empêche Discord de créer deux fois la même annonce.
     await channel.send({
       content: formatLiveAnnouncement(request, canMentionEveryone),
       allowedMentions: { parse: canMentionEveryone ? ["everyone"] : [] },
+      nonce: liveAnnouncementNonce(request),
+      enforceNonce: true,
     });
   } catch (error) {
     const detail = (error as Error).message;
-    throw new LiveChannelUnavailableError("send-failed", `envoi refusé (${detail})`, detail);
+    const code = discordCode(error);
+    const key = code === MISSING_ACCESS || code === MISSING_PERMISSIONS ? "send-denied" : "discord-down";
+    throw new LiveChannelUnavailableError(key, `envoi refusé (${detail})`, detail);
   }
   return { posted: true, mentionEveryone: canMentionEveryone, embedLinks: canEmbedLinks };
 }
