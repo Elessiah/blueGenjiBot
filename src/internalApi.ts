@@ -582,13 +582,16 @@ export function startInternalApi(client: Client) {
       // main pendant ce temps notifierait deux fois tout le serveur.
       const head =
         `Annonce de live non publiée (${request.context}) : ${describeLiveIssue(key, detail)}. ` +
-        "Le site la réessaie seul tant que le match a commencé depuis moins de deux heures : ne pas la " +
+        "Le site la réessaie seul pendant les deux heures qui suivent le début du direct : ne pas la " +
         "reposter à la main avant. Signalé au plus une fois par heure, d'autres annonces peuvent échouer " +
         "pour la même raison. Annonce concernée :";
       const link = `\n<${request.streamUrl}>`;
-      const room = MAX_LIVE_LOG_LENGTH - "[AppBlueGenji] ".length - head.length - link.length;
-      const quoted = cutText(request.message.split("\n").map((line) => `> ${line}`).join("\n"), Math.max(room - 1, 1));
-      reportLiveIssue(key, `${head}\n${quoted}${link}`);
+      // Place restante pour la citation : chaque ligne y gagne « > » (deux caractères).
+      const room = MAX_LIVE_LOG_LENGTH - "[AppBlueGenji] ".length - head.length - link.length - 1;
+      const lineCount = request.message.split("\n").length;
+      const text = room > 2 * lineCount + 1 ? cutText(request.message, room - 2 * lineCount) : "";
+      const quoted = text ? "\n" + text.split("\n").map((line) => "> " + line).join("\n") : "";
+      reportLiveIssue(key, `${head}${quoted}${link}`);
     }
   });
 

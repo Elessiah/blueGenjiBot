@@ -43,6 +43,9 @@ export const MAX_LIVE_MESSAGE_LENGTH = 1800;
 /** Longueur maximale de l'étiquette `context` (journaux pm2 et canal de logs). */
 export const MAX_LIVE_CONTEXT_LENGTH = 200;
 
+/** Longueur maximale du texte d'erreur brut cité dans un signalement. */
+export const MAX_LIVE_DETAIL_LENGTH = 300;
+
 /**
  * Plafond d'un signalement au canal de logs : sous les 2 000 caractères d'un
  * message Discord, sans quoi il serait refusé — et perdu.
@@ -148,7 +151,9 @@ export function resetLiveLogThrottle(): void {
  * @param detail Texte d'erreur brut de Discord, cité pour le diagnostic.
  * @returns Une phrase en français, avec l'action à mener.
  */
-export function describeLiveIssue(key: string, detail: string): string {
+export function describeLiveIssue(key: string, rawDetail: string): string {
+  // Le texte d'erreur brut est cité, borné : le signalement doit tenir dans un message.
+  const detail = cutText(rawDetail, MAX_LIVE_DETAIL_LENGTH);
   switch (key) {
     case "missing":
       return "le salon #live est introuvable ou invisible pour le bot — vérifier qu'il existe et que le bot a la permission « Voir le salon »";
@@ -243,7 +248,8 @@ export function parseLiveAnnouncement(payload: unknown): LiveAnnouncementRequest
   const streamUrl = typeof raw.streamUrl === "string" ? raw.streamUrl.trim() : "";
   if (!message || !isAllowedStreamUrl(streamUrl)) { return null; }
   // Assez long pour la liste des matchs d'un groupe (`live-announce match-12,13,…`).
-  const context = typeof raw.context === "string" && raw.context.trim() ? raw.context.trim().slice(0, MAX_LIVE_CONTEXT_LENGTH) : "live-announce";
+  // Coupée d'un « … » visible : un identifiant tronqué ne passe pas pour un autre.
+  const context = typeof raw.context === "string" && raw.context.trim() ? cutText(raw.context.trim(), MAX_LIVE_CONTEXT_LENGTH) : "live-announce";
   return { message: cutText(neutralizeMassMentions(message), MAX_LIVE_MESSAGE_LENGTH), streamUrl, context };
 }
 
