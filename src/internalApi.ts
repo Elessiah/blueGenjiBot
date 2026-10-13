@@ -571,7 +571,8 @@ export function startInternalApi(client: Client) {
       const key = unavailable ? error.key : "failed";
       console.warn(`[live-announce] annonce ${liveFailureVerdict(key)} (${request.context}) : ${(error as Error).message}`);
       if (unavailable) {
-        res.status(503).json({ error: "LIVE_CHANNEL_UNAVAILABLE" });
+        // `reason` : la nature de l'incident, pour que le site la dise dans ses journaux.
+        res.status(503).json({ error: "LIVE_CHANNEL_UNAVAILABLE", reason: error.key });
       } else {
         res.status(500).json({ error: "LIVE_ANNOUNCEMENT_FAILED" });
       }

@@ -67,6 +67,17 @@ const UNKNOWN_CHANNEL = 10003;
  */
 export const SLOWMODE_SILENT_MS = 60 * 1000;
 
+/** « 45 s », « 12 min », « 5 h 59 min » : une attente lisible par le staff. */
+export function formatWait(ms: number): string {
+  const seconds = Math.ceil(ms / 1000);
+  if (seconds < 60) { return `${seconds} s`; }
+  const minutes = Math.ceil(seconds / 60);
+  if (minutes < 60) { return `${minutes} min`; }
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest === 0 ? `${hours} h` : `${hours} h ${rest} min`;
+}
+
 /** Codes Discord d'un message bloqué par une règle AutoMod du serveur. */
 const AUTOMOD_BLOCKED = new Set([200000, 200001]);
 
@@ -214,7 +225,7 @@ export function describeLiveIssue(key: string, rawDetail: string): string {
       return "le salon #live est introuvable ou invisible pour le bot — vérifier qu'il existe et que le bot a la permission « Voir le salon » ; " +
         "s'il a été supprimé puis recréé, son nouvel identifiant doit être reporté dans le code du bot (LIVE_ANNOUNCE_CHANNEL_ID)";
     case "slowmode":
-      return `le mode lent de #live retient l'annonce (${detail} : le bot y a déjà posté pendant le délai) — elle partira à la fin du délai si le match a commencé depuis moins de deux heures ; s'il est long, le raccourcir ou donner au bot la permission « Gérer les messages » dans #live`;
+      return `le mode lent de #live retient l'annonce (${detail} ; le bot y a déjà posté pendant le délai) — passé deux heures après le début du direct, elle ne partira plus : si l'attente est longue, raccourcir le mode lent ou donner au bot la permission « Gérer les messages » dans #live`;
     case "no-view":
       return "le bot n'a pas la permission « Voir le salon » dans #live — la lui rendre";
     case "no-send":
@@ -461,9 +472,9 @@ export async function announceLive(client: Client, request: LiveAnnouncementRequ
   if (slowWaitMs > 0) {
     // Une courte attente se règle seule au nouvel essai du site : pas de quoi
     // alerter le staff (`slowmode-short`, jamais signalé).
-    const seconds = Math.ceil(slowWaitMs / 1000);
     const key = slowWaitMs <= SLOWMODE_SILENT_MS ? "slowmode-short" : "slowmode";
-    throw new LiveChannelUnavailableError(key, `mode lent actif sur le salon (encore ${seconds} s)`, `encore ${seconds} s`);
+    const wait = `encore ${formatWait(slowWaitMs)}`;
+    throw new LiveChannelUnavailableError(key, `mode lent actif sur le salon (${wait})`, wait);
   }
 
   try {
