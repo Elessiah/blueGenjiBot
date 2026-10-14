@@ -88,6 +88,8 @@ test("isAllowedStreamUrl : ni page de redirection, ni autre adresse dans le lien
     "https://www.twitch.tv/bluegenji?next=https:%5C%5Cpiege.example",
     "https://www.twitch.tv/bluegenji?continue=%2F%2Fpiege.example",
     "https://www.twitch.tv/bluegenji?next=https%253A%252F%252Fpiege.example",
+    "https://www.youtube.com/logout?continue=/%09/piege.example",
+    "https://www.youtube.com/logout?continue=/%0D/piege.example",
   ]) {
     assert.equal(isAllowedStreamUrl(url), false, url);
   }
