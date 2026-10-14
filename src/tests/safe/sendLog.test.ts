@@ -17,8 +17,6 @@ import type { Client } from "discord.js";
 type Setup = {
   /** Lectures du titulaire qui échouent avant la première réussite (`Infinity` : toujours). */
   ownerFetchFailures?: number;
-  /** Code porté par ces échecs de lecture (`ECONNRESET` : coupure réseau). */
-  ownerFetchCode?: string;
   /** Copies privées au titulaire qui échouent avant la première réussite. */
   ownerSendFailures?: number;
   /** Le salon de supervision : absent, illisible, ou qui refuse l'envoi. */
@@ -52,9 +50,7 @@ function fakeClient(trace: string[], setup: Setup): Client {
       fetch: async (id: string) => {
         ownerFetches++;
         trace.push("users.fetch " + id);
-        if (ownerFetches <= (setup.ownerFetchFailures ?? 0)) {
-          throw Object.assign(new Error("Gateway indisponible"), setup.ownerFetchCode ? { code: setup.ownerFetchCode } : {});
-        }
+        if (ownerFetches <= (setup.ownerFetchFailures ?? 0)) throw new Error("Gateway indisponible");
         return owner;
       },
     },
@@ -256,11 +252,25 @@ test("sendLogConfirmed : des messages privés fermés gardent l'heure : un seul 
   assert.equal(trace.filter((line) => line === "owner.send échoue").length, 1);
 });
 
-test("sendLogConfirmed : un avis au titulaire perdu en passant est retenté au signalement suivant", async () => {
+test("sendLogConfirmed : un avis tenté mais en échec (coupure réseau, peut-être parti) garde l'heure", async () => {
+  resetOwnerNoticeThrottle();
+  const trace: string[] = [];
+  const client = fakeClient(trace, { channel: "missing-access", ownerSendFailures: Infinity });
+  const original = console.error;
+  console.error = () => undefined;
+  try {
+    for (const message of ["A", "B", "C"]) await sendLogConfirmed(client, message);
+  } finally {
+    console.error = original;
+  }
+  assert.equal(trace.filter((line) => line === "owner.send échoue").length, 1);
+});
+
+test("sendLogConfirmed : un titulaire illisible (rien n'est parti) laisse retenter l'avis au signalement suivant", async () => {
   resetOwnerNoticeThrottle();
   const trace: string[] = [];
   // La lecture du titulaire échoue une fois (passage à vide du réseau), puis passe.
-  const client = fakeClient(trace, { channel: "missing-access", ownerFetchFailures: 1, ownerFetchCode: "ECONNRESET" });
+  const client = fakeClient(trace, { channel: "missing-access", ownerFetchFailures: 1 });
   const original = console.error;
   console.error = () => undefined;
   try {
