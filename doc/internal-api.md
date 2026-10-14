@@ -133,7 +133,12 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
 - `POST /internal/announce/live`
   - Body: `{ "message": "...", "streamUrl": "https://twitch.tv/...", "context": "live-announce tournoi-7 match-42" }`
     (`context`, étiquette des journaux : 200 caractères au plus, au-delà elle
-    est coupée et se termine par « … »)
+    est coupée et se termine par « … » ; lettres, chiffres, espace et `, + … _ -`
+    seulement, tout autre caractère devient `_`)
+  - **Jeton exigé** : même quand le bot n'écoute que la boucle locale, cette
+    route refuse de publier sans `INTERNAL_API_TOKEN` (`503
+    INTERNAL_API_TOKEN_NOT_CONFIGURED`) — c'est la seule qui notifie tout le
+    serveur.
   - Annonce un **live** au début d'un match diffusé : le bot publie
     `@everyone <message>` puis le lien, seul sur sa ligne, dans le salon #live
     du serveur BlueGenji. Ce salon est fixé dans le code (constante
@@ -149,8 +154,10 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     puis « • A contre B » par match) ; `context` les cite alors tous
     (`live-announce tournoi-7 match-12,13`).
   - `streamUrl` doit être un lien `https` vers Twitch, YouTube ou Kick, sans
-    identifiants ni port, 255 caractères au plus : sinon `400
-    INVALID_LIVE_ANNOUNCEMENT`, comme pour un message vide. Le message est
+    identifiants ni port, sans espace ni caractère de contrôle, 255 caractères
+    au plus : sinon `400 INVALID_LIVE_ANNOUNCEMENT`, comme pour un message
+    vide. Le bot publie sa forme normalisée (`<` et `>` percent-encodés) : le
+    lien ne peut porter ni texte, ni lien masqué, ni mention. Le message est
     raccourci d'un « … » (1 800 caractères au plus, puis ce qu'il faut pour que
     mention, texte et lien tiennent dans les 2 000 caractères d'un message
     Discord).
@@ -177,12 +184,15 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     message, et chaque essai alerterait la modération) ; et sur un délai dépassé ou un
     `503` `discord-down` — le bot a pu publier, elle n'est pas réessayée, pour
     ne jamais notifier deux fois tout le serveur. Sur tout
-    autre `503`, un `500` ou un bot injoignable, il la reprend et réessaie
-    tant que le match a commencé depuis moins de deux heures.
+    autre `503`, un `500` (panne avant l'envoi) ou un bot injoignable
+    (connexion refusée), il la reprend et réessaie tant que le match a
+    commencé depuis moins de deux heures ; une connexion coupée avant la
+    réponse (bot redémarré pendant l'envoi) la garde : l'annonce a pu partir.
   - Le canal de logs : la réponse part **avant** le signalement (un canal lent
     ne fait pas dépasser le délai du site). Il dit la cause, l'action à mener
     et cite l'annonce concernée et son lien pour la reconnaître, en tenant
-    toujours dans un message Discord (citation raccourcie au besoin). Une
+    toujours dans un message Discord (citation raccourcie au besoin), sans
+    qu'aucune mention n'y notifie (`allowedMentions: { parse: [] }`). Une
     annonce « non publiée » pour une cause qui peut se régler (salon,
     permission, refus lié à l'état du salon, Discord injoignable) est réessayée par le site : la reposter à la main
     pendant ces deux heures notifierait deux fois tout le serveur ; comme le
