@@ -555,8 +555,14 @@ export function startInternalApi(client: Client) {
       if (!shouldLogLiveIssue(key)) { return; }
       // Jamais de mention de masse dans le canal de logs : le bot qui peut
       // notifier tout #live pourrait aussi notifier tout le canal du staff.
+      // Le lien de fin, déjà validé et publié tel quel dans #live, n'est pas
+      // touché : une chaîne YouTube `/@HereForGaming` deviendrait un lien mort.
       // Confirmé : un envoi refusé par le salon de supervision n'étrangle rien.
-      void sendLogConfirmed(client, `[AppBlueGenji] ${neutralizeMassMentions(text)}`)
+      const link = `\n<${request.streamUrl}>`;
+      const safe = text.endsWith(link)
+        ? neutralizeMassMentions(text.slice(0, -link.length)) + link
+        : neutralizeMassMentions(text);
+      void sendLogConfirmed(client, `[AppBlueGenji] ${safe}`)
         .then((sent) => { if (!sent) { forgetLiveIssue(key); } })
         .catch(() => forgetLiveIssue(key));
     };

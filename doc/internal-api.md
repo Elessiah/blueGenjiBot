@@ -131,7 +131,8 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     identifiants injoignables).
 
 - `POST /internal/announce/live`
-  - Body: `{ "message": "...", "streamUrl": "https://twitch.tv/...", "context": "live-announce tournoi-7 match-42" }`
+  - Body: `{ "message": "...", "streamUrl": "https://twitch.tv/...", "context": "live-announce tournoi-7 match-42", "logMessage": "..." }`
+    (`logMessage` facultatif, voir plus bas)
     (`context`, étiquette des journaux : 200 caractères au plus, au-delà elle
     est coupée et se termine par « … » ; lettres, chiffres, espace et `, + … _ -`
     seulement, tout autre caractère devient `_`)
@@ -147,8 +148,14 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     autorisée (`allowedMentions: { parse: ["everyone"] }`) que pour cet envoi.
   - Le site décide du moment (un match et son affiche ne sont annoncés
     qu'une fois, seuls ou dans un message groupé) et rédige
-    le texte : les deux équipes et le tournoi, noms neutralisés — jamais le
-    pseudo d'un joueur (une entrée individuelle s'écrit « un joueur »). Des
+    le texte : les deux équipes et le tournoi, noms neutralisés. Quand
+    `message` nomme le pseudo d'une entrée individuelle, le site envoie aussi
+    `logMessage`, le même texte où ce pseudo devient « un joueur » : c'est
+    lui, jamais `message`, que le canal de logs cite. `logMessage` se valide
+    comme `message` (texte non vide, mêmes neutralisations, même longueur) ;
+    présent mais vide ou d'un autre type, la requête est refusée (`400
+    INVALID_LIVE_ANNOUNCEMENT`) plutôt que de citer le pseudo au staff.
+    Absent, `message` (qui ne nomme alors aucun joueur) est cité. Des
     matchs d'un même tournoi passés à l'antenne ensemble sur le même lien
     partent en un seul message de plusieurs lignes (« 🔴 En direct — Tournoi : »
     puis « • A contre B » par match) ; `context` les cite alors tous
@@ -175,7 +182,11 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     bot n'a pas pu publier, ou pas pu confirmer la publication. `reason` :
     - `missing`, `no-view`, `no-send`, `send-denied` — salon introuvable ou
       permission manquante ;
-    - `automod` — une règle AutoMod du serveur a bloqué le message ;
+    - `automod` — une règle AutoMod du serveur a bloqué le message ; si la
+      règle a l'action « Envoyer une alerte », c'est Discord, pas le bot, qui
+      recopie le message bloqué (`message`, pseudo compris) dans le salon
+      d'alerte de la règle : ce salon ne doit pas être le canal de logs, et
+      seuls les modérateurs doivent le lire ;
     - `send-rejected` — Discord a refusé le message pour une autre raison,
       souvent l'état du salon (type, verrouillage) ;
     - `discord-unreachable` — Discord n'a pas répondu en lisant le salon,
@@ -195,7 +206,8 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     réponse (bot redémarré pendant l'envoi) la garde : l'annonce a pu partir.
   - Le canal de logs : la réponse part **avant** le signalement (un canal lent
     ne fait pas dépasser le délai du site). Il dit la cause, l'action à mener
-    et cite l'annonce concernée et son lien pour la reconnaître, en tenant
+    et cite l'annonce concernée (`logMessage` s'il est fourni, sinon
+    `message` : jamais un pseudo) et son lien pour la reconnaître, en tenant
     toujours dans un message Discord (citation raccourcie au besoin), sans
     qu'aucune mention n'y notifie (`allowedMentions: { parse: [] }`). Une
     annonce « non publiée » pour une cause qui peut se régler (salon,
@@ -210,14 +222,17 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     lieu de promettre un nouvel essai. Pour ces annonces que le site ne
     réessaie pas, hors panne pendant l'envoi, rien n'est parti : le
     signalement dit qu'elle peut être postée à la main sans doublon, avec
-    « @everyone » en tête et le texte entier si la citation est raccourcie (après un
+    « @everyone » en tête et le texte entier si la citation est raccourcie ou
+    sans pseudo (après un
     blocage AutoMod, une fois la règle corrigée — ni le texte ni le lien n'y
     sont cités, la même règle pourrait bloquer le signalement : le staff
     reprend les affiches depuis la fiche du tournoi, dont le numéro suit
     « tournoi- » dans l'étiquette). Une annonce que le site
     réessaie ne se poste pas à la main pendant ces deux heures. Le canal de
     logs ne reçoit jamais de mention de masse : « @everyone » et « @here » y
-    sont neutralisés.
+    sont neutralisés, sauf dans le lien de fin, cité tel que publié dans #live
+    (une chaîne YouTube `/@HereForGaming` resterait sinon un lien mort ; aucune
+    mention n'est autorisée dans ce canal).
     Un signalement qui n'a pas pu partir (canal de logs illisible, Discord
     surchargé) ne compte pas : le suivant partira. Un envoi tenté sans
     réponse claire compte, pour ne pas doubler un signalement arrivé.
@@ -226,7 +241,15 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     est rejoué dans les quelques minutes (nouvel essai interne de discord.js
     après une réponse perdue). Il n'arrête pas une annonce postée à la main.
   - Une mention `@everyone` ou `@here` glissée dans le texte est neutralisée :
-    seule celle de tête notifie.
+    seule celle de tête notifie. La syntaxe de mention d'un membre, d'un rôle
+    ou d'un salon (`<@id>`, `<@!id>`, `<@&id>`, `<#id>`) est coupée d'une
+    espace de largeur nulle dans `message` et `logMessage` : sans notifier,
+    Discord l'afficherait sous le nom actuel du membre. Un retour chariot
+    (`\r`, `\r\n`) y devient un saut de ligne `\n` : chaque ligne citée au
+    canal de logs garde son « > ».
+  - Déploiement : le bot passe **avant** (ou avec) un site qui envoie
+    `logMessage`. Un bot plus ancien ignore ce champ et citerait `message`,
+    pseudo compris, au canal de logs.
 
 - `GET /internal/feed/stream`
   - Flux SSE des évènements d'activité (`FeedEvent`) : le backlog récent

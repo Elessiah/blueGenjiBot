@@ -867,6 +867,39 @@ test("/internal/announce/live : envoi refusé → 503, puis un seul signalement 
   assert.equal(state.logs.length, 1);
 });
 
+test("/internal/announce/live : logMessage cité au staff, message publié dans #live", async () => {
+  // Succès : #live reçoit message, aucun signalement ne cite logMessage ni message.
+  let res = await call("/internal/announce/live", {
+    body: { message: "Pseudo42 contre Beta", logMessage: "un joueur contre Beta", streamUrl: "https://twitch.tv/bluegenji", context: "live-announce match-7" },
+  });
+  assert.equal(res.status, 200);
+  assert.equal(state.logs.length, 1);
+  assert.equal((state.logs[0] as unknown as { content: string }).content, "@everyone Pseudo42 contre Beta\nhttps://twitch.tv/bluegenji");
+  state.logs.length = 0;
+
+  // Échec : le signalement cite logMessage, jamais le pseudo.
+  state.liveSendError = Object.assign(new Error("Missing Permissions"), { code: 50013 });
+  res = await call("/internal/announce/live", {
+    body: { message: "Pseudo42 contre Beta", logMessage: "un joueur contre Beta", streamUrl: "https://twitch.tv/bluegenji", context: "live-announce match-8" },
+  });
+  assert.equal(res.status, 503);
+  for (let i = 0; i < 50 && state.logs.length === 0; i++) { await new Promise((r) => setTimeout(r, 5)); }
+  assert.equal(state.logs.length, 1);
+  assert.ok(state.logs[0].endsWith("\n> un joueur contre Beta\n<https://twitch.tv/bluegenji>"), state.logs[0]);
+  assert.doesNotMatch(state.logs[0], /Pseudo42/);
+});
+
+test("/internal/announce/live : logMessage invalide → 400, rien de publié", async () => {
+  for (const logMessage of ["", 42]) {
+    const res = await call("/internal/announce/live", {
+      body: { message: "Pseudo42 contre Beta", logMessage, streamUrl: "https://twitch.tv/bluegenji", context: "live-announce match-9" },
+    });
+    assert.equal(res.status, 400);
+    assert.deepEqual(res.body, { error: "INVALID_LIVE_ANNOUNCEMENT" });
+  }
+  assert.equal(state.logs.length, 0);
+});
+
 test("/internal/announce/live : un signalement refusé par le canal de logs n'étrangle pas le suivant", async () => {
   state.liveSendError = Object.assign(new Error("Missing Permissions"), { code: 50013 });
   state.logSendFailures = 1;
@@ -981,6 +1014,23 @@ test("/internal/announce/live : aucun signalement ne mentionne tout le canal de 
   assert.ok(reports.every((log) => !/@(everyone|here)/.test(log)));
   // Ni rôle ni personne : le signalement part sans aucune mention autorisée.
   assert.ok(state.logMentions.length > 0);
+  assert.ok(state.logMentions.every((mentions) => mentions !== null && mentions.parse.length === 0));
+});
+
+test("/internal/announce/live : le lien cité au staff reste celui de #live, même avec « @here » dans la chaîne", async () => {
+  state.liveSendError = Object.assign(new Error("Missing Permissions"), { code: 50013 });
+  const streamUrl = "https://www.youtube.com/@HereForGaming/live";
+  const res = await call("/internal/announce/live", {
+    body: { message: "Alpha contre Beta @everyone", streamUrl, context: "live-announce match-3" },
+  });
+  assert.equal(res.status, 503);
+  for (let i = 0; i < 50 && state.logs.length === 0; i++) { await new Promise((r) => setTimeout(r, 5)); }
+  assert.equal(state.logs.length, 1);
+  const report = String(state.logs[0]);
+  // Le lien, validé, garde son « @ » : sinon il mènerait à une autre chaîne.
+  assert.ok(report.endsWith(`\n<${streamUrl}>`), report);
+  // Le texte, lui, reste neutralisé ; aucune mention n'est autorisée.
+  assert.ok(!/@(everyone|here)/i.test(report.slice(0, -streamUrl.length - 3)), report);
   assert.ok(state.logMentions.every((mentions) => mentions !== null && mentions.parse.length === 0));
 });
 
