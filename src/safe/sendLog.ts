@@ -8,6 +8,12 @@ const MAX_ATTEMPTS = 3;
 /** Code Discord d'un accès refusé au salon de supervision. */
 const MISSING_ACCESS = 50001;
 
+/** Plus petit code d'erreur JSON de Discord (`10001`) : en dessous, un statut HTTP ou rien. */
+const MIN_DISCORD_JSON_CODE = 10_000;
+
+/** Code Discord d'une ressource d'API surchargée : passager. */
+const API_OVERLOADED = 130_000;
+
 /**
  * Envoie un log technique vers le canal de supervision.
  * @param client Client Discord utilisé pour les appels API.
@@ -74,33 +80,37 @@ async function postToAdminChannel(client: Client, owner: User, message: string, 
 
 /**
  * Publie un signalement dans le salon de supervision (`INFO_SERV`), sans copie
- * au titulaire, et dit s'il y est **arrivé** : un envoi refusé en passant
- * (limite de débit, panne de Discord) rend `false`, là où {@link sendLog} le
- * compte fait. Pour l'appelant qui n'étrangle ses signalements qu'une fois
- * l'un d'eux reçu. Le titulaire n'est lu que pour l'avertir d'un accès refusé
- * au salon — ce cas-là compte comme traité, pour qu'un nouvel essai ne lui
- * réécrive pas à chaque fois. Ne lève jamais.
+ * au titulaire, et rend `false` seulement si un **nouvel essai** peut réussir :
+ * une panne passagère (réseau, `5xx`, sans code Discord), là où
+ * {@link sendLog} la compte faite. Pour l'appelant qui n'étrangle ses
+ * signalements qu'une fois l'un d'eux traité. Un refus durable — salon absent
+ * ou non textuel, erreur d'API codée (permission, salon inconnu) — compte comme
+ * traité : le renvoyer à chaque essai ne ferait qu'empiler des requêtes
+ * refusées chez Discord. Le titulaire n'est lu que pour l'avertir d'un accès
+ * refusé au salon. Ne lève jamais.
  * @param client Client Discord utilisé pour les appels API.
  * @param message Contenu du log.
- * @returns `true` si le salon a reçu le message (ou si le titulaire a été averti d'un accès refusé).
+ * @returns `false` si l'envoi a échoué pour une cause passagère, `true` sinon.
  */
 async function sendLogConfirmed(client: Client, message: string): Promise<boolean> {
     try {
         const admin_channel: TextChannel | null = await client.channels.fetch(process.env.INFO_SERV as string) as TextChannel;
-        if (!admin_channel)
-            return false;
+        if (!admin_channel || typeof admin_channel.send !== "function")
+            return true;
         await admin_channel.send(message);
         return true;
     } catch (error) {
-        if (errorCode(error) === MISSING_ACCESS) {
+        console.error("Erreur while sending to the admin channel : ", describeError(error));
+        const code = errorCode(error);
+        if (code === MISSING_ACCESS) {
             try {
                 const owner: User = await client.users.fetch(process.env.OWNER_ID as string);
                 await owner.send("Missing Access to admin channel");
             } catch { /* le titulaire est lui aussi injoignable */ }
-            return true;
         }
-        console.error("Erreur while sending to the admin channel : ", describeError(error));
-        return false;
+        // Refus codé de Discord (codes JSON à cinq chiffres et plus) : durable,
+        // un nouvel essai serait refusé de même — sauf une API surchargée.
+        return typeof code === "number" && code >= MIN_DISCORD_JSON_CODE && code !== API_OVERLOADED;
     }
 }
 
