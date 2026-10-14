@@ -76,6 +76,19 @@ test("isAllowedStreamUrl : https et liste blanche seulement", () => {
   assert.equal(isAllowedStreamUrl("https://twitch.tv/" + "a".repeat(260)), false);
 });
 
+test("isAllowedStreamUrl : ni page de redirection, ni autre adresse dans le lien", () => {
+  for (const url of [
+    "https://www.youtube.com/redirect?q=https://piege.example",
+    "https://www.youtube.com/redirect?q=https%3A%2F%2Fpiege.example",
+    "https://www.youtube.com/attribution_link?u=/watch%3Fv%3Dabc",
+    "https://www.twitch.tv/bluegenji?r=https://piege.example",
+    "https://www.twitch.tv/bluegenji#%E0%A4%A",
+  ]) {
+    assert.equal(isAllowedStreamUrl(url), false, url);
+  }
+  assert.equal(isAllowedStreamUrl("https://www.youtube.com/watch?v=abc&t=60"), true);
+});
+
 test("parseLiveAnnouncement : un lien ne transporte ni texte, ni lien masqué, ni mention", () => {
   // `new URL` accepte ces chaînes avec l'hôte www.twitch.tv : seule la forme
   // normalisée part, et une espace ou un saut de ligne font refuser le lien.
