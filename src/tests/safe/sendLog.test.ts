@@ -236,3 +236,19 @@ test("sendLogConfirmed : l'avis d'accès refusé au titulaire part au plus une f
   }
   assert.equal(trace.filter((line) => line === "owner.send Missing Access to admin channel").length, 1);
 });
+
+test("sendLogConfirmed : un avis au titulaire perdu en passant est retenté au signalement suivant", async () => {
+  resetOwnerNoticeThrottle();
+  const trace: string[] = [];
+  // La lecture du titulaire échoue une fois (passage à vide du réseau), puis passe.
+  const client = fakeClient(trace, { channel: "missing-access", ownerFetchFailures: 1 });
+  const original = console.error;
+  console.error = () => undefined;
+  try {
+    await sendLogConfirmed(client, "A");
+    await sendLogConfirmed(client, "B");
+  } finally {
+    console.error = original;
+  }
+  assert.equal(trace.filter((line) => line === "owner.send Missing Access to admin channel").length, 1);
+});
