@@ -14,7 +14,7 @@ These terms govern the use of the Discord bot **BlueGenji Bot**: its commands an
 
 **BlueGenji Bot** is published by the association **Bluegenji Esport** (a French non-profit association under the law of 1901, registered office: 4 impasse des Cyprès, 51210 Janvilliers, France). It is developed and administered on a voluntary basis by Keryan Houssin, the association's technical host.
 
-The Bot relays the advertisements of the BlueGenji esport community — Overwatch and Marvel Rivals — between the channels of partner servers (scrim searches, recruitment and other services). It also delivers by direct message the messages of the BlueGenji website: login codes, match times (set, changed or removed) and match reminders, referee alerts, moderation notices, team join requests and data-protection notices. It is free of charge.
+The Bot relays the advertisements of the BlueGenji esport community — Overwatch and Marvel Rivals — between the channels of partner servers (scrim searches, recruitment and other services). It also delivers by direct message the messages of the BlueGenji website: login codes, match times (set, changed or removed), match reminders and notices of removal from a match (“Match retiré”), referee alerts, moderation notices, team join requests and data-protection notices. It is free of charge.
 
 ---
 

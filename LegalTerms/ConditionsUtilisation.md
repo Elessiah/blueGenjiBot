@@ -14,7 +14,7 @@ Ces conditions encadrent l'utilisation du bot Discord **BlueGenji Bot** : ses co
 
 **BlueGenji Bot** est édité par l'association **Bluegenji Esport** (association loi 1901, siège : 4 impasse des Cyprès, 51210 Janvilliers, France). Il est développé et administré bénévolement par Keryan Houssin, hébergeur technique de l'association.
 
-Le Bot relaie les annonces de la communauté esport BlueGenji — Overwatch et Marvel Rivals — entre les salons des serveurs partenaires (recherches de scrims, recrutements et autres services). Il remet aussi en message privé les messages du site BlueGenji : codes de connexion, horaires de match (posés, changés ou retirés) et rappels de match, alertes d'arbitrage, avis de modération, demandes d'adhésion à une équipe et informations sur les données. Il est gratuit.
+Le Bot relaie les annonces de la communauté esport BlueGenji — Overwatch et Marvel Rivals — entre les salons des serveurs partenaires (recherches de scrims, recrutements et autres services). Il remet aussi en message privé les messages du site BlueGenji : codes de connexion, horaires de match (posés, changés ou retirés), rappels de match et avis de retrait d'un match (« Match retiré »), alertes d'arbitrage, avis de modération, demandes d'adhésion à une équipe et informations sur les données. Il est gratuit.
 
 ---
 
