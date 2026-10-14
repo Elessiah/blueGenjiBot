@@ -540,9 +540,15 @@ function neutralizeMentionSyntax(text: string): string {
   return text.replace(/<(?=[@#])/g, "<\u200B");
 }
 
-/** Texte reçu de l'app, normalisé : sans mention (de masse ou d'un membre) ni lien, borné. */
+/**
+ * Texte reçu de l'app, normalisé : fins de ligne en `\n` seul (un `\r` isolé
+ * ferait une ligne que la citation du canal de logs, coupée sur `\n`, ne
+ * préfixerait pas de « > »), sans mention (de masse ou d'un membre) ni lien,
+ * borné.
+ */
 function normalizeLiveText(text: string): string {
-  return cutText(neutralizeLinks(neutralizeMentionSyntax(neutralizeMassMentions(text))), MAX_LIVE_MESSAGE_LENGTH);
+  const lines = text.replace(/\r\n?/g, "\n");
+  return cutText(neutralizeLinks(neutralizeMentionSyntax(neutralizeMassMentions(lines))), MAX_LIVE_MESSAGE_LENGTH);
 }
 
 /**
