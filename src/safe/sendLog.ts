@@ -20,28 +20,6 @@ async function sendLog(client: Client,
                        message: string = "Error",
                        idMsg?: idSendLogMsg,
                        copyToOwner: boolean = idMsg !== undefined) : Promise<boolean> {
-    return deliverLog(client, message, idMsg, copyToOwner, false);
-}
-
-/**
- * Comme {@link sendLog}, sans copie au titulaire, mais `true` **seulement** si
- * le message est bien arrivé dans le salon de supervision : un envoi refusé
- * (limite de débit, panne passagère) rend `false`. Pour l'appelant qui
- * n'étrangle ses signalements qu'une fois l'un d'eux reçu.
- * @param client Client Discord utilisé pour les appels API.
- * @param message Contenu du log.
- * @returns `true` si le salon de supervision a reçu le message.
- */
-async function sendLogConfirmed(client: Client, message: string): Promise<boolean> {
-    return deliverLog(client, message, undefined, false, true);
-}
-
-/** Corps commun : `confirmPost` fait compter un envoi refusé au salon comme un échec. */
-async function deliverLog(client: Client,
-                          message: string,
-                          idMsg: idSendLogMsg | undefined,
-                          copyToOwner: boolean,
-                          confirmPost: boolean): Promise<boolean> {
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
         try {
             const owner: User = await client.users.fetch(process.env.OWNER_ID as string);
@@ -51,7 +29,7 @@ async function deliverLog(client: Client,
                     idMsg.owner = sent.id;
                 }
             }
-            return await postToAdminChannel(client, owner, message, idMsg, confirmPost);
+            return await postToAdminChannel(client, owner, message, idMsg);
         } catch (error) {
             // `describeError` ne lève pas : une valeur rejetée étrange (null…) ne
             // fait pas lever `sendLog`, dont les appelants comptent qu'il ne lève jamais.
@@ -71,10 +49,9 @@ async function deliverLog(client: Client,
  * @param owner Titulaire, prévenu d'un accès refusé.
  * @param message Contenu du log.
  * @param idMsg Reçoit l'identifiant du message publié, s'il est fourni.
- * @param confirmPost Un échec de lecture ou d'envoi rend `false` au lieu de compter comme fait.
- * @returns `false` si le salon n'existe pas (ou, avec `confirmPost`, si le message n'y est pas arrivé), `true` sinon.
+ * @returns `false` si le salon n'existe pas, `true` sinon.
  */
-async function postToAdminChannel(client: Client, owner: User, message: string, idMsg?: idSendLogMsg, confirmPost = false): Promise<boolean> {
+async function postToAdminChannel(client: Client, owner: User, message: string, idMsg?: idSendLogMsg): Promise<boolean> {
     try {
         const admin_channel: TextChannel | null = await client.channels.fetch(process.env.INFO_SERV as string) as TextChannel;
         if (!admin_channel)
@@ -91,9 +68,40 @@ async function postToAdminChannel(client: Client, owner: User, message: string, 
                 await owner.send("Missing Access to admin channel");
             } catch { /* le canal de secours est lui aussi injoignable */ }
         }
-        return !confirmPost;
     }
     return true;
+}
+
+/**
+ * Publie un signalement dans le salon de supervision (`INFO_SERV`), sans copie
+ * au titulaire, et dit s'il y est **arrivé** : un envoi refusé en passant
+ * (limite de débit, panne de Discord) rend `false`, là où {@link sendLog} le
+ * compte fait. Pour l'appelant qui n'étrangle ses signalements qu'une fois
+ * l'un d'eux reçu. Le titulaire n'est lu que pour l'avertir d'un accès refusé
+ * au salon — ce cas-là compte comme traité, pour qu'un nouvel essai ne lui
+ * réécrive pas à chaque fois. Ne lève jamais.
+ * @param client Client Discord utilisé pour les appels API.
+ * @param message Contenu du log.
+ * @returns `true` si le salon a reçu le message (ou si le titulaire a été averti d'un accès refusé).
+ */
+async function sendLogConfirmed(client: Client, message: string): Promise<boolean> {
+    try {
+        const admin_channel: TextChannel | null = await client.channels.fetch(process.env.INFO_SERV as string) as TextChannel;
+        if (!admin_channel)
+            return false;
+        await admin_channel.send(message);
+        return true;
+    } catch (error) {
+        if (errorCode(error) === MISSING_ACCESS) {
+            try {
+                const owner: User = await client.users.fetch(process.env.OWNER_ID as string);
+                await owner.send("Missing Access to admin channel");
+            } catch { /* le titulaire est lui aussi injoignable */ }
+            return true;
+        }
+        console.error("Erreur while sending to the admin channel : ", describeError(error));
+        return false;
+    }
 }
 
 export { sendLog, sendLogConfirmed };
