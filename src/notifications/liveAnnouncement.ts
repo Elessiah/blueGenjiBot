@@ -530,9 +530,19 @@ export function isAllowedStreamUrl(value: string): boolean {
 /** Caractères d'une étiquette `context` du site (`live-announce tournoi-7 match-12,13,…+4`). */
 const CONTEXT_UNSAFE = /[^A-Za-z0-9 ,+…_-]/gu;
 
-/** Texte reçu de l'app, normalisé : sans mention de masse ni lien, borné. */
+/**
+ * Désamorce la syntaxe de mention Discord (`<@id>`, `<@!id>`, `<@&id>`,
+ * `<#id>`) : même sans notification (`allowedMentions`), le client la rend
+ * sous le nom actuel du membre, du rôle ou du salon — un pseudo apparaîtrait
+ * dans #live ou au canal de logs. Une espace de largeur nulle après `<` suffit.
+ */
+function neutralizeMentionSyntax(text: string): string {
+  return text.replace(/<(?=[@#])/g, "<\u200B");
+}
+
+/** Texte reçu de l'app, normalisé : sans mention (de masse ou d'un membre) ni lien, borné. */
 function normalizeLiveText(text: string): string {
-  return cutText(neutralizeLinks(neutralizeMassMentions(text)), MAX_LIVE_MESSAGE_LENGTH);
+  return cutText(neutralizeLinks(neutralizeMentionSyntax(neutralizeMassMentions(text))), MAX_LIVE_MESSAGE_LENGTH);
 }
 
 /**
