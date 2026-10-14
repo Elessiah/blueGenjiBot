@@ -20,7 +20,7 @@ type Setup = {
   /** Copies privées au titulaire qui échouent avant la première réussite. */
   ownerSendFailures?: number;
   /** Le salon de supervision : absent, illisible, ou qui refuse l'envoi. */
-  channel?: "ok" | "null" | "fetch-throws" | "missing-access" | "send-throws";
+  channel?: "ok" | "null" | "fetch-throws" | "missing-access" | "send-throws" | "send-denied";
   /** L'avis « Missing Access » au titulaire échoue lui aussi. */
   ownerNoticeFails?: boolean;
 };
@@ -63,6 +63,7 @@ function fakeClient(trace: string[], setup: Setup): Client {
           send: async (text: string) => {
             if (mode === "missing-access") throw Object.assign(new Error("Missing Access"), { code: 50001 });
             if (mode === "send-throws") throw Object.assign(new Error("Rate limited"), { code: 429 });
+            if (mode === "send-denied") throw Object.assign(new Error("Missing Permissions"), { code: 50013 });
             trace.push("admin.send " + text);
             return { id: "admin-msg" };
           },
@@ -195,10 +196,13 @@ test("sendLogConfirmed : vrai seulement si le salon de supervision a reçu le me
   assert.equal((await runConfirmed({ ownerFetchFailures: Infinity }, "Y")).ok, true);
 });
 
-test("sendLogConfirmed : un envoi refusé en passant ou un salon illisible rend faux (sendLog le compte fait)", async () => {
-  for (const channel of ["send-throws", "fetch-throws", "null"] as const) {
-    assert.equal((await runConfirmed({ channel }, "X")).ok, false, channel);
-  }
+test("sendLogConfirmed : seule une panne passagère rend faux (sendLog la compte faite)", async () => {
+  // Sans code JSON de Discord (réseau, 5xx, limite de débit) : un nouvel essai peut passer.
+  assert.equal((await runConfirmed({ channel: "fetch-throws" }, "X")).ok, false);
+  assert.equal((await runConfirmed({ channel: "send-throws" }, "X")).ok, false);
+  // Refus codé (permission) ou salon absent : durable, compté traité — pas de requête refusée à chaque essai.
+  assert.equal((await runConfirmed({ channel: "send-denied" }, "X")).ok, true);
+  assert.equal((await runConfirmed({ channel: "null" }, "X")).ok, true);
   // Comportement d'origine inchangé pour les autres appelants.
   assert.equal((await run({ channel: "send-throws" }, { message: "X" })).ok, true);
 });
