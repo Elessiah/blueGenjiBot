@@ -75,7 +75,7 @@ const state = {
   cacheThrows: false,
   /** L'envoi d'une annonce de live (message à options) lève cette erreur. */
   liveSendError: null as Error | null,
-  /** Envois au canal de logs refusés avant le premier qui passe (limite de débit). */
+  /** Envois au canal de logs refusés avant le premier qui passe (API surchargée : rien n'est parti). */
   logSendFailures: 0,
 };
 
@@ -146,7 +146,7 @@ const fakeClient = {
         if (typeof text !== "string" && state.liveSendError) { throw state.liveSendError; }
         if (typeof text === "string" && state.logSendFailures > 0) {
           state.logSendFailures--;
-          throw Object.assign(new Error("Rate limited"), { code: 429 });
+          throw Object.assign(new Error("API resource overloaded"), { code: 130000 });
         }
         state.logs.push(text);
         return { id: "log" };

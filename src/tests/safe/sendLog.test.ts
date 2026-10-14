@@ -202,12 +202,13 @@ test("sendLogConfirmed : vrai seulement si le salon de supervision a reçu le me
   assert.equal((await runConfirmed({ ownerFetchFailures: Infinity }, "Y")).ok, true);
 });
 
-test("sendLogConfirmed : seule une panne passagère rend faux (sendLog la compte faite)", async () => {
-  // Sans code JSON de Discord (réseau, 5xx, limite de débit) : un nouvel essai peut passer.
+test("sendLogConfirmed : faux seulement si rien n'a pu partir pour une cause passagère (sendLog compte tout fait)", async () => {
+  // Salon illisible sans code (réseau, 5xx), ou API surchargée : un nouvel essai peut passer.
   assert.equal((await runConfirmed({ channel: "fetch-throws" }, "X")).ok, false);
-  assert.equal((await runConfirmed({ channel: "send-throws" }, "X")).ok, false);
-  assert.equal((await runConfirmed({ channel: "send-timeout" }, "X")).ok, false);
   assert.equal((await runConfirmed({ channel: "send-overloaded" }, "X")).ok, false);
+  // Envoi tenté sans réponse claire (délai dépassé, erreur sans code JSON) : il a pu arriver, compté traité.
+  assert.equal((await runConfirmed({ channel: "send-throws" }, "X")).ok, true);
+  assert.equal((await runConfirmed({ channel: "send-timeout" }, "X")).ok, true);
   // Refus codé (permission) ou salon absent : durable, compté traité — pas de requête refusée à chaque essai.
   assert.equal((await runConfirmed({ channel: "send-denied" }, "X")).ok, true);
   assert.equal((await runConfirmed({ channel: "null" }, "X")).ok, true);
