@@ -17,6 +17,8 @@ import type { Client } from "discord.js";
 type Setup = {
   /** Lectures du titulaire qui échouent avant la première réussite (`Infinity` : toujours). */
   ownerFetchFailures?: number;
+  /** Code porté par ces échecs de lecture (`ECONNRESET` : coupure réseau). */
+  ownerFetchCode?: string;
   /** Copies privées au titulaire qui échouent avant la première réussite. */
   ownerSendFailures?: number;
   /** Le salon de supervision : absent, illisible, ou qui refuse l'envoi. */
@@ -38,7 +40,8 @@ function fakeClient(trace: string[], setup: Setup): Client {
       }
       if (text === "Missing Access to admin channel" && setup.ownerNoticeFails) {
         trace.push("owner.send échoue");
-        throw new Error("DM fermés");
+        // Messages privés fermés : refus durable de Discord.
+        throw Object.assign(new Error("Cannot send messages to this user"), { code: 50007 });
       }
       trace.push("owner.send " + text);
       return { id: "owner-msg-" + ownerSends };
@@ -49,7 +52,9 @@ function fakeClient(trace: string[], setup: Setup): Client {
       fetch: async (id: string) => {
         ownerFetches++;
         trace.push("users.fetch " + id);
-        if (ownerFetches <= (setup.ownerFetchFailures ?? 0)) throw new Error("Gateway indisponible");
+        if (ownerFetches <= (setup.ownerFetchFailures ?? 0)) {
+          throw Object.assign(new Error("Gateway indisponible"), setup.ownerFetchCode ? { code: setup.ownerFetchCode } : {});
+        }
         return owner;
       },
     },
@@ -237,11 +242,25 @@ test("sendLogConfirmed : l'avis d'accès refusé au titulaire part au plus une f
   assert.equal(trace.filter((line) => line === "owner.send Missing Access to admin channel").length, 1);
 });
 
+test("sendLogConfirmed : des messages privés fermés gardent l'heure : un seul essai d'avis pour trois signalements", async () => {
+  resetOwnerNoticeThrottle();
+  const trace: string[] = [];
+  const client = fakeClient(trace, { channel: "missing-access", ownerNoticeFails: true });
+  const original = console.error;
+  console.error = () => undefined;
+  try {
+    for (const message of ["A", "B", "C"]) await sendLogConfirmed(client, message);
+  } finally {
+    console.error = original;
+  }
+  assert.equal(trace.filter((line) => line === "owner.send échoue").length, 1);
+});
+
 test("sendLogConfirmed : un avis au titulaire perdu en passant est retenté au signalement suivant", async () => {
   resetOwnerNoticeThrottle();
   const trace: string[] = [];
   // La lecture du titulaire échoue une fois (passage à vide du réseau), puis passe.
-  const client = fakeClient(trace, { channel: "missing-access", ownerFetchFailures: 1 });
+  const client = fakeClient(trace, { channel: "missing-access", ownerFetchFailures: 1, ownerFetchCode: "ECONNRESET" });
   const original = console.error;
   console.error = () => undefined;
   try {
