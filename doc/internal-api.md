@@ -235,7 +235,13 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     est rejoué dans les quelques minutes (nouvel essai interne de discord.js
     après une réponse perdue). Il n'arrête pas une annonce postée à la main.
   - Une mention `@everyone` ou `@here` glissée dans le texte est neutralisée :
-    seule celle de tête notifie.
+    seule celle de tête notifie. La syntaxe de mention d'un membre, d'un rôle
+    ou d'un salon (`<@id>`, `<@!id>`, `<@&id>`, `<#id>`) est coupée d'une
+    espace de largeur nulle dans `message` et `logMessage` : sans notifier,
+    Discord l'afficherait sous le nom actuel du membre.
+  - Déploiement : le bot passe **avant** (ou avec) un site qui envoie
+    `logMessage`. Un bot plus ancien ignore ce champ et citerait `message`,
+    pseudo compris, au canal de logs.
 
 - `GET /internal/feed/stream`
   - Flux SSE des évènements d'activité (`FeedEvent`) : le backlog récent
