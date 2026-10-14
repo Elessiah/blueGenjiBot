@@ -275,7 +275,8 @@ export function isLiveIssueFinal(key: string): boolean {
 /**
  * Signalement au canal de logs d'une annonce qui n'est pas partie, sans le
  * préfixe `[AppBlueGenji]` : la cause et l'action à mener, puis l'annonce
- * concernée (équipes et tournoi, jamais un pseudo) et son lien, cités pour la
+ * concernée (équipes et tournoi, jamais un pseudo : sa version de journal,
+ * {@link loggedLiveText}) et son lien, cités pour la
  * reconnaître — le site la réessaie seul, la reposter à la main pendant ce
  * temps notifierait deux fois tout le serveur. Une panne passagère de Discord
  * peut cacher un envoi réussi : elle est dite « non confirmée », pas « non
@@ -304,18 +305,19 @@ export function liveFailureReport(
     return `${intro}${retrySentence(key, siteGaveUp, true)} Texte et lien non cités ici (la même règle pourrait les bloquer).`;
   }
   const max = MAX_LIVE_LOG_LENGTH - LOG_PREFIX.length;
-  const lineCount = request.message.split("\n").length;
+  const logged = loggedLiveText(request);
+  const lineCount = logged.split("\n").length;
   // La citation sert à reconnaître l'annonce, raccourcie au besoin ; si elle
   // l'est, la consigne de la poster à la main le dit.
   const build = (shortened: boolean): { head: string; text: string } => {
     const head = `${intro}${retrySentence(key, siteGaveUp, shortened)} Annonce concernée :`;
     // Place restante : chaque ligne y gagne « > » (deux caractères).
     const room = max - head.length - link.length - 1;
-    const text = room > 2 * lineCount + 1 ? cutText(request.message, room - 2 * lineCount) : "";
+    const text = room > 2 * lineCount + 1 ? cutText(logged, room - 2 * lineCount) : "";
     return { head, text };
   };
   let { head, text } = build(false);
-  if (text !== request.message) { ({ head, text } = build(true)); }
+  if (text !== logged) { ({ head, text } = build(true)); }
   const quoted = text ? "\n" + quoteLines(text) : "";
   return `${head}${quoted}${link}`;
 }
@@ -361,6 +363,24 @@ export interface LiveAnnouncementRequest {
   streamUrl: string;
   /** Étiquette de journalisation (`live-announce match-42`, …). */
   context: string;
+  /**
+   * Version **sans pseudo** du texte (le pseudo d'une entrée individuelle
+   * remplacé par « un joueur »), seule citée au canal de logs. Absente quand
+   * le texte ne nomme aucun joueur : `message` est alors cité.
+   */
+  logMessage?: string;
+}
+
+/**
+ * Texte de l'annonce tel qu'il peut être cité au canal de logs du staff :
+ * `logMessage` s'il a été fourni, sinon `message` (qui ne nomme alors aucun
+ * joueur). Jamais le texte publié dans #live quand les deux diffèrent.
+ *
+ * @param request Demande validée.
+ * @returns Le texte à citer.
+ */
+export function loggedLiveText(request: LiveAnnouncementRequest): string {
+  return request.logMessage ?? request.message;
 }
 
 /** Bilan d'une annonce publiée. */
@@ -508,8 +528,15 @@ export function isAllowedStreamUrl(value: string): boolean {
 /** Caractères d'une étiquette `context` du site (`live-announce tournoi-7 match-12,13,…+4`). */
 const CONTEXT_UNSAFE = /[^A-Za-z0-9 ,+…_-]/gu;
 
+/** Texte reçu de l'app, normalisé : sans mention de masse ni lien, borné. */
+function normalizeLiveText(text: string): string {
+  return cutText(neutralizeLinks(neutralizeMassMentions(text)), MAX_LIVE_MESSAGE_LENGTH);
+}
+
 /**
- * Valide le corps d'une annonce de live.
+ * Valide le corps d'une annonce de live. `logMessage`, facultatif, se valide
+ * comme `message` : présent mais vide ou d'un autre type, toute la demande est
+ * refusée — retomber sur `message` citerait au staff le pseudo qu'il retire.
  *
  * @param payload Corps JSON brut.
  * @returns La demande normalisée, ou `null` si elle est inexploitable.
@@ -520,6 +547,9 @@ export function parseLiveAnnouncement(payload: unknown): LiveAnnouncementRequest
   const message = typeof raw.message === "string" ? raw.message.trim() : "";
   const streamUrl = publishableStreamUrl(typeof raw.streamUrl === "string" ? raw.streamUrl.trim() : "");
   if (!message || !streamUrl) { return null; }
+  const hasLogMessage = raw.logMessage !== undefined;
+  const logMessage = typeof raw.logMessage === "string" ? raw.logMessage.trim() : "";
+  if (hasLogMessage && !logMessage) { return null; }
   // Assez long pour la liste des matchs d'un groupe (`live-announce match-12,13,…`).
   // Coupée d'un « … » visible : un identifiant tronqué ne passe pas pour un autre.
   // Écrite telle quelle dans pm2 et au canal de logs : hors des caractères
@@ -527,7 +557,9 @@ export function parseLiveAnnouncement(payload: unknown): LiveAnnouncementRequest
   // journal, ni balisage qui ferait un lien masqué).
   const rawContext = typeof raw.context === "string" ? raw.context.trim().replace(CONTEXT_UNSAFE, "_") : "";
   const context = rawContext ? cutText(rawContext, MAX_LIVE_CONTEXT_LENGTH) : "live-announce";
-  return { message: cutText(neutralizeLinks(neutralizeMassMentions(message)), MAX_LIVE_MESSAGE_LENGTH), streamUrl, context };
+  const request: LiveAnnouncementRequest = { message: normalizeLiveText(message), streamUrl, context };
+  if (hasLogMessage) { request.logMessage = normalizeLiveText(logMessage); }
+  return request;
 }
 
 /**
