@@ -411,11 +411,32 @@ function hasUrlBreak(value: string): boolean {
   });
 }
 
+/** Pages de redirection des plateformes : l'hôte est autorisé, la destination non. */
+const REDIRECT_PATHS = /^\/(redirect|attribution_link)(\/|$)/i;
+
+/** Une adresse complète (`schéma://`), glissée dans le chemin ou la requête. */
+const EMBEDDED_URL = /[a-z][a-z0-9+.-]*:\/\//i;
+
+/**
+ * Vrai si le lien mène ailleurs que la diffusion : page de redirection, ou
+ * autre adresse portée par le chemin, la requête ou l'ancre (en clair ou
+ * encodée).
+ */
+function leadsElsewhere(url: URL): boolean {
+  if (REDIRECT_PATHS.test(url.pathname)) { return true; }
+  try {
+    return EMBEDDED_URL.test(decodeURIComponent(url.pathname + url.search + url.hash));
+  } catch {
+    return true;
+  }
+}
+
 /**
  * Forme publiable du lien : `https`, hôte de la liste blanche, sans
  * identifiants ni port, 255 caractères au plus, sans espace ni caractère de
- * contrôle. Seconde barrière — le site valide déjà —, parce que ce lien part
- * devant tout le serveur.
+ * contrôle, sans redirection ni autre adresse dans le lien. Seconde
+ * barrière — le site valide déjà —, parce que ce lien part devant tout le
+ * serveur.
  *
  * C'est la forme **normalisée** (`href`) qui est publiée, pas la chaîne reçue :
  * `new URL` accepte `https://www.twitch.tv/x [Live](https://piege.example)`
@@ -438,7 +459,7 @@ export function publishableStreamUrl(value: string): string | null {
     && url.password === ""
     && url.port === ""
     && LIVE_HOSTS.has(url.hostname.toLowerCase());
-  if (!allowed || url.href.length > MAX_STREAM_URL_LENGTH) { return null; }
+  if (!allowed || leadsElsewhere(url) || url.href.length > MAX_STREAM_URL_LENGTH) { return null; }
   return url.href;
 }
 
