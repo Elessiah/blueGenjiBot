@@ -397,7 +397,7 @@ test("liveFailureReport : poster à la main — avec la mention, et le texte ent
   const long = { ...short, message: ["🔴 En direct — Coupe :", ...lines].join("\n") };
   const cut = liveFailureReport(long, "send-rejected", "x", { siteGaveUp: true });
   assert.ok(cut.length <= 1900 - "[AppBlueGenji] ".length);
-  assert.match(cut, /texte cité raccourci ou absent : reprendre toutes les affiches depuis la fiche du tournoi, \/tournois\//);
+  assert.match(cut, /texte cité raccourci, sans pseudo ou absent : reprendre toutes les affiches depuis la fiche du tournoi, \/tournois\//);
   // AutoMod : rien n'est cité, le staff est renvoyé à la fiche du tournoi.
   assert.match(liveFailureReport(short, "automod", "x"), /reprendre toutes les affiches depuis la fiche du tournoi/);
 });
@@ -440,6 +440,13 @@ test("liveFailureReport : cite logMessage, jamais le pseudo de message", () => {
       assert.doesNotMatch(report, /Pseudo42/, `${key} ${siteGaveUp}`);
     }
   }
+  // La citation sans pseudo n'est pas le texte publié : un repost manuel
+  // reprend les affiches depuis la fiche du tournoi.
+  const gaveUp = liveFailureReport(request, "send-rejected", "x", { siteGaveUp: true });
+  assert.match(gaveUp, /postée à la main sans doublon, avec la mention de tout le serveur en tête \(texte cité raccourci, sans pseudo ou absent : reprendre toutes les affiches depuis la fiche du tournoi/);
+  // Version de journal identique au texte, entière : pas de renvoi.
+  const same = { ...request, message: request.logMessage };
+  assert.doesNotMatch(liveFailureReport(same, "send-rejected", "x", { siteGaveUp: true }), /fiche du tournoi/);
   // AutoMod : rien n'est cité, ni l'un ni l'autre.
   const automod = liveFailureReport(request, "automod", "x");
   assert.doesNotMatch(automod, /Pseudo42|un joueur/);
@@ -448,7 +455,7 @@ test("liveFailureReport : cite logMessage, jamais le pseudo de message", () => {
   const long = { ...request, logMessage: lines.join("\n") };
   const cut = liveFailureReport(long, "send-rejected", "x", { siteGaveUp: true });
   assert.ok(cut.length <= 1900 - "[AppBlueGenji] ".length);
-  assert.match(cut, /texte cité raccourci ou absent/);
+  assert.match(cut, /texte cité raccourci, sans pseudo ou absent/);
   assert.doesNotMatch(cut, /Pseudo42/);
   // Sans logMessage : message est cité.
   const withoutLog = { message: request.message, streamUrl: request.streamUrl, context: request.context };
