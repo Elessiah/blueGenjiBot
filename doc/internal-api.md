@@ -182,7 +182,11 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     bot n'a pas pu publier, ou pas pu confirmer la publication. `reason` :
     - `missing`, `no-view`, `no-send`, `send-denied` — salon introuvable ou
       permission manquante ;
-    - `automod` — une règle AutoMod du serveur a bloqué le message ;
+    - `automod` — une règle AutoMod du serveur a bloqué le message ; si la
+      règle a l'action « Envoyer une alerte », c'est Discord, pas le bot, qui
+      recopie le message bloqué (`message`, pseudo compris) dans le salon
+      d'alerte de la règle : ce salon ne doit pas être le canal de logs, et
+      seuls les modérateurs doivent le lire ;
     - `send-rejected` — Discord a refusé le message pour une autre raison,
       souvent l'état du salon (type, verrouillage) ;
     - `discord-unreachable` — Discord n'a pas répondu en lisant le salon,
