@@ -11,6 +11,7 @@ import {
   MAX_LIVE_MESSAGE_LENGTH,
   isLiveIssueFinal,
   liveFailureReport,
+  loggedLiveText,
   liveFailureVerdict,
   liveAnnouncementNonce,
   describeLiveIssue,
@@ -399,4 +400,68 @@ test("liveFailureReport : poster à la main — avec la mention, et le texte ent
   assert.match(cut, /texte cité raccourci ou absent : reprendre toutes les affiches depuis la fiche du tournoi, \/tournois\//);
   // AutoMod : rien n'est cité, le staff est renvoyé à la fiche du tournoi.
   assert.match(liveFailureReport(short, "automod", "x"), /reprendre toutes les affiches depuis la fiche du tournoi/);
+});
+
+test("parseLiveAnnouncement : logMessage facultatif, validé comme message", () => {
+  // Absent : rien n'est ajouté, message sera cité.
+  const plain = parseLiveAnnouncement(REQUEST);
+  assert.ok(plain);
+  assert.equal("logMessage" in plain, false);
+  assert.equal(loggedLiveText(plain), REQUEST.message);
+  // Présent : normalisé comme message (espaces, mentions, liens, longueur).
+  const withLog = parseLiveAnnouncement({
+    ...REQUEST,
+    message: "Pseudo42 contre Beta",
+    logMessage: "  un joueur contre Beta @everyone https://piege.example " + "x".repeat(5000),
+  });
+  assert.ok(withLog);
+  assert.equal(withLog.message, "Pseudo42 contre Beta");
+  assert.ok(withLog.logMessage?.startsWith("un joueur contre Beta @\u200Beveryone https:\u200B//piege.example"));
+  assert.equal(withLog.logMessage?.length, MAX_LIVE_MESSAGE_LENGTH);
+  assert.ok(withLog.logMessage?.endsWith("…"));
+  assert.equal(loggedLiveText(withLog), withLog.logMessage);
+  // Invalide : toute la demande est refusée, plutôt que de citer le pseudo.
+  for (const logMessage of ["", "   ", 42, null, ["un joueur"], { text: "un joueur" }]) {
+    assert.equal(parseLiveAnnouncement({ ...REQUEST, logMessage }), null, JSON.stringify(logMessage));
+  }
+});
+
+test("liveFailureReport : cite logMessage, jamais le pseudo de message", () => {
+  const request = {
+    message: "Pseudo42 contre Beta — Coupe",
+    logMessage: "un joueur contre Beta — Coupe",
+    streamUrl: "https://twitch.tv/bg",
+    context: "live-announce match-1",
+  };
+  for (const key of ["no-send", "send-denied", "send-rejected", "missing", "discord-unreachable", "discord-down", "failed"]) {
+    for (const siteGaveUp of [false, true]) {
+      const report = liveFailureReport(request, key, "x", { siteGaveUp });
+      assert.match(report, /\n> un joueur contre Beta — Coupe\n<https:\/\/twitch\.tv\/bg>$/, `${key} ${siteGaveUp}`);
+      assert.doesNotMatch(report, /Pseudo42/, `${key} ${siteGaveUp}`);
+    }
+  }
+  // AutoMod : rien n'est cité, ni l'un ni l'autre.
+  const automod = liveFailureReport(request, "automod", "x");
+  assert.doesNotMatch(automod, /Pseudo42|un joueur/);
+  // Une version de journal longue est raccourcie comme le serait message.
+  const lines = Array.from({ length: 40 }, (_, i) => `• ${"A".repeat(30)}${i} contre un joueur`);
+  const long = { ...request, logMessage: lines.join("\n") };
+  const cut = liveFailureReport(long, "send-rejected", "x", { siteGaveUp: true });
+  assert.ok(cut.length <= 1900 - "[AppBlueGenji] ".length);
+  assert.match(cut, /texte cité raccourci ou absent/);
+  assert.doesNotMatch(cut, /Pseudo42/);
+  // Sans logMessage : message est cité.
+  const withoutLog = { message: request.message, streamUrl: request.streamUrl, context: request.context };
+  assert.match(liveFailureReport(withoutLog, "no-send", "x"), /> Pseudo42 contre Beta — Coupe/);
+});
+
+test("announceLive : #live publie message, jamais logMessage", async () => {
+  const sent: Sent[] = [];
+  const request = parseLiveAnnouncement({ ...REQUEST, message: "Pseudo42 contre Beta", logMessage: "un joueur contre Beta" });
+  assert.ok(request);
+  await announceLive(fakeClient({ sent }), request);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].content, "@everyone Pseudo42 contre Beta\nhttps://www.twitch.tv/bluegenji");
+  // Le jeton d'unicité ne dépend pas de logMessage : un même envoi rejoué reste reconnu.
+  assert.equal(sent[0].nonce, liveAnnouncementNonce({ ...REQUEST, message: "Pseudo42 contre Beta" }));
 });
