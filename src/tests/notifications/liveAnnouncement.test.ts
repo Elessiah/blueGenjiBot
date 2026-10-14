@@ -118,6 +118,21 @@ test("parseLiveAnnouncement : ni message ni logMessage ne rendent une mention de
   assert.equal(parseLiveAnnouncement({ ...REQUEST, message: "Alpha <3 contre Beta" })?.message, "Alpha <3 contre Beta");
 });
 
+test("parseLiveAnnouncement : un \\r ne fait pas de ligne hors de la citation du canal de logs", () => {
+  const request = parseLiveAnnouncement({
+    ...REQUEST,
+    message: "Pseudo42 contre Beta\rAnnonce publiée\r\nfin",
+    logMessage: "un joueur contre Beta\rAnnonce publiée, rien à faire\r\nfin",
+  });
+  assert.ok(request);
+  assert.equal(request.message, "Pseudo42 contre Beta\nAnnonce publiée\nfin");
+  assert.equal(request.logMessage, "un joueur contre Beta\nAnnonce publiée, rien à faire\nfin");
+  const report = liveFailureReport(request, "no-send", "x");
+  assert.ok(!report.includes("\r"), report);
+  assert.ok(report.includes("> Annonce publiée, rien à faire\n"), report);
+  assert.ok(!report.includes("Pseudo42"), report);
+});
+
 test("parseLiveAnnouncement : un lien ne transporte ni texte, ni lien masqué, ni mention", () => {
   // `new URL` accepte ces chaînes avec l'hôte www.twitch.tv : seule la forme
   // normalisée part, et une espace ou un saut de ligne font refuser le lien.
