@@ -218,7 +218,8 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     lieu de promettre un nouvel essai. Pour ces annonces que le site ne
     réessaie pas, hors panne pendant l'envoi, rien n'est parti : le
     signalement dit qu'elle peut être postée à la main sans doublon, avec
-    « @everyone » en tête et le texte entier si la citation est raccourcie (après un
+    « @everyone » en tête et le texte entier si la citation est raccourcie ou
+    sans pseudo (après un
     blocage AutoMod, une fois la règle corrigée — ni le texte ni le lien n'y
     sont cités, la même règle pourrait bloquer le signalement : le staff
     reprend les affiches depuis la fiche du tournoi, dont le numéro suit
