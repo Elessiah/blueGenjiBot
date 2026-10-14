@@ -308,7 +308,8 @@ export function liveFailureReport(
   const logged = loggedLiveText(request);
   const lineCount = logged.split("\n").length;
   // La citation sert à reconnaître l'annonce, raccourcie au besoin ; si elle
-  // l'est, la consigne de la poster à la main le dit.
+  // l'est, ou si c'est la version sans pseudo (elle diffère alors du texte
+  // publié), la consigne de la poster à la main renvoie à la fiche du tournoi.
   const build = (shortened: boolean): { head: string; text: string } => {
     const head = `${intro}${retrySentence(key, siteGaveUp, shortened)} Annonce concernée :`;
     // Place restante : chaque ligne y gagne « > » (deux caractères).
@@ -316,8 +317,9 @@ export function liveFailureReport(
     const text = room > 2 * lineCount + 1 ? cutText(logged, room - 2 * lineCount) : "";
     return { head, text };
   };
-  let { head, text } = build(false);
-  if (text !== logged) { ({ head, text } = build(true)); }
+  const anonymized = logged !== request.message;
+  let { head, text } = build(anonymized);
+  if (!anonymized && text !== logged) { ({ head, text } = build(true)); }
   const quoted = text ? "\n" + quoteLines(text) : "";
   return `${head}${quoted}${link}`;
 }
@@ -331,7 +333,7 @@ function manualPostSentence(key: string, shortened: boolean): string {
   if (key === "discord-down") { return ""; }
   const when = key === "automod" ? "une fois la règle corrigée, " : "";
   const whole = shortened
-    ? " (texte cité raccourci ou absent : reprendre toutes les affiches depuis la fiche du tournoi, /tournois/<n° de « tournoi- » dans l'étiquette>)"
+    ? " (texte cité raccourci, sans pseudo ou absent : reprendre toutes les affiches depuis la fiche du tournoi, /tournois/<n° de « tournoi- » dans l'étiquette>)"
     : "";
   return ` Rien n'est parti : ${when}elle peut être postée à la main sans doublon, avec la mention de tout le serveur en tête${whole}.`;
 }
