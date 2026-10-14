@@ -83,10 +83,24 @@ test("isAllowedStreamUrl : ni page de redirection, ni autre adresse dans le lien
     "https://www.youtube.com/attribution_link?u=/watch%3Fv%3Dabc",
     "https://www.twitch.tv/bluegenji?r=https://piege.example",
     "https://www.twitch.tv/bluegenji#%E0%A4%A",
+    "https://www.youtube.com/%72edirect?q=piege.example",
+    "https://www.youtube.com//redirect?q=piege.example",
+    "https://www.twitch.tv/bluegenji?next=https:%5C%5Cpiege.example",
+    "https://www.twitch.tv/bluegenji?continue=%2F%2Fpiege.example",
+    "https://www.twitch.tv/bluegenji?next=https%253A%252F%252Fpiege.example",
   ]) {
     assert.equal(isAllowedStreamUrl(url), false, url);
   }
   assert.equal(isAllowedStreamUrl("https://www.youtube.com/watch?v=abc&t=60"), true);
+  assert.equal(isAllowedStreamUrl("https://www.youtube.com/@BlueGenji/live"), true);
+});
+
+test("parseLiveAnnouncement : seul streamUrl est cliquable, le texte ne porte ni lien ni lien masqué", () => {
+  const request = parseLiveAnnouncement({ ...REQUEST, message: "🔴 En direct : [Twitch](https://piege.example) contre https://piege.example — T" });
+  assert.ok(request);
+  assert.ok(!/:\/\//.test(request.message), request.message);
+  assert.ok(!/\]\(/.test(request.message), request.message);
+  assert.equal(request.message.replace(/\u200B/g, ""), "🔴 En direct : [Twitch](https://piege.example) contre https://piege.example — T");
 });
 
 test("parseLiveAnnouncement : un lien ne transporte ni texte, ni lien masqué, ni mention", () => {
