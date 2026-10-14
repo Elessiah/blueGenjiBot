@@ -186,7 +186,7 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     annonce « non publiée » pour une cause qui peut se régler (salon,
     permission, refus lié à l'état du salon, Discord injoignable) est réessayée par le site : la reposter à la main
     pendant ces deux heures notifierait deux fois tout le serveur ; comme le
-    site réessaie à chaque balayage, une même cause n'est signalée qu'**une
+    site réessaie environ toutes les minutes, une même cause n'est signalée qu'**une
     fois par heure** (d'autres annonces peuvent alors échouer pour elle sans
     nouveau signalement). Une annonce « non confirmée » (`discord-down`) n'est
     pas réessayée : chacune est signalée (vérifier #live), comme chaque blocage
