@@ -51,7 +51,7 @@ The public activity feed on the bot's page contains no Discord ID; it repeats th
 
 ### Legal basis
 
-This processing is based on the association's **legitimate interest** (Article 6(1)(f) GDPR): running the relay between partner servers, moderating it and measuring its activity. Messages from the website rely on the legal basis of their original processing, set out in the website's register: legitimate interest for a player's match direct messages (time, reminders, “Match retiré”), which they object to with the switch in “My profile” — the website keeps that choice in their legitimate interest, to honour it; performance of the service the player registers for, for their public username in the #live announcement of a solo tournament.
+This processing is based on the association's **legitimate interest** (Article 6(1)(f) GDPR): running the relay between partner servers, moderating it and measuring its activity. Messages from the website rely on the legal basis of their original processing, set out in the website's register: legitimate interest for a player's match direct messages (time, reminders, “Match retiré”), which they object to with the switch in “My profile” — the website keeps that choice in their legitimate interest, to honour it; performance of the service the player registers for, for their public username in the #live announcement of a solo tournament; the association's legitimate interest in moderating its server for the AutoMod alert of such an announcement when blocked, deleted on request.
 
 ---
 
