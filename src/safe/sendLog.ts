@@ -1,6 +1,6 @@
 import type {Client, TextChannel, User} from "discord.js";
 import {idSendLogMsg} from "./types.js";
-import {describeError, discordJsonCode, errorCode} from "./errorGuards.js";
+import {describeError, discordJsonCode, errorCode, isTransientNetworkError} from "./errorGuards.js";
 
 /** Essais d'un envoi au journal : seule la lecture du titulaire et sa copie privée sont rejouées. */
 const MAX_ATTEMPTS = 3;
@@ -112,9 +112,10 @@ async function sendLogConfirmed(client: Client, message: string): Promise<boolea
                 const owner: User = await client.users.fetch(process.env.OWNER_ID as string);
                 await owner.send("Missing Access to admin channel");
             } catch (noticeError) {
-                // Avis perdu en passant (réseau, `5xx`) : le prochain signalement
-                // le retente. Un refus codé (messages privés fermés) garde l'heure.
-                if (discordJsonCode(noticeError) === null) lastOwnerNoticeAt = previous;
+                // Avis perdu sur le réseau (connexion coupée, refusée) : rien n'est
+                // parti, le prochain signalement le retente. Un refus (messages
+                // privés fermés) ou un délai dépassé (il a pu partir) garde l'heure.
+                if (isTransientNetworkError(noticeError)) lastOwnerNoticeAt = previous;
             }
         }
         // Refus codé de Discord : durable, un nouvel essai serait refusé de
