@@ -1,6 +1,6 @@
 import type {Client, TextChannel, User} from "discord.js";
 import {idSendLogMsg} from "./types.js";
-import {describeError, discordJsonCode, errorCode, isTransientNetworkError} from "./errorGuards.js";
+import {describeError, discordJsonCode, errorCode} from "./errorGuards.js";
 
 /** Essais d'un envoi au journal : seule la lecture du titulaire et sa copie privée sont rejouées. */
 const MAX_ATTEMPTS = 3;
@@ -108,15 +108,17 @@ async function sendLogConfirmed(client: Client, message: string): Promise<boolea
         if (code === MISSING_ACCESS && Date.now() - lastOwnerNoticeAt >= OWNER_NOTICE_COOLDOWN_MS) {
             const previous = lastOwnerNoticeAt;
             lastOwnerNoticeAt = Date.now();
+            let owner: User | null = null;
             try {
-                const owner: User = await client.users.fetch(process.env.OWNER_ID as string);
-                await owner.send("Missing Access to admin channel");
-            } catch (noticeError) {
-                // Avis perdu sur le réseau (connexion coupée, refusée) : rien n'est
-                // parti, le prochain signalement le retente. Un refus (messages
-                // privés fermés) ou un délai dépassé (il a pu partir) garde l'heure.
-                if (isTransientNetworkError(noticeError)) lastOwnerNoticeAt = previous;
+                owner = await client.users.fetch(process.env.OWNER_ID as string);
+            } catch {
+                // Titulaire illisible : rien n'est parti, le prochain signalement
+                // retente l'avis.
+                lastOwnerNoticeAt = previous;
             }
+            // Un envoi qui échoue garde l'heure : refusé (messages privés
+            // fermés), ou peut-être parti malgré l'erreur.
+            await owner?.send("Missing Access to admin channel").catch(() => undefined);
         }
         // Refus codé de Discord : durable, un nouvel essai serait refusé de
         // même — sauf une API surchargée.
