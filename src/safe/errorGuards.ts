@@ -52,6 +52,22 @@ const IGNORABLE_DISCORD_CODES: ReadonlySet<number> = new Set([
     10003, 10004, 10008, 10013, 10062, 40060, 50001, 50007, 50013,
 ]);
 
+/** Plus petit code d'erreur JSON de Discord (`10001`) : en dessous, un statut HTTP, un code de `DOMException` (`20` : délai dépassé) ou rien. */
+const MIN_DISCORD_JSON_CODE = 10_000;
+
+/**
+ * Code d'erreur JSON de Discord porté par l'erreur (`DiscordAPIError` :
+ * `50013`, `10003`…), sinon `null`. Un refus **explicite** de Discord : une
+ * erreur sans ce code (réseau, `5xx`, délai dépassé) ne dit pas ce qui s'est
+ * passé côté Discord.
+ * @param error Valeur capturée.
+ * @returns Le code, ou `null`.
+ */
+function discordJsonCode(error: unknown): number | null {
+    const code = errorCode(error);
+    return typeof code === "number" && code >= MIN_DISCORD_JSON_CODE ? code : null;
+}
+
 /**
  * Extrait le code d'erreur d'une valeur inconnue levée par une API tierce.
  * @param error Valeur capturée (pas nécessairement une `Error`).
@@ -179,6 +195,7 @@ function classifyError(error: unknown): ErrorSeverity {
 }
 
 export {
+    discordJsonCode,
     classifyError,
     MAX_CAUSE_DEPTH,
     describeError,

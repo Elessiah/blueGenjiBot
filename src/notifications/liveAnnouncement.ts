@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { PermissionFlagsBits, type Client } from "discord.js";
+import { discordJsonCode } from "../safe/errorGuards.js";
 
 /**
  * Annonce d'un live dans le salon #live du serveur BlueGenji, poussée par l'app
@@ -63,10 +64,12 @@ const UNKNOWN_CHANNEL = 10003;
 /** Codes Discord d'un message bloqué par une règle AutoMod du serveur. */
 const AUTOMOD_BLOCKED = new Set([200000, 200001]);
 
-/** Code d'erreur Discord porté par une `DiscordAPIError`, sinon `undefined`. */
+/**
+ * Code d'erreur JSON de Discord porté par une `DiscordAPIError`, sinon
+ * `undefined` : un délai dépassé (`AbortError`, code `20`) n'est pas un refus.
+ */
 function discordCode(error: unknown): number | undefined {
-  const code = typeof error === "object" && error !== null ? (error as { code?: unknown }).code : undefined;
-  return typeof code === "number" ? code : undefined;
+  return discordJsonCode(error) ?? undefined;
 }
 
 /**
@@ -92,7 +95,7 @@ function sendFailure(error: unknown): LiveChannelUnavailableError {
   if (code !== undefined && AUTOMOD_BLOCKED.has(code)) {
     return new LiveChannelUnavailableError("automod", `envoi bloqué par AutoMod (${detail})`, detail);
   }
-  if (code !== undefined && code > 0) {
+  if (code !== undefined) {
     return new LiveChannelUnavailableError("send-rejected", `envoi refusé par Discord (${detail})`, detail);
   }
   return new LiveChannelUnavailableError("discord-down", `envoi sans réponse claire de Discord (${detail})`, detail);

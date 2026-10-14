@@ -1,6 +1,6 @@
 import type {Client, TextChannel, User} from "discord.js";
 import {idSendLogMsg} from "./types.js";
-import {describeError, errorCode} from "./errorGuards.js";
+import {describeError, discordJsonCode, errorCode} from "./errorGuards.js";
 
 /** Essais d'un envoi au journal : seule la lecture du titulaire et sa copie privée sont rejouées. */
 const MAX_ATTEMPTS = 3;
@@ -8,11 +8,13 @@ const MAX_ATTEMPTS = 3;
 /** Code Discord d'un accès refusé au salon de supervision. */
 const MISSING_ACCESS = 50001;
 
-/** Plus petit code d'erreur JSON de Discord (`10001`) : en dessous, un statut HTTP ou rien. */
-const MIN_DISCORD_JSON_CODE = 10_000;
-
 /** Code Discord d'une ressource d'API surchargée : passager. */
 const API_OVERLOADED = 130_000;
+
+/** Délai entre deux avis « Missing Access » au titulaire venus de {@link sendLogConfirmed}. */
+const OWNER_NOTICE_COOLDOWN_MS = 60 * 60 * 1000;
+
+let lastOwnerNoticeAt = Number.NEGATIVE_INFINITY;
 
 /**
  * Envoie un log technique vers le canal de supervision.
@@ -101,17 +103,24 @@ async function sendLogConfirmed(client: Client, message: string): Promise<boolea
         return true;
     } catch (error) {
         console.error("Erreur while sending to the admin channel : ", describeError(error));
-        const code = errorCode(error);
-        if (code === MISSING_ACCESS) {
+        const code = discordJsonCode(error);
+        // Un avis par heure : chaque annonce abandonnée a sa propre clé de signalement.
+        if (code === MISSING_ACCESS && Date.now() - lastOwnerNoticeAt >= OWNER_NOTICE_COOLDOWN_MS) {
+            lastOwnerNoticeAt = Date.now();
             try {
                 const owner: User = await client.users.fetch(process.env.OWNER_ID as string);
                 await owner.send("Missing Access to admin channel");
             } catch { /* le titulaire est lui aussi injoignable */ }
         }
-        // Refus codé de Discord (codes JSON à cinq chiffres et plus) : durable,
-        // un nouvel essai serait refusé de même — sauf une API surchargée.
-        return typeof code === "number" && code >= MIN_DISCORD_JSON_CODE && code !== API_OVERLOADED;
+        // Refus codé de Discord : durable, un nouvel essai serait refusé de
+        // même — sauf une API surchargée.
+        return code !== null && code !== API_OVERLOADED;
     }
 }
 
-export { sendLog, sendLogConfirmed };
+/** Oublie le dernier avis au titulaire. Réservé aux tests. */
+function resetOwnerNoticeThrottle(): void {
+    lastOwnerNoticeAt = Number.NEGATIVE_INFINITY;
+}
+
+export { sendLog, sendLogConfirmed, resetOwnerNoticeThrottle };
