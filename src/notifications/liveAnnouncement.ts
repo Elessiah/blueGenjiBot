@@ -414,21 +414,51 @@ function hasUrlBreak(value: string): boolean {
 /** Pages de redirection des plateformes : l'hôte est autorisé, la destination non. */
 const REDIRECT_PATHS = /^\/(redirect|attribution_link)(\/|$)/i;
 
-/** Une adresse complète (`schéma://`), glissée dans le chemin ou la requête. */
-const EMBEDDED_URL = /[a-z][a-z0-9+.-]*:\/\//i;
+/**
+ * Ce qui, une fois décodé, désigne une autre adresse : un schéma suivi d'une
+ * barre (`https://`, `https:\\` que les navigateurs lisent pareil), ou une
+ * adresse sans schéma (`//hôte`, `\\hôte`).
+ */
+const EMBEDDED_ADDRESS = /:[\\/]|[\\/]{2}|\\/;
+
+/** Décode jusqu'à stabilité (trois passes au plus) ; `null` si illisible ou encore encodé. */
+function fullyDecoded(value: string): string | null {
+  let current = value;
+  for (let pass = 0; pass < 3; pass++) {
+    let next: string;
+    try {
+      next = decodeURIComponent(current);
+    } catch {
+      return null;
+    }
+    if (next === current) { return current; }
+    current = next;
+  }
+  return null;
+}
 
 /**
- * Vrai si le lien mène ailleurs que la diffusion : page de redirection, ou
- * autre adresse portée par le chemin, la requête ou l'ancre (en clair ou
- * encodée).
+ * Vrai si le lien mène ailleurs que la diffusion : page de redirection (même
+ * encodée ou derrière une barre doublée), ou autre adresse portée par le
+ * chemin, la requête ou l'ancre — en clair, encodée une ou plusieurs fois,
+ * avec ou sans schéma.
  */
 function leadsElsewhere(url: URL): boolean {
-  if (REDIRECT_PATHS.test(url.pathname)) { return true; }
-  try {
-    return EMBEDDED_URL.test(decodeURIComponent(url.pathname + url.search + url.hash));
-  } catch {
-    return true;
-  }
+  const path = fullyDecoded(url.pathname);
+  const rest = fullyDecoded(url.search + url.hash);
+  if (path === null || rest === null) { return true; }
+  if (REDIRECT_PATHS.test(path.replace(/[\\/]+/g, "/"))) { return true; }
+  return EMBEDDED_ADDRESS.test(path) || EMBEDDED_ADDRESS.test(rest);
+}
+
+/**
+ * Désamorce les liens du texte : le seul lien cliquable d'une annonce est
+ * `streamUrl`, validé. Le site neutralise déjà les noms ; si une adresse lui
+ * échappait, elle ne deviendrait ni lien (`://` coupé d'une espace de largeur
+ * nulle) ni lien masqué (`](` coupé de même).
+ */
+function neutralizeLinks(text: string): string {
+  return text.replace(/:\/\//g, ":\u200B//").replace(/\]\(/g, "]\u200B(");
 }
 
 /**
@@ -495,7 +525,7 @@ export function parseLiveAnnouncement(payload: unknown): LiveAnnouncementRequest
   // journal, ni balisage qui ferait un lien masqué).
   const rawContext = typeof raw.context === "string" ? raw.context.trim().replace(CONTEXT_UNSAFE, "_") : "";
   const context = rawContext ? cutText(rawContext, MAX_LIVE_CONTEXT_LENGTH) : "live-announce";
-  return { message: cutText(neutralizeMassMentions(message), MAX_LIVE_MESSAGE_LENGTH), streamUrl, context };
+  return { message: cutText(neutralizeLinks(neutralizeMassMentions(message)), MAX_LIVE_MESSAGE_LENGTH), streamUrl, context };
 }
 
 /**
