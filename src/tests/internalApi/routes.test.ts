@@ -1017,6 +1017,23 @@ test("/internal/announce/live : aucun signalement ne mentionne tout le canal de 
   assert.ok(state.logMentions.every((mentions) => mentions !== null && mentions.parse.length === 0));
 });
 
+test("/internal/announce/live : le lien cité au staff reste celui de #live, même avec « @here » dans la chaîne", async () => {
+  state.liveSendError = Object.assign(new Error("Missing Permissions"), { code: 50013 });
+  const streamUrl = "https://www.youtube.com/@HereForGaming/live";
+  const res = await call("/internal/announce/live", {
+    body: { message: "Alpha contre Beta @everyone", streamUrl, context: "live-announce match-3" },
+  });
+  assert.equal(res.status, 503);
+  for (let i = 0; i < 50 && state.logs.length === 0; i++) { await new Promise((r) => setTimeout(r, 5)); }
+  assert.equal(state.logs.length, 1);
+  const report = String(state.logs[0]);
+  // Le lien, validé, garde son « @ » : sinon il mènerait à une autre chaîne.
+  assert.ok(report.endsWith(`\n<${streamUrl}>`), report);
+  // Le texte, lui, reste neutralisé ; aucune mention n'est autorisée.
+  assert.ok(!/@(everyone|here)/i.test(report.slice(0, -streamUrl.length - 3)), report);
+  assert.ok(state.logMentions.every((mentions) => mentions !== null && mentions.parse.length === 0));
+});
+
 // --- Flux SSE ---------------------------------------------------------------
 
 /** Lit le flux jusqu'à ce que `until` soit vrai sur le texte reçu. */
