@@ -131,7 +131,8 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     identifiants injoignables).
 
 - `POST /internal/announce/live`
-  - Body: `{ "message": "...", "streamUrl": "https://twitch.tv/...", "context": "live-announce tournoi-7 match-42" }`
+  - Body: `{ "message": "...", "streamUrl": "https://twitch.tv/...", "context": "live-announce tournoi-7 match-42", "logMessage": "..." }`
+    (`logMessage` facultatif, voir plus bas)
     (`context`, étiquette des journaux : 200 caractères au plus, au-delà elle
     est coupée et se termine par « … » ; lettres, chiffres, espace et `, + … _ -`
     seulement, tout autre caractère devient `_`)
@@ -147,8 +148,14 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     autorisée (`allowedMentions: { parse: ["everyone"] }`) que pour cet envoi.
   - Le site décide du moment (un match et son affiche ne sont annoncés
     qu'une fois, seuls ou dans un message groupé) et rédige
-    le texte : les deux équipes et le tournoi, noms neutralisés — jamais le
-    pseudo d'un joueur (une entrée individuelle s'écrit « un joueur »). Des
+    le texte : les deux équipes et le tournoi, noms neutralisés. Quand
+    `message` nomme le pseudo d'une entrée individuelle, le site envoie aussi
+    `logMessage`, le même texte où ce pseudo devient « un joueur » : c'est
+    lui, jamais `message`, que le canal de logs cite. `logMessage` se valide
+    comme `message` (texte non vide, mêmes neutralisations, même longueur) ;
+    présent mais vide ou d'un autre type, la requête est refusée (`400
+    INVALID_LIVE_ANNOUNCEMENT`) plutôt que de citer le pseudo au staff.
+    Absent, `message` (qui ne nomme alors aucun joueur) est cité. Des
     matchs d'un même tournoi passés à l'antenne ensemble sur le même lien
     partent en un seul message de plusieurs lignes (« 🔴 En direct — Tournoi : »
     puis « • A contre B » par match) ; `context` les cite alors tous
@@ -195,7 +202,8 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     réponse (bot redémarré pendant l'envoi) la garde : l'annonce a pu partir.
   - Le canal de logs : la réponse part **avant** le signalement (un canal lent
     ne fait pas dépasser le délai du site). Il dit la cause, l'action à mener
-    et cite l'annonce concernée et son lien pour la reconnaître, en tenant
+    et cite l'annonce concernée (`logMessage` s'il est fourni, sinon
+    `message` : jamais un pseudo) et son lien pour la reconnaître, en tenant
     toujours dans un message Discord (citation raccourcie au besoin), sans
     qu'aucune mention n'y notifie (`allowedMentions: { parse: [] }`). Une
     annonce « non publiée » pour une cause qui peut se régler (salon,
