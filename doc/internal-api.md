@@ -158,7 +158,11 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     redirection (`/redirect`, `/attribution_link`) ni autre adresse dans son
     chemin ou sa requête, 255 caractères au plus : sinon `400 INVALID_LIVE_ANNOUNCEMENT`, comme pour un message
     vide. Le bot publie sa forme normalisée (`<` et `>` percent-encodés) : le
-    lien ne peut porter ni texte, ni lien masqué, ni mention. Le message est
+    lien ne peut porter ni texte, ni lien masqué, ni mention. Redirections et
+    adresses glissées sont cherchées après décodage complet (y compris
+    `https:\\`, `//hôte` et double encodage). Dans `message`, `://` et `](`
+    sont coupés d'une espace de largeur nulle : `streamUrl` est le seul lien
+    cliquable de l'annonce. Le message est
     raccourci d'un « … » (1 800 caractères au plus, puis ce qu'il faut pour que
     mention, texte et lien tiennent dans les 2 000 caractères d'un message
     Discord).
