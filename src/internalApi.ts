@@ -16,7 +16,7 @@ import { createHash } from "node:crypto";
 import express, { type Request, type Response, type NextFunction } from "express";
 import type { Client } from "discord.js";
 import { getBddInstance } from "./bdd/Bdd.js";
-import { sendLog } from "./safe/sendLog.js";
+import { sendLog, sendLogConfirmed } from "./safe/sendLog.js";
 import { describeError } from "./safe/errorGuards.js";
 import { recordEvent, getBacklog, subscribe } from "./feed/feedBus.js";
 import { getSnapshotsBetween } from "./snapshots/dailySnapshot.js";
@@ -547,7 +547,8 @@ export function startInternalApi(client: Client) {
       if (!shouldLogLiveIssue(key)) { return; }
       // Jamais de mention de masse dans le canal de logs : le bot qui peut
       // notifier tout #live pourrait aussi notifier tout le canal du staff.
-      void sendLog(client, `[AppBlueGenji] ${neutralizeMassMentions(text)}`)
+      // Confirmé : un envoi refusé par le salon de supervision n'étrangle rien.
+      void sendLogConfirmed(client, `[AppBlueGenji] ${neutralizeMassMentions(text)}`)
         .then((sent) => { if (!sent) { forgetLiveIssue(key); } })
         .catch(() => forgetLiveIssue(key));
     };
@@ -572,6 +573,9 @@ export function startInternalApi(client: Client) {
         );
       }
     } catch (error) {
+      // Lu avant d'écrire la réponse : il dit si le site a coupé la requête
+      // (délai dépassé) avant qu'elle lui parvienne, pas l'effet de la réponse.
+      const siteGaveUp = req.socket.destroyed;
       const unavailable = error instanceof LiveChannelUnavailableError;
       const key = unavailable ? error.key : "failed";
       console.warn(`[live-announce] annonce ${liveFailureVerdict(key)} (${request.context}) : ${(error as Error).message}`);
@@ -584,7 +588,6 @@ export function startInternalApi(client: Client) {
       const detail = unavailable ? error.detail : (error as Error).message;
       // Le site a coupé la requête (délai dépassé) : il garde sa réservation et
       // ne réessaiera pas, quelle que soit la cause.
-      const siteGaveUp = req.socket.destroyed;
       // Une annonce que le site ne réessaie pas est signalée à part (clé
       // propre à l'annonce), pour qu'aucune ne se perde sans trace.
       const final = siteGaveUp || isLiveIssueFinal(key);

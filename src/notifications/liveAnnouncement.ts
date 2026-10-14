@@ -137,13 +137,27 @@ export function liveAnnouncementNonce(request: LiveAnnouncementRequest): string 
 
 /**
  * Délai entre deux signalements d'un même incident au canal de logs. Le site
- * réessaie une annonce refusée à chaque balayage (toutes les dix secondes au
- * plus, tant que le match est frais) : sans ce délai, une permission retirée
+ * réessaie une annonce refusée environ toutes les minutes (pause du site après
+ * un report), tant que le match est frais : sans ce délai, une permission retirée
  * sur #live inonderait le canal du staff.
  */
 export const LIVE_LOG_COOLDOWN_MS = 60 * 60 * 1000;
 
 const lastLiveLogAt = new Map<string, number>();
+
+/** Taille au-delà de laquelle les signalements échus sont oubliés. */
+const LIVE_LOG_PRUNE_SIZE = 200;
+
+/**
+ * Oublie les signalements dont le délai est passé : une annonce que le site
+ * ne réessaie pas a sa propre clé, et le bot tourne des semaines sous pm2.
+ */
+function pruneLiveLogs(now: number): void {
+  if (lastLiveLogAt.size < LIVE_LOG_PRUNE_SIZE) { return; }
+  for (const [key, at] of lastLiveLogAt) {
+    if (now - at >= LIVE_LOG_COOLDOWN_MS) { lastLiveLogAt.delete(key); }
+  }
+}
 
 /**
  * Vrai si l'incident `key` peut être signalé au canal de logs maintenant : la
@@ -156,6 +170,7 @@ const lastLiveLogAt = new Map<string, number>();
 export function shouldLogLiveIssue(key: string, now: number = Date.now()): boolean {
   const last = lastLiveLogAt.get(key);
   if (last !== undefined && now - last < LIVE_LOG_COOLDOWN_MS) { return false; }
+  pruneLiveLogs(now);
   lastLiveLogAt.set(key, now);
   return true;
 }
