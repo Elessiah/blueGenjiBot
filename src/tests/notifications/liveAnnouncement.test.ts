@@ -234,6 +234,8 @@ test("announceLive : une permission manquante se distingue d'une panne passagèr
     [{ sent: [], sendError: discordError("Missing Permissions", 50013) }, "send-denied"],
     [{ sent: [], sendError: discordError("Service Unavailable", 0) }, "discord-down"],
     [{ sent: [], sendError: new Error("socket hang up") }, "discord-down"],
+    // Délai dépassé (undici : `AbortError`, code numérique 20) : le message a pu partir.
+    [{ sent: [], sendError: Object.assign(new Error("This operation was aborted"), { name: "AbortError", code: 20 }) }, "discord-down"],
     // Refus explicite (AutoMod, mode lent…) : rien n'est parti, ce n'est pas une panne.
     [{ sent: [], sendError: discordError("Message blocked by AutoMod", 200000) }, "automod"],
     [{ sent: [], sendError: discordError("Message blocked by AutoMod", 200001) }, "automod"],

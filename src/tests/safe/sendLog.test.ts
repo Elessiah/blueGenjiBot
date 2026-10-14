@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 process.env.OWNER_ID = "owner-1";
 process.env.INFO_SERV = "admin-channel-1";
 
-import { sendLog, sendLogConfirmed } from "../../safe/sendLog.js";
+import { resetOwnerNoticeThrottle, sendLog, sendLogConfirmed } from "../../safe/sendLog.js";
 import type { idSendLogMsg } from "../../safe/types.js";
 import type { Client } from "discord.js";
 
@@ -20,7 +20,7 @@ type Setup = {
   /** Copies privées au titulaire qui échouent avant la première réussite. */
   ownerSendFailures?: number;
   /** Le salon de supervision : absent, illisible, ou qui refuse l'envoi. */
-  channel?: "ok" | "null" | "fetch-throws" | "missing-access" | "send-throws" | "send-denied";
+  channel?: "ok" | "null" | "fetch-throws" | "missing-access" | "send-throws" | "send-denied" | "send-timeout" | "send-overloaded" | "not-text";
   /** L'avis « Missing Access » au titulaire échoue lui aussi. */
   ownerNoticeFails?: boolean;
 };
@@ -59,11 +59,15 @@ function fakeClient(trace: string[], setup: Setup): Client {
         const mode = setup.channel ?? "ok";
         if (mode === "null") return null;
         if (mode === "fetch-throws") throw new Error("Unknown Channel");
+        if (mode === "not-text") return { id: "voice" };
         return {
           send: async (text: string) => {
             if (mode === "missing-access") throw Object.assign(new Error("Missing Access"), { code: 50001 });
             if (mode === "send-throws") throw Object.assign(new Error("Rate limited"), { code: 429 });
             if (mode === "send-denied") throw Object.assign(new Error("Missing Permissions"), { code: 50013 });
+            // Délai dépassé d'undici : `DOMException` « AbortError », code numérique 20.
+            if (mode === "send-timeout") throw Object.assign(new Error("This operation was aborted"), { name: "AbortError", code: 20 });
+            if (mode === "send-overloaded") throw Object.assign(new Error("API resource overloaded"), { code: 130000 });
             trace.push("admin.send " + text);
             return { id: "admin-msg" };
           },
@@ -177,6 +181,7 @@ test("copie au titulaire refusée trois fois : le salon n'est jamais servi", asy
 });
 
 async function runConfirmed(setup: Setup, message: string) {
+  resetOwnerNoticeThrottle();
   const trace: string[] = [];
   const original = console.error;
   console.error = () => undefined;
@@ -200,9 +205,12 @@ test("sendLogConfirmed : seule une panne passagère rend faux (sendLog la compte
   // Sans code JSON de Discord (réseau, 5xx, limite de débit) : un nouvel essai peut passer.
   assert.equal((await runConfirmed({ channel: "fetch-throws" }, "X")).ok, false);
   assert.equal((await runConfirmed({ channel: "send-throws" }, "X")).ok, false);
+  assert.equal((await runConfirmed({ channel: "send-timeout" }, "X")).ok, false);
+  assert.equal((await runConfirmed({ channel: "send-overloaded" }, "X")).ok, false);
   // Refus codé (permission) ou salon absent : durable, compté traité — pas de requête refusée à chaque essai.
   assert.equal((await runConfirmed({ channel: "send-denied" }, "X")).ok, true);
   assert.equal((await runConfirmed({ channel: "null" }, "X")).ok, true);
+  assert.equal((await runConfirmed({ channel: "not-text" }, "X")).ok, true);
   // Comportement d'origine inchangé pour les autres appelants.
   assert.equal((await run({ channel: "send-throws" }, { message: "X" })).ok, true);
 });
@@ -212,4 +220,19 @@ test("sendLogConfirmed : un accès refusé avertit le titulaire et compte comme 
   assert.equal(r.ok, true, "sinon chaque nouvel essai réécrirait au titulaire");
   assert.deepEqual(r.trace, ["channels.fetch admin-channel-1", "users.fetch owner-1", "owner.send Missing Access to admin channel"]);
   assert.equal((await runConfirmed({ channel: "missing-access", ownerNoticeFails: true }, "X")).ok, true);
+});
+
+test("sendLogConfirmed : l'avis d'accès refusé au titulaire part au plus une fois par heure", async () => {
+  resetOwnerNoticeThrottle();
+  const trace: string[] = [];
+  const client = fakeClient(trace, { channel: "missing-access" });
+  const original = console.error;
+  console.error = () => undefined;
+  try {
+    // Trois annonces abandonnées, trois clés de signalement : un seul avis.
+    for (const message of ["A", "B", "C"]) assert.equal(await sendLogConfirmed(client, message), true);
+  } finally {
+    console.error = original;
+  }
+  assert.equal(trace.filter((line) => line === "owner.send Missing Access to admin channel").length, 1);
 });
