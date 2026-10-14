@@ -230,7 +230,9 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     « tournoi- » dans l'étiquette). Une annonce que le site
     réessaie ne se poste pas à la main pendant ces deux heures. Le canal de
     logs ne reçoit jamais de mention de masse : « @everyone » et « @here » y
-    sont neutralisés.
+    sont neutralisés, sauf dans le lien de fin, cité tel que publié dans #live
+    (une chaîne YouTube `/@HereForGaming` resterait sinon un lien mort ; aucune
+    mention n'est autorisée dans ce canal).
     Un signalement qui n'a pas pu partir (canal de logs illisible, Discord
     surchargé) ne compte pas : le suivant partira. Un envoi tenté sans
     réponse claire compte, pour ne pas doubler un signalement arrivé.
