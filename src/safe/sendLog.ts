@@ -106,11 +106,16 @@ async function sendLogConfirmed(client: Client, message: string): Promise<boolea
         const code = discordJsonCode(error);
         // Un avis par heure : chaque annonce abandonnée a sa propre clé de signalement.
         if (code === MISSING_ACCESS && Date.now() - lastOwnerNoticeAt >= OWNER_NOTICE_COOLDOWN_MS) {
+            const previous = lastOwnerNoticeAt;
             lastOwnerNoticeAt = Date.now();
             try {
                 const owner: User = await client.users.fetch(process.env.OWNER_ID as string);
                 await owner.send("Missing Access to admin channel");
-            } catch { /* le titulaire est lui aussi injoignable */ }
+            } catch (noticeError) {
+                // Avis perdu en passant (réseau, `5xx`) : le prochain signalement
+                // le retente. Un refus codé (messages privés fermés) garde l'heure.
+                if (discordJsonCode(noticeError) === null) lastOwnerNoticeAt = previous;
+            }
         }
         // Refus codé de Discord : durable, un nouvel essai serait refusé de
         // même — sauf une API surchargée.
