@@ -130,6 +130,104 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
   - Même bilan de retour que `/internal/notify/dm` (`failed` liste les
     identifiants injoignables).
 
+- `POST /internal/announce/live`
+  - Body: `{ "message": "...", "streamUrl": "https://twitch.tv/...", "context": "live-announce tournoi-7 match-42" }`
+    (`context`, étiquette des journaux : 200 caractères au plus, au-delà elle
+    est coupée et se termine par « … » ; lettres, chiffres, espace et `, + … _ -`
+    seulement, tout autre caractère devient `_`)
+  - **Jeton exigé** : même quand le bot n'écoute que la boucle locale, cette
+    route refuse de publier sans `INTERNAL_API_TOKEN` (`503
+    INTERNAL_API_TOKEN_NOT_CONFIGURED`) — c'est la seule qui notifie tout le
+    serveur.
+  - Annonce un **live** au début d'un match diffusé : le bot publie
+    `@everyone <message>` puis le lien, seul sur sa ligne, dans le salon #live
+    du serveur BlueGenji. Ce salon est fixé dans le code (constante
+    `LIVE_ANNOUNCE_CHANNEL_ID`), pas par une variable d'environnement. C'est le
+    seul message du bot qui notifie tout le serveur : la mention n'est
+    autorisée (`allowedMentions: { parse: ["everyone"] }`) que pour cet envoi.
+  - Le site décide du moment (un match et son affiche ne sont annoncés
+    qu'une fois, seuls ou dans un message groupé) et rédige
+    le texte : les deux équipes et le tournoi, noms neutralisés — jamais le
+    pseudo d'un joueur (une entrée individuelle s'écrit « un joueur »). Des
+    matchs d'un même tournoi passés à l'antenne ensemble sur le même lien
+    partent en un seul message de plusieurs lignes (« 🔴 En direct — Tournoi : »
+    puis « • A contre B » par match) ; `context` les cite alors tous
+    (`live-announce tournoi-7 match-12,13`).
+  - `streamUrl` doit être un lien `https` vers Twitch, YouTube ou Kick, sans
+    identifiants ni port, sans espace ni caractère de contrôle, ni page de
+    redirection (`/redirect`, `/attribution_link`) ni autre adresse dans son
+    chemin ou sa requête, 255 caractères au plus : sinon `400 INVALID_LIVE_ANNOUNCEMENT`, comme pour un message
+    vide. Le bot publie sa forme normalisée (`<` et `>` percent-encodés) : le
+    lien ne peut porter ni texte, ni lien masqué, ni mention. Redirections et
+    adresses glissées sont cherchées après décodage complet (y compris
+    `https:\\`, `//hôte` et double encodage). Dans `message`, `://` et `](`
+    sont coupés d'une espace de largeur nulle : `streamUrl` est le seul lien
+    cliquable de l'annonce. Le message est
+    raccourci d'un « … » (1 800 caractères au plus, puis ce qu'il faut pour que
+    mention, texte et lien tiennent dans les 2 000 caractères d'un message
+    Discord).
+  - Retour `{ "posted": true, "mentionEveryone": boolean, "embedLinks": boolean }`.
+    Sans la permission « Mentionner @everyone, @here et tous les rôles » dans
+    le salon, le message part **sans** la mention (`mentionEveryone: false`) ;
+    sans « Intégrer des liens », il part sans aperçu de la chaîne
+    (`embedLinks: false`). Le canal de logs le signale dans les deux cas.
+  - `503 { "error": "LIVE_CHANNEL_UNAVAILABLE", "reason": "<nature>" }` : le
+    bot n'a pas pu publier, ou pas pu confirmer la publication. `reason` :
+    - `missing`, `no-view`, `no-send`, `send-denied` — salon introuvable ou
+      permission manquante ;
+    - `automod` — une règle AutoMod du serveur a bloqué le message ;
+    - `send-rejected` — Discord a refusé le message pour une autre raison,
+      souvent l'état du salon (type, verrouillage) ;
+    - `discord-unreachable` — Discord n'a pas répondu en lisant le salon,
+      avant tout envoi ;
+    - `discord-down` — Discord a lâché **pendant** l'envoi : le message a pu
+      partir malgré tout.
+  - `500 LIVE_ANNOUNCEMENT_FAILED` pour toute autre panne.
+  - Ce que fait le site : il garde l'annonce sur un succès ; sur un `400` (la
+    requête elle-même est refusée avant tout envoi, la renvoyer n'y changerait
+    rien) ; sur un `503` `automod` (AutoMod bloquerait de nouveau le même
+    message, et chaque essai alerterait la modération) ; et sur un délai dépassé ou un
+    `503` `discord-down` — le bot a pu publier, elle n'est pas réessayée, pour
+    ne jamais notifier deux fois tout le serveur. Sur tout
+    autre `503`, un `500` (panne avant l'envoi) ou un bot injoignable
+    (connexion refusée), il la reprend et réessaie tant que le match a
+    commencé depuis moins de deux heures ; une connexion coupée avant la
+    réponse (bot redémarré pendant l'envoi) la garde : l'annonce a pu partir.
+  - Le canal de logs : la réponse part **avant** le signalement (un canal lent
+    ne fait pas dépasser le délai du site). Il dit la cause, l'action à mener
+    et cite l'annonce concernée et son lien pour la reconnaître, en tenant
+    toujours dans un message Discord (citation raccourcie au besoin), sans
+    qu'aucune mention n'y notifie (`allowedMentions: { parse: [] }`). Une
+    annonce « non publiée » pour une cause qui peut se régler (salon,
+    permission, refus lié à l'état du salon, Discord injoignable) est réessayée par le site : la reposter à la main
+    pendant ces deux heures notifierait deux fois tout le serveur ; comme le
+    site réessaie environ toutes les minutes, une même cause n'est signalée qu'**une
+    fois par heure** (d'autres annonces peuvent alors échouer pour elle sans
+    nouveau signalement). Une annonce « non confirmée » (`discord-down`) n'est
+    pas réessayée : chacune est signalée (vérifier #live), comme chaque blocage
+    par AutoMod, et toute annonce dont le site avait
+    déjà coupé la requête (délai dépassé) — le signalement le dit alors, au
+    lieu de promettre un nouvel essai. Pour ces annonces que le site ne
+    réessaie pas, hors panne pendant l'envoi, rien n'est parti : le
+    signalement dit qu'elle peut être postée à la main sans doublon, avec
+    « @everyone » en tête et le texte entier si la citation est raccourcie (après un
+    blocage AutoMod, une fois la règle corrigée — ni le texte ni le lien n'y
+    sont cités, la même règle pourrait bloquer le signalement : le staff
+    reprend les affiches depuis la fiche du tournoi, dont le numéro suit
+    « tournoi- » dans l'étiquette). Une annonce que le site
+    réessaie ne se poste pas à la main pendant ces deux heures. Le canal de
+    logs ne reçoit jamais de mention de masse : « @everyone » et « @here » y
+    sont neutralisés.
+    Un signalement qui n'a pas pu partir (canal de logs illisible, Discord
+    surchargé) ne compte pas : le suivant partira. Un envoi tenté sans
+    réponse claire compte, pour ne pas doubler un signalement arrivé.
+  - Chaque envoi porte un jeton d'unicité (`nonce`, `enforceNonce`) tiré de
+    l'étiquette et du lien : Discord ne crée pas deux fois ce même envoi s'il
+    est rejoué dans les quelques minutes (nouvel essai interne de discord.js
+    après une réponse perdue). Il n'arrête pas une annonce postée à la main.
+  - Une mention `@everyone` ou `@here` glissée dans le texte est neutralisée :
+    seule celle de tête notifie.
+
 - `GET /internal/feed/stream`
   - Flux SSE des évènements d'activité (`FeedEvent`) : le backlog récent
     d'abord, puis le direct. `Last-Event-ID` reprend là où le lecteur s'était

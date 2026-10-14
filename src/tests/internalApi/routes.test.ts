@@ -37,6 +37,7 @@ import { getBddInstance, resetBddInstance } from "../../bdd/Bdd.js";
 import { recordEvent } from "../../feed/feedBus.js";
 import { readSiteVisitStats } from "../../siteVisits/siteVisits.js";
 import { RESOLVE_BUDGET_MS } from "../../notifications/resolveHandle.js";
+import { liveAnnouncementNonce, resetLiveLogThrottle } from "../../notifications/liveAnnouncement.js";
 
 const TOKEN = "jeton-de-test";
 const OWNER = process.env.OWNER_ID as string;
@@ -72,6 +73,12 @@ const state = {
   onSearch: () => {},
   /** Lire le cache des serveurs lève (panne de résolution). */
   cacheThrows: false,
+  /** L'envoi d'une annonce de live (message à options) lève cette erreur. */
+  liveSendError: null as Error | null,
+  /** Envois au canal de logs refusés avant le premier qui passe (API surchargée : rien n'est parti). */
+  logSendFailures: 0,
+  /** `allowedMentions` de chaque signalement envoyé avec options. */
+  logMentions: [] as ({ parse: string[] } | null)[],
 };
 
 function member(id: string, username: string): FakeMember {
@@ -137,8 +144,20 @@ const fakeClient = {
   },
   channels: {
     fetch: async () => ({
-      send: async (text: string) => {
-        state.logs.push(text);
+      send: async (payload: string | { content: string; nonce?: string; allowedMentions?: { parse: string[] } }) => {
+        // L'annonce porte un jeton d'unicité ; un signalement au canal de logs non.
+        const live = typeof payload !== "string" && payload.nonce !== undefined;
+        if (live && state.liveSendError) { throw state.liveSendError; }
+        if (!live && state.logSendFailures > 0) {
+          state.logSendFailures--;
+          throw Object.assign(new Error("API resource overloaded"), { code: 130000 });
+        }
+        if (!live && typeof payload !== "string") {
+          state.logMentions.push(payload.allowedMentions ?? null);
+          state.logs.push(payload.content);
+        } else {
+          state.logs.push(payload as string);
+        }
         return { id: "log" };
       },
     }),
@@ -168,6 +187,7 @@ test.beforeEach(() => {
   state.ready = true;
   state.ping = 42;
   state.logs.length = 0;
+  state.logMentions.length = 0;
   state.dms.length = 0;
   state.unknownUsers.clear();
   state.closedDms.clear();
@@ -175,6 +195,9 @@ test.beforeEach(() => {
   state.searchHangs = false;
   state.onSearch = () => {};
   state.cacheThrows = false;
+  state.liveSendError = null;
+  state.logSendFailures = 0;
+  resetLiveLogThrottle();
   process.env.INTERNAL_API_TOKEN = TOKEN;
   process.env.INTERNAL_API_HOST = "127.0.0.1";
   process.env.CLIENT_ID = "600000000000000001";
@@ -244,6 +267,16 @@ test("auth : sans INTERNAL_API_TOKEN, la boucle locale passe sans jeton", async 
   delete process.env.INTERNAL_API_TOKEN;
   const res = await call("/internal/invite", { token: null });
   assert.equal(res.status, 200);
+});
+
+test("auth : sans INTERNAL_API_TOKEN, l'annonce @everyone est refusée même sur la boucle locale", async () => {
+  delete process.env.INTERNAL_API_TOKEN;
+  const res = await call("/internal/announce/live", {
+    token: null,
+    body: { message: "Alpha contre Beta", streamUrl: "https://www.twitch.tv/bluegenji" },
+  });
+  assert.equal(res.status, 503);
+  assert.deepEqual(res.body, { error: "INTERNAL_API_TOKEN_NOT_CONFIGURED" });
 });
 
 test("auth : sans INTERNAL_API_TOKEN sur une interface publique, tout est refusé en 503", async () => {
@@ -778,6 +811,177 @@ test("/internal/notify/leadership : propriétaire et président prévenus, éche
   assert.deepEqual(res.body, { sent: 1, unresolved: [], failed: [PRESIDENT] });
   assert.deepEqual(state.dms, [`${OWNER}: [AppBlueGenji] Contestation reçue`]);
   assert.deepEqual(state.logs, ["[AppBlueGenji] Contestation reçue"]);
+});
+
+test("/internal/announce/live : corps ou lien invalide 400, sinon publié avec @everyone", async () => {
+  let res = await call("/internal/announce/live", { body: { message: "Alpha contre Beta" } });
+  assert.equal(res.status, 400);
+  assert.deepEqual(res.body, { error: "INVALID_LIVE_ANNOUNCEMENT" });
+
+  res = await call("/internal/announce/live", { body: { message: "Alpha contre Beta", streamUrl: "https://evil.example/x" } });
+  assert.equal(res.status, 400);
+  assert.equal(state.logs.length, 0);
+
+  res = await call("/internal/announce/live", {
+    body: { message: "Alpha contre Beta", streamUrl: "https://twitch.tv/bluegenji", context: "live-announce match-1" },
+  });
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body, { posted: true, mentionEveryone: true, embedLinks: true });
+  assert.deepEqual(state.logs, [
+    {
+      content: "@everyone Alpha contre Beta\nhttps://twitch.tv/bluegenji",
+      allowedMentions: { parse: ["everyone"] },
+      nonce: liveAnnouncementNonce({
+        message: "Alpha contre Beta",
+        streamUrl: "https://twitch.tv/bluegenji",
+        context: "live-announce match-1",
+      }),
+      enforceNonce: true,
+    },
+  ] as unknown as string[]);
+});
+
+test("/internal/announce/live : envoi refusé → 503, puis un seul signalement au staff, avec texte et lien", async () => {
+  state.liveSendError = Object.assign(new Error("Missing Permissions"), { code: 50013 });
+  const body = { message: "Alpha contre Beta — Coupe", streamUrl: "https://twitch.tv/bluegenji", context: "live-announce match-2" };
+
+  let res = await call("/internal/announce/live", { body });
+  assert.equal(res.status, 503);
+  assert.deepEqual(res.body, { error: "LIVE_CHANNEL_UNAVAILABLE", reason: "send-denied" });
+  // Le signalement part après la réponse : on lui laisse le temps d'arriver.
+  for (let i = 0; i < 50 && state.logs.length === 0; i++) { await new Promise((r) => setTimeout(r, 5)); }
+  assert.equal(state.logs.length, 1);
+  assert.equal(
+    state.logs[0],
+    "[AppBlueGenji] Annonce de live non publiée (live-announce match-2) : Discord a refusé l'envoi faute de " +
+    "permission (Missing Permissions) — vérifier les permissions du bot dans #live. Le site la réessaie seul " +
+    "pendant les deux heures qui suivent le début du direct : ne pas la reposter à la main avant. Signalé au " +
+    "plus une fois par heure, d'autres annonces peuvent échouer pour la même raison. Annonce concernée :" +
+    "\n> Alpha contre Beta — Coupe\n<https://twitch.tv/bluegenji>",
+  );
+
+  // Le site réessaie dix secondes plus tard : pas de second signalement.
+  res = await call("/internal/announce/live", { body });
+  assert.equal(res.status, 503);
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(state.logs.length, 1);
+});
+
+test("/internal/announce/live : un signalement refusé par le canal de logs n'étrangle pas le suivant", async () => {
+  state.liveSendError = Object.assign(new Error("Missing Permissions"), { code: 50013 });
+  state.logSendFailures = 1;
+  const body = { message: "Alpha contre Beta — Coupe", streamUrl: "https://twitch.tv/bluegenji", context: "live-announce match-4" };
+  const original = console.error;
+  console.error = () => undefined;
+  try {
+    let res = await call("/internal/announce/live", { body });
+    assert.equal(res.status, 503);
+    await new Promise((r) => setTimeout(r, 30));
+    assert.equal(state.logs.length, 0, "premier signalement perdu");
+    // Nouvel essai du site : la cause est signalée, au lieu d'une heure de silence.
+    res = await call("/internal/announce/live", { body });
+    assert.equal(res.status, 503);
+    for (let i = 0; i < 50 && state.logs.length === 0; i++) { await new Promise((r) => setTimeout(r, 5)); }
+    assert.equal(state.logs.length, 1);
+  } finally {
+    console.error = original;
+  }
+});
+
+test("/internal/announce/live : un texte d'erreur démesuré ne fait pas déborder le signalement", async () => {
+  state.liveSendError = Object.assign(new Error("x".repeat(5000)), { code: 0 });
+  const body = { message: "Alpha contre Beta — Coupe", streamUrl: "https://twitch.tv/bluegenji", context: "live-announce match-3" };
+  const res = await call("/internal/announce/live", { body });
+  assert.equal(res.status, 503);
+  for (let i = 0; i < 50 && state.logs.length === 0; i++) { await new Promise((r) => setTimeout(r, 5)); }
+  assert.equal(state.logs.length, 1);
+  assert.ok(state.logs[0].length <= 1900);
+  assert.ok(state.logs[0].endsWith("<https://twitch.tv/bluegenji>"));
+});
+
+test("/internal/announce/live : le signalement d'une longue annonce groupée tient dans un message Discord", async () => {
+  state.liveSendError = Object.assign(new Error("Missing Permissions"), { code: 50013 });
+  const lines = Array.from({ length: 40 }, (_, i) => `• ${"A".repeat(30)}${i} contre ${"B".repeat(30)}${i}`);
+  const body = {
+    message: ["🔴 En direct — Coupe :", ...lines].join("\n"),
+    streamUrl: "https://twitch.tv/" + "c".repeat(230),
+    context: "live-announce match-" + Array.from({ length: 30 }, (_, i) => 10_000 + i).join(","),
+  };
+  const res = await call("/internal/announce/live", { body });
+  assert.equal(res.status, 503);
+  for (let i = 0; i < 50 && state.logs.length === 0; i++) { await new Promise((r) => setTimeout(r, 5)); }
+  assert.equal(state.logs.length, 1);
+  assert.ok(state.logs[0].length <= 1900);
+  assert.ok(state.logs[0].includes(body.context), "toute la liste des matchs, sans coupe");
+  assert.ok(state.logs[0].endsWith(`<${body.streamUrl}>`), "le lien reste entier");
+  // La citation reste un bloc cité, coupée à l'intérieur : chaque ligne commence par « > ».
+  const quote = state.logs[0].split("Annonce concernée :\n")[1].split("\n<")[0];
+  assert.ok(quote.split("\n").every((line) => line.startsWith("> ")));
+  assert.ok(quote.endsWith("…"));
+});
+
+test("/internal/announce/live : envoi incertain — « non confirmée », vérifier #live, pas de nouvel essai promis", async () => {
+  state.liveSendError = Object.assign(new Error("Service Unavailable"), { code: 0 });
+  const body = { message: "Alpha contre Beta — Coupe", streamUrl: "https://twitch.tv/bluegenji", context: "live-announce match-5" };
+  const res = await call("/internal/announce/live", { body });
+  assert.equal(res.status, 503);
+  for (let i = 0; i < 50 && state.logs.length === 0; i++) { await new Promise((r) => setTimeout(r, 5)); }
+  assert.equal(state.logs.length, 1);
+  assert.ok(state.logs[0].startsWith("[AppBlueGenji] Annonce de live non confirmée (live-announce match-5)"));
+  assert.ok(state.logs[0].includes("l'annonce a pu partir malgré tout (vérifier #live)"));
+  assert.ok(!state.logs[0].includes("à la main seulement"), "aucune consigne de la poster à la main");
+  assert.ok(state.logs[0].includes("Le site ne la réessaie pas"));
+  assert.ok(!state.logs[0].includes("Le site la réessaie seul"));
+  assert.ok(!state.logs[0].includes("une fois par heure"));
+  assert.ok(state.logs[0].endsWith("> Alpha contre Beta — Coupe\n<https://twitch.tv/bluegenji>"));
+});
+
+test("/internal/announce/live : un refus d'AutoMod n'est pas promis au nouvel essai, et chaque annonce est signalée", async () => {
+  state.liveSendError = Object.assign(new Error("Message blocked by AutoMod"), { code: 200000 });
+  for (const context of ["live-announce match-8", "live-announce match-9"]) {
+    const res = await call("/internal/announce/live", { body: { message: "Alpha contre Beta", streamUrl: "https://twitch.tv/bg", context } });
+    assert.equal(res.status, 503);
+    assert.deepEqual(res.body, { error: "LIVE_CHANNEL_UNAVAILABLE", reason: "automod" });
+  }
+  for (let i = 0; i < 50 && state.logs.length < 2; i++) { await new Promise((r) => setTimeout(r, 5)); }
+  assert.equal(state.logs.length, 2);
+  assert.ok(state.logs.every((log) => log.includes("Le site ne la réessaie pas : AutoMod bloquerait de nouveau le même message.")));
+});
+
+test("/internal/announce/live : chaque envoi incertain est signalé, même dans l'heure", async () => {
+  state.liveSendError = Object.assign(new Error("Service Unavailable"), { code: 0 });
+  const first = { message: "Alpha contre Beta — Coupe A", streamUrl: "https://twitch.tv/a", context: "live-announce match-12" };
+  const second = { message: "Gamma contre Delta — Coupe B", streamUrl: "https://twitch.tv/b", context: "live-announce match-31" };
+  for (const body of [first, second]) {
+    const res = await call("/internal/announce/live", { body });
+    assert.equal(res.status, 503);
+    assert.deepEqual(res.body, { error: "LIVE_CHANNEL_UNAVAILABLE", reason: "discord-down" });
+  }
+  for (let i = 0; i < 50 && state.logs.length < 2; i++) { await new Promise((r) => setTimeout(r, 5)); }
+  assert.equal(state.logs.length, 2);
+  assert.ok(state.logs[0].includes("match-12") && state.logs[1].includes("match-31"));
+});
+
+test("/internal/announce/live : aucun signalement ne mentionne tout le canal de logs", async () => {
+  // Le bot peut mentionner tout le serveur dans #live, donc peut-être aussi
+  // dans le canal de logs : « @everyone » n'y part jamais tel quel.
+  const res = await call("/internal/announce/live", {
+    body: { message: "Alpha contre Beta", streamUrl: "https://twitch.tv/bluegenji", context: "live-announce match-1" },
+  });
+  assert.equal(res.status, 200);
+  state.liveSendError = Object.assign(new Error("Missing Permissions"), { code: 50013 });
+  await call("/internal/announce/live", {
+    body: { message: "Alpha contre Beta", streamUrl: "https://twitch.tv/bluegenji", context: "live-announce match-2" },
+  });
+  for (let i = 0; i < 50 && state.logs.filter((l) => typeof l === "string").length === 0; i++) {
+    await new Promise((r) => setTimeout(r, 5));
+  }
+  const reports = state.logs.filter((l): l is string => typeof l === "string");
+  assert.ok(reports.length > 0);
+  assert.ok(reports.every((log) => !/@(everyone|here)/.test(log)));
+  // Ni rôle ni personne : le signalement part sans aucune mention autorisée.
+  assert.ok(state.logMentions.length > 0);
+  assert.ok(state.logMentions.every((mentions) => mentions !== null && mentions.parse.length === 0));
 });
 
 // --- Flux SSE ---------------------------------------------------------------

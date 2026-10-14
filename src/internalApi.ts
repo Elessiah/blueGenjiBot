@@ -16,7 +16,7 @@ import { createHash } from "node:crypto";
 import express, { type Request, type Response, type NextFunction } from "express";
 import type { Client } from "discord.js";
 import { getBddInstance } from "./bdd/Bdd.js";
-import { sendLog } from "./safe/sendLog.js";
+import { sendLog, sendLogConfirmed } from "./safe/sendLog.js";
 import { describeError } from "./safe/errorGuards.js";
 import { recordEvent, getBacklog, subscribe } from "./feed/feedBus.js";
 import { getSnapshotsBetween } from "./snapshots/dailySnapshot.js";
@@ -36,6 +36,17 @@ import { parseDirectMessageRequest, parseRefereeAlert } from "./notifications/no
 import { deliverDirectMessages, alertLeadership, alertReferees, HomeGuildUnavailableError } from "./notifications/deliver.js";
 import { HandleResolutionTimeoutError, resolveDiscordHandle } from "./notifications/resolveHandle.js";
 import { MESSAGE_RETENTION_DAYS } from "./privacy/retentionPeriods.js";
+import {
+  announceLive,
+  isLiveIssueFinal,
+  neutralizeMassMentions,
+  liveFailureReport,
+  liveFailureVerdict,
+  forgetLiveIssue,
+  LiveChannelUnavailableError,
+  parseLiveAnnouncement,
+  shouldLogLiveIssue,
+} from "./notifications/liveAnnouncement.js";
 
 /**
  * Fenetre des compteurs tires de `OGMsg` / `DPMsg` (`/internal/stats`,
@@ -510,6 +521,86 @@ export function startInternalApi(client: Client) {
     } catch (error) {
       await sendLog(client, `notify/leadership error (${request.context}): ${(error as Error).message}`);
       res.status(500).json({ error: "NOTIFICATION_DELIVERY_FAILED" });
+    }
+  });
+
+  /**
+   * Annonce d'un live au debut d'un match diffuse : message `@everyone` dans le
+   * salon #live du serveur BlueGenji (constante `LIVE_ANNOUNCE_CHANNEL_ID`).
+   * L'app decide du moment et redige le texte ; elle reserve l'annonce avant
+   * l'appel, la garde sur un succes, un `400`, un `503` `automod` ou
+   * `discord-down`, ou un delai depasse (le bot a pu publier : un second
+   * `@everyone` serait pire qu'une annonce perdue), et la rend sur tout autre
+   * `503`, un `500` ou un bot injoignable pour reessayer. La
+   * reponse part donc **avant** les signalements au staff : un canal de logs
+   * lent ne doit pas faire depasser le delai du site.
+   */
+  app.post("/internal/announce/live", async (req: Request, res: Response) => {
+    // La seule route qui notifie tout le serveur exige le jeton, même sur la
+    // boucle locale : un processus de la machine, ou une requête que le site
+    // se laisserait forger vers 127.0.0.1, ne doit pas suffire à réveiller
+    // 1 200 membres.
+    if (!process.env.INTERNAL_API_TOKEN) {
+      res.status(503).json({ error: "INTERNAL_API_TOKEN_NOT_CONFIGURED" });
+      return;
+    }
+    const request = parseLiveAnnouncement(req.body);
+    if (!request) {
+      res.status(400).json({ error: "INVALID_LIVE_ANNOUNCEMENT" });
+      return;
+    }
+
+    /** Signale au staff, au plus une fois par heure par incident ; un envoi raté ne compte pas. */
+    const reportLiveIssue = (key: string, text: string): void => {
+      if (!shouldLogLiveIssue(key)) { return; }
+      // Jamais de mention de masse dans le canal de logs : le bot qui peut
+      // notifier tout #live pourrait aussi notifier tout le canal du staff.
+      // Confirmé : un envoi refusé par le salon de supervision n'étrangle rien.
+      void sendLogConfirmed(client, `[AppBlueGenji] ${neutralizeMassMentions(text)}`)
+        .then((sent) => { if (!sent) { forgetLiveIssue(key); } })
+        .catch(() => forgetLiveIssue(key));
+    };
+
+    try {
+      const report = await announceLive(client, request);
+      console.log(`[live-announce] annonce publiée (${request.context})`);
+      res.json(report);
+      if (!report.mentionEveryone) {
+        reportLiveIssue(
+          "mention-everyone",
+          "Annonce de live publiée sans notifier : le bot n'a pas la permission " +
+          "« Mentionner @everyone, @here et tous les rôles » dans le salon #live " +
+          "(action requise sur Discord ; signalé au plus une fois par heure).",
+        );
+      }
+      if (!report.embedLinks) {
+        reportLiveIssue(
+          "embed-links",
+          "Annonce de live publiée sans aperçu de la chaîne : le bot n'a pas la permission " +
+          "« Intégrer des liens » dans le salon #live (action requise sur Discord ; signalé au plus une fois par heure).",
+        );
+      }
+    } catch (error) {
+      // Lu avant d'écrire la réponse : il dit si le site a coupé la requête
+      // (délai dépassé) avant qu'elle lui parvienne, pas l'effet de la réponse.
+      const siteGaveUp = req.socket.destroyed;
+      const unavailable = error instanceof LiveChannelUnavailableError;
+      const key = unavailable ? error.key : "failed";
+      console.warn(`[live-announce] annonce ${liveFailureVerdict(key)} (${request.context}) : ${(error as Error).message}`);
+      if (unavailable) {
+        // `reason` : la nature de l'incident, pour que le site la dise dans ses journaux.
+        res.status(503).json({ error: "LIVE_CHANNEL_UNAVAILABLE", reason: error.key });
+      } else {
+        res.status(500).json({ error: "LIVE_ANNOUNCEMENT_FAILED" });
+      }
+      const detail = unavailable ? error.detail : (error as Error).message;
+      // Le site a coupé la requête (délai dépassé) : il garde sa réservation et
+      // ne réessaiera pas, quelle que soit la cause.
+      // Une annonce que le site ne réessaie pas est signalée à part (clé
+      // propre à l'annonce), pour qu'aucune ne se perde sans trace.
+      const final = siteGaveUp || isLiveIssueFinal(key);
+      const throttleKey = final ? `${key} ${request.context}` : key;
+      reportLiveIssue(throttleKey, liveFailureReport(request, key, detail, { siteGaveUp }));
     }
   });
 

@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: notifications/liveAnnouncement.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: notifications/liveAnnouncement.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>import { createHash } from "node:crypto";
+import { PermissionFlagsBits } from "discord.js";
+import { discordJsonCode } from "../safe/errorGuards.js";
+/**
+ * Annonce d'un live dans le salon #live du serveur BlueGenji, poussée par l'app
+ * web au début d'un match diffusé (`POST /internal/announce/live`).
+ *
+ * L'app décide **quand** annoncer (elle seule connaît le match, son état de
+ * diffusion et ce qui a déjà été annoncé) et rédige le texte, noms d'équipe
+ * déjà neutralisés ; le bot valide, préfixe la mention `@everyone` et publie.
+ * C'est le **seul** message du bot qui notifie tout le serveur : la mention
+ * n'est autorisée (`allowedMentions`) que pour cet envoi-là.
+ */
+/**
+ * Salon #live du serveur BlueGenji esport. Un identifiant de salon public, pas
+ * un secret — gardé ici, en un seul endroit, plutôt que dans la configuration
+ * du serveur : le salon d'annonce n'est pas un réglage par serveur.
+ */
+export const LIVE_ANNOUNCE_CHANNEL_ID = "678961388030394401";
+/** Plateformes de diffusion acceptées — la même liste blanche que le site. */
+const LIVE_HOSTS = new Set([
+    "twitch.tv", "www.twitch.tv", "m.twitch.tv",
+    "youtube.com", "www.youtube.com", "m.youtube.com",
+    "youtu.be", "www.youtu.be", "m.youtu.be",
+    "kick.com", "www.kick.com", "m.kick.com",
+]);
+/** Longueur maximale d'un lien de diffusion (celle du site). */
+const MAX_STREAM_URL_LENGTH = 255;
+/** Plafond Discord d'un message, mention et lien compris. */
+const DISCORD_MAX_CONTENT_LENGTH = 2000;
+/**
+ * Longueur maximale du texte reçu de l'app. Au-delà, il est coupé d'un simple
+ * « … » : jamais la mention « (message tronqué) » des messages privés, qui
+ * n'a rien à faire dans une annonce publique.
+ */
+export const MAX_LIVE_MESSAGE_LENGTH = 1800;
+/** Longueur maximale de l'étiquette `context` (journaux pm2 et canal de logs). */
+export const MAX_LIVE_CONTEXT_LENGTH = 200;
+/** Longueur maximale du texte d'erreur brut cité dans un signalement. */
+export const MAX_LIVE_DETAIL_LENGTH = 300;
+/**
+ * Plafond d'un signalement au canal de logs : sous les 2 000 caractères d'un
+ * message Discord, sans quoi il serait refusé — et perdu.
+ */
+export const MAX_LIVE_LOG_LENGTH = 1900;
+/** Mention de tête, posée seulement quand le bot peut notifier tout le serveur. */
+const EVERYONE_PREFIX = "@everyone ";
+/** Codes Discord d'un accès refusé : permission manquante, salon invisible. */
+const MISSING_ACCESS = 50001;
+const MISSING_PERMISSIONS = 50013;
+/** Code Discord d'un salon inconnu (supprimé, identifiant périmé). */
+const UNKNOWN_CHANNEL = 10003;
+/** Codes Discord d'un message bloqué par une règle AutoMod du serveur. */
+const AUTOMOD_BLOCKED = new Set([200000, 200001]);
+/**
+ * Code d'erreur JSON de Discord porté par une `DiscordAPIError`, sinon
+ * `undefined` : un délai dépassé (`AbortError`, code `20`) n'est pas un refus.
+ */
+function discordCode(error) {
+    return discordJsonCode(error) ?? undefined;
+}
+/**
+ * Échec d'un `channel.send`, classé : un refus explicite de Discord (erreur
+ * d'API portant un code) dit que rien n'est parti — faute de permission
+ * (`send-denied`), par AutoMod (`automod`) ou pour une autre raison
+ * (`send-rejected`) ; sans code, c'est une panne pendant l'envoi (`discord-down`, réseau,
+ * `5xx`, limite de débit) qui a pu cacher une publication réussie.
+ *
+ * @param error Erreur levée par l'envoi.
+ * @returns L'erreur à lever.
+ */
+function sendFailure(error) {
+    const detail = error.message;
+    const code = discordCode(error);
+    if (code === UNKNOWN_CHANNEL) {
+        // Salon supprimé ou recréé alors que le cache le gardait.
+        return new LiveChannelUnavailableError("missing", `salon introuvable à l'envoi (${detail})`, detail);
+    }
+    if (code === MISSING_ACCESS || code === MISSING_PERMISSIONS) {
+        return new LiveChannelUnavailableError("send-denied", `envoi refusé faute de permission (${detail})`, detail);
+    }
+    if (code !== undefined &amp;&amp; AUTOMOD_BLOCKED.has(code)) {
+        return new LiveChannelUnavailableError("automod", `envoi bloqué par AutoMod (${detail})`, detail);
+    }
+    if (code !== undefined) {
+        return new LiveChannelUnavailableError("send-rejected", `envoi refusé par Discord (${detail})`, detail);
+    }
+    return new LiveChannelUnavailableError("discord-down", `envoi sans réponse claire de Discord (${detail})`, detail);
+}
+/**
+ * Coupe un texte à `max` unités au plus, terminé par « … », sans jamais
+ * couper un caractère en deux (émoji, lettre hors du plan de base) : un « � »
+ * sous `@everyone` aurait l'air d'une panne.
+ */
+export function cutText(text, max) {
+    if (text.length &lt;= max) {
+        return text;
+    }
+    let end = max - 1;
+    const last = text.charCodeAt(end - 1);
+    // Moitié haute d'une paire de substitution laissée seule : on la retire.
+    if (last >= 0xd800 &amp;&amp; last &lt;= 0xdbff) {
+        end -= 1;
+    }
+    return `${text.slice(0, end)}…`;
+}
+/**
+ * Neutralise une mention de masse glissée dans le texte : seule la mention de
+ * tête, posée par le bot, doit notifier (`allowedMentions` autorise
+ * `everyone`, qui couvre aussi `@here`). Le site neutralise déjà les noms ;
+ * c'est la seconde barrière.
+ */
+export function neutralizeMassMentions(text) {
+    return text.replace(/@(everyone|here)/gi, "@\u200B$1");
+}
+/**
+ * Jeton d'unicité de l'envoi (`nonce`, 25 caractères au plus), tiré de
+ * l'étiquette et du lien : Discord ne crée pas deux messages de même jeton à
+ * quelques minutes d'écart — le même envoi rejoué peu après (réponse perdue,
+ * nouvel essai du site) ne notifie pas deux fois tout le serveur. Il réduit
+ * le risque sans l'écarter : un essai plus tardif, ou regroupé avec un autre
+ * match (autre étiquette), n'est pas reconnu.
+ */
+export function liveAnnouncementNonce(request) {
+    const seed = `${request.context}\n${request.streamUrl}`;
+    return "live" + createHash("sha256").update(seed).digest("hex").slice(0, 21);
+}
+/**
+ * Délai entre deux signalements d'un même incident au canal de logs. Le site
+ * réessaie une annonce refusée environ toutes les minutes (pause du site après
+ * un report), tant que le match est frais : sans ce délai, une permission retirée
+ * sur #live inonderait le canal du staff.
+ */
+export const LIVE_LOG_COOLDOWN_MS = 60 * 60 * 1000;
+const lastLiveLogAt = new Map();
+/** Taille au-delà de laquelle les signalements échus sont oubliés. */
+const LIVE_LOG_PRUNE_SIZE = 200;
+/**
+ * Oublie les signalements dont le délai est passé : une annonce que le site
+ * ne réessaie pas a sa propre clé, et le bot tourne des semaines sous pm2.
+ */
+function pruneLiveLogs(now) {
+    if (lastLiveLogAt.size &lt; LIVE_LOG_PRUNE_SIZE) {
+        return;
+    }
+    for (const [key, at] of lastLiveLogAt) {
+        if (now - at >= LIVE_LOG_COOLDOWN_MS) {
+            lastLiveLogAt.delete(key);
+        }
+    }
+}
+/**
+ * Vrai si l'incident `key` peut être signalé au canal de logs maintenant : la
+ * première fois, puis au plus une fois par {@link LIVE_LOG_COOLDOWN_MS}.
+ *
+ * @param key Nature de l'incident (raison du refus, permission manquante).
+ * @param now Instant de référence, injectable pour les tests.
+ * @returns `true` si le signalement doit partir.
+ */
+export function shouldLogLiveIssue(key, now = Date.now()) {
+    const last = lastLiveLogAt.get(key);
+    if (last !== undefined &amp;&amp; now - last &lt; LIVE_LOG_COOLDOWN_MS) {
+        return false;
+    }
+    pruneLiveLogs(now);
+    lastLiveLogAt.set(key, now);
+    return true;
+}
+/**
+ * Oublie un signalement qui n'a pas pu partir (canal de logs injoignable) :
+ * le prochain incident de même nature sera signalé, au lieu d'un silence d'une
+ * heure.
+ *
+ * @param key Nature de l'incident.
+ */
+export function forgetLiveIssue(key) {
+    lastLiveLogAt.delete(key);
+}
+/** Oublie les signalements déjà faits. Réservé aux tests. */
+export function resetLiveLogThrottle() {
+    lastLiveLogAt.clear();
+}
+/**
+ * Ce que le staff doit faire, selon la nature de l'incident
+ * ({@link LiveChannelUnavailableError.key}) : la phrase du canal de logs.
+ *
+ * @param key Nature de l'incident : `missing` (salon introuvable ou invisible),
+ *   `no-view`, `no-send` (permission manquante), `send-denied` (envoi refusé
+ *   faute de permission), `automod` (message bloqué par AutoMod),
+ *   `send-rejected` (autre refus explicite de Discord, souvent l'état du
+ *   salon), `discord-unreachable` (panne passagère de Discord
+ *   avant l'envoi : rien n'est parti), `discord-down` (panne pendant l'envoi :
+ *   l'annonce a pu partir), autre.
+ * @param rawDetail Texte d'erreur brut de Discord, cité pour le diagnostic,
+ *   coupé à {@link MAX_LIVE_DETAIL_LENGTH} caractères.
+ * @returns Une phrase en français, avec l'action à mener.
+ */
+export function describeLiveIssue(key, rawDetail) {
+    // Le texte d'erreur brut est cité, borné : le signalement doit tenir dans un message.
+    const detail = cutText(rawDetail, MAX_LIVE_DETAIL_LENGTH);
+    switch (key) {
+        case "missing":
+            return "le salon #live est introuvable ou invisible pour le bot — vérifier qu'il existe et que le bot a la permission « Voir le salon » ; " +
+                "s'il a été supprimé puis recréé, son nouvel identifiant doit être reporté dans le code du bot (LIVE_ANNOUNCE_CHANNEL_ID)";
+        case "no-view":
+            return "le bot n'a pas la permission « Voir le salon » dans #live — la lui rendre";
+        case "no-send":
+            return "le bot n'a pas la permission « Envoyer des messages » dans #live — la lui rendre";
+        case "send-denied":
+            return `Discord a refusé l'envoi faute de permission (${detail}) — vérifier les permissions du bot dans #live`;
+        case "automod":
+            return `une règle AutoMod du serveur a bloqué l'annonce (${detail}) — la revoir dans Paramètres du serveur → AutoMod`;
+        case "send-rejected":
+            return `Discord a refusé l'annonce (${detail}) — vérifier le salon #live (type, verrouillage) et les permissions du bot`;
+        case "discord-unreachable":
+            return `Discord n'a pas répondu ou a limité le bot en lisant le salon (${detail}) — rien n'est parti, rien à régler sur le salon`;
+        case "discord-down":
+            return `Discord n'a pas répondu ou a limité le bot pendant l'envoi (${detail}) — rien à régler sur le salon ; ` +
+                "l'annonce a pu partir malgré tout (vérifier #live)";
+        default:
+            return `erreur inattendue (${detail})`;
+    }
+}
+/** Préfixe que `sendLog` ajoute devant chaque signalement de l'app. */
+const LOG_PREFIX = "[AppBlueGenji] ";
+/**
+ * Verdict d'un échec : « non confirmée » quand une panne pendant l'envoi a pu
+ * cacher une publication réussie, « non publiée » sinon.
+ *
+ * @param key Nature de l'incident ({@link describeLiveIssue}).
+ * @returns Le verdict, commun au canal de logs et à pm2.
+ */
+export function liveFailureVerdict(key) {
+    return key === "discord-down" ? "non confirmée" : "non publiée";
+}
+/** Le texte cité, ligne à ligne (« > »). */
+function quoteLines(text) {
+    return text.split("\n").map((line) => "> " + line).join("\n");
+}
+/**
+ * Causes que le site ne réessaie pas : un envoi peut-être parti (un second
+ * `@everyone` serait pire qu'une annonce perdue), ou un message qu'AutoMod
+ * bloquerait de nouveau tel quel (chaque essai alerterait la modération).
+ */
+const NOT_RETRIED_KEYS = new Set(["discord-down", "automod"]);
+/**
+ * Vrai si le site ne réessaiera pas l'annonce après cette cause. Chacune de
+ * ces annonces est signalée à part (pas de nouvel essai, donc pas de rafale).
+ *
+ * @param key Nature de l'incident.
+ */
+export function isLiveIssueFinal(key) {
+    return NOT_RETRIED_KEYS.has(key);
+}
+/**
+ * Signalement au canal de logs d'une annonce qui n'est pas partie, sans le
+ * préfixe `[AppBlueGenji]` : la cause et l'action à mener, puis l'annonce
+ * concernée (équipes et tournoi, jamais un pseudo) et son lien, cités pour la
+ * reconnaître — le site la réessaie seul, la reposter à la main pendant ce
+ * temps notifierait deux fois tout le serveur. Une panne passagère de Discord
+ * peut cacher un envoi réussi : elle est dite « non confirmée », pas « non
+ * publiée ». Le tout tient sous {@link MAX_LIVE_LOG_LENGTH} caractères,
+ * préfixe compris : la citation est raccourcie au besoin, le lien reste entier.
+ *
+ * @param request Demande validée.
+ * @param key Nature de l'incident ({@link describeLiveIssue}).
+ * @param detail Texte d'erreur brut de Discord.
+ * @param options `siteGaveUp` : le site avait coupé la requête avant la
+ *   réponse (délai dépassé) — il ne réessaiera pas, quelle que soit la cause.
+ * @returns Le texte du signalement.
+ */
+export function liveFailureReport(request, key, detail, options = {}) {
+    const siteGaveUp = options.siteGaveUp === true;
+    const link = `\n&lt;${request.streamUrl}>`;
+    const intro = `Annonce de live ${liveFailureVerdict(key)} (${request.context}) : ${describeLiveIssue(key, detail)}. `;
+    if (key === "automod") {
+        // Citer le texte ou le lien bloqués ferait bloquer le signalement par la
+        // même règle (une règle peut viser les liens de diffusion).
+        return `${intro}${retrySentence(key, siteGaveUp, true)} Texte et lien non cités ici (la même règle pourrait les bloquer).`;
+    }
+    const max = MAX_LIVE_LOG_LENGTH - LOG_PREFIX.length;
+    const lineCount = request.message.split("\n").length;
+    // La citation sert à reconnaître l'annonce, raccourcie au besoin ; si elle
+    // l'est, la consigne de la poster à la main le dit.
+    const build = (shortened) => {
+        const head = `${intro}${retrySentence(key, siteGaveUp, shortened)} Annonce concernée :`;
+        // Place restante : chaque ligne y gagne « > » (deux caractères).
+        const room = max - head.length - link.length - 1;
+        const text = room > 2 * lineCount + 1 ? cutText(request.message, room - 2 * lineCount) : "";
+        return { head, text };
+    };
+    let { head, text } = build(false);
+    if (text !== request.message) {
+        ({ head, text } = build(true));
+    }
+    const quoted = text ? "\n" + quoteLines(text) : "";
+    return `${head}${quoted}${link}`;
+}
+/**
+ * Consigne d'une annonce que le site ne réessaie pas, quand rien n'est parti
+ * (toute cause sauf une panne pendant l'envoi) : elle peut être postée à la
+ * main, avec la mention, et le texte entier si la citation est raccourcie.
+ */
+function manualPostSentence(key, shortened) {
+    if (key === "discord-down") {
+        return "";
+    }
+    const when = key === "automod" ? "une fois la règle corrigée, " : "";
+    const whole = shortened
+        ? " (texte cité raccourci ou absent : reprendre toutes les affiches depuis la fiche du tournoi, /tournois/&lt;n° de « tournoi- » dans l'étiquette>)"
+        : "";
+    return ` Rien n'est parti : ${when}elle peut être postée à la main sans doublon, avec la mention de tout le serveur en tête${whole}.`;
+}
+/** Ce que fera le site après cet échec, et ce que le staff peut faire. */
+function retrySentence(key, siteGaveUp, shortened) {
+    if (siteGaveUp) {
+        // Le site a cessé d'attendre la réponse : il garde sa réservation.
+        return "Le site avait déjà cessé d'attendre la réponse du bot : il ne la réessaie pas." +
+            manualPostSentence(key, shortened);
+    }
+    if (key === "discord-down") {
+        return "Le site ne la réessaie pas, pour ne pas notifier deux fois tout le serveur.";
+    }
+    if (isLiveIssueFinal(key)) {
+        return "Le site ne la réessaie pas : AutoMod bloquerait de nouveau le même message." +
+            manualPostSentence(key, shortened);
+    }
+    return "Le site la réessaie seul pendant les deux heures qui suivent le début du direct : ne pas la " +
+        "reposter à la main avant. Signalé au plus une fois par heure, d'autres annonces peuvent échouer " +
+        "pour la même raison.";
+}
+/**
+ * L'annonce n'a pas été publiée : salon introuvable, permission manquante,
+ * refus explicite de Discord (AutoMod…), ou panne passagère de Discord
+ * ({@link LiveChannelUnavailableError.key}). La
+ * route en fait un `503` portant la clé (`reason`) ; le site rend sa
+ * réservation pour réessayer, sauf après `automod` et `discord-down`
+ * ({@link isLiveIssueFinal}). Le jeton d'unicité ({@link liveAnnouncementNonce})
+ * écarte le doublon d'un même envoi rejoué dans les quelques minutes.
+ */
+export class LiveChannelUnavailableError extends Error {
+    /**
+     * Nature stable de l'incident (sans le texte d'erreur de Discord), clé de
+     * l'étranglement des signalements au staff.
+     */
+    key;
+    /** Texte d'erreur brut (Discord), cité dans le signalement. */
+    detail;
+    constructor(key, reason, detail = reason) {
+        super(`LIVE_CHANNEL_UNAVAILABLE: ${reason}`);
+        this.name = "LiveChannelUnavailableError";
+        this.key = key;
+        this.detail = detail;
+    }
+}
+/**
+ * Vrai si le lien contient une espace ou un caractère de contrôle : `new URL`
+ * les tolère (ou les retire), Discord y lirait du texte.
+ */
+function hasUrlBreak(value) {
+    if (/\s/u.test(value)) {
+        return true;
+    }
+    return [...value].some((char) => {
+        const code = char.codePointAt(0) ?? 0;
+        return code &lt; 0x20 || (code >= 0x7f &amp;&amp; code &lt;= 0x9f);
+    });
+}
+/** Pages de redirection des plateformes : l'hôte est autorisé, la destination non. */
+const REDIRECT_PATHS = /^\/(redirect|attribution_link)(\/|$)/i;
+/**
+ * Ce qui, une fois décodé, désigne une autre adresse : un schéma suivi d'une
+ * barre (`https://`, `https:\\` que les navigateurs lisent pareil), ou une
+ * adresse sans schéma (`//hôte`, `\\hôte`). Un caractère de contrôle décodé
+ * (tabulation, saut de ligne) est refusé aussi : les navigateurs le retirent
+ * avant de lire l'adresse, si bien que `/%09/hôte` vaut `//hôte`.
+ */
+const EMBEDDED_ADDRESS = /:[\\/]|[\\/]{2}|\\|\p{Cc}/u;
+/** Décode jusqu'à stabilité (trois passes au plus) ; `null` si illisible ou encore encodé. */
+function fullyDecoded(value) {
+    let current = value;
+    for (let pass = 0; pass &lt; 3; pass++) {
+        let next;
+        try {
+            next = decodeURIComponent(current);
+        }
+        catch {
+            return null;
+        }
+        if (next === current) {
+            return current;
+        }
+        current = next;
+    }
+    return null;
+}
+/**
+ * Vrai si le lien mène ailleurs que la diffusion : page de redirection (même
+ * encodée ou derrière une barre doublée), ou autre adresse portée par le
+ * chemin, la requête ou l'ancre — en clair, encodée une ou plusieurs fois,
+ * avec ou sans schéma.
+ */
+function leadsElsewhere(url) {
+    const path = fullyDecoded(url.pathname);
+    const rest = fullyDecoded(url.search + url.hash);
+    if (path === null || rest === null) {
+        return true;
+    }
+    if (REDIRECT_PATHS.test(path.replace(/[\\/]+/g, "/"))) {
+        return true;
+    }
+    return EMBEDDED_ADDRESS.test(path) || EMBEDDED_ADDRESS.test(rest);
+}
+/**
+ * Désamorce les liens du texte : le seul lien cliquable d'une annonce est
+ * `streamUrl`, validé. Le site neutralise déjà les noms ; si une adresse lui
+ * échappait, elle ne deviendrait ni lien (`://` coupé d'une espace de largeur
+ * nulle) ni lien masqué (`](` coupé de même).
+ */
+function neutralizeLinks(text) {
+    return text.replace(/:\/\//g, ":\u200B//").replace(/\]\(/g, "]\u200B(");
+}
+/**
+ * Forme publiable du lien : `https`, hôte de la liste blanche, sans
+ * identifiants ni port, 255 caractères au plus, sans espace ni caractère de
+ * contrôle, sans redirection ni autre adresse dans le lien. Seconde
+ * barrière — le site valide déjà —, parce que ce lien part devant tout le
+ * serveur.
+ *
+ * C'est la forme **normalisée** (`href`) qui est publiée, pas la chaîne reçue :
+ * `new URL` accepte `https://www.twitch.tv/x [Live](https://piege.example)`
+ * (espace encodée), et `&lt;`, `>` d'une ancre (`#&lt;@&amp;rôle>`) n'y restent que
+ * percent-encodés — ni texte ajouté, ni lien masqué, ni mention.
+ *
+ * @param value Lien reçu.
+ * @returns Le lien à publier, ou `null` s'il est refusé.
+ */
+export function publishableStreamUrl(value) {
+    if (value.length > MAX_STREAM_URL_LENGTH || hasUrlBreak(value)) {
+        return null;
+    }
+    let url;
+    try {
+        url = new URL(value);
+    }
+    catch {
+        return null;
+    }
+    const allowed = url.protocol === "https:"
+        &amp;&amp; url.username === ""
+        &amp;&amp; url.password === ""
+        &amp;&amp; url.port === ""
+        &amp;&amp; LIVE_HOSTS.has(url.hostname.toLowerCase());
+    if (!allowed || leadsElsewhere(url) || url.href.length > MAX_STREAM_URL_LENGTH) {
+        return null;
+    }
+    return url.href;
+}
+/**
+ * Vrai si le lien est une diffusion acceptable ({@link publishableStreamUrl}).
+ *
+ * @param value Lien reçu.
+ * @returns `true` si le lien peut être publié.
+ */
+export function isAllowedStreamUrl(value) {
+    return publishableStreamUrl(value) !== null;
+}
+/** Caractères d'une étiquette `context` du site (`live-announce tournoi-7 match-12,13,…+4`). */
+const CONTEXT_UNSAFE = /[^A-Za-z0-9 ,+…_-]/gu;
+/**
+ * Valide le corps d'une annonce de live.
+ *
+ * @param payload Corps JSON brut.
+ * @returns La demande normalisée, ou `null` si elle est inexploitable.
+ */
+export function parseLiveAnnouncement(payload) {
+    if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+        return null;
+    }
+    const raw = payload;
+    const message = typeof raw.message === "string" ? raw.message.trim() : "";
+    const streamUrl = publishableStreamUrl(typeof raw.streamUrl === "string" ? raw.streamUrl.trim() : "");
+    if (!message || !streamUrl) {
+        return null;
+    }
+    // Assez long pour la liste des matchs d'un groupe (`live-announce match-12,13,…`).
+    // Coupée d'un « … » visible : un identifiant tronqué ne passe pas pour un autre.
+    // Écrite telle quelle dans pm2 et au canal de logs : hors des caractères
+    // du site, rien ne passe (ni saut de ligne qui forgerait une ligne de
+    // journal, ni balisage qui ferait un lien masqué).
+    const rawContext = typeof raw.context === "string" ? raw.context.trim().replace(CONTEXT_UNSAFE, "_") : "";
+    const context = rawContext ? cutText(rawContext, MAX_LIVE_CONTEXT_LENGTH) : "live-announce";
+    return { message: cutText(neutralizeLinks(neutralizeMassMentions(message)), MAX_LIVE_MESSAGE_LENGTH), streamUrl, context };
+}
+/**
+ * Texte publié : la mention, le message de l'app, puis le lien seul sur sa
+ * ligne (Discord en tire l'aperçu de la chaîne). Sans la permission de
+ * mentionner, la mention n'est pas écrite : un « @everyone » gris qui ne
+ * notifie personne aurait l'air d'une panne. Le message est raccourci pour que
+ * l'ensemble tienne dans les 2 000 caractères d'un message Discord.
+ *
+ * @param request Demande validée.
+ * @param mentionEveryone `false` : le bot ne peut pas notifier tout le serveur.
+ * @returns Le contenu du message Discord.
+ */
+export function formatLiveAnnouncement(request, mentionEveryone = true) {
+    const prefix = mentionEveryone ? EVERYONE_PREFIX : "";
+    const budget = DISCORD_MAX_CONTENT_LENGTH - prefix.length - 1 - request.streamUrl.length;
+    return `${prefix}${cutText(request.message, budget)}\n${request.streamUrl}`;
+}
+/**
+ * Lit les permissions du bot dans le salon. Un salon qui ne les expose pas (ou
+ * un client sans utilisateur) est tenu pour accessible : l'envoi dira le reste.
+ */
+function readPermissions(client, channel) {
+    const permissions = client.user &amp;&amp; channel.permissionsFor ? channel.permissionsFor(client.user) : null;
+    if (!permissions) {
+        return { canView: true, canSend: true, canMentionEveryone: true, canEmbedLinks: true };
+    }
+    // Pas de mode lent à surveiller : Discord n'y soumet pas les bots.
+    return {
+        canView: permissions.has(PermissionFlagsBits.ViewChannel),
+        canSend: permissions.has(PermissionFlagsBits.SendMessages),
+        canMentionEveryone: permissions.has(PermissionFlagsBits.MentionEveryone),
+        canEmbedLinks: permissions.has(PermissionFlagsBits.EmbedLinks),
+    };
+}
+/**
+ * Publie l'annonce dans le salon #live.
+ *
+ * Sans la permission « Mentionner @everyone, @here et tous les rôles », le
+ * message part quand même, sans la mention — une annonce sans notification
+ * vaut mieux que pas d'annonce — et le bilan le dit (`mentionEveryone: false`)
+ * pour que la route le journalise ; de même sans « Intégrer des liens »
+ * (`embedLinks: false`, pas d'aperçu de la chaîne).
+ *
+ * @param client Client Discord.
+ * @param request Demande validée.
+ * @returns Le bilan de la publication.
+ * @throws {LiveChannelUnavailableError} Salon introuvable ou fermé au bot.
+ */
+export async function announceLive(client, request) {
+    let channel;
+    try {
+        channel = await client.channels.fetch(LIVE_ANNOUNCE_CHANNEL_ID);
+    }
+    catch (error) {
+        const detail = error.message;
+        // Seuls un salon inconnu ou un accès refusé désignent le salon ; le reste
+        // est une panne passagère de Discord (réseau, 5xx, limite de débit).
+        const code = discordCode(error);
+        // Rien n'est encore envoyé : une panne ici ne cache aucune publication.
+        const key = code === UNKNOWN_CHANNEL || code === MISSING_ACCESS ? "missing" : "discord-unreachable";
+        throw new LiveChannelUnavailableError(key, `salon illisible (${detail})`, detail);
+    }
+    if (!channel || typeof channel.send !== "function") {
+        throw new LiveChannelUnavailableError("missing", "salon introuvable ou non textuel");
+    }
+    const { canView, canSend, canMentionEveryone, canEmbedLinks } = readPermissions(client, channel);
+    if (!canView) {
+        throw new LiveChannelUnavailableError("no-view", "permission de voir le salon absente");
+    }
+    if (!canSend) {
+        throw new LiveChannelUnavailableError("no-send", "permission d'écrire absente");
+    }
+    try {
+        // `parse: ["everyone"]` et rien d'autre ; toute mention de masse du texte
+        // est neutralisée (`parseLiveAnnouncement`) : seule celle de tête notifie.
+        // Le jeton d'unicité empêche Discord de créer deux fois la même annonce.
+        await channel.send({
+            content: formatLiveAnnouncement(request, canMentionEveryone),
+            allowedMentions: { parse: canMentionEveryone ? ["everyone"] : [] },
+            nonce: liveAnnouncementNonce(request),
+            enforceNonce: true,
+        });
+    }
+    catch (error) {
+        throw sendFailure(error);
+    }
+    return { posted: true, mentionEveryone: canMentionEveryone, embedLinks: canEmbedLinks };
+}
+//# sourceMappingURL=liveAnnouncement.js.map</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Classes</h3><ul><li><a href="Bdd.html">Bdd</a></li><li><a href="HandleResolutionTimeoutError.html">HandleResolutionTimeoutError</a></li><li><a href="HomeGuildUnavailableError.html">HomeGuildUnavailableError</a></li><li><a href="LiveChannelUnavailableError.html">LiveChannelUnavailableError</a></li><li><a href="MissingCommandError.html">MissingCommandError</a></li><li><a href="Tips.html">Tips</a></li></ul><h3>Global</h3><ul><li><a href="global.html#ACTIVITY_AUTHOR_RETENTION_DAYS">ACTIVITY_AUTHOR_RETENTION_DAYS</a></li><li><a href="global.html#ACTIVITY_DAILY_TABLE">ACTIVITY_DAILY_TABLE</a></li><li><a href="global.html#ADHESION_INTERVAL_TABLE">ADHESION_INTERVAL_TABLE</a></li><li><a href="global.html#ADHESION_REMINDER_HOUR">ADHESION_REMINDER_HOUR</a></li><li><a href="global.html#API_OVERLOADED">API_OVERLOADED</a></li><li><a href="global.html#ARCHIVE_NAME">ARCHIVE_NAME</a></li><li><a href="global.html#AUTOMOD_BLOCKED">AUTOMOD_BLOCKED</a></li><li><a href="global.html#BAN_TABLE">BAN_TABLE</a></li><li><a href="global.html#BOT_OWNER_TABLE">BOT_OWNER_TABLE</a></li><li><a href="global.html#BUSY_TIMEOUT_PRAGMA">BUSY_TIMEOUT_PRAGMA</a></li><li><a href="global.html#CHANNEL_FAILED_NOTICE">CHANNEL_FAILED_NOTICE</a></li><li><a href="global.html#CHANNEL_NOT_SERVED">CHANNEL_NOT_SERVED</a></li><li><a href="global.html#CHANNEL_PARTNER_RANK_TABLE">CHANNEL_PARTNER_RANK_TABLE</a></li><li><a href="global.html#CHANNEL_PARTNER_SERVICE_TABLE">CHANNEL_PARTNER_SERVICE_TABLE</a></li><li><a href="global.html#CHANNEL_PARTNER_TABLE">CHANNEL_PARTNER_TABLE</a></li><li><a href="global.html#CHECK_TIMEOUT_MS">CHECK_TIMEOUT_MS</a></li><li><a href="global.html#COMMAND_DIRS">COMMAND_DIRS</a></li><li><a href="global.html#COMMAND_PATH">COMMAND_PATH</a></li><li><a href="global.html#COMMAND_TIMEOUT_MS">COMMAND_TIMEOUT_MS</a></li><li><a href="global.html#CONFIGURED_GUILDS_SQL">CONFIGURED_GUILDS_SQL</a></li><li><a href="global.html#CONTEXT_UNSAFE">CONTEXT_UNSAFE</a></li><li><a href="global.html#DAILY_SNAPSHOT_TABLE">DAILY_SNAPSHOT_TABLE</a></li><li><a href="global.html#DEFAULT_ADHESION_MESSAGE">DEFAULT_ADHESION_MESSAGE</a></li><li><a href="global.html#DEFAULT_BDD_PATH">DEFAULT_BDD_PATH</a></li><li><a href="global.html#DEFAULT_DEDUPE_WINDOW_MS">DEFAULT_DEDUPE_WINDOW_MS</a></li><li><a href="global.html#DEFAULT_INTERNAL_HOST">DEFAULT_INTERNAL_HOST</a></li><li><a href="global.html#DEFAULT_TOURNAMENT_LINKS">DEFAULT_TOURNAMENT_LINKS</a></li><li><a href="global.html#DISCORD_ID_RE">DISCORD_ID_RE</a></li><li><a href="global.html#DISCORD_MAX_CONTENT_LENGTH">DISCORD_MAX_CONTENT_LENGTH</a></li><li><a href="global.html#DISCORD_MESSAGE_MAX">DISCORD_MESSAGE_MAX</a></li><li><a href="global.html#DPMSG_TABLE">DPMSG_TABLE</a></li><li><a href="global.html#DROP_USER_LINK">DROP_USER_LINK</a></li><li><a href="global.html#EMBEDDED_ADDRESS">EMBEDDED_ADDRESS</a></li><li><a href="global.html#EVERYONE_PREFIX">EVERYONE_PREFIX</a></li><li><a href="global.html#EVERYONE_REFUSED_NOTICE">EVERYONE_REFUSED_NOTICE</a></li><li><a href="global.html#EXPECTED_ARCHIVE_ENTRIES">EXPECTED_ARCHIVE_ENTRIES</a></li><li><a href="global.html#FEED_ANONYMOUS_ACTOR">FEED_ANONYMOUS_ACTOR</a></li><li><a href="global.html#FEED_EVENT_RETENTION_DAYS">FEED_EVENT_RETENTION_DAYS</a></li><li><a href="global.html#FEED_EVENT_TABLE">FEED_EVENT_TABLE</a></li><li><a href="global.html#FETCH_GRACE_MS">FETCH_GRACE_MS</a></li><li><a href="global.html#GONE_CODES">GONE_CODES</a></li><li><a href="global.html#GUILD_CHANNEL_TABLE">GUILD_CHANNEL_TABLE</a></li><li><a href="global.html#GUILD_CONFIG_TABLES">GUILD_CONFIG_TABLES</a></li><li><a href="global.html#IGNORABLE_DISCORD_CODES">IGNORABLE_DISCORD_CODES</a></li><li><a href="global.html#INCOMPLETE_WARNING">INCOMPLETE_WARNING</a></li><li><a href="global.html#INHERITED_ENV_KEYS">INHERITED_ENV_KEYS</a></li><li><a href="global.html#IPV4_MAPPED_PREFIX">IPV4_MAPPED_PREFIX</a></li><li><a href="global.html#ITERATION_UNLIMITED">ITERATION_UNLIMITED</a></li><li><a href="global.html#LISTED_ARCHIVES">LISTED_ARCHIVES</a></li><li><a href="global.html#LIVE_ANNOUNCE_CHANNEL_ID">LIVE_ANNOUNCE_CHANNEL_ID</a></li><li><a href="global.html#LIVE_HOSTS">LIVE_HOSTS</a></li><li><a href="global.html#LIVE_LOG_COOLDOWN_MS">LIVE_LOG_COOLDOWN_MS</a></li><li><a href="global.html#LIVE_LOG_PRUNE_SIZE">LIVE_LOG_PRUNE_SIZE</a></li><li><a href="global.html#LOG_PREFIX">LOG_PREFIX</a></li><li><a href="global.html#LOOPBACK_HOSTS">LOOPBACK_HOSTS</a></li><li><a href="global.html#MARKDOWN_LINK_SPECIALS">MARKDOWN_LINK_SPECIALS</a></li><li><a href="global.html#MAX_ADHESION_DMS">MAX_ADHESION_DMS</a></li><li><a href="global.html#MAX_ATTEMPTS">MAX_ATTEMPTS</a></li><li><a href="global.html#MAX_CAUSE_DEPTH">MAX_CAUSE_DEPTH</a></li><li><a href="global.html#MAX_LISTING_BYTES">MAX_LISTING_BYTES</a></li><li><a href="global.html#MAX_LIVE_CONTEXT_LENGTH">MAX_LIVE_CONTEXT_LENGTH</a></li><li><a href="global.html#MAX_LIVE_DETAIL_LENGTH">MAX_LIVE_DETAIL_LENGTH</a></li><li><a href="global.html#MAX_LIVE_LOG_LENGTH">MAX_LIVE_LOG_LENGTH</a></li><li><a href="global.html#MAX_LIVE_MESSAGE_LENGTH">MAX_LIVE_MESSAGE_LENGTH</a></li><li><a href="global.html#MAX_LOG_DELETIONS_PER_RUN">MAX_LOG_DELETIONS_PER_RUN</a></li><li><a href="global.html#MAX_LOG_PAGES_PER_RUN">MAX_LOG_PAGES_PER_RUN</a></li><li><a href="global.html#MAX_MESSAGE_LENGTH">MAX_MESSAGE_LENGTH</a></li><li><a href="global.html#MAX_RECIPIENTS">MAX_RECIPIENTS</a></li><li><a href="global.html#MAX_REFEREE_DMS">MAX_REFEREE_DMS</a></li><li><a href="global.html#MAX_STREAM_URL_LENGTH">MAX_STREAM_URL_LENGTH</a></li><li><a href="global.html#MAX_TOURNAMENT_LINK_LENGTH">MAX_TOURNAMENT_LINK_LENGTH</a></li><li><a href="global.html#MAX_TRACKED_KEYS">MAX_TRACKED_KEYS</a></li><li><a href="global.html#MEMBERS_DELIVERED_NOTICE">MEMBERS_DELIVERED_NOTICE</a></li><li><a href="global.html#MENTION_PATTERN">MENTION_PATTERN</a></li><li><a href="global.html#MESSAGE_RETENTION_DAYS">MESSAGE_RETENTION_DAYS</a></li><li><a href="global.html#MESSAGE_SERVICE_TABLE">MESSAGE_SERVICE_TABLE</a></li><li><a href="global.html#MESSAGE_WINDOW_DAYS">MESSAGE_WINDOW_DAYS</a></li><li><a href="global.html#MIN_DISCORD_JSON_CODE">MIN_DISCORD_JSON_CODE</a></li><li><a href="global.html#MISSING_ACCESS">MISSING_ACCESS</a></li><li><a href="global.html#MISSING_FILES_NOTICE">MISSING_FILES_NOTICE</a></li><li><a href="global.html#MODULE_KEYS">MODULE_KEYS</a></li><li><a href="global.html#NOT_RETRIED_KEYS">NOT_RETRIED_KEYS</a></li><li><a href="global.html#NO_DISPLAY_NAME">NO_DISPLAY_NAME</a></li><li><a href="global.html#OGMSG_TABLE">OGMSG_TABLE</a></li><li><a href="global.html#OWNER_NOTICE_COOLDOWN_MS">OWNER_NOTICE_COOLDOWN_MS</a></li><li><a href="global.html#PARIS_TIME_ZONE">PARIS_TIME_ZONE</a></li><li><a href="global.html#PERMISSION_WARNING">PERMISSION_WARNING</a></li><li><a href="global.html#POSTPONED">POSTPONED</a></li><li><a href="global.html#PRODUCTION_SEARCH_OPTIONS">PRODUCTION_SEARCH_OPTIONS</a></li><li><a href="global.html#PURGE_RETIRED_MODULES">PURGE_RETIRED_MODULES</a></li><li><a href="global.html#RANKS_TABLE">RANKS_TABLE</a></li><li><a href="global.html#RECRUIT_ROLE_CHOICES">RECRUIT_ROLE_CHOICES</a></li><li><a href="global.html#RECRUTE_TABLE">RECRUTE_TABLE</a></li><li><a href="global.html#REDIRECT_PATHS">REDIRECT_PATHS</a></li><li><a href="global.html#REFEREE_ROLE_TABLE">REFEREE_ROLE_TABLE</a></li><li><a href="global.html#REFUSED">REFUSED</a></li><li><a href="global.html#REMINDER_NOT_SAVED">REMINDER_NOT_SAVED</a></li><li><a href="global.html#RESOLVE_BUDGET_MS">RESOLVE_BUDGET_MS</a></li><li><a href="global.html#RESOLVE_CONCURRENCY">RESOLVE_CONCURRENCY</a></li><li><a href="global.html#RESOLVE_WAVE_BUDGET_MS">RESOLVE_WAVE_BUDGET_MS</a></li><li><a href="global.html#RETENTION_MODIFIER">RETENTION_MODIFIER</a></li><li><a href="global.html#ROLE_ADMIN_TABLE">ROLE_ADMIN_TABLE</a></li><li><a href="global.html#ROLLBACK_RETENTION_DAYS">ROLLBACK_RETENTION_DAYS</a></li><li><a href="global.html#ROLLBACK_STAMP">ROLLBACK_STAMP</a></li><li><a href="global.html#SCRIM_GAME">SCRIM_GAME</a></li><li><a href="global.html#SCRIM_GAME_LABEL">SCRIM_GAME_LABEL</a></li><li><a href="global.html#SCRIM_LEVEL_CHOICES">SCRIM_LEVEL_CHOICES</a></li><li><a href="global.html#SCRIM_TABLE">SCRIM_TABLE</a></li><li><a href="global.html#SECURE_DELETE_PRAGMA">SECURE_DELETE_PRAGMA</a></li><li><a href="global.html#SEE_PM2">SEE_PM2</a></li><li><a href="global.html#SERVER_INVITE_TABLE">SERVER_INVITE_TABLE</a></li><li><a href="global.html#SERVER_MODULE_TABLE">SERVER_MODULE_TABLE</a></li><li><a href="global.html#SERVICE_TABLE">SERVICE_TABLE</a></li><li><a href="global.html#SEVERAL_SERVICES">SEVERAL_SERVICES</a></li><li><a href="global.html#SITE_VISITOR_WINDOW_MONTHS">SITE_VISITOR_WINDOW_MONTHS</a></li><li><a href="global.html#SITE_VISIT_TABLE">SITE_VISIT_TABLE</a></li><li><a href="global.html#SNOWFLAKE_PATTERN">SNOWFLAKE_PATTERN</a></li><li><a href="global.html#SPARKLINE_POINTS">SPARKLINE_POINTS</a></li><li><a href="global.html#SQLITE_MAGIC">SQLITE_MAGIC</a></li><li><a href="global.html#STAFF_LOG_RETENTION_DAYS">STAFF_LOG_RETENTION_DAYS</a></li><li><a href="global.html#STALE_AFTER_MS">STALE_AFTER_MS</a></li><li><a href="global.html#TIPS_EVERY">TIPS_EVERY</a></li><li><a href="global.html#TOO_MANY_ATTACHMENTS">TOO_MANY_ATTACHMENTS</a></li><li><a href="global.html#TOURNAMENT_LINK_KINDS">TOURNAMENT_LINK_KINDS</a></li><li><a href="global.html#TOURNAMENT_LINK_LABELS">TOURNAMENT_LINK_LABELS</a></li><li><a href="global.html#TOURNAMENT_LINK_TABLE">TOURNAMENT_LINK_TABLE</a></li><li><a href="global.html#TRANSIENT_NETWORK_CODES">TRANSIENT_NETWORK_CODES</a></li><li><a href="global.html#UNKNOWN_CHANNEL">UNKNOWN_CHANNEL</a></li><li><a href="global.html#UNSPECIFIED_CHOICE_VALUE">UNSPECIFIED_CHOICE_VALUE</a></li><li><a href="global.html#_deleteTempMsg">_deleteTempMsg</a></li><li><a href="global.html#_resetChannel">_resetChannel</a></li><li><a href="global.html#_resetProcessGuards">_resetProcessGuards</a></li><li><a href="global.html#_resetServer">_resetServer</a></li><li><a href="global.html#absDelta">absDelta</a></li><li><a href="global.html#activeBanMessageIds">activeBanMessageIds</a></li><li><a href="global.html#addArchives">addArchives</a></li><li><a href="global.html#addConfiguredAdmins">addConfiguredAdmins</a></li><li><a href="global.html#addMembers">addMembers</a></li><li><a href="global.html#adhesionDir">adhesionDir</a></li><li><a href="global.html#adhesionFilePath">adhesionFilePath</a></li><li><a href="global.html#adhesionPerimee">adhesionPerimee</a></li><li><a href="global.html#adhesionValide">adhesionValide</a></li><li><a href="global.html#alertLeadership">alertLeadership</a></li><li><a href="global.html#alertReferees">alertReferees</a></li><li><a href="global.html#announceLive">announceLive</a></li><li><a href="global.html#anonymizeOldActivity">anonymizeOldActivity</a></li><li><a href="global.html#answerBackupCheck">answerBackupCheck</a></li><li><a href="global.html#answerTmp">answerTmp</a></li><li><a href="global.html#archiveSourcesFromEnv">archiveSourcesFromEnv</a></li><li><a href="global.html#areaFilter">areaFilter</a></li><li><a href="global.html#asLogChannel">asLogChannel</a></li><li><a href="global.html#assertSqlIdentifier">assertSqlIdentifier</a></li><li><a href="global.html#authorCopy">authorCopy</a></li><li><a href="global.html#authorize">authorize</a></li><li><a href="global.html#backupCheck">backupCheck</a></li><li><a href="global.html#backupCheckConfigFromEnv">backupCheckConfigFromEnv</a></li><li><a href="global.html#backupChecksPassed">backupChecksPassed</a></li><li><a href="global.html#ban">ban</a></li><li><a href="global.html#banMessageIds">banMessageIds</a></li><li><a href="global.html#ban_id">ban_id</a></li><li><a href="global.html#ban_username">ban_username</a></li><li><a href="global.html#banlist">banlist</a></li><li><a href="global.html#broadcast">broadcast</a></li><li><a href="global.html#buildAttachments">buildAttachments</a></li><li><a href="global.html#buildEmbedPage">buildEmbedPage</a></li><li><a href="global.html#buildServerChoices">buildServerChoices</a></li><li><a href="global.html#buildServiceMessage">buildServiceMessage</a></li><li><a href="global.html#capRefereeTargets">capRefereeTargets</a></li><li><a href="global.html#capReferees">capReferees</a></li><li><a href="global.html#channelDeliveredNotice">channelDeliveredNotice</a></li><li><a href="global.html#channelIsGone">channelIsGone</a></li><li><a href="global.html#checkAdminRole">checkAdminRole</a></li><li><a href="global.html#checkBan">checkBan</a></li><li><a href="global.html#checkChannelMinPermissions">checkChannelMinPermissions</a></li><li><a href="global.html#checkCooldown">checkCooldown</a></li><li><a href="global.html#checkIntervalleAdhesion">checkIntervalleAdhesion</a></li><li><a href="global.html#checkLatestArchive">checkLatestArchive</a></li><li><a href="global.html#checkMessageValidity">checkMessageValidity</a></li><li><a href="global.html#checkPermissions">checkPermissions</a></li><li><a href="global.html#checkRecipientKey">checkRecipientKey</a></li><li><a href="global.html#checkRole">checkRole</a></li><li><a href="global.html#checkTargets">checkTargets</a></li><li><a href="global.html#checkUploadsMirror">checkUploadsMirror</a></li><li><a href="global.html#choiceLabel">choiceLabel</a></li><li><a href="global.html#classifyError">classifyError</a></li><li><a href="global.html#client">client</a></li><li><a href="global.html#closeBddInstance">closeBddInstance</a></li><li><a href="global.html#collectAdmins">collectAdmins</a></li><li><a href="global.html#collectRecipients">collectRecipients</a></li><li><a href="global.html#commandEnv">commandEnv</a></li><li><a href="global.html#commands">commands</a></li><li><a href="global.html#comparable">comparable</a></li><li><a href="global.html#compareNewestFirst">compareNewestFirst</a></li><li><a href="global.html#configModule">configModule</a></li><li><a href="global.html#confirmMembersDelivered">confirmMembersDelivered</a></li><li><a href="global.html#contactAdminServer">contactAdminServer</a></li><li><a href="global.html#createErrorReporter">createErrorReporter</a></li><li><a href="global.html#cutText">cutText</a></li><li><a href="global.html#decryptDatabase">decryptDatabase</a></li><li><a href="global.html#dedupeRecipients">dedupeRecipients</a></li><li><a href="global.html#defaultRunner">defaultRunner</a></li><li><a href="global.html#defineRankRange">defineRankRange</a></li><li><a href="global.html#delay">delay</a></li><li><a href="global.html#deleteBanMessages">deleteBanMessages</a></li><li><a href="global.html#deleteDPMsgs">deleteDPMsgs</a></li><li><a href="global.html#deleteOldAttachment">deleteOldAttachment</a></li><li><a href="global.html#deleteSetupAdhesion">deleteSetupAdhesion</a></li><li><a href="global.html#deliverDirectMessages">deliverDirectMessages</a></li><li><a href="global.html#deliverToAuthor">deliverToAuthor</a></li><li><a href="global.html#deliverToChannel">deliverToChannel</a></li><li><a href="global.html#deliverToMembers">deliverToMembers</a></li><li><a href="global.html#deliverToRecipients">deliverToRecipients</a></li><li><a href="global.html#deliverToTargets">deliverToTargets</a></li><li><a href="global.html#describeError">describeError</a></li><li><a href="global.html#describeLiveIssue">describeLiveIssue</a></li><li><a href="global.html#deterministicColor">deterministicColor</a></li><li><a href="global.html#discordCode">discordCode</a></li><li><a href="global.html#discordJsonCode">discordJsonCode</a></li><li><a href="global.html#displayChannelFilter">displayChannelFilter</a></li><li><a href="global.html#displayChannelRankFilter">displayChannelRankFilter</a></li><li><a href="global.html#displayNameLabel">displayNameLabel</a></li><li><a href="global.html#displaySetupAdhesion">displaySetupAdhesion</a></li><li><a href="global.html#downloadAttachment">downloadAttachment</a></li><li><a href="global.html#dropTarget">dropTarget</a></li><li><a href="global.html#eraseGuild">eraseGuild</a></li><li><a href="global.html#eraseLeftGuild">eraseLeftGuild</a></li><li><a href="global.html#errorCode">errorCode</a></li><li><a href="global.html#errorIsError">errorIsError</a></li><li><a href="global.html#errorTrace">errorTrace</a></li><li><a href="global.html#escapeLinkLabel">escapeLinkLabel</a></li><li><a href="global.html#execCommand">execCommand</a></li><li><a href="global.html#expandHome">expandHome</a></li><li><a href="global.html#extractRanks">extractRanks</a></li><li><a href="global.html#failedSourceLabel">failedSourceLabel</a></li><li><a href="global.html#failureDetail">failureDetail</a></li><li><a href="global.html#fetchAllMembersOnce">fetchAllMembersOnce</a></li><li><a href="global.html#fetchArchive">fetchArchive</a></li><li><a href="global.html#fetchAuthor">fetchAuthor</a></li><li><a href="global.html#fetchGuild">fetchGuild</a></li><li><a href="global.html#fetchHomeGuilds">fetchHomeGuilds</a></li><li><a href="global.html#fetchRoleMembers">fetchRoleMembers</a></li><li><a href="global.html#fetchServer">fetchServer</a></li><li><a href="global.html#fetchTargets">fetchTargets</a></li><li><a href="global.html#fillBlueCommands">fillBlueCommands</a></li><li><a href="global.html#filterArchiveNames">filterArchiveNames</a></li><li><a href="global.html#findGuildMemberByHandle">findGuildMemberByHandle</a></li><li><a href="global.html#findHomeMember">findHomeMember</a></li><li><a href="global.html#findMemberIn">findMemberIn</a></li><li><a href="global.html#findMissingCommand">findMissingCommand</a></li><li><a href="global.html#findTargetChannels">findTargetChannels</a></li><li><a href="global.html#forgetDeletedChannels">forgetDeletedChannels</a></li><li><a href="global.html#forgetDepartedGuilds">forgetDepartedGuilds</a></li><li><a href="global.html#forgetGuildDeletedChannels">forgetGuildDeletedChannels</a></li><li><a href="global.html#forgetLiveIssue">forgetLiveIssue</a></li><li><a href="global.html#formatBackupChecks">formatBackupChecks</a></li><li><a href="global.html#formatBackupStatus">formatBackupStatus</a></li><li><a href="global.html#formatBytes">formatBytes</a></li><li><a href="global.html#formatCadence">formatCadence</a></li><li><a href="global.html#formatDiskUsage">formatDiskUsage</a></li><li><a href="global.html#formatLiveAnnouncement">formatLiveAnnouncement</a></li><li><a href="global.html#formatPlayerStats">formatPlayerStats</a></li><li><a href="global.html#formatRawRanks">formatRawRanks</a></li><li><a href="global.html#formatSiteVisitStats">formatSiteVisitStats</a></li><li><a href="global.html#formatSnapshotAge">formatSnapshotAge</a></li><li><a href="global.html#formatTarget">formatTarget</a></li><li><a href="global.html#formatTournamentLinks">formatTournamentLinks</a></li><li><a href="global.html#fullyDecoded">fullyDecoded</a></li><li><a href="global.html#getAdhesion">getAdhesion</a></li><li><a href="global.html#getAdminRole">getAdminRole</a></li><li><a href="global.html#getBacklog">getBacklog</a></li><li><a href="global.html#getBddInstance">getBddInstance</a></li><li><a href="global.html#getCpuPercent">getCpuPercent</a></li><li><a href="global.html#getDiskUsage">getDiskUsage</a></li><li><a href="global.html#getInviteFromChannel">getInviteFromChannel</a></li><li><a href="global.html#getInviteFromMessage">getInviteFromMessage</a></li><li><a href="global.html#getReporter">getReporter</a></li><li><a href="global.html#getServicesAndID">getServicesAndID</a></li><li><a href="global.html#getSnapshotsBetween">getSnapshotsBetween</a></li><li><a href="global.html#getTargetRegions">getTargetRegions</a></li><li><a href="global.html#getTips">getTips</a></li><li><a href="global.html#hasTarget">hasTarget</a></li><li><a href="global.html#hasUrlBreak">hasUrlBreak</a></li><li><a href="global.html#homeGuildIds">homeGuildIds</a></li><li><a href="global.html#inFlight">inFlight</a></li><li><a href="global.html#initialIteration">initialIteration</a></li><li><a href="global.html#installProcessGuards">installProcessGuards</a></li><li><a href="global.html#isAllowedStreamUrl">isAllowedStreamUrl</a></li><li><a href="global.html#isBackupFresh">isBackupFresh</a></li><li><a href="global.html#isBlueGenjiGuild">isBlueGenjiGuild</a></li><li><a href="global.html#isDiscordInvite">isDiscordInvite</a></li><li><a href="global.html#isEveryoneRole">isEveryoneRole</a></li><li><a href="global.html#isExecutable">isExecutable</a></li><li><a href="global.html#isGone">isGone</a></li><li><a href="global.html#isIgnorableDiscordError">isIgnorableDiscordError</a></li><li><a href="global.html#isInheritedEnvKey">isInheritedEnvKey</a></li><li><a href="global.html#isLiveIssueFinal">isLiveIssueFinal</a></li><li><a href="global.html#isLoopbackHost">isLoopbackHost</a></li><li><a href="global.html#isMissingBinary">isMissingBinary</a></li><li><a href="global.html#isModuleEnabled">isModuleEnabled</a></li><li><a href="global.html#isNativeError">isNativeError</a></li><li><a href="global.html#isSnowflake">isSnowflake</a></li><li><a href="global.html#isTournamentLinkKind">isTournamentLinkKind</a></li><li><a href="global.html#isTransientNetworkError">isTransientNetworkError</a></li><li><a href="global.html#isValidModule">isValidModule</a></li><li><a href="global.html#leadershipIds">leadershipIds</a></li><li><a href="global.html#leadsElsewhere">leadsElsewhere</a></li><li><a href="global.html#listArchives">listArchives</a></li><li><a href="global.html#listModules">listModules</a></li><li><a href="global.html#listOrExplain">listOrExplain</a></li><li><a href="global.html#listPartner">listPartner</a></li><li><a href="global.html#liveAnnouncementNonce">liveAnnouncementNonce</a></li><li><a href="global.html#liveFailureReport">liveFailureReport</a></li><li><a href="global.html#liveFailureVerdict">liveFailureVerdict</a></li><li><a href="global.html#loadAdhesionAttachments">loadAdhesionAttachments</a></li><li><a href="global.html#loadAdhesionFiles">loadAdhesionFiles</a></li><li><a href="global.html#loadAdhesionPaths">loadAdhesionPaths</a></li><li><a href="global.html#logAdhesion">logAdhesion</a></li><li><a href="global.html#logAdhesionError">logAdhesionError</a></li><li><a href="global.html#logDistributionError">logDistributionError</a></li><li><a href="global.html#logFailure">logFailure</a></li><li><a href="global.html#logRefusalHandled">logRefusalHandled</a></li><li><a href="global.html#manageDistribution">manageDistribution</a></li><li><a href="global.html#manageMsgExpiration">manageMsgExpiration</a></li><li><a href="global.html#manageOldFiles">manageOldFiles</a></li><li><a href="global.html#manageServiceSuccess">manageServiceSuccess</a></li><li><a href="global.html#manualPostSentence">manualPostSentence</a></li><li><a href="global.html#matchesToken">matchesToken</a></li><li><a href="global.html#maxSnowflake">maxSnowflake</a></li><li><a href="global.html#memberDeliveredNotice">memberDeliveredNotice</a></li><li><a href="global.html#memberFailedLine">memberFailedLine</a></li><li><a href="global.html#memberMatchesHandle">memberMatchesHandle</a></li><li><a href="global.html#membersFailedNotice">membersFailedNotice</a></li><li><a href="global.html#messages">messages</a></li><li><a href="global.html#missingCommandText">missingCommandText</a></li><li><a href="global.html#neutralizeLinks">neutralizeLinks</a></li><li><a href="global.html#neutralizeMassMentions">neutralizeMassMentions</a></li><li><a href="global.html#newChannelPartner">newChannelPartner</a></li><li><a href="global.html#nextTips">nextTips</a></li><li><a href="global.html#nextTransmissionAfter">nextTransmissionAfter</a></li><li><a href="global.html#noRecipientNotice">noRecipientNotice</a></li><li><a href="global.html#normalizeInvite">normalizeInvite</a></li><li><a href="global.html#normalizeLegacyChoice">normalizeLegacyChoice</a></li><li><a href="global.html#normalizeText">normalizeText</a></li><li><a href="global.html#normalizeTournamentLink">normalizeTournamentLink</a></li><li><a href="global.html#notifyBannedUser">notifyBannedUser</a></li><li><a href="global.html#notifyRoleUnreadable">notifyRoleUnreadable</a></li><li><a href="global.html#olderThanRetention">olderThanRetention</a></li><li><a href="global.html#ownsDatabase">ownsDatabase</a></li><li><a href="global.html#parisDaysLater">parisDaysLater</a></li><li><a href="global.html#parisOffsetMs">parisOffsetMs</a></li><li><a href="global.html#parisWallClock">parisWallClock</a></li><li><a href="global.html#parseDirectMessageRequest">parseDirectMessageRequest</a></li><li><a href="global.html#parseDiscordHandle">parseDiscordHandle</a></li><li><a href="global.html#parseEnvFile">parseEnvFile</a></li><li><a href="global.html#parseLiveAnnouncement">parseLiveAnnouncement</a></li><li><a href="global.html#parseRecipients">parseRecipients</a></li><li><a href="global.html#parseRefereeAlert">parseRefereeAlert</a></li><li><a href="global.html#parseSiteVisitStats">parseSiteVisitStats</a></li><li><a href="global.html#parseTarListing">parseTarListing</a></li><li><a href="global.html#partialFailureText">partialFailureText</a></li><li><a href="global.html#pickArchive">pickArchive</a></li><li><a href="global.html#pickAttachment">pickAttachment</a></li><li><a href="global.html#ping">ping</a></li><li><a href="global.html#pipelineFailureText">pipelineFailureText</a></li><li><a href="global.html#postToAdminChannel">postToAdminChannel</a></li><li><a href="global.html#postponeForRole">postponeForRole</a></li><li><a href="global.html#printHelp">printHelp</a></li><li><a href="global.html#pruneLiveLogs">pruneLiveLogs</a></li><li><a href="global.html#publishableStreamUrl">publishableStreamUrl</a></li><li><a href="global.html#purgeFeedIdentifiers">purgeFeedIdentifiers</a></li><li><a href="global.html#purgeLogChannel">purgeLogChannel</a></li><li><a href="global.html#purgeOldFeedEvents">purgeOldFeedEvents</a></li><li><a href="global.html#purgeOldRollbacks">purgeOldRollbacks</a></li><li><a href="global.html#purgeStaffLogs">purgeStaffLogs</a></li><li><a href="global.html#queryInteger">queryInteger</a></li><li><a href="global.html#quoteLines">quoteLines</a></li><li><a href="global.html#rankChoices">rankChoices</a></li><li><a href="global.html#readAdhesionPaths">readAdhesionPaths</a></li><li><a href="global.html#readAdhesionRoleMembers">readAdhesionRoleMembers</a></li><li><a href="global.html#readBackupStatus">readBackupStatus</a></li><li><a href="global.html#readOptionalFile">readOptionalFile</a></li><li><a href="global.html#readPackageInfo">readPackageInfo</a></li><li><a href="global.html#readPermissions">readPermissions</a></li><li><a href="global.html#readRefereeMembers">readRefereeMembers</a></li><li><a href="global.html#readRoleMembers">readRoleMembers</a></li><li><a href="global.html#readSiteVisitStats">readSiteVisitStats</a></li><li><a href="global.html#recipientCapNotice">recipientCapNotice</a></li><li><a href="global.html#recordDailySnapshot">recordDailySnapshot</a></li><li><a href="global.html#recordEvent">recordEvent</a></li><li><a href="global.html#recrute">recrute</a></li><li><a href="global.html#refuse">refuse</a></li><li><a href="global.html#refuseRecipients">refuseRecipients</a></li><li><a href="global.html#refuseUnjoinedGuild">refuseUnjoinedGuild</a></li><li><a href="global.html#relay">relay</a></li><li><a href="global.html#relayStatus">relayStatus</a></li><li><a href="global.html#remainingIteration">remainingIteration</a></li><li><a href="global.html#reminderPostponedNotice">reminderPostponedNotice</a></li><li><a href="global.html#reminderRefusedSuffix">reminderRefusedSuffix</a></li><li><a href="global.html#remoteArchiveNames">remoteArchiveNames</a></li><li><a href="global.html#remotePath">remotePath</a></li><li><a href="global.html#remoteServerReset">remoteServerReset</a></li><li><a href="global.html#removeIntervalle">removeIntervalle</a></li><li><a href="global.html#reportDistribution">reportDistribution</a></li><li><a href="global.html#reportError">reportError</a></li><li><a href="global.html#reportMissingPaths">reportMissingPaths</a></li><li><a href="global.html#reportRestore">reportRestore</a></li><li><a href="global.html#resetBddInstance">resetBddInstance</a></li><li><a href="global.html#resetChannel">resetChannel</a></li><li><a href="global.html#resetLiveLogThrottle">resetLiveLogThrottle</a></li><li><a href="global.html#resetOwnerNoticeThrottle">resetOwnerNoticeThrottle</a></li><li><a href="global.html#resetRefereeRole">resetRefereeRole</a></li><li><a href="global.html#resetServer">resetServer</a></li><li><a href="global.html#resetServerInvite">resetServerInvite</a></li><li><a href="global.html#resolutionWaves">resolutionWaves</a></li><li><a href="global.html#resolveBddPath">resolveBddPath</a></li><li><a href="global.html#resolveChannel">resolveChannel</a></li><li><a href="global.html#resolveCommand">resolveCommand</a></li><li><a href="global.html#resolveDiscordHandle">resolveDiscordHandle</a></li><li><a href="global.html#resolveMember">resolveMember</a></li><li><a href="global.html#resolveRole">resolveRole</a></li><li><a href="global.html#resolveScriptPath">resolveScriptPath</a></li><li><a href="global.html#resolveServerId">resolveServerId</a></li><li><a href="global.html#resolveTargetRegions">resolveTargetRegions</a></li><li><a href="global.html#resolveTournamentLinks">resolveTournamentLinks</a></li><li><a href="global.html#restoreBackup">restoreBackup</a></li><li><a href="global.html#restoreDatabase">restoreDatabase</a></li><li><a href="global.html#restoreFailureText">restoreFailureText</a></li><li><a href="global.html#resumePoints">resumePoints</a></li><li><a href="global.html#retrySentence">retrySentence</a></li><li><a href="global.html#roleReader">roleReader</a></li><li><a href="global.html#roleUnreadableNotice">roleUnreadableNotice</a></li><li><a href="global.html#rollbackTimestamp">rollbackTimestamp</a></li><li><a href="global.html#runBackupChecks">runBackupChecks</a></li><li><a href="global.html#runDataRetention">runDataRetention</a></li><li><a href="global.html#runDataRetentionOnce">runDataRetentionOnce</a></li><li><a href="global.html#runPipeline">runPipeline</a></li><li><a href="global.html#runSetupWizard">runSetupWizard</a></li><li><a href="global.html#safeChannel">safeChannel</a></li><li><a href="global.html#safeFollowUp">safeFollowUp</a></li><li><a href="global.html#safeMsgReply">safeMsgReply</a></li><li><a href="global.html#safeReact">safeReact</a></li><li><a href="global.html#safeReply">safeReply</a></li><li><a href="global.html#safeUser">safeUser</a></li><li><a href="global.html#saveAdhesionPaths">saveAdhesionPaths</a></li><li><a href="global.html#saveSiteVisitStats">saveSiteVisitStats</a></li><li><a href="global.html#scrim">scrim</a></li><li><a href="global.html#scrubFeedField">scrubFeedField</a></li><li><a href="global.html#scrubFeedText">scrubFeedText</a></li><li><a href="global.html#searchInWaves">searchInWaves</a></li><li><a href="global.html#searchString">searchString</a></li><li><a href="global.html#selectExpiredLogMessages">selectExpiredLogMessages</a></li><li><a href="global.html#selectExpiredRollbacks">selectExpiredRollbacks</a></li><li><a href="global.html#selectTargetedService">selectTargetedService</a></li><li><a href="global.html#sendAdhesion">sendAdhesion</a></li><li><a href="global.html#sendAdhesionReminder">sendAdhesionReminder</a></li><li><a href="global.html#sendDatabaseBackup">sendDatabaseBackup</a></li><li><a href="global.html#sendFailure">sendFailure</a></li><li><a href="global.html#sendInteractiveMsg">sendInteractiveMsg</a></li><li><a href="global.html#sendLog">sendLog</a></li><li><a href="global.html#sendLogConfirmed">sendLogConfirmed</a></li><li><a href="global.html#sendPrivately">sendPrivately</a></li><li><a href="global.html#sendServiceMessage">sendServiceMessage</a></li><li><a href="global.html#sendToAdmins">sendToAdmins</a></li><li><a href="global.html#sendToReferee">sendToReferee</a></li><li><a href="global.html#sendToTargets">sendToTargets</a></li><li><a href="global.html#servicesChoices">servicesChoices</a></li><li><a href="global.html#servicesWithNoRanks">servicesWithNoRanks</a></li><li><a href="global.html#setBotAdminRole">setBotAdminRole</a></li><li><a href="global.html#setChannelFilter">setChannelFilter</a></li><li><a href="global.html#setChannelRankFilter">setChannelRankFilter</a></li><li><a href="global.html#setModuleEnabled">setModuleEnabled</a></li><li><a href="global.html#setRankFilter">setRankFilter</a></li><li><a href="global.html#setRefereeRole">setRefereeRole</a></li><li><a href="global.html#setServerInvite">setServerInvite</a></li><li><a href="global.html#setTournamentLink">setTournamentLink</a></li><li><a href="global.html#setupIntervalAdhesion">setupIntervalAdhesion</a></li><li><a href="global.html#shouldLogLiveIssue">shouldLogLiveIssue</a></li><li><a href="global.html#showBotAdminRole">showBotAdminRole</a></li><li><a href="global.html#showRefereeRole">showRefereeRole</a></li><li><a href="global.html#showServerInvite">showServerInvite</a></li><li><a href="global.html#shutdown">shutdown</a></li><li><a href="global.html#shuttingDown">shuttingDown</a></li><li><a href="global.html#sparklineFromBuckets">sparklineFromBuckets</a></li><li><a href="global.html#spawnCommand">spawnCommand</a></li><li><a href="global.html#splitForDiscord">splitForDiscord</a></li><li><a href="global.html#startInternalApi">startInternalApi</a></li><li><a href="global.html#statsPlayer">statsPlayer</a></li><li><a href="global.html#statsSite">statsSite</a></li><li><a href="global.html#stopProcess">stopProcess</a></li><li><a href="global.html#subscribe">subscribe</a></li><li><a href="global.html#toSQLiteDate">toSQLiteDate</a></li><li><a href="global.html#tournoi">tournoi</a></li><li><a href="global.html#truncateMessage">truncateMessage</a></li><li><a href="global.html#ts">ts</a></li><li><a href="global.html#unban">unban</a></li><li><a href="global.html#unlinkedFrom">unlinkedFrom</a></li><li><a href="global.html#updateCommands">updateCommands</a></li><li><a href="global.html#validateSqliteFile">validateSqliteFile</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Wed Oct 14 2026 04:10:36 GMT+0200 (heure d’été d’Europe centrale)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>
