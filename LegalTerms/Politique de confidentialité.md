@@ -51,7 +51,7 @@ Le fil d'activité public de la page du bot ne contient aucun identifiant Discor
 
 ### Base légale
 
-Ces traitements reposent sur l'**intérêt légitime** de l'association (article 6.1.f du RGPD) : faire fonctionner le relais entre serveurs partenaires, le modérer et en mesurer l'activité. Les messages du site reposent sur la base légale de leur traitement d'origine, indiquée dans le registre du site : intérêt légitime pour les messages privés de match d'un joueur (horaire, rappels, « Match retiré »), auxquels il s'oppose par l'interrupteur de « Mon profil » — le site garde ce choix dans son intérêt légitime, pour l'honorer ; exécution du service auquel le joueur s'inscrit pour son pseudo public dans l'annonce #live d'un tournoi individuel.
+Ces traitements reposent sur l'**intérêt légitime** de l'association (article 6.1.f du RGPD) : faire fonctionner le relais entre serveurs partenaires, le modérer et en mesurer l'activité. Les messages du site reposent sur la base légale de leur traitement d'origine, indiquée dans le registre du site : intérêt légitime pour les messages privés de match d'un joueur (horaire, rappels, « Match retiré »), auxquels il s'oppose par l'interrupteur de « Mon profil » — le site garde ce choix dans l'intérêt légitime du joueur, pour l'honorer ; exécution du service auquel le joueur s'inscrit pour son pseudo public dans l'annonce #live d'un tournoi individuel.
 
 ---
 
