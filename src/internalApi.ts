@@ -536,6 +536,14 @@ export function startInternalApi(client: Client) {
    * lent ne doit pas faire depasser le delai du site.
    */
   app.post("/internal/announce/live", async (req: Request, res: Response) => {
+    // La seule route qui notifie tout le serveur exige le jeton, même sur la
+    // boucle locale : un processus de la machine, ou une requête que le site
+    // se laisserait forger vers 127.0.0.1, ne doit pas suffire à réveiller
+    // 1 200 membres.
+    if (!process.env.INTERNAL_API_TOKEN) {
+      res.status(503).json({ error: "INTERNAL_API_TOKEN_NOT_CONFIGURED" });
+      return;
+    }
     const request = parseLiveAnnouncement(req.body);
     if (!request) {
       res.status(400).json({ error: "INVALID_LIVE_ANNOUNCEMENT" });

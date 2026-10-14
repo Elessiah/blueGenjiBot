@@ -400,27 +400,60 @@ export class LiveChannelUnavailableError extends Error {
 }
 
 /**
- * Vrai si le lien est une diffusion acceptable : `https`, hôte de la liste
- * blanche, sans identifiants ni port, 255 caractères au plus. Seconde barrière
- * — le site valide déjà —, parce que ce lien part devant tout le serveur.
+ * Vrai si le lien contient une espace ou un caractère de contrôle : `new URL`
+ * les tolère (ou les retire), Discord y lirait du texte.
+ */
+function hasUrlBreak(value: string): boolean {
+  if (/\s/u.test(value)) { return true; }
+  return [...value].some((char) => {
+    const code = char.codePointAt(0) ?? 0;
+    return code < 0x20 || (code >= 0x7f && code <= 0x9f);
+  });
+}
+
+/**
+ * Forme publiable du lien : `https`, hôte de la liste blanche, sans
+ * identifiants ni port, 255 caractères au plus, sans espace ni caractère de
+ * contrôle. Seconde barrière — le site valide déjà —, parce que ce lien part
+ * devant tout le serveur.
+ *
+ * C'est la forme **normalisée** (`href`) qui est publiée, pas la chaîne reçue :
+ * `new URL` accepte `https://www.twitch.tv/x [Live](https://piege.example)`
+ * (espace encodée), et `<`, `>` d'une ancre (`#<@&rôle>`) n'y restent que
+ * percent-encodés — ni texte ajouté, ni lien masqué, ni mention.
+ *
+ * @param value Lien reçu.
+ * @returns Le lien à publier, ou `null` s'il est refusé.
+ */
+export function publishableStreamUrl(value: string): string | null {
+  if (value.length > MAX_STREAM_URL_LENGTH || hasUrlBreak(value)) { return null; }
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return null;
+  }
+  const allowed = url.protocol === "https:"
+    && url.username === ""
+    && url.password === ""
+    && url.port === ""
+    && LIVE_HOSTS.has(url.hostname.toLowerCase());
+  if (!allowed || url.href.length > MAX_STREAM_URL_LENGTH) { return null; }
+  return url.href;
+}
+
+/**
+ * Vrai si le lien est une diffusion acceptable ({@link publishableStreamUrl}).
  *
  * @param value Lien reçu.
  * @returns `true` si le lien peut être publié.
  */
 export function isAllowedStreamUrl(value: string): boolean {
-  if (value.length > MAX_STREAM_URL_LENGTH) { return false; }
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    return false;
-  }
-  return url.protocol === "https:"
-    && url.username === ""
-    && url.password === ""
-    && url.port === ""
-    && LIVE_HOSTS.has(url.hostname.toLowerCase());
+  return publishableStreamUrl(value) !== null;
 }
+
+/** Caractères d'une étiquette `context` du site (`live-announce tournoi-7 match-12,13,…+4`). */
+const CONTEXT_UNSAFE = /[^A-Za-z0-9 ,+…_-]/gu;
 
 /**
  * Valide le corps d'une annonce de live.
@@ -432,11 +465,15 @@ export function parseLiveAnnouncement(payload: unknown): LiveAnnouncementRequest
   if (typeof payload !== "object" || payload === null || Array.isArray(payload)) { return null; }
   const raw = payload as Record<string, unknown>;
   const message = typeof raw.message === "string" ? raw.message.trim() : "";
-  const streamUrl = typeof raw.streamUrl === "string" ? raw.streamUrl.trim() : "";
-  if (!message || !isAllowedStreamUrl(streamUrl)) { return null; }
+  const streamUrl = publishableStreamUrl(typeof raw.streamUrl === "string" ? raw.streamUrl.trim() : "");
+  if (!message || !streamUrl) { return null; }
   // Assez long pour la liste des matchs d'un groupe (`live-announce match-12,13,…`).
   // Coupée d'un « … » visible : un identifiant tronqué ne passe pas pour un autre.
-  const context = typeof raw.context === "string" && raw.context.trim() ? cutText(raw.context.trim(), MAX_LIVE_CONTEXT_LENGTH) : "live-announce";
+  // Écrite telle quelle dans pm2 et au canal de logs : hors des caractères
+  // du site, rien ne passe (ni saut de ligne qui forgerait une ligne de
+  // journal, ni balisage qui ferait un lien masqué).
+  const rawContext = typeof raw.context === "string" ? raw.context.trim().replace(CONTEXT_UNSAFE, "_") : "";
+  const context = rawContext ? cutText(rawContext, MAX_LIVE_CONTEXT_LENGTH) : "live-announce";
   return { message: cutText(neutralizeMassMentions(message), MAX_LIVE_MESSAGE_LENGTH), streamUrl, context };
 }
 

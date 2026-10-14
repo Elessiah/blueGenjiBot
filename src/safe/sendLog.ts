@@ -106,7 +106,9 @@ async function sendLogConfirmed(client: Client, message: string): Promise<boolea
     if (!admin_channel || typeof admin_channel.send !== "function")
         return true;
     try {
-        await admin_channel.send(message);
+        // Aucune mention ne notifie : le signalement cite un texte et un lien
+        // venus du site, qui ne doivent appeler ni un rôle ni une personne.
+        await admin_channel.send({ content: message, allowedMentions: { parse: [] } });
         return true;
     } catch (error) {
         console.error("Erreur while sending to the admin channel : ", describeError(error));
