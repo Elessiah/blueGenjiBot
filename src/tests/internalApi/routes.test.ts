@@ -75,6 +75,8 @@ const state = {
   cacheThrows: false,
   /** L'envoi d'une annonce de live (message à options) lève cette erreur. */
   liveSendError: null as Error | null,
+  /** Envois au canal de logs refusés avant le premier qui passe (limite de débit). */
+  logSendFailures: 0,
 };
 
 function member(id: string, username: string): FakeMember {
@@ -142,6 +144,10 @@ const fakeClient = {
     fetch: async () => ({
       send: async (text: string) => {
         if (typeof text !== "string" && state.liveSendError) { throw state.liveSendError; }
+        if (typeof text === "string" && state.logSendFailures > 0) {
+          state.logSendFailures--;
+          throw Object.assign(new Error("Rate limited"), { code: 429 });
+        }
         state.logs.push(text);
         return { id: "log" };
       },
@@ -180,6 +186,7 @@ test.beforeEach(() => {
   state.onSearch = () => {};
   state.cacheThrows = false;
   state.liveSendError = null;
+  state.logSendFailures = 0;
   resetLiveLogThrottle();
   process.env.INTERNAL_API_TOKEN = TOKEN;
   process.env.INTERNAL_API_HOST = "127.0.0.1";
@@ -838,6 +845,27 @@ test("/internal/announce/live : envoi refusé → 503, puis un seul signalement 
   assert.equal(res.status, 503);
   await new Promise((r) => setTimeout(r, 20));
   assert.equal(state.logs.length, 1);
+});
+
+test("/internal/announce/live : un signalement refusé par le canal de logs n'étrangle pas le suivant", async () => {
+  state.liveSendError = Object.assign(new Error("Missing Permissions"), { code: 50013 });
+  state.logSendFailures = 1;
+  const body = { message: "Alpha contre Beta — Coupe", streamUrl: "https://twitch.tv/bluegenji", context: "live-announce match-4" };
+  const original = console.error;
+  console.error = () => undefined;
+  try {
+    let res = await call("/internal/announce/live", { body });
+    assert.equal(res.status, 503);
+    await new Promise((r) => setTimeout(r, 30));
+    assert.equal(state.logs.length, 0, "premier signalement perdu");
+    // Nouvel essai du site : la cause est signalée, au lieu d'une heure de silence.
+    res = await call("/internal/announce/live", { body });
+    assert.equal(res.status, 503);
+    for (let i = 0; i < 50 && state.logs.length === 0; i++) { await new Promise((r) => setTimeout(r, 5)); }
+    assert.equal(state.logs.length, 1);
+  } finally {
+    console.error = original;
+  }
 });
 
 test("/internal/announce/live : un texte d'erreur démesuré ne fait pas déborder le signalement", async () => {

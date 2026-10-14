@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 process.env.OWNER_ID = "owner-1";
 process.env.INFO_SERV = "admin-channel-1";
 
-import { sendLog } from "../../safe/sendLog.js";
+import { sendLog, sendLogConfirmed } from "../../safe/sendLog.js";
 import type { idSendLogMsg } from "../../safe/types.js";
 import type { Client } from "discord.js";
 
@@ -173,4 +173,30 @@ test("copie au titulaire refusée trois fois : le salon n'est jamais servi", asy
   const r = await run({ ownerSendFailures: 3 }, { message: "X", copyToOwner: true });
   assert.equal(r.ok, false);
   assert.ok(!r.trace.some((line) => line.startsWith("channels.fetch")));
+});
+
+async function runConfirmed(setup: Setup, message: string) {
+  const trace: string[] = [];
+  const original = console.error;
+  console.error = () => undefined;
+  try {
+    const ok = await sendLogConfirmed(fakeClient(trace, setup), message);
+    return { ok, trace };
+  } finally {
+    console.error = original;
+  }
+}
+
+test("sendLogConfirmed : vrai seulement si le salon de supervision a reçu le message, sans copie au titulaire", async () => {
+  const r = await runConfirmed({}, "Signalement");
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.trace, ["users.fetch owner-1", "channels.fetch admin-channel-1", "admin.send Signalement"]);
+});
+
+test("sendLogConfirmed : un envoi refusé ou un salon illisible rend faux (sendLog le compte fait)", async () => {
+  for (const channel of ["send-throws", "fetch-throws", "missing-access", "null"] as const) {
+    assert.equal((await runConfirmed({ channel }, "X")).ok, false, channel);
+  }
+  // Comportement d'origine inchangé pour les autres appelants.
+  assert.equal((await run({ channel: "send-throws" }, { message: "X" })).ok, true);
 });
