@@ -417,9 +417,11 @@ const REDIRECT_PATHS = /^\/(redirect|attribution_link)(\/|$)/i;
 /**
  * Ce qui, une fois décodé, désigne une autre adresse : un schéma suivi d'une
  * barre (`https://`, `https:\\` que les navigateurs lisent pareil), ou une
- * adresse sans schéma (`//hôte`, `\\hôte`).
+ * adresse sans schéma (`//hôte`, `\\hôte`). Un caractère de contrôle décodé
+ * (tabulation, saut de ligne) est refusé aussi : les navigateurs le retirent
+ * avant de lire l'adresse, si bien que `/%09/hôte` vaut `//hôte`.
  */
-const EMBEDDED_ADDRESS = /:[\\/]|[\\/]{2}|\\/;
+const EMBEDDED_ADDRESS = /:[\\/]|[\\/]{2}|\\|\p{Cc}/u;
 
 /** Décode jusqu'à stabilité (trois passes au plus) ; `null` si illisible ou encore encodé. */
 function fullyDecoded(value: string): string | null {
