@@ -106,6 +106,18 @@ test("parseLiveAnnouncement : seul streamUrl est cliquable, le texte ne porte ni
   assert.equal(request.message.replace(/\u200B/g, ""), "🔴 En direct : [Twitch](https://piege.example) contre https://piege.example — T");
 });
 
+test("parseLiveAnnouncement : ni message ni logMessage ne rendent une mention de membre, rôle ou salon", () => {
+  const forged = "<@123456789012345678> contre <@!123456789012345678> — <@&123456789012345678> <#123456789012345678>";
+  const request = parseLiveAnnouncement({ ...REQUEST, message: forged, logMessage: forged });
+  assert.ok(request);
+  for (const text of [request.message, request.logMessage ?? ""]) {
+    assert.ok(!/<[@#]/.test(text), text);
+    assert.equal(text.replace(/\u200B/g, ""), forged);
+  }
+  // Le texte du site, sans chevron, ne change pas.
+  assert.equal(parseLiveAnnouncement({ ...REQUEST, message: "Alpha <3 contre Beta" })?.message, "Alpha <3 contre Beta");
+});
+
 test("parseLiveAnnouncement : un lien ne transporte ni texte, ni lien masqué, ni mention", () => {
   // `new URL` accepte ces chaînes avec l'hôte www.twitch.tv : seule la forme
   // normalisée part, et une espace ou un saut de ligne font refuser le lien.
