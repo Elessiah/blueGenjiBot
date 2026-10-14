@@ -203,8 +203,9 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     réessaie ne se poste pas à la main pendant ces deux heures. Le canal de
     logs ne reçoit jamais de mention de masse : « @everyone » et « @here » y
     sont neutralisés.
-    Un signalement que le canal de logs n'a pas reçu ne compte pas : le
-    suivant partira.
+    Un signalement qui n'a pas pu partir (canal de logs illisible, Discord
+    surchargé) ne compte pas : le suivant partira. Un envoi tenté sans
+    réponse claire compte, pour ne pas doubler un signalement arrivé.
   - Chaque envoi porte un jeton d'unicité (`nonce`, `enforceNonce`) tiré de
     l'étiquette et du lien : Discord ne crée pas deux fois ce même envoi s'il
     est rejoué dans les quelques minutes (nouvel essai interne de discord.js
