@@ -187,16 +187,25 @@ async function runConfirmed(setup: Setup, message: string) {
   }
 }
 
-test("sendLogConfirmed : vrai seulement si le salon de supervision a reçu le message, sans copie au titulaire", async () => {
+test("sendLogConfirmed : vrai seulement si le salon de supervision a reçu le message, sans lire le titulaire", async () => {
   const r = await runConfirmed({}, "Signalement");
   assert.equal(r.ok, true);
-  assert.deepEqual(r.trace, ["users.fetch owner-1", "channels.fetch admin-channel-1", "admin.send Signalement"]);
+  assert.deepEqual(r.trace, ["channels.fetch admin-channel-1", "admin.send Signalement"]);
+  // Un titulaire illisible n'empêche pas le signalement.
+  assert.equal((await runConfirmed({ ownerFetchFailures: Infinity }, "Y")).ok, true);
 });
 
-test("sendLogConfirmed : un envoi refusé ou un salon illisible rend faux (sendLog le compte fait)", async () => {
-  for (const channel of ["send-throws", "fetch-throws", "missing-access", "null"] as const) {
+test("sendLogConfirmed : un envoi refusé en passant ou un salon illisible rend faux (sendLog le compte fait)", async () => {
+  for (const channel of ["send-throws", "fetch-throws", "null"] as const) {
     assert.equal((await runConfirmed({ channel }, "X")).ok, false, channel);
   }
   // Comportement d'origine inchangé pour les autres appelants.
   assert.equal((await run({ channel: "send-throws" }, { message: "X" })).ok, true);
+});
+
+test("sendLogConfirmed : un accès refusé avertit le titulaire et compte comme traité", async () => {
+  const r = await runConfirmed({ channel: "missing-access" }, "X");
+  assert.equal(r.ok, true, "sinon chaque nouvel essai réécrirait au titulaire");
+  assert.deepEqual(r.trace, ["channels.fetch admin-channel-1", "users.fetch owner-1", "owner.send Missing Access to admin channel"]);
+  assert.equal((await runConfirmed({ channel: "missing-access", ownerNoticeFails: true }, "X")).ok, true);
 });
