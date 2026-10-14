@@ -2,7 +2,7 @@
 
 # Politique de Confidentialité — BlueGenji Bot
 
-**Dernière mise à jour** : 16 octobre 2026
+**Dernière mise à jour** : 15 octobre 2026
 
 > Copie du texte publié sur [https://bluegenji-esport.fr/privacy-policy-bot](https://bluegenji-esport.fr/privacy-policy-bot), **qui fait foi** en cas de divergence. Ne modifiez pas ce fichier à la main : il est régénéré depuis le site (`lib/shared/bot-legal-content.ts` d'AppBlueGenji).
 
@@ -43,7 +43,7 @@ Identifiants des serveurs, salons et rôles configurés, invitation du serveur, 
 
 ### Messages du site BlueGenji
 
-Le site transmet au Bot un identifiant ou un pseudo Discord, le pseudo BlueGenji du destinataire et le message à remettre (code de connexion, horaire ou rappel de match, alerte d'arbitrage, signalement ; avis de modération — signalement vous désignant, logo d'équipe masqué, retiré ou supprimé — ; demande d'adhésion à une équipe que vous gérez ; information sur les données) ; le Bot remet les messages personnels (code, horaire, rappel, avis de modération, demande d'adhésion, information) en message privé **sans les enregistrer** ; un joueur peut couper ceux de ses matchs (horaire, rappel, retrait d'un match) dans « Mon profil » sur le site. Les alertes d'arbitrage et les signalements, qui ne nomment aucun joueur (noms d'équipe et liens de tournoi seulement), sont en outre publiés dans le salon de journal privé du staff ; les alertes d'arbitrage partent aussi en message privé aux membres du rôle d'arbitrage de chaque serveur qui en a défini un (**/set-referee-role**), les signalements à la direction de l'association. Au début d'un match diffusé, le site transmet aussi au Bot une annonce (noms des deux équipes — en tournoi individuel, le pseudo public BlueGenji de chaque joueur, « un joueur » pour une entrée sans compte, un compte supprimé ou une inscription antérieure au 16 octobre 2026 —, nom du tournoi et lien de la diffusion), que le Bot publie dans le salon #live du serveur Discord de l'association avec une mention @everyone. Ces traitements relèvent de la [politique de confidentialité du site](https://bluegenji-esport.fr/rgpd).
+Le site transmet au Bot un identifiant ou un pseudo Discord, le pseudo BlueGenji du destinataire et le message à remettre (code de connexion, horaire ou rappel de match, avis de retrait d'un match (« Match retiré »), alerte d'arbitrage, signalement ; avis de modération — signalement vous désignant, logo d'équipe masqué, retiré ou supprimé — ; demande d'adhésion à une équipe que vous gérez ; information sur les données) ; le Bot remet les messages personnels (code, horaire, rappel, retrait d'un match, avis de modération, demande d'adhésion, information) en message privé **sans les enregistrer** ; un joueur peut couper ceux de ses matchs (horaire, rappel, retrait d'un match) dans « Mon profil » sur le site. Les alertes d'arbitrage et les signalements, qui ne nomment aucun joueur (noms d'équipe et liens de tournoi seulement), sont en outre publiés dans le salon de journal privé du staff ; les alertes d'arbitrage partent aussi en message privé aux membres du rôle d'arbitrage de chaque serveur qui en a défini un (**/set-referee-role**), les signalements à la direction de l'association. Au début d'un match diffusé, le site transmet aussi au Bot une annonce (noms des deux équipes — en tournoi individuel, le pseudo public BlueGenji de chaque joueur, « un joueur » pour une entrée sans compte, un compte supprimé ou une inscription antérieure au 16 octobre 2026 —, nom du tournoi et lien de la diffusion), que le Bot publie dans le salon #live du serveur Discord de l'association avec une mention @everyone. Ces traitements relèvent de la [politique de confidentialité du site](https://bluegenji-esport.fr/rgpd).
 
 ### Journaux
 
@@ -51,7 +51,7 @@ Le fil d'activité public de la page du bot ne contient aucun identifiant Discor
 
 ### Base légale
 
-Ces traitements reposent sur l'**intérêt légitime** de l'association (article 6.1.f du RGPD) : faire fonctionner le relais entre serveurs partenaires, le modérer et en mesurer l'activité. Les messages du site reposent sur la base légale de leur traitement d'origine, indiquée dans le registre du site.
+Ces traitements reposent sur l'**intérêt légitime** de l'association (article 6.1.f du RGPD) : faire fonctionner le relais entre serveurs partenaires, le modérer et en mesurer l'activité. Les messages du site reposent sur la base légale de leur traitement d'origine, indiquée dans le registre du site : intérêt légitime pour les messages privés de match d'un joueur (horaire, rappels, « Match retiré »), auxquels il s'oppose par l'interrupteur de « Mon profil » — le site garde ce choix dans l'intérêt légitime du joueur, pour l'honorer ; exécution du service auquel le joueur s'inscrit pour son pseudo public dans l'annonce #live d'un tournoi individuel ; intérêt légitime de l'association à modérer son serveur pour l'alerte AutoMod d'une telle annonce bloquée ou signalée, supprimée sur demande.
 
 ---
 
@@ -65,7 +65,7 @@ Ces traitements reposent sur l'**intérêt légitime** de l'association (article
 - **Adhésions et rappels programmés** : jusqu'au dernier envoi du rappel (pour une adhésion, sa date de péremption) ou sa suppression, au plus tard jusqu'au départ du Bot du serveur où ils ont été enregistrés, qui les efface — départ survenu pendant une interruption compris, rattrapé au redémarrage.
 - **Salon de journal privé du staff** (et messages privés du Bot à son titulaire) : un an (365 jours) ; les messages du Bot plus anciens sont supprimés par le ménage de nuit, par lots (plusieurs nuits pour un arriéré important), sauf le motif publié au salon d'une exclusion en cours — et, pour une exclusion prononcée à partir de cette règle, son avis et la copie de son motif en message privé —, supprimés à sa levée.
 - **Journaux du serveur** : selon leur rotation automatique.
-- **Annonces #live** (début d'un match diffusé : noms d'équipe ou, en tournoi individuel, pseudo public BlueGenji des joueurs) : gardées dans le salon tant qu'il existe, même après la suppression du compte du joueur ; supprimées sur demande de l'équipe ou du joueur concerné (formulaire « Signaler un problème » du site, catégorie RGPD).
+- **Annonces #live** (début d'un match diffusé : noms d'équipe ou, en tournoi individuel, pseudo public BlueGenji des joueurs) : gardées dans le salon tant qu'il existe, même après la suppression du compte du joueur ; supprimées sur demande de l'équipe ou du joueur concerné (formulaire « Signaler un problème » du site, catégorie RGPD). Une annonce bloquée ou signalée par une règle AutoMod : son alerte reste dans le salon d'alertes de modération jusqu'à sa suppression par les modérateurs, et est supprimée sur demande de la même façon.
 - **Sauvegardes** : la base du Bot est sauvegardée chaque semaine, chiffrée, et chaque copie est supprimée définitivement au bout de 30 jours au plus. Une restauration se fait depuis ces archives, déchiffrées sur la machine du Bot : la base ne transite plus par Discord ; la copie de la base précédente qu'elle laisse à côté est supprimée à la restauration réussie suivante, au plus tard dans la nuit qui suit ses 30 jours.
 
 ---
@@ -79,6 +79,7 @@ Ces traitements reposent sur l'**intérêt légitime** de l'association (article
 - Les membres des serveurs partenaires, qui lisent les annonces relayées.
 - Les membres du rôle d'arbitrage de chaque serveur qui en a défini un, pour les alertes d'arbitrage du site.
 - Les membres du serveur Discord de l'association, qui lisent dans le salon #live l'annonce des matchs diffusés.
+- Les modérateurs du serveur Discord de l'association : si une règle AutoMod de Discord bloque ou signale une annonce #live, son texte (pseudo public compris en tournoi individuel) peut parvenir au salon d'alertes de modération du serveur.
 - Les administrateurs de tout serveur où le Bot est installé, et les titulaires du rôle d'administration du Bot que chaque serveur désigne (**/set-bot-admin**), qui peuvent lire la liste des exclusions (commande **/ban-list**, réponse visible du seul demandeur).
 - L'hébergeur technique, Keryan Houssin, qui fournit la machine sur laquelle tourne le Bot (un Raspberry Pi, à Caen) : sous-traitant.
 - Discord, plateforme sur laquelle le Bot fonctionne.
@@ -105,7 +106,7 @@ Vous disposez sur vos données des droits suivants :
 - **Rectification** : faire corriger une donnée inexacte.
 - **Effacement** : faire supprimer vos données ; certaines fonctions du Bot peuvent alors ne plus vous être rendues.
 - **Limitation** : faire geler l'utilisation d'une donnée le temps d'examiner une contestation.
-- **Opposition** : vous opposer, pour des raisons tenant à votre situation particulière, à un traitement fondé sur l'intérêt légitime. Exception : le pseudo d'un joueur dans l'annonce #live d'un tournoi individuel — s'y opposer revient à ne pas s'inscrire ; une annonce passée est supprimée sur demande (formulaire « Signaler un problème » du site, catégorie RGPD).
+- **Opposition** : vous opposer, pour des raisons tenant à votre situation particulière, à un traitement fondé sur l'intérêt légitime. Le pseudo d'un joueur dans l'annonce #live d'un tournoi individuel n'en relève pas : il repose sur l'exécution du service auquel il s'inscrit — ne pas y être nommé revient à ne pas s'inscrire ; une annonce passée est supprimée sur demande (formulaire « Signaler un problème » du site, catégorie RGPD).
 
 Le droit à la portabilité ne s'applique pas : ces traitements reposent sur l'intérêt légitime, non sur un consentement ou un contrat. Pour exercer vos droits, utilisez les moyens de la section Contact ; une réponse vous est apportée dans un délai d'un mois.
 
