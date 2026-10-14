@@ -2,7 +2,7 @@
 
 # Politique de Confidentialité — BlueGenji Bot
 
-**Dernière mise à jour** : 16 octobre 2026
+**Dernière mise à jour** : 15 octobre 2026
 
 > Copie du texte publié sur [https://bluegenji-esport.fr/privacy-policy-bot](https://bluegenji-esport.fr/privacy-policy-bot), **qui fait foi** en cas de divergence. Ne modifiez pas ce fichier à la main : il est régénéré depuis le site (`lib/shared/bot-legal-content.ts` d'AppBlueGenji).
 
