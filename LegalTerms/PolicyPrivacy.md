@@ -51,7 +51,7 @@ The public activity feed on the bot's page contains no Discord ID; it repeats th
 
 ### Legal basis
 
-This processing is based on the association's **legitimate interest** (Article 6(1)(f) GDPR): running the relay between partner servers, moderating it and measuring its activity. Messages from the website rely on the legal basis of their original processing, set out in the website's register: legitimate interest for a player's match direct messages (time, reminders, “Match retiré”), which they object to with the switch in “My profile” — the website keeps that choice in their legitimate interest, to honour it; performance of the service the player registers for, for their public username in the #live announcement of a solo tournament; the association's legitimate interest in moderating its server for the AutoMod alert of such an announcement when blocked, deleted on request.
+This processing is based on the association's **legitimate interest** (Article 6(1)(f) GDPR): running the relay between partner servers, moderating it and measuring its activity. Messages from the website rely on the legal basis of their original processing, set out in the website's register: legitimate interest for a player's match direct messages (time, reminders, “Match retiré”), which they object to with the switch in “My profile” — the website keeps that choice in their legitimate interest, to honour it; performance of the service the player registers for, for their public username in the #live announcement of a solo tournament; the association's legitimate interest in moderating its server for the AutoMod alert of such an announcement when blocked or flagged, deleted on request.
 
 ---
 
@@ -65,7 +65,7 @@ This processing is based on the association's **legitimate interest** (Article 6
 - **Memberships and scheduled reminders**: until the reminder's last sending (for a membership, its expiry date) or its deletion, and at the latest until the Bot leaves the server where they were recorded, which erases them — including a departure while the Bot is down, caught up when it restarts.
 - **Staff private log channel** (and the Bot's direct messages to its owner): one year (365 days); older messages from the Bot are deleted by the nightly clean-up, in batches (several nights for a large backlog), except the reason posted in the channel for an exclusion still in force — and, for an exclusion issued from this rule on, its notice and the copy of its reason by direct message —, deleted when it is lifted.
 - **Server logs**: according to their automatic rotation.
-- **#live announcements** (start of a streamed match: team names or, in a solo tournament, the players' public BlueGenji username): kept in the channel as long as it exists, even after the player's account is deleted; deleted at the request of the team or player concerned (the website's “Report a problem” form, GDPR category). An announcement blocked by an AutoMod rule: its alert stays in the moderation alert channel until the moderators delete it, and is deleted on request in the same way.
+- **#live announcements** (start of a streamed match: team names or, in a solo tournament, the players' public BlueGenji username): kept in the channel as long as it exists, even after the player's account is deleted; deleted at the request of the team or player concerned (the website's “Report a problem” form, GDPR category). An announcement blocked or flagged by an AutoMod rule: its alert stays in the moderation alert channel until the moderators delete it, and is deleted on request in the same way.
 - **Backups**: the Bot's database is backed up weekly, encrypted, and each copy is permanently deleted after 30 days at most. A restore is made from these archives, decrypted on the Bot's machine: the database no longer travels through Discord; the copy of the previous database it leaves alongside is deleted at the next successful restore, and at the latest during the night after it turns 30 days old.
 
 ---
@@ -79,7 +79,7 @@ This processing is based on the association's **legitimate interest** (Article 6
 - Members of partner servers, who read the relayed advertisements.
 - Members of the referee role of every server that has set one, for the website's referee alerts.
 - Members of the association's Discord server, who read the announcement of streamed matches in the #live channel.
-- Moderators of the association's Discord server: if a Discord AutoMod rule blocks a #live announcement, its text (including the public username in a solo tournament) may reach the server's moderation alert channel.
+- Moderators of the association's Discord server: if a Discord AutoMod rule blocks or flags a #live announcement, its text (including the public username in a solo tournament) may reach the server's moderation alert channel.
 - The administrators of any server where the Bot is installed, and the holders of the Bot administration role each server designates (**/set-bot-admin**), who can read the list of exclusions (**/ban-list** command, reply visible only to the person who asked).
 - The technical host, Keryan Houssin, who provides the machine the Bot runs on (a Raspberry Pi in Caen, France): processor.
 - Discord, the platform the Bot runs on.
