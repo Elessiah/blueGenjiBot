@@ -25,6 +25,9 @@ type Setup = {
   ownerNoticeFails?: boolean;
 };
 
+/** `allowedMentions` de chaque envoi à options au salon de supervision. */
+const sentMentions: unknown[] = [];
+
 function fakeClient(trace: string[], setup: Setup): Client {
   let ownerFetches = 0;
   let ownerSends = 0;
@@ -62,7 +65,9 @@ function fakeClient(trace: string[], setup: Setup): Client {
         if (mode === "fetch-throws") throw new Error("Unknown Channel");
         if (mode === "not-text") return { id: "voice" };
         return {
-          send: async (text: string) => {
+          send: async (payload: string | { content: string; allowedMentions?: { parse: string[] } }) => {
+            const text = typeof payload === "string" ? payload : payload.content;
+            if (typeof payload !== "string") { sentMentions.push(payload.allowedMentions ?? null); }
             if (mode === "missing-access") throw Object.assign(new Error("Missing Access"), { code: 50001 });
             if (mode === "send-throws") throw Object.assign(new Error("Rate limited"), { code: 429 });
             if (mode === "send-denied") throw Object.assign(new Error("Missing Permissions"), { code: 50013 });
@@ -193,6 +198,13 @@ async function runConfirmed(setup: Setup, message: string) {
     console.error = original;
   }
 }
+
+test("sendLogConfirmed : aucune mention ne notifie, même un rôle ou une personne cités dans le signalement", async () => {
+  sentMentions.length = 0;
+  const r = await runConfirmed({}, "Lien <https://twitch.tv/a#<@&123456789012345678>> <@987654321098765432>");
+  assert.equal(r.ok, true);
+  assert.deepEqual(sentMentions, [{ parse: [] }]);
+});
 
 test("sendLogConfirmed : vrai seulement si le salon de supervision a reçu le message, sans lire le titulaire", async () => {
   const r = await runConfirmed({}, "Signalement");

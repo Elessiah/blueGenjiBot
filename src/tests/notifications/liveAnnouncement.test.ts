@@ -76,6 +76,30 @@ test("isAllowedStreamUrl : https et liste blanche seulement", () => {
   assert.equal(isAllowedStreamUrl("https://twitch.tv/" + "a".repeat(260)), false);
 });
 
+test("parseLiveAnnouncement : un lien ne transporte ni texte, ni lien masqué, ni mention", () => {
+  // `new URL` accepte ces chaînes avec l'hôte www.twitch.tv : seule la forme
+  // normalisée part, et une espace ou un saut de ligne font refuser le lien.
+  for (const streamUrl of [
+    "https://www.twitch.tv/x [Live officiel](https://piege.example/login)",
+    "https://www.twitch.tv/x\n[Live officiel](https://piege.example/login)",
+    "https://www.twitch.tv/x\t@everyone",
+  ]) {
+    assert.equal(parseLiveAnnouncement({ ...REQUEST, streamUrl }), null, JSON.stringify(streamUrl));
+  }
+  const hashed = parseLiveAnnouncement({ ...REQUEST, streamUrl: "https://twitch.tv/a#<@&123456789012345678>" });
+  assert.ok(hashed);
+  assert.equal(hashed.streamUrl, "https://twitch.tv/a#%3C@&123456789012345678%3E");
+  assert.ok(!/[<>\s]/.test(hashed.streamUrl));
+});
+
+test("parseLiveAnnouncement : l'étiquette ne garde que les caractères du site", () => {
+  const forged = parseLiveAnnouncement({ ...REQUEST, context: "x)\n[live-announce] annonce publiée (match-99 [Fiche](https://piege.example)" });
+  assert.ok(forged);
+  assert.ok(!/[\n()[\]:/.]/.test(forged.context), forged.context);
+  const site = parseLiveAnnouncement({ ...REQUEST, context: "live-announce tournoi-7 match-12,13,…+4" });
+  assert.equal(site?.context, "live-announce tournoi-7 match-12,13,…+4");
+});
+
 test("parseLiveAnnouncement : corps valide normalisé, sinon null", () => {
   assert.deepEqual(parseLiveAnnouncement(REQUEST), REQUEST);
   assert.equal(parseLiveAnnouncement(null), null);

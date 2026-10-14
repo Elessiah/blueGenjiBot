@@ -77,6 +77,8 @@ const state = {
   liveSendError: null as Error | null,
   /** Envois au canal de logs refusés avant le premier qui passe (API surchargée : rien n'est parti). */
   logSendFailures: 0,
+  /** `allowedMentions` de chaque signalement envoyé avec options. */
+  logMentions: [] as ({ parse: string[] } | null)[],
 };
 
 function member(id: string, username: string): FakeMember {
@@ -142,13 +144,20 @@ const fakeClient = {
   },
   channels: {
     fetch: async () => ({
-      send: async (text: string) => {
-        if (typeof text !== "string" && state.liveSendError) { throw state.liveSendError; }
-        if (typeof text === "string" && state.logSendFailures > 0) {
+      send: async (payload: string | { content: string; nonce?: string; allowedMentions?: { parse: string[] } }) => {
+        // L'annonce porte un jeton d'unicité ; un signalement au canal de logs non.
+        const live = typeof payload !== "string" && payload.nonce !== undefined;
+        if (live && state.liveSendError) { throw state.liveSendError; }
+        if (!live && state.logSendFailures > 0) {
           state.logSendFailures--;
           throw Object.assign(new Error("API resource overloaded"), { code: 130000 });
         }
-        state.logs.push(text);
+        if (!live && typeof payload !== "string") {
+          state.logMentions.push(payload.allowedMentions ?? null);
+          state.logs.push(payload.content);
+        } else {
+          state.logs.push(payload as string);
+        }
         return { id: "log" };
       },
     }),
@@ -178,6 +187,7 @@ test.beforeEach(() => {
   state.ready = true;
   state.ping = 42;
   state.logs.length = 0;
+  state.logMentions.length = 0;
   state.dms.length = 0;
   state.unknownUsers.clear();
   state.closedDms.clear();
@@ -257,6 +267,16 @@ test("auth : sans INTERNAL_API_TOKEN, la boucle locale passe sans jeton", async 
   delete process.env.INTERNAL_API_TOKEN;
   const res = await call("/internal/invite", { token: null });
   assert.equal(res.status, 200);
+});
+
+test("auth : sans INTERNAL_API_TOKEN, l'annonce @everyone est refusée même sur la boucle locale", async () => {
+  delete process.env.INTERNAL_API_TOKEN;
+  const res = await call("/internal/announce/live", {
+    token: null,
+    body: { message: "Alpha contre Beta", streamUrl: "https://www.twitch.tv/bluegenji" },
+  });
+  assert.equal(res.status, 503);
+  assert.deepEqual(res.body, { error: "INTERNAL_API_TOKEN_NOT_CONFIGURED" });
 });
 
 test("auth : sans INTERNAL_API_TOKEN sur une interface publique, tout est refusé en 503", async () => {
@@ -959,6 +979,9 @@ test("/internal/announce/live : aucun signalement ne mentionne tout le canal de 
   const reports = state.logs.filter((l): l is string => typeof l === "string");
   assert.ok(reports.length > 0);
   assert.ok(reports.every((log) => !/@(everyone|here)/.test(log)));
+  // Ni rôle ni personne : le signalement part sans aucune mention autorisée.
+  assert.ok(state.logMentions.length > 0);
+  assert.ok(state.logMentions.every((mentions) => mentions !== null && mentions.parse.length === 0));
 });
 
 // --- Flux SSE ---------------------------------------------------------------
