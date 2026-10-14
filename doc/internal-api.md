@@ -242,7 +242,9 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     seule celle de tête notifie. La syntaxe de mention d'un membre, d'un rôle
     ou d'un salon (`<@id>`, `<@!id>`, `<@&id>`, `<#id>`) est coupée d'une
     espace de largeur nulle dans `message` et `logMessage` : sans notifier,
-    Discord l'afficherait sous le nom actuel du membre.
+    Discord l'afficherait sous le nom actuel du membre. Un retour chariot
+    (`\r`, `\r\n`) y devient un saut de ligne `\n` : chaque ligne citée au
+    canal de logs garde son « > ».
   - Déploiement : le bot passe **avant** (ou avec) un site qui envoie
     `logMessage`. Un bot plus ancien ignore ce champ et citerait `message`,
     pseudo compris, au canal de logs.
