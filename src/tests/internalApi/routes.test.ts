@@ -826,11 +826,11 @@ test("/internal/announce/live : corps ou lien invalide 400, sinon publié avec @
     body: { message: "Alpha contre Beta", streamUrl: "https://twitch.tv/bluegenji", context: "live-announce match-1" },
   });
   assert.equal(res.status, 200);
-  assert.deepEqual(res.body, { posted: true, mentionEveryone: true, embedLinks: true });
+  assert.deepEqual(res.body, { posted: true, mentionEveryone: true, embedLinks: true, messageId: "log", edited: false });
   assert.deepEqual(state.logs, [
     {
       content: "@everyone Alpha contre Beta\nhttps://twitch.tv/bluegenji",
-      allowedMentions: { parse: ["everyone"] },
+      allowedMentions: { parse: ["everyone"], roles: [] },
       nonce: liveAnnouncementNonce({
         message: "Alpha contre Beta",
         streamUrl: "https://twitch.tv/bluegenji",

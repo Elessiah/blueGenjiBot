@@ -195,28 +195,28 @@ test("formatLiveAnnouncement : message le plus long + lien le plus long tiennent
 test("announceLive : publie dans #live, @everyone autorisé pour ce seul message", async () => {
   const sent: Sent[] = [];
   const report = await announceLive(fakeClient({ sent }), REQUEST);
-  assert.deepEqual(report, { posted: true, mentionEveryone: true, embedLinks: true });
+  assert.deepEqual(report, { posted: true, mentionEveryone: true, embedLinks: true, messageId: "m1", edited: false });
   assert.equal(sent.length, 1);
   assert.equal(sent[0].channelId, LIVE_ANNOUNCE_CHANNEL_ID);
   assert.equal(LIVE_ANNOUNCE_CHANNEL_ID, "678961388030394401");
-  assert.deepEqual(sent[0].allowedMentions, { parse: ["everyone"] });
+  assert.deepEqual(sent[0].allowedMentions, { parse: ["everyone"], roles: [] });
   assert.ok(sent[0].content.startsWith("@everyone "));
 });
 
 test("announceLive : sans la permission de mentionner, publie et le dit", async () => {
   const sent: Sent[] = [];
   const report = await announceLive(fakeClient({ sent, denied: [PermissionFlagsBits.MentionEveryone] }), REQUEST);
-  assert.deepEqual(report, { posted: true, mentionEveryone: false, embedLinks: true });
+  assert.deepEqual(report, { posted: true, mentionEveryone: false, embedLinks: true, messageId: "m1", edited: false });
   assert.equal(sent.length, 1);
   // Ni mention écrite (elle s'afficherait en gris sans notifier), ni mention autorisée.
   assert.ok(!sent[0].content.includes("@everyone"));
-  assert.deepEqual(sent[0].allowedMentions, { parse: [] });
+  assert.deepEqual(sent[0].allowedMentions, { parse: [], roles: [] });
 });
 
 test("announceLive : sans « Intégrer des liens », publie et le dit", async () => {
   const sent: Sent[] = [];
   const report = await announceLive(fakeClient({ sent, denied: [PermissionFlagsBits.EmbedLinks] }), REQUEST);
-  assert.deepEqual(report, { posted: true, mentionEveryone: true, embedLinks: false });
+  assert.deepEqual(report, { posted: true, mentionEveryone: true, embedLinks: false, messageId: "m1", edited: false });
   assert.equal(sent.length, 1);
 });
 

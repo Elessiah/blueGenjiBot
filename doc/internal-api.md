@@ -166,6 +166,46 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     partent en un seul message de plusieurs lignes (« 🔴 En direct — Tournoi : »
     puis « • A contre B » par match) ; `context` les cite alors tous
     (`live-announce tournoi-7 match-12,13`).
+  - **Annonces de soirée** (champs facultatifs, un site plus ancien ne les
+    envoie pas) :
+    - `mention` : `"everyone"` (défaut) ou `"stream-viewer"`. Le site réserve
+      `everyone` à la chaîne officielle BlueGenji ; toute autre chaîne notifie
+      le seul rôle StreamViewer (constante `STREAM_VIEWER_ROLE_ID`) :
+      `allowedMentions: { parse: [], roles: [<ce rôle>] }`, jamais `@everyone`.
+      Toute autre valeur : `400`.
+    - `streamUrls` : 1 à 10 liens (même liste blanche que `streamUrl`, le
+      premier égal à `streamUrl`). Le texte les place par des jetons
+      `{{lien:N}}` (N à partir de 1) ; aucun lien n'est alors ajouté en fin.
+      Au canal de logs, ils sont cités entre `<…>` (sans aperçu).
+    - `editMessageId` : identifiant du message #live déjà publié pour la
+      soirée. Le bot le **modifie** (aucune nouvelle notification : Discord ne
+      notifie jamais sur une modification ; la mention de tête reste autorisée
+      pour garder son surlignage), en un seul appel à Discord. S'il n'est pas
+      du bot ou ne se modifie plus (plafond de modifications de Discord), une
+      **suite** part, sans mention écrite ni notification. S'il a été
+      **supprimé** (`10008`, souvent par le staff sur demande), rien n'est
+      republié : `503` `LIVE_CHANNEL_UNAVAILABLE`, `reason: "message-deleted"`
+      — le site ferme la soirée de ce public jusqu'à la fin de sa fenêtre (au
+      direct suivant s'il avait cessé d'attendre la réponse) — et
+      le canal de logs le signale sans citer le texte ni proposer de le
+      reposter.
+    - `notify` : seule valeur admise `false` — nouveau message **sans mention
+      écrite ni notification** (le site l'envoie quand la soirée a peut-être
+      déjà notifié son public, sans message connu à modifier). Avec
+      `editMessageId` : le message modifié était parti sans mention, la
+      modification n'en écrit pas non plus. Toute autre valeur : `400`.
+    - `refresh` : seule valeur admise `true`, et seulement avec `editMessageId`
+      (sinon `400`) — simple **mise à jour** du message de la soirée, envoyée
+      par le site à la fin d'un match (étiquette `live-refresh soiree-N …`) :
+      le match y passe « Terminé ». Même traitement qu'une modification
+      (aucune notification, suite sans mention si le message ne se modifie
+      plus, `message-deleted` s'il a été supprimé) ; en cas d'échec, le
+      signalement au canal de logs dit qu'il n'y a **rien à poster à la
+      main** (les matchs sont déjà dans #live, la fin de match ou le direct
+      suivant refera la mise à jour).
+    - Réponse : `{ posted, mentionEveryone, embedLinks, messageId, edited }`
+      — `messageId` est l'identifiant à renvoyer en `editMessageId` pour la
+      modification suivante, `edited` dit si le message a été modifié.
   - `streamUrl` doit être un lien `https` vers Twitch, YouTube ou Kick, sans
     identifiants ni port, sans espace ni caractère de contrôle, ni page de
     redirection (`/redirect`, `/attribution_link`) ni autre adresse dans son
@@ -227,9 +267,22 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     déjà coupé la requête (délai dépassé) — le signalement le dit alors, au
     lieu de promettre un nouvel essai. Pour ces annonces que le site ne
     réessaie pas, hors panne pendant l'envoi, rien n'est parti : le
-    signalement dit qu'elle peut être postée à la main sans doublon, avec
-    « @everyone » en tête et le texte entier si la citation est raccourcie ou
-    sans pseudo (après un
+    signalement dit qu'elle peut être postée à la main sans doublon, avec la
+    mention de son public en tête (« @everyone » pour la chaîne officielle, le
+    rôle StreamViewer pour une autre chaîne) — **sans aucune mention** pour
+    toute annonce de soirée (`streamUrls`) : une modification (`editMessageId`)
+    ou un envoi `notify: false`, un message de la soirée ayant déjà pu
+    notifier — et seuls les matchs de l'étiquette que #live ne montre pas
+    encore, pas le texte entier de la soirée, déjà publié en partie ; un
+    premier message refusé, le site rendant la notification au
+    prochain direct de la soirée. Exception : si le site avait déjà cessé
+    d'attendre la réponse, il croit l'annonce peut-être partie — un premier
+    message peut être posté à la main **avec** la mention de son public (le
+    direct suivant partira sans notification), une modification ou un envoi
+    muet ne se postent pas (le direct suivant les reprend dans son message).
+    Un envoi `notify: false` a son propre jeton d'unicité : Discord ne rend pas
+    à sa place le message qui a notifié — et le texte entier si la
+    citation est raccourcie ou sans pseudo (après un
     blocage AutoMod, une fois la règle corrigée — ni le texte ni le lien n'y
     sont cités, la même règle pourrait bloquer le signalement : le staff
     reprend les affiches depuis la fiche du tournoi, dont le numéro suit
@@ -246,6 +299,10 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     l'étiquette et du lien : Discord ne crée pas deux fois ce même envoi s'il
     est rejoué dans les quelques minutes (nouvel essai interne de discord.js
     après une réponse perdue). Il n'arrête pas une annonce postée à la main.
+    Le jeton d'une suite (`editMessageId`) ou d'un envoi muet (`notify:
+    false`) tient aussi au texte : une suite rédigée plus tard pour le même
+    message (autre fin de match) n'obtient pas de Discord la précédente, à
+    l'ancien texte.
   - Une mention `@everyone` ou `@here` glissée dans le texte est neutralisée :
     seule celle de tête notifie. La syntaxe de mention d'un membre, d'un rôle
     ou d'un salon (`<@id>`, `<@!id>`, `<@&id>`, `<#id>`) est coupée d'une
