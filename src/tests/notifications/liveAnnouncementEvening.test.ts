@@ -38,15 +38,10 @@ function fakeClient(options: { sent: Sent[]; edited?: Edited[]; editError?: Erro
           return { id: "222222222222222222" };
         },
         messages: {
-          fetch: async (id: string) => {
+          edit: async (id: string, payload: Omit<Edited, "id">) => {
             if (options.editError) { throw options.editError; }
-            return {
-              id,
-              edit: async (payload: Omit<Edited, "id">) => {
-                options.edited?.push({ id, ...payload });
-                return { id };
-              },
-            };
+            options.edited?.push({ id, ...payload });
+            return { id };
           },
         },
       }),
@@ -161,8 +156,8 @@ test("announceLive : soirée déjà annoncée → message modifié, aucune notif
   assert.deepEqual(edited[0].allowedMentions, { parse: [], roles: [] });
 });
 
-test("announceLive : message de la soirée disparu → suite sans mention ni notification", async () => {
-  for (const code of [10008, 50005]) {
+test("announceLive : message de la soirée disparu ou plus modifiable → suite sans mention ni notification", async () => {
+  for (const code of [10008, 50005, 30046]) {
     const sent: Sent[] = [];
     const request = parseLiveAnnouncement({ ...EVENING, editMessageId: MESSAGE_ID });
     assert.ok(request);
