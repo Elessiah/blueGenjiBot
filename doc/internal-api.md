@@ -299,6 +299,10 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     l'étiquette et du lien : Discord ne crée pas deux fois ce même envoi s'il
     est rejoué dans les quelques minutes (nouvel essai interne de discord.js
     après une réponse perdue). Il n'arrête pas une annonce postée à la main.
+    Le jeton d'une suite (`editMessageId`) ou d'un envoi muet (`notify:
+    false`) tient aussi au texte : une suite rédigée plus tard pour le même
+    message (autre fin de match) n'obtient pas de Discord la précédente, à
+    l'ancien texte.
   - Une mention `@everyone` ou `@here` glissée dans le texte est neutralisée :
     seule celle de tête notifie. La syntaxe de mention d'un membre, d'un rôle
     ou d'un salon (`<@id>`, `<@!id>`, `<@&id>`, `<#id>`) est coupée d'une
