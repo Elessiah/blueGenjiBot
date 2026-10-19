@@ -363,6 +363,11 @@ function audienceMention(request: LiveAnnouncementRequest): string {
 function manualPostSentence(request: LiveAnnouncementRequest, key: string, shortened: boolean): string {
   if (key === "discord-down") { return ""; }
   const when = key === "automod" ? "une fois la règle corrigée, " : "";
+  if (request.editMessageId !== undefined || request.notify === false) {
+    // Le texte est celui de toute la soirée : le reposter doublerait les
+    // matchs déjà montrés dans #live.
+    return ` Rien n'est parti : ${when}seuls les matchs de l'étiquette que #live ne montre pas encore peuvent être postés à la main, ${manualMention(request)} — pas le texte entier de la soirée, dont le reste est déjà publié.`;
+  }
   const whole = shortened
     ? " (texte cité raccourci, sans pseudo ou absent : reprendre toutes les affiches depuis la fiche du tournoi, /tournois/<n° de « tournoi- » dans l'étiquette>)"
     : "";
