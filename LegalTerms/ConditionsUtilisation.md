@@ -2,7 +2,7 @@
 
 # Conditions d'Utilisation — BlueGenji Bot
 
-**Dernière mise à jour** : 15 octobre 2026
+**Dernière mise à jour** : 19 octobre 2026
 
 > Copie du texte publié sur [https://bluegenji-esport.fr/terms-of-service-bot](https://bluegenji-esport.fr/terms-of-service-bot), **qui fait foi** en cas de divergence. Ne modifiez pas ce fichier à la main : il est régénéré depuis le site (`lib/shared/bot-legal-content.ts` d'AppBlueGenji).
 
@@ -14,7 +14,7 @@ Ces conditions encadrent l'utilisation du bot Discord **BlueGenji Bot** : ses co
 
 **BlueGenji Bot** est édité par l'association **Bluegenji Esport** (association loi 1901, siège : 4 impasse des Cyprès, 51210 Janvilliers, France). Il est développé et administré bénévolement par Keryan Houssin, hébergeur technique de l'association.
 
-Le Bot relaie les annonces de la communauté esport BlueGenji — Overwatch et Marvel Rivals — entre les salons des serveurs partenaires (recherches de scrims, recrutements et autres services). Il remet aussi en message privé les messages du site BlueGenji : codes de connexion, horaires de match (posés, changés ou retirés), rappels de match et avis de retrait d'un match (« Match retiré »), alertes d'arbitrage, avis de modération, demandes d'adhésion à une équipe et informations sur les données. Il est gratuit.
+Le Bot relaie les annonces de la communauté esport BlueGenji — Overwatch et Marvel Rivals — entre les salons des serveurs partenaires (recherches de scrims, recrutements et autres services). Il remet aussi en message privé les messages du site BlueGenji : codes de connexion, horaires de match (posés, changés ou retirés), rappels de match et avis de retrait d'un match (« Match retiré ») — ces messages de match aux seuls comptes dont le tag Discord est certifié sur le site —, alertes d'arbitrage, avis de modération, demandes d'adhésion à une équipe et informations sur les données. Il est gratuit.
 
 ---
 
