@@ -7,6 +7,7 @@ import {
   formatLiveAnnouncement,
   liveAllowedMentions,
   liveAnnouncementNonce,
+  liveFailureReport,
   loggedLiveText,
   MAX_LIVE_STREAM_URLS,
   parseLiveAnnouncement,
@@ -225,5 +226,32 @@ test("announceLive : `notify: false` → nouveau message sans mention écrite ni
     assert.equal(sent.length, 1);
     assert.deepEqual(sent[0].allowedMentions, { parse: [], roles: [] });
     assert.ok(sent[0].content.startsWith("🔴"), mention);
+  }
+});
+
+test("liveFailureReport : poster à la main — mention du public, aucune pour une soirée déjà annoncée", () => {
+  const base = {
+    message: "🔴 **Les lives de la soirée**\n\n**21:00** · En direct\nA contre B — Coupe\n{{lien:1}}",
+    streamUrl: "https://www.twitch.tv/caster",
+    streamUrls: ["https://www.twitch.tv/caster"],
+    context: "live-announce soiree-3 tournoi-4 match-40",
+  };
+  const everyone = liveFailureReport({ ...base, mention: "everyone" as const }, "send-rejected", "x", { siteGaveUp: true });
+  assert.match(everyone, /avec la mention de tout le serveur en tête/);
+  const viewers = liveFailureReport({ ...base, mention: "stream-viewer" as const }, "send-rejected", "x", { siteGaveUp: true });
+  assert.match(viewers, /avec la mention du rôle StreamViewer en tête \(pas celle de tout le serveur\)/);
+  assert.doesNotMatch(viewers, /avec la mention de tout le serveur/);
+  // Modification de la soirée, suite, envoi muet : une mention notifierait deux fois.
+  for (const request of [
+    { ...base, mention: "everyone" as const, editMessageId: "123456789012345678" },
+    { ...base, mention: "stream-viewer" as const, notify: false as const },
+  ]) {
+    for (const report of [
+      liveFailureReport(request, "send-rejected", "x", { siteGaveUp: true }),
+      liveFailureReport(request, "automod", "x"),
+    ]) {
+      assert.match(report, /sans aucune mention \(un message de cette soirée a déjà pu notifier son public\)/);
+      assert.doesNotMatch(report, /avec la mention/);
+    }
   }
 });
