@@ -734,10 +734,6 @@ export function liveAllowedMentions(target: LiveMentionTarget | undefined, notif
 
 type AllowedMentions = { parse: "everyone"[]; roles: string[] };
 
-type EditableMessage = {
-  id: string;
-  edit: (options: { content: string; allowedMentions: AllowedMentions }) => Promise<{ id: string }>;
-};
 
 type SendableChannel = {
   send: (options: {
@@ -746,7 +742,9 @@ type SendableChannel = {
     nonce: string;
     enforceNonce: boolean;
   }) => Promise<{ id: string }>;
-  messages?: { fetch: (id: string) => Promise<EditableMessage> };
+  messages?: {
+    edit: (id: string, options: { content: string; allowedMentions: AllowedMentions }) => Promise<{ id: string }>;
+  };
   permissionsFor?: (user: unknown) => { has: (flag: bigint) => boolean } | null;
 };
 
@@ -755,6 +753,15 @@ const UNKNOWN_MESSAGE = 10008;
 
 /** Modification refusée : le message n'est pas du bot. */
 const CANNOT_EDIT_OTHERS = 50005;
+
+/**
+ * Plafond des modifications d'un message vieux de plus d'une heure : le
+ * message de la soirée ne se modifie plus pour un temps.
+ */
+const EDIT_LIMIT_REACHED = 30046;
+
+/** Refus qui rendent le message de la soirée non modifiable : une suite part à sa place. */
+const NOT_EDITABLE: ReadonlySet<number> = new Set([UNKNOWN_MESSAGE, CANNOT_EDIT_OTHERS, EDIT_LIMIT_REACHED]);
 
 /**
  * Lit les permissions du bot dans le salon. Un salon qui ne les expose pas (ou
@@ -776,21 +783,22 @@ function readPermissions(
 }
 
 /**
- * Modifie le message de la soirée. `null` si le message n'est plus modifiable
- * (supprimé, pas du bot) : l'appelant poste alors une suite sans notification.
+ * Modifie le message de la soirée, en un seul appel à Discord (aucune lecture
+ * préalable du message). `null` si le message n'est plus modifiable (supprimé,
+ * pas du bot, plafond de modifications atteint) : l'appelant poste alors une
+ * suite sans notification.
  *
  * @throws {LiveChannelUnavailableError} Toute autre erreur de Discord.
  */
 async function editEveningMessage(channel: SendableChannel, messageId: string, content: string): Promise<string | null> {
   if (!channel.messages) { return null; }
   try {
-    const message = await channel.messages.fetch(messageId);
     // La mention de tête reste écrite, mais une modification ne notifie personne.
-    const edited = await message.edit({ content, allowedMentions: liveAllowedMentions(undefined, false) });
+    const edited = await channel.messages.edit(messageId, { content, allowedMentions: liveAllowedMentions(undefined, false) });
     return edited.id;
   } catch (error) {
     const code = discordCode(error);
-    if (code === UNKNOWN_MESSAGE || code === CANNOT_EDIT_OTHERS) { return null; }
+    if (code !== undefined && NOT_EDITABLE.has(code)) { return null; }
     throw sendFailure(error);
   }
 }
@@ -801,8 +809,8 @@ async function editEveningMessage(channel: SendableChannel, messageId: string, c
  * - Nouvelle soirée : un message qui notifie son public — `@everyone` pour la
  *   chaîne officielle, le rôle StreamViewer pour toute autre chaîne.
  * - Soirée déjà annoncée (`editMessageId`) : le message est **modifié**, sans
- *   nouvelle notification ; s'il n'est plus modifiable (supprimé), une suite
- *   part **sans aucune mention**.
+ *   nouvelle notification ; s'il n'est plus modifiable (supprimé, plafond de
+ *   modifications de Discord atteint), une suite part **sans aucune mention**.
  *
  * Sans la permission « Mentionner @everyone, @here et tous les rôles », le
  * message part quand même, sans la mention — une annonce sans notification
