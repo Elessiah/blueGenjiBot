@@ -134,9 +134,12 @@ export function neutralizeMassMentions(text: string): string {
  * match (autre étiquette), n'est pas reconnu.
  */
 export function liveAnnouncementNonce(request: LiveAnnouncementRequest): string {
-  // La suite d'une soirée (message disparu) ne reprend pas le jeton du premier envoi.
+  // La suite d'une soirée (message disparu) ne reprend pas le jeton du premier
+  // envoi, ni un envoi muet (`notify: false`) celui de l'envoi qui a notifié :
+  // Discord rendrait le message qui a notifié, que le site garderait muet.
   const followUp = request.editMessageId ? `\n${request.editMessageId}` : "";
-  const seed = `${request.context}\n${request.streamUrl}${followUp}`;
+  const quiet = request.notify === false ? "\nquiet" : "";
+  const seed = `${request.context}\n${request.streamUrl}${followUp}${quiet}`;
   return "live" + createHash("sha256").update(seed).digest("hex").slice(0, 21);
 }
 
@@ -341,6 +344,11 @@ function manualMention(request: LiveAnnouncementRequest): string {
   if (request.streamUrls !== undefined) {
     return "sans aucune mention (le prochain direct de la soirée notifiera son public)";
   }
+  return audienceMention(request);
+}
+
+/** Mention du public d'une annonce, à écrire en tête d'un message posté à la main. */
+function audienceMention(request: LiveAnnouncementRequest): string {
   return request.mention === "stream-viewer"
     ? "avec la mention du rôle StreamViewer en tête (pas celle de tout le serveur)"
     : "avec la mention de tout le serveur en tête";
@@ -361,8 +369,33 @@ function manualPostSentence(request: LiveAnnouncementRequest, key: string, short
   return ` Rien n'est parti : ${when}elle peut être postée à la main sans doublon, ${manualMention(request)}${whole}.`;
 }
 
+/**
+ * Consigne d'une annonce de soirée dont le site avait déjà cessé d'attendre la
+ * réponse : il la croit peut-être partie — il garde la marque de notification
+ * de la soirée et la reprend au message du direct suivant, sans notifier.
+ * Rien n'est parti (hors panne pendant l'envoi) : un premier message peut être
+ * posté à la main **avec** la mention de son public (le direct suivant ne
+ * notifiera pas) ; une modification, une suite ou un envoi muet ne se postent
+ * pas à la main (le direct suivant les reprend).
+ */
+function eveningGaveUpSentence(request: LiveAnnouncementRequest, key: string, shortened: boolean): string {
+  if (key === "discord-down") { return ""; }
+  if (request.editMessageId !== undefined || request.notify === false) {
+    return " Rien n'est parti, mais le site la croit peut-être partie : ne pas la poster à la main, le direct suivant de la soirée la reprendra dans son message.";
+  }
+  const when = key === "automod" ? "une fois la règle corrigée, " : "";
+  const whole = shortened
+    ? " (texte cité raccourci, sans pseudo ou absent : reprendre toutes les affiches depuis la fiche du tournoi, /tournois/<n° de « tournoi- » dans l'étiquette>)"
+    : "";
+  return ` Rien n'est parti : ${when}elle peut être postée à la main, ${audienceMention(request)} — le site la croit peut-être partie, le direct suivant de la soirée partira sans notification${whole}.`;
+}
+
 /** Ce que fera le site après cet échec, et ce que le staff peut faire. */
 function retrySentence(request: LiveAnnouncementRequest, key: string, siteGaveUp: boolean, shortened: boolean): string {
+  if (siteGaveUp && request.streamUrls !== undefined) {
+    return "Le site avait déjà cessé d'attendre la réponse du bot : il ne la réessaie pas." +
+      eveningGaveUpSentence(request, key, shortened);
+  }
   if (siteGaveUp) {
     // Le site a cessé d'attendre la réponse : il garde sa réservation.
     return "Le site avait déjà cessé d'attendre la réponse du bot : il ne la réessaie pas." +
