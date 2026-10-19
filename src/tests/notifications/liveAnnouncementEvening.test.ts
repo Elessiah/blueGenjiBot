@@ -253,6 +253,10 @@ test("liveFailureReport : soirée refusée, le site attendait encore → poster 
     const report = liveFailureReport(request, "automod", "x");
     assert.match(report, /sans aucune mention \(un message de cette soirée a déjà pu notifier son public\)/);
     assert.doesNotMatch(report, /avec la mention/);
+    // Le texte est toute la soirée : seuls les matchs absents de #live se postent.
+    assert.match(report, /seuls les matchs de l'étiquette que #live ne montre pas encore peuvent être postés à la main/);
+    assert.match(report, /pas le texte entier de la soirée/);
+    assert.doesNotMatch(report, /sans doublon/);
   }
 });
 
