@@ -194,6 +194,15 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
       déjà notifié son public, sans message connu à modifier). Avec
       `editMessageId` : le message modifié était parti sans mention, la
       modification n'en écrit pas non plus. Toute autre valeur : `400`.
+    - `refresh` : seule valeur admise `true`, et seulement avec `editMessageId`
+      (sinon `400`) — simple **mise à jour** du message de la soirée, envoyée
+      par le site à la fin d'un match (étiquette `live-refresh soiree-N …`) :
+      le match y passe « Terminé ». Même traitement qu'une modification
+      (aucune notification, suite sans mention si le message ne se modifie
+      plus, `message-deleted` s'il a été supprimé) ; en cas d'échec, le
+      signalement au canal de logs dit qu'il n'y a **rien à poster à la
+      main** (les matchs sont déjà dans #live, la fin de match ou le direct
+      suivant refera la mise à jour).
     - Réponse : `{ posted, mentionEveryone, embedLinks, messageId, edited }`
       — `messageId` est l'identifiant à renvoyer en `editMessageId` pour la
       modification suivante, `edited` dit si le message a été modifié.
