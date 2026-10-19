@@ -171,6 +171,24 @@ test("announceLive : message de la soirée disparu ou plus modifiable → suite 
   }
 });
 
+test("announceLive : la modification d'un message parti sans mention (`notify: false`) n'en écrit pas", async () => {
+  const sent: Sent[] = [];
+  const edited: Edited[] = [];
+  const request = parseLiveAnnouncement({ ...EVENING, editMessageId: MESSAGE_ID, notify: false });
+  assert.ok(request);
+  const report = await announceLive(fakeClient({ sent, edited }), request);
+  assert.equal(report.edited, true);
+  assert.equal(edited.length, 1);
+  assert.ok(edited[0].content.startsWith("🔴"), edited[0].content);
+  assert.deepEqual(edited[0].allowedMentions, { parse: [], roles: [] });
+  // Sans `notify` : la mention de tête du message d'origine reste écrite.
+  const plain = parseLiveAnnouncement({ ...EVENING, editMessageId: MESSAGE_ID });
+  assert.ok(plain);
+  await announceLive(fakeClient({ sent, edited }), plain);
+  assert.ok(edited[1].content.startsWith(`<@&${STREAM_VIEWER_ROLE_ID}> `));
+  assert.equal(sent.length, 0);
+});
+
 test("announceLive : une modification refusée pour une autre raison est une erreur, pas une suite", async () => {
   const sent: Sent[] = [];
   const request = parseLiveAnnouncement({ ...EVENING, editMessageId: MESSAGE_ID });
