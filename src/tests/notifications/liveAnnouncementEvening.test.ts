@@ -89,6 +89,10 @@ test("parseLiveAnnouncement : public, liens ou identifiant invalides → refus",
     { editMessageId: 123 },
     { notify: true },
     { notify: "false" },
+    { refresh: false },
+    { refresh: "true" },
+    // Une mise à jour sans message à modifier n'en crée jamais un.
+    { refresh: true, editMessageId: undefined },
   ]) {
     assert.equal(parseLiveAnnouncement({ ...EVENING, ...patch }), null, JSON.stringify(patch));
   }
@@ -311,4 +315,25 @@ test("liveFailureReport : annonce simple → la mention de son public", () => {
   const viewers = liveFailureReport({ ...single, mention: "stream-viewer" as const }, "send-rejected", "x", { siteGaveUp: true });
   assert.match(viewers, /avec la mention du rôle StreamViewer en tête \(pas celle de tout le serveur\)/);
   assert.match(liveFailureReport(single, "send-rejected", "x", { siteGaveUp: true }), /avec la mention de tout le serveur en tête/);
+});
+
+test("parseLiveAnnouncement : mise à jour d'un message connu (`refresh`)", () => {
+  const request = parseLiveAnnouncement({ ...EVENING, editMessageId: MESSAGE_ID, refresh: true });
+  assert.equal(request?.refresh, true);
+  assert.equal(parseLiveAnnouncement({ ...EVENING, editMessageId: MESSAGE_ID })?.refresh, undefined);
+});
+
+test("liveFailureReport : mise à jour de la soirée échouée → rien à poster à la main", () => {
+  const refresh = {
+    ...EVENING_REPORT,
+    context: "live-refresh soiree-3 tournoi-4 match-40",
+    mention: "everyone" as const,
+    editMessageId: "123456789012345678",
+    refresh: true as const,
+  };
+  for (const [key, siteGaveUp] of [["automod", false], ["send-rejected", true], ["no-send", false], ["discord-down", false]] as [string, boolean][]) {
+    const report = liveFailureReport(refresh, key, "x", { siteGaveUp });
+    assert.match(report, /Simple mise à jour des matchs terminés de la soirée : rien à poster à la main/, key);
+    assert.doesNotMatch(report, /peut être postée|peuvent être postés|réessaie seul pendant les deux heures/, key);
+  }
 });
