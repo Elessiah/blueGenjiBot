@@ -393,7 +393,9 @@ export interface LiveAnnouncementRequest {
   /**
    * `false` : nouveau message **sans mention écrite ni notification** — soirée
    * dont le public a peut-être déjà été notifié (premier envoi incertain) sans
-   * message connu à modifier. Absent : notification habituelle.
+   * message connu à modifier. Avec `editMessageId` : le message modifié était
+   * parti sans mention, sa modification n'en écrit pas. Absent : notification
+   * habituelle.
    */
   notify?: false;
 }
@@ -846,7 +848,9 @@ export async function announceLive(client: Client, request: LiveAnnouncementRequ
 
   const report = { posted: true as const, mentionEveryone: canMentionEveryone, embedLinks: canEmbedLinks };
   if (request.editMessageId) {
-    const editedId = await editEveningMessage(channel, request.editMessageId, formatLiveAnnouncement(request, canMentionEveryone));
+    // Un message parti sans mention (`notify: false`) n'en reçoit pas à sa modification.
+    const content = formatLiveAnnouncement(request, canMentionEveryone && request.notify !== false);
+    const editedId = await editEveningMessage(channel, request.editMessageId, content);
     if (editedId) { return { ...report, messageId: editedId, edited: true }; }
   }
   // Suite d'une soirée dont le message a disparu, ou soirée peut-être déjà
