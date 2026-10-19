@@ -237,8 +237,7 @@ export function describeLiveIssue(key: string, rawDetail: string): string {
       return `Discord n'a pas répondu ou a limité le bot pendant l'envoi (${detail}) — rien à régler sur le salon ; ` +
         "l'annonce a pu partir malgré tout (vérifier #live)";
     case "message-deleted":
-      return "le message de la soirée a été supprimé de #live — le site n'y publie plus rien pour ce public jusqu'à la fin de la soirée, " +
-        "pour que la suppression tienne (aucune suite ne le republie)";
+      return "le message de la soirée a été supprimé de #live — aucune suite ne le republie, pour que la suppression tienne";
     default:
       return `erreur inattendue (${detail})`;
   }
@@ -309,8 +308,13 @@ export function liveFailureReport(
   const intro = `Annonce de live ${liveFailureVerdict(key)} (${request.context}) : ${describeLiveIssue(key, detail)}. `;
   if (key === MESSAGE_DELETED) {
     // Message supprimé (souvent sur demande) : ni son texte ni une consigne
-    // de le reposter, la suppression doit tenir.
-    return `${intro}Ne pas la reposter à la main.`;
+    // de le reposter, la suppression doit tenir. Le site ferme la soirée de
+    // ce public à cette réponse — sauf s'il avait cessé de l'attendre : il le
+    // fera au prochain direct, que le bot refusera de même.
+    const closing = siteGaveUp
+      ? "Le site avait déjà cessé d'attendre la réponse : il fermera la soirée de ce public au prochain direct, qui ne republiera rien non plus."
+      : "Le site n'y publie plus rien pour ce public jusqu'à la fin de la soirée.";
+    return `${intro}${closing} Ne pas la reposter à la main.`;
   }
   if (key === "automod") {
     // Citer le texte ou le lien bloqués ferait bloquer le signalement par la
