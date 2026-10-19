@@ -143,7 +143,7 @@ test("announceLive : chaîne officielle → @everyone seul", async () => {
   assert.ok(sent[0].content.startsWith("@everyone "));
 });
 
-test("announceLive : soirée déjà annoncée → message modifié, aucune notification, rien de nouveau", async () => {
+test("announceLive : soirée déjà annoncée → message modifié, sa mention gardée, rien de nouveau", async () => {
   const sent: Sent[] = [];
   const edited: Edited[] = [];
   const request = parseLiveAnnouncement({ ...EVENING, editMessageId: MESSAGE_ID });
@@ -153,7 +153,14 @@ test("announceLive : soirée déjà annoncée → message modifié, aucune notif
   assert.equal(report.messageId, MESSAGE_ID);
   assert.equal(sent.length, 0);
   assert.equal(edited.length, 1);
-  assert.deepEqual(edited[0].allowedMentions, { parse: [], roles: [] });
+  // Mention de tête toujours autorisée : Discord ne la recalcule pas en
+  // « personne » (surlignage gardé) ; une modification ne notifie jamais.
+  assert.ok(edited[0].content.startsWith(`<@&${STREAM_VIEWER_ROLE_ID}> `));
+  assert.deepEqual(edited[0].allowedMentions, { parse: [], roles: [STREAM_VIEWER_ROLE_ID] });
+  const official = parseLiveAnnouncement({ ...EVENING, mention: "everyone", editMessageId: MESSAGE_ID });
+  assert.ok(official);
+  await announceLive(fakeClient({ sent, edited }), official);
+  assert.deepEqual(edited[1].allowedMentions, { parse: ["everyone"], roles: [] });
 });
 
 test("announceLive : message de la soirée disparu ou plus modifiable → suite sans mention ni notification", async () => {
