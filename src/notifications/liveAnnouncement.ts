@@ -304,7 +304,7 @@ export function liveFailureReport(
   if (key === "automod") {
     // Citer le texte ou le lien bloqués ferait bloquer le signalement par la
     // même règle (une règle peut viser les liens de diffusion).
-    return `${intro}${retrySentence(key, siteGaveUp, true)} Texte et lien non cités ici (la même règle pourrait les bloquer).`;
+    return `${intro}${retrySentence(request, key, siteGaveUp, true)} Texte et lien non cités ici (la même règle pourrait les bloquer).`;
   }
   const max = MAX_LIVE_LOG_LENGTH - LOG_PREFIX.length;
   const logged = loggedLiveText(request);
@@ -313,7 +313,7 @@ export function liveFailureReport(
   // l'est, ou si c'est la version sans pseudo (elle diffère alors du texte
   // publié), la consigne de la poster à la main renvoie à la fiche du tournoi.
   const build = (shortened: boolean): { head: string; text: string } => {
-    const head = `${intro}${retrySentence(key, siteGaveUp, shortened)} Annonce concernée :`;
+    const head = `${intro}${retrySentence(request, key, siteGaveUp, shortened)} Annonce concernée :`;
     // Place restante : chaque ligne y gagne « > » (deux caractères).
     const room = max - head.length - link.length - 1;
     const text = room > 2 * lineCount + 1 ? cutText(logged, room - 2 * lineCount) : "";
@@ -327,32 +327,49 @@ export function liveFailureReport(
 }
 
 /**
+ * Mention d'une annonce postée à la main : celle de son public (tout le
+ * serveur, ou le seul rôle StreamViewer pour une autre chaîne que la chaîne
+ * officielle), et **aucune** pour une modification de la soirée, une suite ou
+ * un envoi `notify: false` — un message de la soirée a déjà pu notifier, une
+ * mention de plus notifierait deux fois.
+ */
+function manualMention(request: LiveAnnouncementRequest): string {
+  if (request.editMessageId !== undefined || request.notify === false) {
+    return "sans aucune mention (un message de cette soirée a déjà pu notifier son public)";
+  }
+  return request.mention === "stream-viewer"
+    ? "avec la mention du rôle StreamViewer en tête (pas celle de tout le serveur)"
+    : "avec la mention de tout le serveur en tête";
+}
+
+/**
  * Consigne d'une annonce que le site ne réessaie pas, quand rien n'est parti
  * (toute cause sauf une panne pendant l'envoi) : elle peut être postée à la
- * main, avec la mention, et le texte entier si la citation est raccourcie.
+ * main, avec la mention de son public ({@link manualMention}), et le texte
+ * entier si la citation est raccourcie.
  */
-function manualPostSentence(key: string, shortened: boolean): string {
+function manualPostSentence(request: LiveAnnouncementRequest, key: string, shortened: boolean): string {
   if (key === "discord-down") { return ""; }
   const when = key === "automod" ? "une fois la règle corrigée, " : "";
   const whole = shortened
     ? " (texte cité raccourci, sans pseudo ou absent : reprendre toutes les affiches depuis la fiche du tournoi, /tournois/<n° de « tournoi- » dans l'étiquette>)"
     : "";
-  return ` Rien n'est parti : ${when}elle peut être postée à la main sans doublon, avec la mention de tout le serveur en tête${whole}.`;
+  return ` Rien n'est parti : ${when}elle peut être postée à la main sans doublon, ${manualMention(request)}${whole}.`;
 }
 
 /** Ce que fera le site après cet échec, et ce que le staff peut faire. */
-function retrySentence(key: string, siteGaveUp: boolean, shortened: boolean): string {
+function retrySentence(request: LiveAnnouncementRequest, key: string, siteGaveUp: boolean, shortened: boolean): string {
   if (siteGaveUp) {
     // Le site a cessé d'attendre la réponse : il garde sa réservation.
     return "Le site avait déjà cessé d'attendre la réponse du bot : il ne la réessaie pas." +
-      manualPostSentence(key, shortened);
+      manualPostSentence(request, key, shortened);
   }
   if (key === "discord-down") {
     return "Le site ne la réessaie pas, pour ne pas notifier deux fois tout le serveur.";
   }
   if (isLiveIssueFinal(key)) {
     return "Le site ne la réessaie pas : AutoMod bloquerait de nouveau le même message." +
-      manualPostSentence(key, shortened);
+      manualPostSentence(request, key, shortened);
   }
   return "Le site la réessaie seul pendant les deux heures qui suivent le début du direct : ne pas la " +
     "reposter à la main avant. Signalé au plus une fois par heure, d'autres annonces peuvent échouer " +
