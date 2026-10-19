@@ -88,6 +88,8 @@ test("parseLiveAnnouncement : public, liens ou identifiant invalides → refus",
     { streamUrls: Array.from({ length: MAX_LIVE_STREAM_URLS + 1 }, () => OTHER) },
     { editMessageId: "abc" },
     { editMessageId: 123 },
+    { notify: true },
+    { notify: "false" },
   ]) {
     assert.equal(parseLiveAnnouncement({ ...EVENING, ...patch }), null, JSON.stringify(patch));
   }
@@ -190,4 +192,18 @@ test("announceLive : sans permission de mentionner, la soirée part sans mention
   assert.equal(report.mentionEveryone, false);
   assert.deepEqual(sent[0].allowedMentions, { parse: [], roles: [] });
   assert.ok(sent[0].content.startsWith("🔴"));
+});
+
+test("announceLive : `notify: false` → nouveau message sans mention écrite ni notification", async () => {
+  const request = parseLiveAnnouncement({ ...EVENING, notify: false });
+  assert.equal(request?.notify, false);
+  assert.ok(request);
+  for (const mention of ["stream-viewer", "everyone"] as const) {
+    const sent: Sent[] = [];
+    const report = await announceLive(fakeClient({ sent }), { ...request, mention });
+    assert.equal(report.edited, false);
+    assert.equal(sent.length, 1);
+    assert.deepEqual(sent[0].allowedMentions, { parse: [], roles: [] });
+    assert.ok(sent[0].content.startsWith("🔴"), mention);
+  }
 });
