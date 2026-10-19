@@ -166,6 +166,24 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     partent en un seul message de plusieurs lignes (« 🔴 En direct — Tournoi : »
     puis « • A contre B » par match) ; `context` les cite alors tous
     (`live-announce tournoi-7 match-12,13`).
+  - **Annonces de soirée** (champs facultatifs, un site plus ancien ne les
+    envoie pas) :
+    - `mention` : `"everyone"` (défaut) ou `"stream-viewer"`. Le site réserve
+      `everyone` à la chaîne officielle BlueGenji ; toute autre chaîne notifie
+      le seul rôle StreamViewer (constante `STREAM_VIEWER_ROLE_ID`) :
+      `allowedMentions: { parse: [], roles: [<ce rôle>] }`, jamais `@everyone`.
+      Toute autre valeur : `400`.
+    - `streamUrls` : 1 à 10 liens (même liste blanche que `streamUrl`, le
+      premier égal à `streamUrl`). Le texte les place par des jetons
+      `{{lien:N}}` (N à partir de 1) ; aucun lien n'est alors ajouté en fin.
+      Au canal de logs, ils sont cités entre `<…>` (sans aperçu).
+    - `editMessageId` : identifiant du message #live déjà publié pour la
+      soirée. Le bot le **modifie** (`allowedMentions` vides : aucune nouvelle
+      notification). S'il a disparu ou n'est pas du bot, une **suite** part,
+      sans mention écrite ni notification.
+    - Réponse : `{ posted, mentionEveryone, embedLinks, messageId, edited }`
+      — `messageId` est l'identifiant à renvoyer en `editMessageId` pour la
+      modification suivante, `edited` dit si le message a été modifié.
   - `streamUrl` doit être un lien `https` vers Twitch, YouTube ou Kick, sans
     identifiants ni port, sans espace ni caractère de contrôle, ni page de
     redirection (`/redirect`, `/attribution_link`) ni autre adresse dans son
