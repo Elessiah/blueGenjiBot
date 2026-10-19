@@ -134,7 +134,7 @@ export function neutralizeMassMentions(text: string): string {
  * match (autre étiquette), n'est pas reconnu.
  */
 export function liveAnnouncementNonce(request: LiveAnnouncementRequest): string {
-  // La suite d'une soirée (message disparu) ne reprend pas le jeton du premier
+  // La suite d'une soirée (message plus modifiable) ne reprend pas le jeton du premier
   // envoi, ni un envoi muet (`notify: false`) celui de l'envoi qui a notifié :
   // Discord rendrait le message qui a notifié, que le site garderait muet.
   const followUp = request.editMessageId ? `\n${request.editMessageId}` : "";
@@ -864,8 +864,8 @@ function readPermissions(
 
 /**
  * Modifie le message de la soirée, en un seul appel à Discord (aucune lecture
- * préalable du message). `null` si le message n'est plus modifiable (supprimé,
- * pas du bot, plafond de modifications atteint) : l'appelant poste alors une
+ * préalable du message). `null` si le message n'est plus modifiable (pas du
+ * bot, plafond de modifications atteint) : l'appelant poste alors une
  * suite sans notification.
  *
  * @throws {LiveChannelUnavailableError} Toute autre erreur de Discord.
@@ -897,7 +897,7 @@ async function editEveningMessage(
  * - Nouvelle soirée : un message qui notifie son public — `@everyone` pour la
  *   chaîne officielle, le rôle StreamViewer pour toute autre chaîne.
  * - Soirée déjà annoncée (`editMessageId`) : le message est **modifié**, sans
- *   nouvelle notification ; s'il n'est plus modifiable (supprimé, plafond de
+ *   nouvelle notification ; s'il n'est plus modifiable (pas du bot, plafond de
  *   modifications de Discord atteint), une suite part **sans aucune mention**.
  *
  * Sans la permission « Mentionner @everyone, @here et tous les rôles », le
@@ -948,7 +948,7 @@ export async function announceLive(client: Client, request: LiveAnnouncementRequ
     );
     if (editedId) { return { ...report, messageId: editedId, edited: true }; }
   }
-  // Suite d'une soirée dont le message a disparu, ou soirée peut-être déjà
+  // Suite d'une soirée dont le message ne se modifie plus, ou soirée peut-être déjà
   // notifiée (`notify: false`) : ni mention écrite, ni notification.
   const followUp = request.editMessageId !== undefined || request.notify === false;
   try {
