@@ -569,7 +569,7 @@ export function startInternalApi(client: Client) {
 
     try {
       const report = await announceLive(client, request);
-      console.log(`[live-announce] annonce publiée (${request.context})`);
+      console.log(`[live-announce] annonce ${report.edited ? "modifiée" : "publiée"} (${request.context})`);
       res.json(report);
       if (!report.mentionEveryone) {
         reportLiveIssue(

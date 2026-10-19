@@ -134,7 +134,9 @@ export function neutralizeMassMentions(text: string): string {
  * match (autre étiquette), n'est pas reconnu.
  */
 export function liveAnnouncementNonce(request: LiveAnnouncementRequest): string {
-  const seed = `${request.context}\n${request.streamUrl}`;
+  // La suite d'une soirée (message disparu) ne reprend pas le jeton du premier envoi.
+  const followUp = request.editMessageId ? `\n${request.editMessageId}` : "";
+  const seed = `${request.context}\n${request.streamUrl}${followUp}`;
   return "live" + createHash("sha256").update(seed).digest("hex").slice(0, 21);
 }
 
@@ -371,6 +373,63 @@ export interface LiveAnnouncementRequest {
    * le texte ne nomme aucun joueur : `message` est alors cité.
    */
   logMessage?: string;
+  /**
+   * Public notifié : `everyone` (chaîne officielle, défaut d'un site plus
+   * ancien) ou `stream-viewer` (toute autre chaîne : le rôle
+   * {@link STREAM_VIEWER_ROLE_ID} seulement).
+   */
+  mention?: LiveMentionTarget;
+  /**
+   * Liens d'une annonce de soirée (un par diffusion, le premier = `streamUrl`),
+   * chacun validé par la liste blanche. Le texte les place par des jetons
+   * `{{lien:N}}` (N à partir de 1) ; aucun lien n'est alors ajouté en fin.
+   */
+  streamUrls?: string[];
+  /**
+   * Message #live déjà publié pour la même soirée : il est **modifié** (aucune
+   * nouvelle notification) au lieu d'en poster un nouveau.
+   */
+  editMessageId?: string;
+}
+
+/** Public d'une annonce : tout le serveur, ou le seul rôle StreamViewer. */
+export type LiveMentionTarget = "everyone" | "stream-viewer";
+
+/**
+ * Rôle StreamViewer du serveur BlueGenji, seul notifié pour une diffusion qui
+ * n'est pas la chaîne officielle. Identifiant public, gardé en un seul endroit.
+ */
+export const STREAM_VIEWER_ROLE_ID = "1210173681771479060";
+
+/** Nombre maximal de liens d'une annonce de soirée. */
+export const MAX_LIVE_STREAM_URLS = 10;
+
+/** Jeton d'emplacement d'un lien dans le texte d'une annonce de soirée. */
+const LINK_TOKEN = /\{\{lien:(\d{1,2})\}\}/g;
+
+/** Identifiant de message Discord (snowflake). */
+const SNOWFLAKE = /^\d{17,20}$/;
+
+/**
+ * Remplace les jetons `{{lien:N}}` par les liens validés de la demande ; un
+ * jeton sans lien correspondant disparaît. Sans `streamUrls`, le texte est
+ * rendu tel quel.
+ *
+ * @param text Texte normalisé.
+ * @param urls Liens validés.
+ * @param wrap Habillage d'un lien (`<…>` au canal de logs : pas d'aperçu).
+ * @returns Le texte, liens en place.
+ */
+export function fillLinkTokens(
+  text: string,
+  urls: readonly string[] | undefined,
+  wrap: (url: string) => string = (url) => url,
+): string {
+  if (!urls) { return text; }
+  return text.replace(LINK_TOKEN, (_token, index: string) => {
+    const url = urls[Number(index) - 1];
+    return url ? wrap(url) : "";
+  });
 }
 
 /**
@@ -382,7 +441,7 @@ export interface LiveAnnouncementRequest {
  * @returns Le texte à citer.
  */
 export function loggedLiveText(request: LiveAnnouncementRequest): string {
-  return request.logMessage ?? request.message;
+  return fillLinkTokens(request.logMessage ?? request.message, request.streamUrls, (url) => `<${url}>`);
 }
 
 /** Bilan d'une annonce publiée. */
@@ -392,6 +451,10 @@ export interface LiveAnnouncementReport {
   mentionEveryone: boolean;
   /** `false` : le bot n'a pas la permission d'intégrer des liens (pas d'aperçu de la chaîne). */
   embedLinks: boolean;
+  /** Identifiant du message #live publié ou modifié : le site le garde pour les modifications suivantes. */
+  messageId: string;
+  /** `true` : le message de la soirée a été modifié ; `false` : un nouveau message est parti. */
+  edited: boolean;
 }
 
 /**
@@ -577,27 +640,94 @@ export function parseLiveAnnouncement(payload: unknown): LiveAnnouncementRequest
   const context = rawContext ? cutText(rawContext, MAX_LIVE_CONTEXT_LENGTH) : "live-announce";
   const request: LiveAnnouncementRequest = { message: normalizeLiveText(message), streamUrl, context };
   if (hasLogMessage) { request.logMessage = normalizeLiveText(logMessage); }
+  return withEveningFields(request, raw);
+}
+
+/**
+ * Champs d'une annonce de soirée, tous facultatifs (un site plus ancien ne les
+ * envoie pas) : public, liens, message à modifier.
+ *
+ * @returns La demande complétée, ou `null` si un champ fourni est invalide.
+ */
+function withEveningFields(request: LiveAnnouncementRequest, raw: Record<string, unknown>): LiveAnnouncementRequest | null {
+  if (raw.mention !== undefined) {
+    if (raw.mention !== "everyone" && raw.mention !== "stream-viewer") { return null; }
+    request.mention = raw.mention;
+  }
+  if (raw.streamUrls !== undefined) {
+    const urls = parseStreamUrls(raw.streamUrls, request.streamUrl);
+    if (!urls) { return null; }
+    request.streamUrls = urls;
+  }
+  if (raw.editMessageId !== undefined) {
+    if (typeof raw.editMessageId !== "string" || !SNOWFLAKE.test(raw.editMessageId)) { return null; }
+    request.editMessageId = raw.editMessageId;
+  }
   return request;
+}
+
+
+/**
+ * Liens d'une annonce de soirée : un tableau de 1 à {@link MAX_LIVE_STREAM_URLS}
+ * liens de la liste blanche, le premier égal à `streamUrl`.
+ *
+ * @returns Les liens normalisés, ou `null` si un seul est refusé.
+ */
+function parseStreamUrls(value: unknown, streamUrl: string): string[] | null {
+  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_LIVE_STREAM_URLS) { return null; }
+  const urls = value.map((url) => publishableStreamUrl(typeof url === "string" ? url.trim() : ""));
+  if (urls[0] !== streamUrl || urls.some((url) => url === null)) { return null; }
+  return urls as string[];
+}
+
+/** Mention écrite en tête du message, selon le public. */
+export function mentionPrefix(target: LiveMentionTarget | undefined): string {
+  return target === "stream-viewer" ? `<@&${STREAM_VIEWER_ROLE_ID}> ` : EVERYONE_PREFIX;
 }
 
 /**
  * Texte publié : la mention, le message de l'app, puis le lien seul sur sa
- * ligne (Discord en tire l'aperçu de la chaîne). Sans la permission de
- * mentionner, la mention n'est pas écrite : un « @everyone » gris qui ne
- * notifie personne aurait l'air d'une panne. Le message est raccourci pour que
+ * ligne (Discord en tire l'aperçu de la chaîne). Une annonce de soirée
+ * (`streamUrls`) porte ses liens dans le texte, à la place des jetons
+ * `{{lien:N}}` : aucun lien n'est ajouté en fin. Sans la permission de
+ * mentionner, la mention n'est pas écrite : une mention grise qui ne notifie
+ * personne aurait l'air d'une panne. Le message est raccourci pour que
  * l'ensemble tienne dans les 2 000 caractères d'un message Discord.
  *
  * @param request Demande validée.
- * @param mentionEveryone `false` : le bot ne peut pas notifier tout le serveur.
+ * @param mentionEveryone `false` : le bot ne peut pas notifier (pas de mention écrite).
  * @returns Le contenu du message Discord.
  */
 export function formatLiveAnnouncement(request: LiveAnnouncementRequest, mentionEveryone = true): string {
-  const prefix = mentionEveryone ? EVERYONE_PREFIX : "";
+  const prefix = mentionEveryone ? mentionPrefix(request.mention) : "";
+  if (request.streamUrls) {
+    const filled = fillLinkTokens(request.message, request.streamUrls);
+    return `${prefix}${cutText(filled, DISCORD_MAX_CONTENT_LENGTH - prefix.length)}`;
+  }
   const budget = DISCORD_MAX_CONTENT_LENGTH - prefix.length - 1 - request.streamUrl.length;
   return `${prefix}${cutText(request.message, budget)}\n${request.streamUrl}`;
 }
 
-type AllowedMentions = { parse: "everyone"[] };
+/**
+ * Mentions autorisées d'un envoi : `@everyone` pour la chaîne officielle, le
+ * seul rôle StreamViewer pour les autres, rien du tout pour une modification
+ * ou une suite (aucune nouvelle notification).
+ *
+ * @param target Public de l'annonce.
+ * @param notify `false` : modification, suite, ou permission absente.
+ */
+export function liveAllowedMentions(target: LiveMentionTarget | undefined, notify: boolean): AllowedMentions {
+  if (!notify) { return { parse: [], roles: [] }; }
+  if (target === "stream-viewer") { return { parse: [], roles: [STREAM_VIEWER_ROLE_ID] }; }
+  return { parse: ["everyone"], roles: [] };
+}
+
+type AllowedMentions = { parse: "everyone"[]; roles: string[] };
+
+type EditableMessage = {
+  id: string;
+  edit: (options: { content: string; allowedMentions: AllowedMentions }) => Promise<{ id: string }>;
+};
 
 type SendableChannel = {
   send: (options: {
@@ -606,8 +736,15 @@ type SendableChannel = {
     nonce: string;
     enforceNonce: boolean;
   }) => Promise<{ id: string }>;
+  messages?: { fetch: (id: string) => Promise<EditableMessage> };
   permissionsFor?: (user: unknown) => { has: (flag: bigint) => boolean } | null;
 };
+
+/** Message inconnu : supprimé depuis, ou d'un autre salon. */
+const UNKNOWN_MESSAGE = 10008;
+
+/** Modification refusée : le message n'est pas du bot. */
+const CANNOT_EDIT_OTHERS = 50005;
 
 /**
  * Lit les permissions du bot dans le salon. Un salon qui ne les expose pas (ou
@@ -629,7 +766,33 @@ function readPermissions(
 }
 
 /**
+ * Modifie le message de la soirée. `null` si le message n'est plus modifiable
+ * (supprimé, pas du bot) : l'appelant poste alors une suite sans notification.
+ *
+ * @throws {LiveChannelUnavailableError} Toute autre erreur de Discord.
+ */
+async function editEveningMessage(channel: SendableChannel, messageId: string, content: string): Promise<string | null> {
+  if (!channel.messages) { return null; }
+  try {
+    const message = await channel.messages.fetch(messageId);
+    // La mention de tête reste écrite, mais une modification ne notifie personne.
+    const edited = await message.edit({ content, allowedMentions: liveAllowedMentions(undefined, false) });
+    return edited.id;
+  } catch (error) {
+    const code = discordCode(error);
+    if (code === UNKNOWN_MESSAGE || code === CANNOT_EDIT_OTHERS) { return null; }
+    throw sendFailure(error);
+  }
+}
+
+/**
  * Publie l'annonce dans le salon #live.
+ *
+ * - Nouvelle soirée : un message qui notifie son public — `@everyone` pour la
+ *   chaîne officielle, le rôle StreamViewer pour toute autre chaîne.
+ * - Soirée déjà annoncée (`editMessageId`) : le message est **modifié**, sans
+ *   nouvelle notification ; s'il n'est plus modifiable (supprimé), une suite
+ *   part **sans aucune mention**.
  *
  * Sans la permission « Mentionner @everyone, @here et tous les rôles », le
  * message part quand même, sans la mention — une annonce sans notification
@@ -663,18 +826,25 @@ export async function announceLive(client: Client, request: LiveAnnouncementRequ
   if (!canView) { throw new LiveChannelUnavailableError("no-view", "permission de voir le salon absente"); }
   if (!canSend) { throw new LiveChannelUnavailableError("no-send", "permission d'écrire absente"); }
 
+  const report = { posted: true as const, mentionEveryone: canMentionEveryone, embedLinks: canEmbedLinks };
+  if (request.editMessageId) {
+    const editedId = await editEveningMessage(channel, request.editMessageId, formatLiveAnnouncement(request, canMentionEveryone));
+    if (editedId) { return { ...report, messageId: editedId, edited: true }; }
+  }
+  // Suite d'une soirée dont le message a disparu : ni mention écrite, ni notification.
+  const followUp = request.editMessageId !== undefined;
   try {
-    // `parse: ["everyone"]` et rien d'autre ; toute mention de masse du texte
-    // est neutralisée (`parseLiveAnnouncement`) : seule celle de tête notifie.
+    // Une seule mention autorisée, celle du public de l'annonce ; toute mention
+    // du texte est neutralisée (`parseLiveAnnouncement`) : seule celle de tête notifie.
     // Le jeton d'unicité empêche Discord de créer deux fois la même annonce.
-    await channel.send({
-      content: formatLiveAnnouncement(request, canMentionEveryone),
-      allowedMentions: { parse: canMentionEveryone ? ["everyone"] : [] },
+    const sent = await channel.send({
+      content: formatLiveAnnouncement(request, canMentionEveryone && !followUp),
+      allowedMentions: liveAllowedMentions(request.mention, canMentionEveryone && !followUp),
       nonce: liveAnnouncementNonce(request),
       enforceNonce: true,
     });
+    return { ...report, messageId: sent.id, edited: false };
   } catch (error) {
     throw sendFailure(error);
   }
-  return { posted: true, mentionEveryone: canMentionEveryone, embedLinks: canEmbedLinks };
 }
