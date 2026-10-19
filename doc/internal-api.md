@@ -185,7 +185,8 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
       **suite** part, sans mention écrite ni notification. S'il a été
       **supprimé** (`10008`, souvent par le staff sur demande), rien n'est
       republié : `503` `LIVE_CHANNEL_UNAVAILABLE`, `reason: "message-deleted"`
-      — le site ferme la soirée de ce public jusqu'à la fin de sa fenêtre — et
+      — le site ferme la soirée de ce public jusqu'à la fin de sa fenêtre (au
+      direct suivant s'il avait cessé d'attendre la réponse) — et
       le canal de logs le signale sans citer le texte ni proposer de le
       reposter.
     - `notify` : seule valeur admise `false` — nouveau message **sans mention
