@@ -229,18 +229,19 @@ test("announceLive : `notify: false` → nouveau message sans mention écrite ni
   }
 });
 
-test("liveFailureReport : poster à la main — mention du public, aucune pour une soirée déjà annoncée", () => {
+test("liveFailureReport : poster à la main — aucune mention pour une soirée, celle du public sinon", () => {
   const base = {
     message: "🔴 **Les lives de la soirée**\n\n**21:00** · En direct\nA contre B — Coupe\n{{lien:1}}",
     streamUrl: "https://www.twitch.tv/caster",
     streamUrls: ["https://www.twitch.tv/caster"],
     context: "live-announce soiree-3 tournoi-4 match-40",
   };
-  const everyone = liveFailureReport({ ...base, mention: "everyone" as const }, "send-rejected", "x", { siteGaveUp: true });
-  assert.match(everyone, /avec la mention de tout le serveur en tête/);
-  const viewers = liveFailureReport({ ...base, mention: "stream-viewer" as const }, "send-rejected", "x", { siteGaveUp: true });
-  assert.match(viewers, /avec la mention du rôle StreamViewer en tête \(pas celle de tout le serveur\)/);
-  assert.doesNotMatch(viewers, /avec la mention de tout le serveur/);
+  // Premier message de soirée refusé : le site notifiera au prochain direct.
+  for (const mention of ["everyone", "stream-viewer"] as const) {
+    const first = liveFailureReport({ ...base, mention }, "send-rejected", "x", { siteGaveUp: true });
+    assert.match(first, /sans aucune mention \(le prochain direct de la soirée notifiera son public\)/);
+    assert.doesNotMatch(first, /avec la mention/);
+  }
   // Modification de la soirée, suite, envoi muet : une mention notifierait deux fois.
   for (const request of [
     { ...base, mention: "everyone" as const, editMessageId: "123456789012345678" },
@@ -254,4 +255,9 @@ test("liveFailureReport : poster à la main — mention du public, aucune pour u
       assert.doesNotMatch(report, /avec la mention/);
     }
   }
+  // Annonce simple (sans liens de soirée) : la mention de son public.
+  const single = { message: "Alpha contre Beta", streamUrl: "https://twitch.tv/bg", context: "live-announce match-1" };
+  const viewers = liveFailureReport({ ...single, mention: "stream-viewer" as const }, "send-rejected", "x", { siteGaveUp: true });
+  assert.match(viewers, /avec la mention du rôle StreamViewer en tête \(pas celle de tout le serveur\)/);
+  assert.match(liveFailureReport(single, "send-rejected", "x", { siteGaveUp: true }), /avec la mention de tout le serveur en tête/);
 });
