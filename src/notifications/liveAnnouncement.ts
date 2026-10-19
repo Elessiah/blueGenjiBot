@@ -390,6 +390,12 @@ export interface LiveAnnouncementRequest {
    * nouvelle notification) au lieu d'en poster un nouveau.
    */
   editMessageId?: string;
+  /**
+   * `false` : nouveau message **sans mention écrite ni notification** — soirée
+   * dont le public a peut-être déjà été notifié (premier envoi incertain) sans
+   * message connu à modifier. Absent : notification habituelle.
+   */
+  notify?: false;
 }
 
 /** Public d'une annonce : tout le serveur, ou le seul rôle StreamViewer. */
@@ -663,6 +669,10 @@ function withEveningFields(request: LiveAnnouncementRequest, raw: Record<string,
     if (typeof raw.editMessageId !== "string" || !SNOWFLAKE.test(raw.editMessageId)) { return null; }
     request.editMessageId = raw.editMessageId;
   }
+  if (raw.notify !== undefined) {
+    if (raw.notify !== false) { return null; }
+    request.notify = false;
+  }
   return request;
 }
 
@@ -831,8 +841,9 @@ export async function announceLive(client: Client, request: LiveAnnouncementRequ
     const editedId = await editEveningMessage(channel, request.editMessageId, formatLiveAnnouncement(request, canMentionEveryone));
     if (editedId) { return { ...report, messageId: editedId, edited: true }; }
   }
-  // Suite d'une soirée dont le message a disparu : ni mention écrite, ni notification.
-  const followUp = request.editMessageId !== undefined;
+  // Suite d'une soirée dont le message a disparu, ou soirée peut-être déjà
+  // notifiée (`notify: false`) : ni mention écrite, ni notification.
+  const followUp = request.editMessageId !== undefined || request.notify === false;
   try {
     // Une seule mention autorisée, celle du public de l'annonce ; toute mention
     // du texte est neutralisée (`parseLiveAnnouncement`) : seule celle de tête notifie.
