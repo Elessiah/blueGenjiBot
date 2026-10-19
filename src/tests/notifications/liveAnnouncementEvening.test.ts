@@ -5,11 +5,14 @@ import {
   announceLive,
   fillLinkTokens,
   formatLiveAnnouncement,
+  isLiveIssueFinal,
   liveAllowedMentions,
   liveAnnouncementNonce,
+  LiveChannelUnavailableError,
   liveFailureReport,
   loggedLiveText,
   MAX_LIVE_STREAM_URLS,
+  MESSAGE_DELETED,
   parseLiveAnnouncement,
   STREAM_VIEWER_ROLE_ID,
 } from "../../notifications/liveAnnouncement.js";
@@ -164,8 +167,25 @@ test("announceLive : soirée déjà annoncée → message modifié, sa mention g
   assert.deepEqual(edited[1].allowedMentions, { parse: ["everyone"], roles: [] });
 });
 
-test("announceLive : message de la soirée disparu ou plus modifiable → suite sans mention ni notification", async () => {
-  for (const code of [10008, 50005, 30046]) {
+test("announceLive : message de la soirée supprimé → aucune suite, la soirée est close (suppression respectée)", async () => {
+  const sent: Sent[] = [];
+  const request = parseLiveAnnouncement({ ...EVENING, editMessageId: MESSAGE_ID });
+  assert.ok(request);
+  await assert.rejects(
+    announceLive(fakeClient({ sent, editError: discordError("Unknown Message", 10008) }), request),
+    (error: unknown) => error instanceof LiveChannelUnavailableError && error.key === MESSAGE_DELETED,
+  );
+  assert.equal(sent.length, 0);
+  assert.equal(isLiveIssueFinal(MESSAGE_DELETED), true);
+  // Signalement : ni le texte (il peut nommer un joueur) ni une consigne de le reposter.
+  const report = liveFailureReport(request, MESSAGE_DELETED, "Unknown Message");
+  assert.match(report, /supprimé de #live/);
+  assert.match(report, /Ne pas la reposter à la main\.$/);
+  assert.doesNotMatch(report, /Annonce concernée|peut être postée/);
+});
+
+test("announceLive : message de la soirée plus modifiable → suite sans mention ni notification", async () => {
+  for (const code of [50005, 30046]) {
     const sent: Sent[] = [];
     const request = parseLiveAnnouncement({ ...EVENING, editMessageId: MESSAGE_ID });
     assert.ok(request);
