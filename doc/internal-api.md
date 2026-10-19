@@ -76,6 +76,12 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     joindre les comptes. Un destinataire sans `discordId` est résolu par son
     `handle` (même résolution que `/internal/auth/resolve`) — les joueurs sont
     sur le serveur BlueGenji, l'ID n'est donc pas requis.
+  - **Messages de match : tags certifiés seulement.** L'app n'adresse un
+    horaire, un rappel ou un avis « Match retiré » qu'aux joueurs dont le tag
+    Discord est **certifié** sur le site (`handle` et `discordId` fournis
+    ensemble) ; un tag saisi à la main, ou rattaché par la connexion Discord
+    sans certification, n'est jamais transmis et ne reçoit rien (lutte contre
+    le spam). Le bot n'a rien à filtrer : le tri est fait côté app.
   - **Seuls les membres des serveurs BlueGenji sont démarchés** : le
     destinataire est d'abord retrouvé dans l'un d'eux, par ID quand l'app le
     connaît, par tag sinon. Absent de tous, aucun envoi n'est tenté — un tag
