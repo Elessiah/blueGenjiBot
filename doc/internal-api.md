@@ -258,7 +258,13 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     toute annonce de soirée (`streamUrls`) : une modification (`editMessageId`)
     ou un envoi `notify: false`, un message de la soirée ayant déjà pu
     notifier ; un premier message refusé, le site rendant la notification au
-    prochain direct de la soirée — et le texte entier si la
+    prochain direct de la soirée. Exception : si le site avait déjà cessé
+    d'attendre la réponse, il croit l'annonce peut-être partie — un premier
+    message peut être posté à la main **avec** la mention de son public (le
+    direct suivant partira sans notification), une modification ou un envoi
+    muet ne se postent pas (le direct suivant les reprend dans son message).
+    Un envoi `notify: false` a son propre jeton d'unicité : Discord ne rend pas
+    à sa place le message qui a notifié — et le texte entier si la
     citation est raccourcie ou sans pseudo (après un
     blocage AutoMod, une fois la règle corrigée — ni le texte ni le lien n'y
     sont cités, la même règle pourrait bloquer le signalement : le staff
