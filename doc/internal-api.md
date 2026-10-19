@@ -184,8 +184,9 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
       **suite** part, sans mention écrite ni notification.
     - `notify` : seule valeur admise `false` — nouveau message **sans mention
       écrite ni notification** (le site l'envoie quand la soirée a peut-être
-      déjà notifié son public, sans message connu à modifier). Toute autre
-      valeur : `400`.
+      déjà notifié son public, sans message connu à modifier). Avec
+      `editMessageId` : le message modifié était parti sans mention, la
+      modification n'en écrit pas non plus. Toute autre valeur : `400`.
     - Réponse : `{ posted, mentionEveryone, embedLinks, messageId, edited }`
       — `messageId` est l'identifiant à renvoyer en `editMessageId` pour la
       modification suivante, `edited` dit si le message a été modifié.
