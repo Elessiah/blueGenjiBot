@@ -252,9 +252,12 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     déjà coupé la requête (délai dépassé) — le signalement le dit alors, au
     lieu de promettre un nouvel essai. Pour ces annonces que le site ne
     réessaie pas, hors panne pendant l'envoi, rien n'est parti : le
-    signalement dit qu'elle peut être postée à la main sans doublon, avec
-    « @everyone » en tête et le texte entier si la citation est raccourcie ou
-    sans pseudo (après un
+    signalement dit qu'elle peut être postée à la main sans doublon, avec la
+    mention de son public en tête (« @everyone » pour la chaîne officielle, le
+    rôle StreamViewer pour une autre chaîne) — **sans aucune mention** pour une
+    modification de la soirée (`editMessageId`) ou un envoi `notify: false`, un
+    message de la soirée ayant déjà pu notifier — et le texte entier si la
+    citation est raccourcie ou sans pseudo (après un
     blocage AutoMod, une fois la règle corrigée — ni le texte ni le lien n'y
     sont cités, la même règle pourrait bloquer le signalement : le staff
     reprend les affiches depuis la fiche du tournoi, dont le numéro suit
