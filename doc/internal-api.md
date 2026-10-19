@@ -178,8 +178,9 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
       `{{lien:N}}` (N à partir de 1) ; aucun lien n'est alors ajouté en fin.
       Au canal de logs, ils sont cités entre `<…>` (sans aperçu).
     - `editMessageId` : identifiant du message #live déjà publié pour la
-      soirée. Le bot le **modifie** (`allowedMentions` vides : aucune nouvelle
-      notification), en un seul appel à Discord. S'il a disparu, n'est pas du
+      soirée. Le bot le **modifie** (aucune nouvelle notification : Discord ne
+      notifie jamais sur une modification ; la mention de tête reste autorisée
+      pour garder son surlignage), en un seul appel à Discord. S'il a disparu, n'est pas du
       bot ou ne se modifie plus (plafond de modifications de Discord), une
       **suite** part, sans mention écrite ni notification.
     - `notify` : seule valeur admise `false` — nouveau message **sans mention
