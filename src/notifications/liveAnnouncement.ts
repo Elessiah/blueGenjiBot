@@ -327,15 +327,19 @@ export function liveFailureReport(
 }
 
 /**
- * Mention d'une annonce postée à la main : celle de son public (tout le
- * serveur, ou le seul rôle StreamViewer pour une autre chaîne que la chaîne
- * officielle), et **aucune** pour une modification de la soirée, une suite ou
- * un envoi `notify: false` — un message de la soirée a déjà pu notifier, une
- * mention de plus notifierait deux fois.
+ * Mention d'une annonce postée à la main : **aucune** pour une annonce de
+ * soirée — modification, suite ou envoi `notify: false` (un message de la
+ * soirée a déjà pu notifier), ou premier message refusé (le site rend alors la
+ * notification au prochain direct de la soirée : une mention à la main
+ * notifierait deux fois) —, sinon celle de son public (tout le serveur, ou le
+ * seul rôle StreamViewer pour une autre chaîne que la chaîne officielle).
  */
 function manualMention(request: LiveAnnouncementRequest): string {
   if (request.editMessageId !== undefined || request.notify === false) {
     return "sans aucune mention (un message de cette soirée a déjà pu notifier son public)";
+  }
+  if (request.streamUrls !== undefined) {
+    return "sans aucune mention (le prochain direct de la soirée notifiera son public)";
   }
   return request.mention === "stream-viewer"
     ? "avec la mention du rôle StreamViewer en tête (pas celle de tout le serveur)"
