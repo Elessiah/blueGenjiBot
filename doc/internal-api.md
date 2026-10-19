@@ -257,7 +257,9 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     rôle StreamViewer pour une autre chaîne) — **sans aucune mention** pour
     toute annonce de soirée (`streamUrls`) : une modification (`editMessageId`)
     ou un envoi `notify: false`, un message de la soirée ayant déjà pu
-    notifier ; un premier message refusé, le site rendant la notification au
+    notifier — et seuls les matchs de l'étiquette que #live ne montre pas
+    encore, pas le texte entier de la soirée, déjà publié en partie ; un
+    premier message refusé, le site rendant la notification au
     prochain direct de la soirée. Exception : si le site avait déjà cessé
     d'attendre la réponse, il croit l'annonce peut-être partie — un premier
     message peut être posté à la main **avec** la mention de son public (le
