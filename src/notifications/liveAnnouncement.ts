@@ -236,6 +236,9 @@ export function describeLiveIssue(key: string, rawDetail: string): string {
     case "discord-down":
       return `Discord n'a pas répondu ou a limité le bot pendant l'envoi (${detail}) — rien à régler sur le salon ; ` +
         "l'annonce a pu partir malgré tout (vérifier #live)";
+    case "message-deleted":
+      return "le message de la soirée a été supprimé de #live — le site n'y publie plus rien pour ce public jusqu'à la fin de la soirée, " +
+        "pour que la suppression tienne (aucune suite ne le republie)";
     default:
       return `erreur inattendue (${detail})`;
   }
@@ -265,7 +268,7 @@ function quoteLines(text: string): string {
  * `@everyone` serait pire qu'une annonce perdue), ou un message qu'AutoMod
  * bloquerait de nouveau tel quel (chaque essai alerterait la modération).
  */
-const NOT_RETRIED_KEYS = new Set(["discord-down", "automod"]);
+const NOT_RETRIED_KEYS = new Set(["discord-down", "automod", "message-deleted"]);
 
 /**
  * Vrai si le site ne réessaiera pas l'annonce après cette cause. Chacune de
@@ -304,6 +307,11 @@ export function liveFailureReport(
   const siteGaveUp = options.siteGaveUp === true;
   const link = `\n<${request.streamUrl}>`;
   const intro = `Annonce de live ${liveFailureVerdict(key)} (${request.context}) : ${describeLiveIssue(key, detail)}. `;
+  if (key === MESSAGE_DELETED) {
+    // Message supprimé (souvent sur demande) : ni son texte ni une consigne
+    // de le reposter, la suppression doit tenir.
+    return `${intro}Ne pas la reposter à la main.`;
+  }
   if (key === "automod") {
     // Citer le texte ou le lien bloqués ferait bloquer le signalement par la
     // même règle (une règle peut viser les liens de diffusion).
@@ -821,8 +829,19 @@ const CANNOT_EDIT_OTHERS = 50005;
  */
 const EDIT_LIMIT_REACHED = 30046;
 
-/** Refus qui rendent le message de la soirée non modifiable : une suite part à sa place. */
-const NOT_EDITABLE: ReadonlySet<number> = new Set([UNKNOWN_MESSAGE, CANNOT_EDIT_OTHERS, EDIT_LIMIT_REACHED]);
+/**
+ * Refus qui rendent le message de la soirée non modifiable : une suite part à
+ * sa place. Un message **inconnu** (`10008`) n'en fait pas partie : supprimé de
+ * #live — souvent par le staff, sur demande —, il n'est pas republié par une
+ * suite ({@link MESSAGE_DELETED}).
+ */
+const NOT_EDITABLE: ReadonlySet<number> = new Set([CANNOT_EDIT_OTHERS, EDIT_LIMIT_REACHED]);
+
+/**
+ * Clé d'incident d'un message de la soirée supprimé : le site ferme la soirée
+ * de ce public (plus rien n'y est publié jusqu'à la fin de sa fenêtre).
+ */
+export const MESSAGE_DELETED = "message-deleted";
 
 /**
  * Lit les permissions du bot dans le salon. Un salon qui ne les expose pas (ou
@@ -864,6 +883,10 @@ async function editEveningMessage(
   } catch (error) {
     const code = discordCode(error);
     if (code !== undefined && NOT_EDITABLE.has(code)) { return null; }
+    if (code === UNKNOWN_MESSAGE) {
+      const detail = (error as Error).message;
+      throw new LiveChannelUnavailableError(MESSAGE_DELETED, `message de la soirée supprimé (${detail})`, detail);
+    }
     throw sendFailure(error);
   }
 }
