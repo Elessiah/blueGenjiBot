@@ -407,8 +407,19 @@ function eveningGaveUpSentence(request: LiveAnnouncementRequest, key: string, sh
   return ` Rien n'est parti : ${when}elle peut être postée à la main, ${audienceMention(request)} — le site la croit peut-être partie, le direct suivant de la soirée partira sans notification${whole}.`;
 }
 
+/**
+ * Consigne d'une mise à jour de la soirée (matchs terminés) qui a échoué :
+ * rien à poster à la main — les matchs sont déjà dans #live, seul leur état
+ * (« Terminé ») manque, et le site la refait à la fin de match ou au direct
+ * suivant de la soirée.
+ */
+const REFRESH_SENTENCE =
+  "Simple mise à jour des matchs terminés de la soirée : rien à poster à la main, " +
+  "la fin de match ou le direct suivant de la soirée la refera.";
+
 /** Ce que fera le site après cet échec, et ce que le staff peut faire. */
 function retrySentence(request: LiveAnnouncementRequest, key: string, siteGaveUp: boolean, shortened: boolean): string {
+  if (request.refresh === true) { return REFRESH_SENTENCE; }
   if (siteGaveUp && request.streamUrls !== undefined) {
     return "Le site avait déjà cessé d'attendre la réponse du bot : il ne la réessaie pas." +
       eveningGaveUpSentence(request, key, shortened);
@@ -469,6 +480,12 @@ export interface LiveAnnouncementRequest {
    * habituelle.
    */
   notify?: false;
+  /**
+   * `true` : simple **mise à jour** du message de la soirée (matchs terminés),
+   * toujours avec `editMessageId`. Rien n'est à poster à la main si elle
+   * échoue : la fin de match ou le direct suivant de la soirée la refera.
+   */
+  refresh?: true;
 }
 
 /** Public d'une annonce : tout le serveur, ou le seul rôle StreamViewer. */
@@ -746,6 +763,20 @@ function withEveningFields(request: LiveAnnouncementRequest, raw: Record<string,
     if (raw.notify !== false) { return null; }
     request.notify = false;
   }
+  return withRefresh(request, raw.refresh);
+}
+
+/**
+ * Marque de mise à jour (`refresh`) : `true` seulement, et avec
+ * `editMessageId` — une mise à jour modifie un message connu, jamais n'en
+ * crée un premier.
+ *
+ * @returns La demande, ou `null` si la marque est invalide.
+ */
+function withRefresh(request: LiveAnnouncementRequest, refresh: unknown): LiveAnnouncementRequest | null {
+  if (refresh === undefined) { return request; }
+  if (refresh !== true || request.editMessageId === undefined) { return null; }
+  request.refresh = true;
   return request;
 }
 
