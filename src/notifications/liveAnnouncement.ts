@@ -139,7 +139,12 @@ export function liveAnnouncementNonce(request: LiveAnnouncementRequest): string 
   // Discord rendrait le message qui a notifié, que le site garderait muet.
   const followUp = request.editMessageId ? `\n${request.editMessageId}` : "";
   const quiet = request.notify === false ? "\nquiet" : "";
-  const seed = `${request.context}\n${request.streamUrl}${followUp}${quiet}`;
+  // Ni l'une ni l'autre ne notifie : leur jeton tient aussi au texte, sans quoi
+  // une suite rédigée plus tard (autre fin de match, même message à remplacer)
+  // recevrait de Discord la suite précédente, à l'ancien texte, que le site
+  // tiendrait pour à jour.
+  const text = followUp || quiet ? `\n${request.message}` : "";
+  const seed = `${request.context}\n${request.streamUrl}${followUp}${quiet}${text}`;
   return "live" + createHash("sha256").update(seed).digest("hex").slice(0, 21);
 }
 
