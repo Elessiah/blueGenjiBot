@@ -180,8 +180,12 @@ test("announceLive : message de la soirée supprimé → aucune suite, la soiré
   // Signalement : ni le texte (il peut nommer un joueur) ni une consigne de le reposter.
   const report = liveFailureReport(request, MESSAGE_DELETED, "Unknown Message");
   assert.match(report, /supprimé de #live/);
-  assert.match(report, /Ne pas la reposter à la main\.$/);
+  assert.match(report, /Le site n'y publie plus rien pour ce public jusqu'à la fin de la soirée\. Ne pas la reposter à la main\.$/);
   assert.doesNotMatch(report, /Annonce concernée|peut être postée/);
+  // Site parti avant la réponse : il ne sait pas encore, il fermera au prochain direct.
+  const gaveUp = liveFailureReport(request, MESSAGE_DELETED, "Unknown Message", { siteGaveUp: true });
+  assert.match(gaveUp, /il fermera la soirée de ce public au prochain direct/);
+  assert.doesNotMatch(gaveUp, /n'y publie plus rien/);
 });
 
 test("announceLive : message de la soirée plus modifiable → suite sans mention ni notification", async () => {
