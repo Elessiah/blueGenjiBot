@@ -227,35 +227,58 @@ test("announceLive : `notify: false` → nouveau message sans mention écrite ni
     assert.deepEqual(sent[0].allowedMentions, { parse: [], roles: [] });
     assert.ok(sent[0].content.startsWith("🔴"), mention);
   }
+  // Jeton d'unicité distinct de l'envoi qui a notifié : Discord ne rend pas ce message-là.
+  assert.notEqual(liveAnnouncementNonce(request), liveAnnouncementNonce({ ...request, notify: undefined }));
 });
 
-test("liveFailureReport : poster à la main — aucune mention pour une soirée, celle du public sinon", () => {
-  const base = {
-    message: "🔴 **Les lives de la soirée**\n\n**21:00** · En direct\nA contre B — Coupe\n{{lien:1}}",
-    streamUrl: "https://www.twitch.tv/caster",
-    streamUrls: ["https://www.twitch.tv/caster"],
-    context: "live-announce soiree-3 tournoi-4 match-40",
-  };
-  // Premier message de soirée refusé : le site notifiera au prochain direct.
+const EVENING_REPORT = {
+  message: "🔴 **Les lives de la soirée**\n\n**21:00** · En direct\nA contre B — Coupe\n{{lien:1}}",
+  streamUrl: "https://www.twitch.tv/caster",
+  streamUrls: ["https://www.twitch.tv/caster"],
+  context: "live-announce soiree-3 tournoi-4 match-40",
+};
+
+test("liveFailureReport : soirée refusée, le site attendait encore → poster à la main sans aucune mention", () => {
+  // Premier message bloqué par AutoMod : le site rend la marque, le direct suivant notifiera.
   for (const mention of ["everyone", "stream-viewer"] as const) {
-    const first = liveFailureReport({ ...base, mention }, "send-rejected", "x", { siteGaveUp: true });
+    const first = liveFailureReport({ ...EVENING_REPORT, mention }, "automod", "x");
     assert.match(first, /sans aucune mention \(le prochain direct de la soirée notifiera son public\)/);
     assert.doesNotMatch(first, /avec la mention/);
   }
-  // Modification de la soirée, suite, envoi muet : une mention notifierait deux fois.
+  // Modification, suite, envoi muet : un message de la soirée a pu notifier.
   for (const request of [
-    { ...base, mention: "everyone" as const, editMessageId: "123456789012345678" },
-    { ...base, mention: "stream-viewer" as const, notify: false as const },
+    { ...EVENING_REPORT, mention: "everyone" as const, editMessageId: "123456789012345678" },
+    { ...EVENING_REPORT, mention: "stream-viewer" as const, notify: false as const },
   ]) {
-    for (const report of [
-      liveFailureReport(request, "send-rejected", "x", { siteGaveUp: true }),
-      liveFailureReport(request, "automod", "x"),
-    ]) {
-      assert.match(report, /sans aucune mention \(un message de cette soirée a déjà pu notifier son public\)/);
-      assert.doesNotMatch(report, /avec la mention/);
-    }
+    const report = liveFailureReport(request, "automod", "x");
+    assert.match(report, /sans aucune mention \(un message de cette soirée a déjà pu notifier son public\)/);
+    assert.doesNotMatch(report, /avec la mention/);
   }
-  // Annonce simple (sans liens de soirée) : la mention de son public.
+});
+
+test("liveFailureReport : soirée refusée après l'abandon du site → il la croit partie", () => {
+  // Premier message : poster à la main avec la mention de son public, le direct suivant ne notifiera pas.
+  const everyone = liveFailureReport({ ...EVENING_REPORT, mention: "everyone" }, "send-rejected", "x", { siteGaveUp: true });
+  assert.match(everyone, /postée à la main, avec la mention de tout le serveur en tête — le site la croit peut-être partie, le direct suivant de la soirée partira sans notification/);
+  const viewers = liveFailureReport({ ...EVENING_REPORT, mention: "stream-viewer" }, "send-rejected", "x", { siteGaveUp: true });
+  assert.match(viewers, /avec la mention du rôle StreamViewer en tête \(pas celle de tout le serveur\)/);
+  // Modification ou envoi muet : ne pas la poster, le direct suivant la reprend.
+  for (const request of [
+    { ...EVENING_REPORT, mention: "everyone" as const, editMessageId: "123456789012345678" },
+    { ...EVENING_REPORT, mention: "everyone" as const, notify: false as const },
+  ]) {
+    const report = liveFailureReport(request, "send-rejected", "x", { siteGaveUp: true });
+    assert.match(report, /ne pas la poster à la main, le direct suivant de la soirée la reprendra dans son message/);
+    assert.doesNotMatch(report, /peut être postée/);
+  }
+  // Panne pendant l'envoi : aucune consigne de la poster.
+  assert.doesNotMatch(
+    liveFailureReport({ ...EVENING_REPORT, mention: "everyone" }, "discord-down", "x", { siteGaveUp: true }),
+    /à la main/,
+  );
+});
+
+test("liveFailureReport : annonce simple → la mention de son public", () => {
   const single = { message: "Alpha contre Beta", streamUrl: "https://twitch.tv/bg", context: "live-announce match-1" };
   const viewers = liveFailureReport({ ...single, mention: "stream-viewer" as const }, "send-rejected", "x", { siteGaveUp: true });
   assert.match(viewers, /avec la mention du rôle StreamViewer en tête \(pas celle de tout le serveur\)/);
