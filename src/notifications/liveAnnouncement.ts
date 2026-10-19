@@ -722,11 +722,11 @@ export function formatLiveAnnouncement(request: LiveAnnouncementRequest, mention
 
 /**
  * Mentions autorisées d'un envoi : `@everyone` pour la chaîne officielle, le
- * seul rôle StreamViewer pour les autres, rien du tout pour une modification
- * ou une suite (aucune nouvelle notification).
+ * seul rôle StreamViewer pour les autres, rien du tout pour une suite ou un
+ * message parti sans mention (aucune nouvelle notification).
  *
  * @param target Public de l'annonce.
- * @param notify `false` : modification, suite, ou permission absente.
+ * @param notify `false` : suite, message sans mention, ou permission absente.
  */
 export function liveAllowedMentions(target: LiveMentionTarget | undefined, notify: boolean): AllowedMentions {
   if (!notify) { return { parse: [], roles: [] }; }
@@ -792,11 +792,15 @@ function readPermissions(
  *
  * @throws {LiveChannelUnavailableError} Toute autre erreur de Discord.
  */
-async function editEveningMessage(channel: SendableChannel, messageId: string, content: string): Promise<string | null> {
+async function editEveningMessage(
+  channel: SendableChannel,
+  messageId: string,
+  content: string,
+  allowedMentions: AllowedMentions,
+): Promise<string | null> {
   if (!channel.messages) { return null; }
   try {
-    // La mention de tête reste écrite, mais une modification ne notifie personne.
-    const edited = await channel.messages.edit(messageId, { content, allowedMentions: liveAllowedMentions(undefined, false) });
+    const edited = await channel.messages.edit(messageId, { content, allowedMentions });
     return edited.id;
   } catch (error) {
     const code = discordCode(error);
@@ -848,9 +852,18 @@ export async function announceLive(client: Client, request: LiveAnnouncementRequ
 
   const report = { posted: true as const, mentionEveryone: canMentionEveryone, embedLinks: canEmbedLinks };
   if (request.editMessageId) {
-    // Un message parti sans mention (`notify: false`) n'en reçoit pas à sa modification.
-    const content = formatLiveAnnouncement(request, canMentionEveryone && request.notify !== false);
-    const editedId = await editEveningMessage(channel, request.editMessageId, content);
+    // Un message parti sans mention (`notify: false`) n'en reçoit pas à sa
+    // modification. Celui qui a notifié garde sa mention, autorisée de nouveau :
+    // sans elle, Discord la recalculerait comme ne visant personne (surlignage
+    // et « Mentions récentes » perdus). Une modification ne notifie jamais.
+    const mention = canMentionEveryone && request.notify !== false;
+    const content = formatLiveAnnouncement(request, mention);
+    const editedId = await editEveningMessage(
+      channel,
+      request.editMessageId,
+      content,
+      liveAllowedMentions(request.mention, mention),
+    );
     if (editedId) { return { ...report, messageId: editedId, edited: true }; }
   }
   // Suite d'une soirée dont le message a disparu, ou soirée peut-être déjà
