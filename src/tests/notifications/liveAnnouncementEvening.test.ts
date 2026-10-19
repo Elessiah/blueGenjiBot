@@ -259,6 +259,22 @@ test("announceLive : `notify: false` → nouveau message sans mention écrite ni
   assert.notEqual(liveAnnouncementNonce(request), liveAnnouncementNonce({ ...request, notify: undefined }));
 });
 
+test("liveAnnouncementNonce : une suite ou un envoi muet au texte changé a un autre jeton ; le même envoi rejoué garde le sien", () => {
+  const request = parseLiveAnnouncement({ ...EVENING, editMessageId: MESSAGE_ID });
+  assert.ok(request);
+  const later = { ...request, message: `${request.message}\n· Terminé` };
+  // Suite rédigée plus tard pour le même message : Discord ne rend pas la précédente.
+  assert.notEqual(liveAnnouncementNonce(later), liveAnnouncementNonce(request));
+  assert.notEqual(liveAnnouncementNonce({ ...later, notify: false }), liveAnnouncementNonce({ ...request, notify: false }));
+  // Réponse perdue, même envoi rejoué : même jeton, pas de doublon.
+  assert.equal(liveAnnouncementNonce({ ...request }), liveAnnouncementNonce(request));
+  // Premier envoi qui notifie : le jeton ne tient pas au texte (un autre texte
+  // du même match, rejoué peu après, ne notifie pas une seconde fois).
+  const first = parseLiveAnnouncement(EVENING);
+  assert.ok(first);
+  assert.equal(liveAnnouncementNonce({ ...first, message: "autre texte" }), liveAnnouncementNonce(first));
+});
+
 const EVENING_REPORT = {
   message: "🔴 **Les lives de la soirée**\n\n**21:00** · En direct\nA contre B — Coupe\n{{lien:1}}",
   streamUrl: "https://www.twitch.tv/caster",
