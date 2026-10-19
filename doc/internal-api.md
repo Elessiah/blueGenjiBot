@@ -180,9 +180,14 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     - `editMessageId` : identifiant du message #live déjà publié pour la
       soirée. Le bot le **modifie** (aucune nouvelle notification : Discord ne
       notifie jamais sur une modification ; la mention de tête reste autorisée
-      pour garder son surlignage), en un seul appel à Discord. S'il a disparu, n'est pas du
-      bot ou ne se modifie plus (plafond de modifications de Discord), une
-      **suite** part, sans mention écrite ni notification.
+      pour garder son surlignage), en un seul appel à Discord. S'il n'est pas
+      du bot ou ne se modifie plus (plafond de modifications de Discord), une
+      **suite** part, sans mention écrite ni notification. S'il a été
+      **supprimé** (`10008`, souvent par le staff sur demande), rien n'est
+      republié : `503` `LIVE_CHANNEL_UNAVAILABLE`, `reason: "message-deleted"`
+      — le site ferme la soirée de ce public jusqu'à la fin de sa fenêtre — et
+      le canal de logs le signale sans citer le texte ni proposer de le
+      reposter.
     - `notify` : seule valeur admise `false` — nouveau message **sans mention
       écrite ni notification** (le site l'envoie quand la soirée a peut-être
       déjà notifié son public, sans message connu à modifier). Avec
