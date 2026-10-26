@@ -114,7 +114,11 @@ export function banNoticeMessage(date: Date | string, reason: string): string {
   // reviendrait à chaque message relayé de l'exclu (`checkBan` le renotifie) :
   // le motif est coupé pour que l'avis tienne, en-tête bilingue compris.
   const room = DISCORD_DM_MAX_LENGTH - head.length;
-  return head + (reason.length <= room ? reason : reason.slice(0, Math.max(0, room - 1)) + "…");
+  if (reason.length <= room) { return head + reason; }
+  let cut = Math.max(0, room - 1);
+  // Ne pas couper un émoji (paire de substitution UTF-16) en son milieu.
+  if (cut > 0 && /[\uD800-\uDBFF]/.test(reason.charAt(cut - 1))) { cut -= 1; }
+  return head + reason.slice(0, cut) + "…";
 }
 
 /** Plafond d'un message Discord (l'API refuse au-delà). */
