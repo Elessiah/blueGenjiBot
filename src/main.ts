@@ -255,7 +255,8 @@ client.on("clientReady", async () => {
       },
       { timezone: "Europe/Paris" },
     );
-    // Sauvegarde hebdomadaire de la base envoyée en MP au propriétaire (lundi 04h00).
+    // Rapport hebdomadaire de sauvegarde envoyé en MP au propriétaire (lundi 04h00) ;
+    // il relit la sauvegarde du dimanche soir (cron système, dimanche et mardi 23 h 49).
     cron.schedule(
       "0 4 * * 1",
       async () => {

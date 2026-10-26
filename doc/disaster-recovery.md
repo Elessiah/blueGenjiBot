@@ -13,7 +13,7 @@ désigne le dossier du dépôt du bot, `<app>` celui du site.
 
 Ce que la reprise rend, et ce qu'elle perd :
 
-- **les deux bases** reviennent à l'état de la **dernière archive** (le lundi précédent au plus tard) — tout ce qui a été écrit depuis est perdu ;
+- **les deux bases** reviennent à l'état de la **dernière archive** (le dimanche ou le mardi soir précédent au plus tard) — tout ce qui a été écrit depuis est perdu ;
 - **les images**, les **logos en quarantaine** et le **journal des suppressions** reviennent à leur état d'**une heure au plus** avant la perte ;
 - une suppression de compte faite dans l'heure qui a précédé la perte n'a pas encore été copiée : elle ne sera pas rejouée.
 - **les deux ne coïncident pas** : une image remplacée ou supprimée après l'archive n'existe plus sur le stockage (le miroir horaire l'a effacée), si bien que la base restaurée peut désigner un fichier absent — le site affiche alors l'initiale, et l'équipe ou le joueur concerné renvoie son image. Même décalage pour la **quarantaine** (logos d'équipe et avatars) : tout masquage, rétablissement ou suppression survenu entre l'archive et la perte laisse la base restaurée et les fichiers en désaccord — un fichier masqué que la base ignore (jamais purgé au bout des six mois, et recopié chaque heure), ou un masquage que la base croit en cours alors que le fichier est déjà revenu dans `public/uploads` (« Rétablir » échoue, le logo reste caché). À l'étape 5, confronter `data/quarantine` aux masquages que la base restaurée connaît et régler chaque écart à la main (requête et gestes à l'étape 5, « Confronter la quarantaine »).
@@ -115,7 +115,7 @@ command -v mysqldump    # le script de sauvegarde appelle ce nom
 
 MariaDB 11.8 : `sudo apt install -y mariadb-server` **seulement si la distribution la livre** (Debian 13) — vérifier avec `apt-cache policy mariadb-server` avant d'installer, puis `mariadb --version`. Sinon, l'installer depuis le dépôt officiel de MariaDB (série 11.8). À faire **ici**, pas à l'étape 4 : une version trop ancienne ne se découvre sinon qu'à l'import.
 
-Sur Debian 13, `mysqldump` est fourni par **`mariadb-client` lui-même** (lien vers `mariadb-dump` ; `dpkg -S /usr/bin/mysqldump` répondait `mariadb-client` sur l'ancienne machine) : aucun paquet de plus. Sur une autre distribution, si `command -v mysqldump` ne rend rien, chercher le paquet qui fournit `/usr/bin/mysqldump` (`sudo apt install -y apt-file && sudo apt-file update && apt-file search /usr/bin/mysqldump`) : sans lui, la sauvegarde du lundi échoue sur un `mysqldump: command not found`.
+Sur Debian 13, `mysqldump` est fourni par **`mariadb-client` lui-même** (lien vers `mariadb-dump` ; `dpkg -S /usr/bin/mysqldump` répondait `mariadb-client` sur l'ancienne machine) : aucun paquet de plus. Sur une autre distribution, si `command -v mysqldump` ne rend rien, chercher le paquet qui fournit `/usr/bin/mysqldump` (`sudo apt install -y apt-file && sudo apt-file update && apt-file search /usr/bin/mysqldump`) : sans lui, la sauvegarde (dimanche et mardi soir) échoue sur un `mysqldump: command not found`.
 
 Créer aussi le **dossier des journaux** que nomment l'entrée pm2 du site (`--output`, `--error`) et les lignes de cron (`>> …/bluegenji-backup.log`) — même emplacement que sur l'ancienne machine. Absent, `pm2 start` échoue en `ENOENT`, et le shell du cron refuse la redirection **sans lancer le script** : aucune sauvegarde, et aucune trace de l'échec.
 
@@ -258,8 +258,8 @@ et s'authentifie par socket, avec `SELECT, SHOW VIEW, EVENT, TRIGGER` sur la seu
 base du site — les droits exacts de l'ancienne machine. Il doit être **distinct**
 du `DB_USER` du site.
 S'ils portaient le même nom, le `CREATE USER IF NOT EXISTS` de la sauvegarde
-ne ferait rien, le compte resterait à mot de passe seul, et le `mysqldump` du
-lundi échouerait en `Access denied`.
+ne ferait rien, le compte resterait à mot de passe seul, et le `mysqldump` de la
+sauvegarde échouerait en `Access denied`.
 
 **Ne pas encore démarrer le site** : la base restaurée contient des comptes
 supprimés depuis l'archive (étape 6).

@@ -68,7 +68,7 @@ Ils sont traités à part, par `scripts/sync-uploads-onedrive.sh` :
 
 - **au fil de l'eau** — `rclone sync` n'envoie que les fichiers nouveaux ou
   modifiés, le script tourne donc chaque heure pour presque rien, et une image
-  n'attend pas le lundi suivant sa première copie ;
+  n'attend pas la sauvegarde suivante (dimanche ou mardi soir) pour sa première copie ;
 - **en miroir strict** — un fichier supprimé du site (avatar changé, compte
   supprimé, logo retiré) est supprimé du stockage distant au passage suivant,
   soit en moins d'une heure, et **définitivement** (voir la section précédente).
@@ -113,7 +113,7 @@ distant:BlueGenji/chiffre/      # vu en clair par distant-crypt: uniquement
 (`distant` et `distant-crypt` sont des noms d'exemple : ce sont ceux que
 `RCLONE_REMOTE` et `UPLOADS_RCLONE_REMOTE` désignent dans `backup-onedrive.env`.)
 
-La sauvegarde du lundi lance aussi cette synchronisation : le statut annonce
+Chaque sauvegarde (dimanche et mardi soir) lance aussi cette synchronisation : le statut annonce
 alors `sqlite+mysql+images`, et passe en échec si les images n'ont pas pu partir
 — c'est le seul endroit où une panne du cron horaire se remarque.
 
@@ -284,21 +284,22 @@ Premier essai à la main :
 
 ### 6. Cron
 
-`crontab -e`, tous les lundis à 3 h (avant le rapport du bot, à 4 h). La ligne
+`crontab -e`, deux fois par semaine : le dimanche et le mardi à 23 h 49 (heure de
+Paris) — celle du dimanche soir précède le rapport du bot, le lundi à 4 h. La ligne
 `PATH` n'est pas décorative : cron ne voit que `/usr/bin:/bin` par défaut, donc
 sans elle c'est la `rclone` d'APT, trop ancienne, qui serait appelée, et l'échec
 ne se manifesterait qu'en production.
 
 ```cron
 PATH=/usr/local/bin:/usr/bin:/bin
-0 3 * * 1 /home/<compte_systeme>/apps/blueGenjiBot/scripts/backup-onedrive.sh >> /home/<compte_systeme>/apps/logs/bluegenji-backup.log 2>&1
+49 23 * * 0,2 /home/<compte_systeme>/apps/blueGenjiBot/scripts/backup-onedrive.sh >> /home/<compte_systeme>/apps/logs/bluegenji-backup.log 2>&1
 17 * * * * /home/<compte_systeme>/apps/blueGenjiBot/scripts/sync-uploads-onedrive.sh >> /home/<compte_systeme>/apps/logs/bluegenji-uploads.log 2>&1
 ```
 
 La seconde ligne synchronise les images et le journal des suppressions chaque
 heure : une image ou un compte supprimé du site quitte le stockage distant dans
 l'heure. Elle purge aussi les archives de plus de `RETENTION_DAYS` jours — la
-purge du lundi seule laisserait une archive vivre jusqu'à 35 jours.
+purge des seules sauvegardes (dimanche et mardi) laisserait une archive vivre jusqu'à 35 jours.
 Renseigner d'abord `UPLOADS_DIR` dans `backup-onedrive.env` (chemin absolu de
 `public/uploads` de l'app) et créer le remote chiffré (3 bis), puis faire un
 premier passage à la main — c'est lui qui envoie tout le dossier, les suivants
@@ -308,8 +309,9 @@ n'envoient que les nouveautés :
 ./scripts/sync-uploads-onedrive.sh
 ```
 
-Les deux tâches partagent un verrou (`flock`) : si elles se croisent le lundi à
-3 h, la seconde attend la première au lieu de synchroniser en même temps.
+Les deux tâches partagent un verrou (`flock`) : la sauvegarde démarre à 23 h 49,
+à l'écart du passage horaire (minute 17), mais si elle dure assez pour le
+croiser, la seconde attend la première au lieu de synchroniser en même temps.
 
 ### Changement de fournisseur
 
@@ -322,7 +324,7 @@ seulement** effacer définitivement les copies laissées chez l'ancien fournisse
 Le cron n'a pas à changer : les noms des scripts sont restés les mêmes.
 
 **Délai : avant que la plus ancienne archive de l'ancien stockage n'atteigne
-`RETENTION_DAYS` (30 jours).** Les purges horaire et hebdomadaire ne visent que
+`RETENTION_DAYS` (30 jours).** Les purges (horaire et à chaque sauvegarde) ne visent que
 le remote configuré : une fois `RCLONE_REMOTE` passé au nouveau stockage, plus
 rien n'efface les copies de l'ancien, qui survivraient alors à la durée
 annoncée par le site. Pour un ancien OneDrive (remotes `onedrive` et

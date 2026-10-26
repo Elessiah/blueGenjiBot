@@ -9,11 +9,11 @@
 # sont ni dans le dump MySQL (la base ne garde que leur chemin) ni dans l'archive
 # chiffrée : sans eux, une base restaurée pointe vers des images disparues.
 #
-# Pourquoi un script à part, et pas une étape de l'archive hebdomadaire :
+# Pourquoi un script à part, et pas une étape de l'archive (dimanche et mardi) :
 #   - `rclone sync` n'envoie que ce qui a changé, donc le script peut tourner
-#     souvent (cron horaire) — une image téléversée lundi n'attend pas une
-#     semaine sa première copie, et chaque passage ne coûte presque rien ;
-#   - archiver le dossier entier chaque semaine dupliquerait les mêmes fichiers
+#     souvent (cron horaire) — une image téléversée lundi n'attend pas la
+#     sauvegarde du mardi soir pour sa première copie, et chaque passage ne coûte presque rien ;
+#   - archiver le dossier entier à chaque sauvegarde dupliquerait les mêmes fichiers
 #     pendant toute la rétention.
 #
 # **Un miroir, pas un historique** : un fichier supprimé du site l'est aussi du
@@ -80,18 +80,19 @@ done
 # peut-être pas celles de la machine.
 [[ -n "$UPLOADS_DIR" ]] || die "UPLOADS_DIR non renseigné dans $CONFIG_FILE"
 
-# Le cron horaire et la sauvegarde du lundi peuvent se croiser : deux `sync`
+# Le cron horaire et la sauvegarde (dimanche et mardi, 23 h 49) peuvent se croiser : deux `sync`
 # simultanés vers le même dossier se marcheraient dessus. On attend le premier
 # (il ne dure que quelques secondes en régime normal) plutôt que d'abandonner,
-# sinon la sauvegarde hebdomadaire annoncerait un échec qui n'en est pas un.
+# sinon la sauvegarde annoncerait un échec qui n'en est pas un.
 exec 9>"$UPLOADS_LOCK_FILE"
 flock -w 600 9 || die "une autre synchronisation tient le verrou depuis plus de 10 min"
 
 # --- Rétention des archives ----------------------------------------------------
-# La purge de backup-onedrive.sh ne tourne que le lundi : une archive créée un
-# lundi y a 28 jours au quatrième passage (gardée), 35 au cinquième — au-delà des
+# La purge de backup-onedrive.sh ne tourne que le dimanche et le mardi : une
+# archive créée un dimanche y a 28 jours au huitième passage (gardée), 30 au
+# neuvième (gardée, à la minute près), 35 au dixième — au-delà des
 # RETENTION_DAYS que le site annonce. Refaite ici chaque heure, la borne tient à
-# une heure près, même quand la sauvegarde du lundi échoue avant sa purge. Elle
+# une heure près, même quand la sauvegarde échoue avant sa purge. Elle
 # passe **avant** les contrôles du miroir des images (dossier, chiffrement,
 # dossier vide) : elle ne touche que les archives, et un miroir refusé ne doit pas
 # prolonger la conservation annoncée. Un échec de purge ne fait pas échouer la
