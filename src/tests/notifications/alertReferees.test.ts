@@ -98,6 +98,22 @@ test("journal d'abord, puis chaque arbitre humain du rôle, un seul message par 
   ]);
 });
 
+test("texte des messages privés à part : les arbitres le reçoivent, le salon de logs garde le français", async () => {
+  await clearRefereeRoles();
+  await setRefereeRole("g1", "arb1");
+  const trace: string[] = [];
+  const report = await alertReferees(
+    fakeClient(trace, [{ id: "g1", name: "Genji", role: [{ id: "a" }] }]),
+    "Litige match 4",
+    "Litige match 4\n\n**— English —**\nDispute match 4",
+  );
+  assert.deepEqual(report, { sent: 1, unresolved: [], failed: [] });
+  assert.deepEqual(trace, [
+    "log Litige match 4",
+    "roles.fetch g1/arb1", "members.fetch g1", "dm:a Litige match 4\n\n**— English —**\nDispute match 4",
+  ]);
+});
+
 test("rôle introuvable ou illisible, membres illisibles : noté par serveur, les autres servis", async () => {
   for (const g of ["g1", "g2", "g3", "g4"]) await setRefereeRole(g, "arb-" + g);
   const trace: string[] = [];

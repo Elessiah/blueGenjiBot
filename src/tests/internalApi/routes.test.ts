@@ -728,6 +728,7 @@ test("/internal/auth/send-code : MP fermés, 500 DISCORD_DM_FAILED", async () =>
   assert.deepEqual(res.body, { error: "DISCORD_DM_FAILED" });
   assert.ok(state.logs.some((l) => l.includes("Failed to send auth code")));
   assert.ok(state.logs.every((l) => !l.includes("111111")), "le code ne part pas au journal");
+  assert.ok(state.logs.every((l) => !l.includes("123456789012345678")), "ni l'identifiant Discord du joueur");
 });
 
 // --- Journal et fréquentation -----------------------------------------------
