@@ -140,7 +140,7 @@ rclone delete "$RCLONE_REMOTE:$REMOTE_DIR" \
 
 # --- 6. Images du site --------------------------------------------------------
 # Après l'archive, et non avant : une panne du stockage côté images ne doit pas
-# priver la semaine de sa sauvegarde des bases. L'échec est tout de même porté
+# priver la sauvegarde des bases. L'échec est tout de même porté
 # au statut — le cron horaire qui fait le gros du travail n'a, lui, aucun autre
 # moyen d'être remarqué que ce rapport du lundi.
 if [[ -n "$UPLOADS_DIR" ]]; then
