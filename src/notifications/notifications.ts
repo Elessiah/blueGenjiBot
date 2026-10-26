@@ -30,7 +30,15 @@ export interface DirectMessageRequest {
 
 /** Corps normalisé de `POST /internal/notify/referees`. */
 export interface RefereeAlertRequest {
+  /** Texte du canal de logs, en français (les salons restent en français). */
   message: string;
+  /**
+   * Texte des messages privés, quand le site l'envoie : déjà rédigé dans la
+   * langue des destinataires (bilingue pour un rôle dont le bot ne connaît pas
+   * les comptes du site). Absent (site plus ancien) : les messages privés
+   * reprennent `message`, comme avant.
+   */
+  dmMessage: string | null;
   context: string;
 }
 
@@ -188,10 +196,22 @@ export function parseRefereeAlert(payload: unknown): RefereeAlertRequest | null 
   const message = toTrimmedString(raw.message);
   if (message === null) { return null; }
 
+  const dmMessage = toTrimmedString(raw.dmMessage);
   return {
     message: truncateMessage(message),
+    dmMessage: dmMessage === null ? null : truncateMessage(dmMessage),
     context: toTrimmedString(raw.context) ?? "site",
   };
+}
+
+/**
+ * Texte des messages privés d'une alerte, préfixé comme le journal ; `undefined`
+ * quand le site n'en a pas envoyé (les messages privés reprennent le journal).
+ * @param request Alerte normalisée.
+ * @returns Le texte des messages privés, ou `undefined`.
+ */
+export function refereeDmMessage(request: RefereeAlertRequest): string | undefined {
+  return request.dmMessage === null ? undefined : `[AppBlueGenji] ${request.dmMessage}`;
 }
 
 /**

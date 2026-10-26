@@ -25,6 +25,7 @@ Options:
 
 Comportement:
 - Si aucune cible n'est fournie, le bot envoie les fichiers en message prive a l'auteur de la commande.
+- Sans `message`, le texte par defaut est bilingue (francais puis anglais) dans les messages prives aux membres (`membre`, `role`) ; il reste en francais dans le `channel` et dans la copie de l'auteur.
 - Si l'auteur n'a pas les permissions admin du bot, les envois vers `channel`/`membre`/`role` sont ignores et le bot envoie en prive a l'auteur.
 - Les membres du `role` sont lus apres recuperation de la liste des membres du serveur: un role peuple n'apparait plus vide apres un redemarrage du bot.
 - Si le bot ne trouve personne a servir en prive (aucun membre dans le `role` vise, sans `membre` designe), personne ne recoit les papiers en prive: l'auteur recoit un avis qui nomme le role et le dit, et la commande repond "Echec de l'envoi !". Un `channel` demande en meme temps recoit quand meme les papiers (et l'auteur en est avise): ne pas relancer la commande pour lui. Un rappel automatique vers ce role previent l'auteur de la meme facon a chaque echeance.
@@ -106,7 +107,7 @@ Droits:
 
 Comportement:
 - Le message "valide" est envoye immediatement en message prive au membre.
-- Le message "perimee" est programme pour la date de peremption (envoi unique).
+- Le message "perimee" est programme pour la date de peremption (envoi unique). Sans texte personnalise, les messages "valide" et "perimee" par defaut sont bilingues (francais puis anglais).
 - **Le format de la date compte.** `DD/MM/YYYY`, et rien d'autre: une date
   ecrite autrement (la forme ISO `2026-12-31`, par exemple) n'est pas comprise.
   Le bot repond alors "Echeance invalide" et **ne programme aucun rappel** --
@@ -125,7 +126,7 @@ Options:
 
 Comportement:
 - Envoi immediat en message prive.
-- Si `message` est vide, un message par defaut est utilise.
+- Si `message` est vide, un message par defaut est utilise, bilingue (francais puis anglais) : le bot ne connait pas la langue du compte du site du membre.
 
 Exemple:
 - `/adhesion-perimee user:@Pseudo`

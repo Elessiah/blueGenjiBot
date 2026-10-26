@@ -10,6 +10,7 @@
 import { Attachment, AttachmentBuilder, ChatInputCommandInteraction, Client, GuildMember, MessageFlags } from "discord.js";
 import { safeReply } from "../../safe/safeReply.js";
 import { safeUser } from "../../safe/safeUser.js";
+import { ADHESION_EXPIRED_REMINDER_DM, ADHESION_VALID_DM } from "../../notifications/dmLanguage.js";
 import { setupIntervalAdhesion } from "../../adhesion/setupIntervalAdhesion.js";
 import { checkPermissions } from "../../check/checkPermissions.js";
 
@@ -31,11 +32,11 @@ async function adhesionValide(client: Client, interaction: ChatInputCommandInter
     const adhesion: Attachment | null = interaction.options.getAttachment("adhesion");
     let messageValide: string | null = interaction.options.getString("message-valide");
     if (!messageValide) {
-        messageValide = "Votre adhésion BlueGenji a été validée. Merci d'avoir rejoint l'association !";
+        messageValide = ADHESION_VALID_DM;
     }
     let messagePerimee: string | null = interaction.options.getString("message-perimee");
     if (!messagePerimee) {
-        messagePerimee = "Votre adhésion BlueGenji a périmée. Merci de renouveler votre adhésion si vous souhaitez continuer à être membre de l'association!";
+        messagePerimee = ADHESION_EXPIRED_REMINDER_DM;
     }
 
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });

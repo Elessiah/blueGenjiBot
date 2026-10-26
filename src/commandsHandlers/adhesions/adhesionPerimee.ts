@@ -10,6 +10,7 @@
 
 import { safeUser } from "../../safe/safeUser.js";
 import { safeReply } from "../../safe/safeReply.js";
+import { ADHESION_EXPIRED_DM } from "../../notifications/dmLanguage.js";
 import type { ChatInputCommandInteraction, Client } from "discord.js";
 
 /**
@@ -28,7 +29,7 @@ async function adhesionPerimee(client: Client,
     }
 
     if (!message) {
-        message = "Votre adhésion à l'association est à présent périmée. Pour la renouveler, veuillez contacter le bureau ou utiliser la commande dédiée.";
+        message = ADHESION_EXPIRED_DM;
     }
 
     // `safeUser` ne lève pas : un message non remis se lit à son `null`, et

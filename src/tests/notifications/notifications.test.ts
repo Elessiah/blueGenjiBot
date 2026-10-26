@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   parseDirectMessageRequest,
   parseRefereeAlert,
+  refereeDmMessage,
   dedupeRecipients,
   truncateMessage,
   MAX_MESSAGE_LENGTH,
@@ -128,7 +129,21 @@ test("dedupeRecipients ne confond pas un ID et un tag identiques", () => {
 
 test("parseRefereeAlert accepte un signalement", () => {
   const alert = parseRefereeAlert({ message: "Probleme signale", context: "issue-report" });
-  assert.deepEqual(alert, { message: "Probleme signale", context: "issue-report" });
+  assert.deepEqual(alert, { message: "Probleme signale", dmMessage: null, context: "issue-report" });
+});
+
+test("parseRefereeAlert garde le texte des messages privés, borné, et l'ignore vide", () => {
+  const alert = parseRefereeAlert({ message: "Litige", dmMessage: "Litige\n\n**— English —**\nDispute", context: "x" });
+  assert.equal(alert?.message, "Litige");
+  assert.equal(alert?.dmMessage, "Litige\n\n**— English —**\nDispute");
+  assert.equal(refereeDmMessage(alert!), "[AppBlueGenji] Litige\n\n**— English —**\nDispute");
+  const long = parseRefereeAlert({ message: "a", dmMessage: "c".repeat(MAX_MESSAGE_LENGTH + 10) });
+  assert.equal(long?.dmMessage?.length, MAX_MESSAGE_LENGTH);
+  for (const dmMessage of ["  ", 42, null, undefined]) {
+    const old = parseRefereeAlert({ message: "Litige", dmMessage });
+    assert.equal(old?.dmMessage, null, String(dmMessage));
+    assert.equal(refereeDmMessage(old!), undefined);
+  }
 });
 
 test("parseRefereeAlert refuse un message vide ou un corps invalide", () => {

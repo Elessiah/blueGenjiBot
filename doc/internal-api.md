@@ -28,8 +28,29 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     déploiement.
 
 - `POST /internal/auth/send-code`
-  - Body: `{ "discordId": "123...", "code": "123456" }`
-  - Envoie un DM Discord avec le code de connexion.
+  - Body: `{ "discordId": "123...", "code": "123456", "locale": "fr" }`
+  - Envoie un DM Discord avec le code de connexion, **rédigé par le bot** dans
+    la langue du compte du site (`locale` : `"fr"` ou `"en"`, lue dans
+    `bg_users.locale`). `locale` absent, vide ou autre valeur (ancien site,
+    compte inconnu) : **un seul** message bilingue, français d'abord puis
+    anglais après `**— English —**`. Le bot ne garde pas cette langue.
+
+### Langue des messages privés (BOT-NOTIF-LANG)
+
+- Les textes des messages privés envoyés **à la demande du site**
+  (`/internal/notify/dm`, `dmMessage` de `/referees` et `/leadership`) sont
+  rédigés par le site dans la langue de chaque destinataire, ou en bilingue
+  quand elle n'est pas connue : le bot les relaie tels quels.
+- Les messages publiés dans un **salon** (canal de logs, annonces) restent en
+  français.
+- Les messages privés **propres au bot** destinés à un membre (papiers et avis
+  d'adhésion par défaut, avis d'exclusion du relais) sont bilingues : le bot ne
+  connaît pas le compte du site de leur destinataire. Les retours à l'auteur
+  d'une commande et les diagnostics du propriétaire restent en français.
+- Séparateur commun aux deux dépôts : `\n\n**— English —**\n`.
+- Compatibilité : un site ancien qui n'envoie ni `locale` ni `dmMessage` reçoit
+  le comportement d'avant (le même `message` en salon et en privé), le code en
+  bilingue. Ordre de déploiement : **le bot d'abord**, puis le site.
 
 - `POST /internal/site-visits`
   - Body: instantané de fréquentation du site (`totalVisits`, `uniqueVisitors`,
@@ -106,7 +127,9 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     erreur : l'app peut dire au staff qui n'a pas été prévenu.
 
 - `POST /internal/notify/referees`
-  - Body: `{ "message": "...", "context": "issue-report" }`
+  - Body: `{ "message": "...", "dmMessage": "...", "context": "issue-report" }`
+    (`dmMessage` facultatif : texte des messages privés, bilingue ; à défaut
+    `message`, qui seul part dans le salon)
   - Poste le message dans le canal de logs (`sendLog()`) **et** l'envoie en
     privé à chaque membre du rôle arbitre configuré, sur chaque serveur qui en a
     défini un (`/set-referee-role`). Les deux canaux, pas l'un ou l'autre : le
@@ -121,7 +144,9 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
   - Même bilan de retour que `/internal/notify/dm`.
 
 - `POST /internal/notify/leadership`
-  - Body: `{ "message": "...", "context": "content-report" }`
+  - Body: `{ "message": "...", "dmMessage": "...", "context": "content-report" }`
+    (`dmMessage` facultatif : texte des messages privés, bilingue ; à défaut
+    `message`, qui seul part dans le salon)
   - Alerte la **direction de l'association** d'un signalement reçu par le site
     (contenu illicite, modération, bug) ou d'une contestation : le message part
     dans le canal de logs (`sendLog()`) **et** en privé au propriétaire du bot

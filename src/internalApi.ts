@@ -32,7 +32,8 @@ import {
   type RelayStatus,
 } from "./internalApi/helpers.js";
 import { parseSiteVisitStats, saveSiteVisitStats } from "./siteVisits/siteVisits.js";
-import { parseDirectMessageRequest, parseRefereeAlert } from "./notifications/notifications.js";
+import { parseDirectMessageRequest, parseRefereeAlert, refereeDmMessage as dmCopy } from "./notifications/notifications.js";
+import { loginCodeMessage, parseDmLocale } from "./notifications/dmLanguage.js";
 import { deliverDirectMessages, alertLeadership, alertReferees, HomeGuildUnavailableError } from "./notifications/deliver.js";
 import { HandleResolutionTimeoutError, resolveDiscordHandle } from "./notifications/resolveHandle.js";
 import { MESSAGE_RETENTION_DAYS } from "./privacy/retentionPeriods.js";
@@ -407,11 +408,15 @@ export function startInternalApi(client: Client) {
 
     try {
       const user = await client.users.fetch(discordId);
-      await user.send(`BlueGenji Arena - Code de connexion: **${code}** (valide 10 minutes).`);
+      // Langue du compte du site quand il existe ; sans elle (pas de compte,
+      // site plus ancien qui ne l'envoie pas), un message bilingue.
+      await user.send(loginCodeMessage(code, parseDmLocale(req.body?.locale)));
       await recordEvent(client, 'auth', 'Code DM envoye a un joueur');
       res.json({ success: true });
     } catch (error) {
-      await sendLog(client, `Failed to send auth code to user ${discordId}: ${(error as Error).message}`);
+      // Jamais l'identifiant Discord du joueur ni le code : le salon de logs est
+      // un message Discord (« un joueur », RGPD_LOGS_AND_VISITS du site).
+      await sendLog(client, `Failed to send auth code to a player: ${(error as Error).message}`);
       res.status(500).json({ error: "DISCORD_DM_FAILED" });
     }
   });
@@ -495,7 +500,7 @@ export function startInternalApi(client: Client) {
     }
 
     try {
-      const report = await alertReferees(client, `[AppBlueGenji] ${request.message}`);
+      const report = await alertReferees(client, `[AppBlueGenji] ${request.message}`, dmCopy(request));
       res.json(report);
     } catch (error) {
       await sendLog(client, `notify/referees error (${request.context}): ${(error as Error).message}`);
@@ -516,7 +521,7 @@ export function startInternalApi(client: Client) {
     }
 
     try {
-      const report = await alertLeadership(client, `[AppBlueGenji] ${request.message}`);
+      const report = await alertLeadership(client, `[AppBlueGenji] ${request.message}`, dmCopy(request));
       res.json(report);
     } catch (error) {
       await sendLog(client, `notify/leadership error (${request.context}): ${(error as Error).message}`);
