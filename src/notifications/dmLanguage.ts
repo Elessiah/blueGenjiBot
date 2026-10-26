@@ -88,7 +88,7 @@ export const ADHESION_VALID_DM = bilingualText({
 
 /** Avis par défaut d'une adhésion périmée, programmé par `/adhesion-valide`. */
 export const ADHESION_EXPIRED_REMINDER_DM = bilingualText({
-  fr: "Votre adhésion BlueGenji a périmée. Merci de renouveler votre adhésion si vous souhaitez continuer à être membre de l'association!",
+  fr: "Votre adhésion BlueGenji est périmée. Merci de renouveler votre adhésion si vous souhaitez continuer à être membre de l'association !",
   en: "Your BlueGenji membership has expired. Please renew it if you wish to remain a member of the association!",
 });
 
@@ -108,7 +108,7 @@ export const ADHESION_EXPIRED_DM = bilingualText({
 export function banNoticeMessage(date: Date | string, reason: string): string {
   return bilingualText({
     fr: "Vous êtes exclu du relais depuis le " + String(date) + " :",
-    en: "You have been banned since " + String(date) + " :",
+    en: "You have been banned from the relay since " + String(date) + ":",
   }) + " \n" + reason;
 }
 
