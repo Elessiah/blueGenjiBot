@@ -25,6 +25,8 @@ import type { adhesionIntervalObj } from "../../adhesion/types.js";
  */
 
 const DEFAULT_MESSAGE = "Voici les papiers pour l'adhésion à l'association BlueGenji :";
+/** Texte par défaut remis en message privé aux membres : bilingue (BOT-NOTIF-LANG). */
+const DEFAULT_DM = DEFAULT_MESSAGE + "\n\n**— English —**\nHere are the membership papers for the BlueGenji association:";
 const FILES = ["adhesion.pdf", "statut.pdf"];
 
 /** Une sortie observée : destinataire, texte, noms des pièces jointes. */
@@ -230,9 +232,9 @@ test("rôle et membre : chaque membre du rôle puis le membre, confirmation grou
   const ok = await sendAdhesion(fakeClient(rec), null, {channel: null, member: fakeMember(fakeUser(rec, "Alice")), role: role}, false, author(rec));
   assert.equal(ok, true);
   assert.deepEqual(rec.trace, [
-    dm("Bob", DEFAULT_MESSAGE, FILES),
-    dm("Carol", DEFAULT_MESSAGE, FILES),
-    dm("Alice", DEFAULT_MESSAGE, FILES),
+    dm("Bob", DEFAULT_DM, FILES),
+    dm("Carol", DEFAULT_DM, FILES),
+    dm("Alice", DEFAULT_DM, FILES),
     dm("author", "Adhésions envoyés avec succès à plusieurs membres !"),
   ]);
 });
@@ -245,7 +247,7 @@ test("un membre injoignable : les autres reçoivent, l'auteur reçoit la liste d
   assert.equal(ok, false);
   assert.deepEqual(rec.trace, [
     log("SafeUser failed : boom"),
-    dm("Carol", DEFAULT_MESSAGE, FILES),
+    dm("Carol", DEFAULT_DM, FILES),
     log("SafeUser failed : boom"),
     dm("author", "Echec de l'envoi pour Bob\nEchec de l'envoi pour Dan\n"),
   ]);
@@ -302,8 +304,8 @@ test("cache vide après redémarrage : les membres du serveur sont récupérés,
   assert.equal(ok, true);
   assert.equal(role.fetches, 1);
   assert.deepEqual(rec.trace, [
-    dm("Bob", DEFAULT_MESSAGE, FILES),
-    dm("Carol", DEFAULT_MESSAGE, FILES),
+    dm("Bob", DEFAULT_DM, FILES),
+    dm("Carol", DEFAULT_DM, FILES),
     dm("author", "Adhésions envoyés avec succès à plusieurs membres !"),
   ]);
 });
@@ -315,7 +317,7 @@ test("cache déjà complet : aucune récupération (limite de débit), le rôle 
   const ok = await sendAdhesion(fakeClient(rec), null, {channel: null, member: null, role: role}, false, author(rec));
   assert.equal(ok, true);
   assert.equal(role.fetches, 0);
-  assert.deepEqual(rec.trace, [dm("Bob", DEFAULT_MESSAGE, FILES), dm("author", "Adhésion envoyée avec succès à Bob !")]);
+  assert.deepEqual(rec.trace, [dm("Bob", DEFAULT_DM, FILES), dm("author", "Adhésion envoyée avec succès à Bob !")]);
 });
 
 test("les bots du rôle sont écartés : ni MP ni échec compté", async () => {
@@ -325,7 +327,7 @@ test("les bots du rôle sont écartés : ni MP ni échec compté", async () => {
   const role = fakeRole([robot, fakeUser(rec, "Bob")]);
   const ok = await sendAdhesion(fakeClient(rec), null, {channel: null, member: null, role: role}, false, author(rec));
   assert.equal(ok, true);
-  assert.deepEqual(rec.trace, [dm("Bob", DEFAULT_MESSAGE, FILES), dm("author", "Adhésion envoyée avec succès à Bob !")]);
+  assert.deepEqual(rec.trace, [dm("Bob", DEFAULT_DM, FILES), dm("author", "Adhésion envoyée avec succès à Bob !")]);
 });
 
 test("beaucoup d'échecs : l'avis à l'auteur reste sous 2000 caractères et compte le reste", async () => {
@@ -467,7 +469,7 @@ test("membres du rôle déjà lus (rappel) : servis tels quels, sans seconde lec
   const ok = await sendAdhesionReminder(fakeClient(rec), interval);
   assert.equal(ok, true);
   assert.equal(role.fetches, 0);
-  assert.deepEqual(rec.trace, [dm("Bob", DEFAULT_MESSAGE, FILES), dm("author", "Adhésion envoyée avec succès à Bob !")]);
+  assert.deepEqual(rec.trace, [dm("Bob", DEFAULT_DM, FILES), dm("author", "Adhésion envoyée avec succès à Bob !")]);
 });
 
 test("membres du rôle illisibles : journalisé sans nom, le membre désigné servi quand même, échec", async () => {
@@ -480,7 +482,7 @@ test("membres du rôle illisibles : journalisé sans nom, le membre désigné se
   assert.deepEqual(rec.trace, [
     log(UNREADABLE_LOG),
     dm("author", unreadableNotice("du rôle « Bureau »")),
-    dm("Alice", DEFAULT_MESSAGE, FILES),
+    dm("Alice", DEFAULT_DM, FILES),
     dm("author", "Adhésion envoyée avec succès à Alice !"),
   ]);
   assert.ok(!rec.trace.some((t) => t.to === "log" && /Bob|Alice/.test(t.content)), "aucun pseudo au journal");

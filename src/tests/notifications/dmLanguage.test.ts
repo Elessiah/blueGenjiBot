@@ -1,7 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  ADHESION_EXPIRED_DM,
+  ADHESION_EXPIRED_REMINDER_DM,
+  ADHESION_PAPERS_DM,
+  ADHESION_VALID_DM,
   BILINGUAL_SEPARATOR,
+  banNoticeMessage,
   bilingualText,
   localizedText,
   loginCodeMessage,
@@ -32,4 +37,29 @@ test("loginCodeMessage : le français inchangé, l'anglais, le bilingue", () => 
   assert.ok(both.startsWith("BlueGenji Arena - Code de connexion"));
   assert.ok(both.endsWith("Login code: **042137** (valid for 10 minutes)."));
   assert.equal(both.split("042137").length - 1, 2, "un seul message, le code dans les deux langues");
+});
+
+test("textes par défaut des messages privés du bot : le français inchangé d'abord, puis l'anglais", () => {
+  const cases: Array<[string, string, string]> = [
+    [ADHESION_PAPERS_DM, "Voici les papiers pour l'adhésion à l'association BlueGenji :", "Here are the membership papers"],
+    [ADHESION_VALID_DM, "Votre adhésion BlueGenji a été validée. Merci d'avoir rejoint l'association !", "has been confirmed"],
+    [ADHESION_EXPIRED_REMINDER_DM, "Votre adhésion BlueGenji a périmée.", "has expired"],
+    [ADHESION_EXPIRED_DM, "Votre adhésion à l'association est à présent périmée.", "has now expired"],
+  ];
+  for (const [text, french, english] of cases) {
+    const [fr, en] = text.split(BILINGUAL_SEPARATOR);
+    assert.ok(fr.startsWith(french), fr);
+    assert.ok(en.includes(english), en);
+  }
+});
+
+test("banNoticeMessage : bilingue, le motif une seule fois à la fin, une Date acceptée comme avant", () => {
+  const msg = banNoticeMessage("2026-10-26", "Spam");
+  assert.equal(
+    msg,
+    "Vous êtes exclu du relais depuis le 2026-10-26 :" + BILINGUAL_SEPARATOR + "You have been banned since 2026-10-26 : \nSpam",
+  );
+  assert.equal(msg.split("Spam").length, 2);
+  const date = new Date(0);
+  assert.ok(banNoticeMessage(date, "x").includes("since " + String(date) + " :"));
 });

@@ -234,7 +234,8 @@ test("auteur exclu : réaction d'exclusion puis liste des mots-clés", async () 
   assert.equal(r.ok, false);
   assert.equal(r.trace.length, 4);
   assert.equal(r.trace[0], NO_REGION_NOTE);
-  assert.match(r.trace[1], /^dm:author-1 You have been banned since .+ : \nSpam$/);
+  // Bilingue (BOT-NOTIF-LANG) : français, anglais, puis le motif une seule fois.
+  assert.match(r.trace[1], /^dm:author-1 Vous êtes exclu du relais depuis le .+ :\n\n\*\*— English —\*\*\nYou have been banned since .+ : \nSpam$/);
   assert.equal(r.trace[2], "react 🚫");
   assert.match(r.trace[3], /^reply Your message has no keyword for a targeted service/);
 });
