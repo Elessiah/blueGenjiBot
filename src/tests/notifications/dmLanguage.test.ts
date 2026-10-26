@@ -43,7 +43,7 @@ test("textes par défaut des messages privés du bot : le français inchangé d'
   const cases: Array<[string, string, string]> = [
     [ADHESION_PAPERS_DM, "Voici les papiers pour l'adhésion à l'association BlueGenji :", "Here are the membership papers"],
     [ADHESION_VALID_DM, "Votre adhésion BlueGenji a été validée. Merci d'avoir rejoint l'association !", "has been confirmed"],
-    [ADHESION_EXPIRED_REMINDER_DM, "Votre adhésion BlueGenji a périmée.", "has expired"],
+    [ADHESION_EXPIRED_REMINDER_DM, "Votre adhésion BlueGenji est périmée.", "has expired"],
     [ADHESION_EXPIRED_DM, "Votre adhésion à l'association est à présent périmée.", "has now expired"],
   ];
   for (const [text, french, english] of cases) {
@@ -57,9 +57,9 @@ test("banNoticeMessage : bilingue, le motif une seule fois à la fin, une Date a
   const msg = banNoticeMessage("2026-10-26", "Spam");
   assert.equal(
     msg,
-    "Vous êtes exclu du relais depuis le 2026-10-26 :" + BILINGUAL_SEPARATOR + "You have been banned since 2026-10-26 : \nSpam",
+    "Vous êtes exclu du relais depuis le 2026-10-26 :" + BILINGUAL_SEPARATOR + "You have been banned from the relay since 2026-10-26: \nSpam",
   );
   assert.equal(msg.split("Spam").length, 2);
   const date = new Date(0);
-  assert.ok(banNoticeMessage(date, "x").includes("since " + String(date) + " :"));
+  assert.ok(banNoticeMessage(date, "x").includes("since " + String(date) + ":"));
 });
