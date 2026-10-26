@@ -73,3 +73,12 @@ test("banNoticeMessage : un motif long est coupé, l'avis tient sous les 2000 ca
   assert.ok(long.endsWith("b…"));
   assert.ok(long.startsWith("Vous êtes exclu du relais depuis le "));
 });
+
+test("banNoticeMessage : la coupe ne sépare jamais un émoji en deux", () => {
+  const room = 2000 - banNoticeMessage("2026-10-26", "").length;
+  // L'émoji (deux unités UTF-16) chevauche le point de coupe (room - 1).
+  const msg = banNoticeMessage("2026-10-26", "c".repeat(room - 2) + "😀" + "d".repeat(50));
+  assert.ok(msg.length <= 2000);
+  assert.ok(msg.endsWith("c…"));
+  assert.equal(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(msg), false);
+});
