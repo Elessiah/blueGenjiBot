@@ -149,6 +149,16 @@ test("alertLeadership écrit au propriétaire et au président, et au salon de l
     assert.ok(trace.logs.includes("Signalement #1"));
   }));
 
+test("alertLeadership : le texte des messages privés part en privé, le salon de logs garde le français", () =>
+  withLeadership({ OWNER_ID: "700000000000000001", PRESIDENT: "" }, async () => {
+    const trace: Trace = { dms: [], logs: [] };
+    const client = leadershipClient(trace, ["700000000000000001"]);
+    const report = await alertLeadership(client, "Signalement #3", "Signalement #3\n\n**— English —**\nReport #3");
+    assert.deepEqual(report, { sent: 1, unresolved: [], failed: [] });
+    assert.deepEqual(trace.dms, ["700000000000000001:Signalement #3\n\n**— English —**\nReport #3"]);
+    assert.deepEqual(trace.logs, ["Signalement #3"]);
+  }));
+
 test("alertLeadership compte en échec un compte injoignable, sans empêcher l'autre", () =>
   withLeadership({ OWNER_ID: "700000000000000001", PRESIDENT: "700000000000000002" }, async () => {
     const trace: Trace = { dms: [], logs: [] };

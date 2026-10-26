@@ -694,12 +694,31 @@ test("/internal/auth/send-code : code envoyé en MP et inscrit au flux sans nomm
   const res = await call("/internal/auth/send-code", { body: { discordId: " 123456789012345678 ", code: "042137" } });
   assert.equal(res.status, 200);
   assert.deepEqual(res.body, { success: true });
-  assert.deepEqual(state.dms, ["123456789012345678: BlueGenji Arena - Code de connexion: **042137** (valide 10 minutes)."]);
+  // Sans `locale` (site plus ancien, ou compte inconnu) : un seul message bilingue.
+  assert.deepEqual(state.dms, [
+    "123456789012345678: BlueGenji Arena - Code de connexion: **042137** (valide 10 minutes)." +
+      "\n\n**— English —**\nBlueGenji Arena - Login code: **042137** (valid for 10 minutes).",
+  ]);
   const bdd = await getBddInstance();
   const [last] = await bdd.raw<{ type: string; summary: string; target: string | null }>("SELECT type, summary, target FROM FeedEvent ORDER BY id DESC LIMIT 1");
   assert.equal(last.type, "auth");
   assert.equal(last.target, null);
   assert.ok(!last.summary.includes("123456789012345678"));
+});
+
+test("/internal/auth/send-code : la langue du compte choisit le message, une valeur inconnue le rend bilingue", async () => {
+  const cases: Array<[unknown, string]> = [
+    ["fr", "BlueGenji Arena - Code de connexion: **123123** (valide 10 minutes)."],
+    ["en", "BlueGenji Arena - Login code: **123123** (valid for 10 minutes)."],
+    [null, "BlueGenji Arena - Code de connexion: **123123** (valide 10 minutes).\n\n**— English —**\nBlueGenji Arena - Login code: **123123** (valid for 10 minutes)."],
+    ["de", "BlueGenji Arena - Code de connexion: **123123** (valide 10 minutes).\n\n**— English —**\nBlueGenji Arena - Login code: **123123** (valid for 10 minutes)."],
+  ];
+  for (const [locale, expected] of cases) {
+    state.dms.length = 0;
+    const res = await call("/internal/auth/send-code", { body: { discordId: "123456789012345678", code: "123123", locale } });
+    assert.equal(res.status, 200, String(locale));
+    assert.deepEqual(state.dms, [`123456789012345678: ${expected}`], String(locale));
+  }
 });
 
 test("/internal/auth/send-code : MP fermés, 500 DISCORD_DM_FAILED", async () => {
@@ -811,6 +830,16 @@ test("/internal/notify/leadership : propriétaire et président prévenus, éche
   assert.deepEqual(res.body, { sent: 1, unresolved: [], failed: [PRESIDENT] });
   assert.deepEqual(state.dms, [`${OWNER}: [AppBlueGenji] Contestation reçue`]);
   assert.deepEqual(state.logs, ["[AppBlueGenji] Contestation reçue"]);
+});
+
+test("/internal/notify/leadership : `dmMessage` en privé, le journal reste en français", async () => {
+  const res = await call("/internal/notify/leadership", {
+    body: { message: "Contestation reçue", dmMessage: "Contestation reçue\n\n**— English —**\nContest received" },
+  });
+  assert.equal(res.status, 200);
+  assert.ok(state.dms.includes(`${OWNER}: [AppBlueGenji] Contestation reçue\n\n**— English —**\nContest received`));
+  assert.ok(state.logs.includes("[AppBlueGenji] Contestation reçue"));
+  assert.ok(state.logs.every((l) => !l.includes("English")), "le salon de logs reste en français");
 });
 
 test("/internal/announce/live : corps ou lien invalide 400, sinon publié avec @everyone", async () => {
