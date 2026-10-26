@@ -414,7 +414,9 @@ export function startInternalApi(client: Client) {
       await recordEvent(client, 'auth', 'Code DM envoye a un joueur');
       res.json({ success: true });
     } catch (error) {
-      await sendLog(client, `Failed to send auth code to user ${discordId}: ${(error as Error).message}`);
+      // Jamais l'identifiant Discord du joueur ni le code : le salon de logs est
+      // un message Discord (« un joueur », RGPD_LOGS_AND_VISITS du site).
+      await sendLog(client, `Failed to send auth code to a player: ${(error as Error).message}`);
       res.status(500).json({ error: "DISCORD_DM_FAILED" });
     }
   });
