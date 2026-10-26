@@ -63,3 +63,13 @@ test("banNoticeMessage : bilingue, le motif une seule fois à la fin, une Date a
   const date = new Date(0);
   assert.ok(banNoticeMessage(date, "x").includes("since " + String(date) + ":"));
 });
+
+test("banNoticeMessage : un motif long est coupé, l'avis tient sous les 2000 caractères de Discord", () => {
+  const exact = "a".repeat(2000 - banNoticeMessage("2026-10-26", "").length);
+  assert.equal(banNoticeMessage("2026-10-26", exact).length, 2000);
+  assert.ok(banNoticeMessage("2026-10-26", exact).endsWith("a"));
+  const long = banNoticeMessage(new Date(0), "b".repeat(1990));
+  assert.equal(long.length, 2000);
+  assert.ok(long.endsWith("b…"));
+  assert.ok(long.startsWith("Vous êtes exclu du relais depuis le "));
+});
