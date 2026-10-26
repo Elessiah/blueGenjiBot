@@ -170,10 +170,11 @@ export async function deliverDirectMessages(
  * personne ne regarde en pleine soirée de tournoi.
  *
  * @param client Client Discord.
- * @param message Texte déjà rédigé et borné par l'app.
+ * @param message Texte déjà rédigé et borné par l'app, pour le journal (français).
+ * @param dmMessage Texte des messages privés (langue des destinataires) ; à défaut, `message`.
  * @returns Le bilan de la distribution aux arbitres.
  */
-export async function alertReferees(client: Client, message: string): Promise<DeliveryReport> {
+export async function alertReferees(client: Client, message: string, dmMessage: string = message): Promise<DeliveryReport> {
   const report: DeliveryReport = { sent: 0, unresolved: [], failed: [] };
 
   await sendLog(client, message);
@@ -192,7 +193,7 @@ export async function alertReferees(client: Client, message: string): Promise<De
     for (const member of kept) {
       if (alreadyNotified.has(member.id)) { continue; }
       alreadyNotified.add(member.id);
-      await sendToReferee(member, message, report);
+      await sendToReferee(member, dmMessage, report);
     }
   }
 
@@ -276,10 +277,11 @@ async function sendToReferee(member: GuildMember, message: string, report: Deliv
  * connaît déjà.
  *
  * @param client Client Discord.
- * @param message Texte déjà rédigé et borné par l'app.
+ * @param message Texte déjà rédigé et borné par l'app, pour le journal (français).
+ * @param dmMessage Texte des messages privés (langue des destinataires) ; à défaut, `message`.
  * @returns Le bilan de la distribution.
  */
-export async function alertLeadership(client: Client, message: string): Promise<DeliveryReport> {
+export async function alertLeadership(client: Client, message: string, dmMessage: string = message): Promise<DeliveryReport> {
   const report: DeliveryReport = { sent: 0, unresolved: [], failed: [] };
 
   await sendLog(client, message);
@@ -287,7 +289,7 @@ export async function alertLeadership(client: Client, message: string): Promise<
   for (const id of leadershipIds(process.env)) {
     try {
       const user = await client.users.fetch(id);
-      await user.send(message);
+      await user.send(dmMessage);
       report.sent += 1;
     } catch {
       report.failed.push(id);
