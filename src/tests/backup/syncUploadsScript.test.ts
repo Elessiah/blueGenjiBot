@@ -38,7 +38,7 @@ test("le contrôle du chiffrement précède tout envoi", () => {
 });
 
 test("la purge horaire des archives tourne même si le remote des images est refusé", () => {
-  // Sans elle, une archive vivrait jusqu'à 35 jours (purge du lundi seule)
+  // Sans elle, une archive vivrait jusqu'à 35 jours (purge des seules sauvegardes du dimanche et du mardi)
   // au lieu des RETENTION_DAYS annoncés par le site.
   const purge = SCRIPT.search(/^rclone delete "\$RCLONE_REMOTE:\$REMOTE_DIR"/m);
   assert.ok(purge > 0);
