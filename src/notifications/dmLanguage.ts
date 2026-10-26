@@ -106,11 +106,19 @@ export const ADHESION_EXPIRED_DM = bilingualText({
  * @returns Le message à envoyer.
  */
 export function banNoticeMessage(date: Date | string, reason: string): string {
-  return bilingualText({
+  const head = bilingualText({
     fr: "Vous êtes exclu du relais depuis le " + String(date) + " :",
     en: "You have been banned from the relay since " + String(date) + ":",
-  }) + " \n" + reason;
+  }) + " \n";
+  // Discord refuse un message privé de plus de 2000 caractères, et le refus
+  // reviendrait à chaque message relayé de l'exclu (`checkBan` le renotifie) :
+  // le motif est coupé pour que l'avis tienne, en-tête bilingue compris.
+  const room = DISCORD_DM_MAX_LENGTH - head.length;
+  return head + (reason.length <= room ? reason : reason.slice(0, Math.max(0, room - 1)) + "…");
 }
+
+/** Plafond d'un message Discord (l'API refuse au-delà). */
+const DISCORD_DM_MAX_LENGTH = 2000;
 
 /**
  * Message du code de connexion envoyé en privé (`/internal/auth/send-code`).
