@@ -4,6 +4,7 @@ import type {Bdd} from "../bdd/Bdd.js";
 import { getBddInstance} from "../bdd/Bdd.js";
 import {safeUser} from "../safe/safeUser.js";
 import {sendLog} from "../safe/sendLog.js";
+import {banNoticeMessage} from "../notifications/dmLanguage.js";
 
 
 import type {BanInfo, BanVerdict} from "./types.js";
@@ -32,7 +33,7 @@ async function notifyBannedUser(client: Client, banInfo: BanInfo): Promise<void>
         await sendLog(client, "Failed to fetch ban reason in admin channel");
         return;
     }
-    const banReason = "You have been banned since " + banInfo.date + " : \n" + reasonMsg.content;
+    const banReason = banNoticeMessage(banInfo.date, reasonMsg.content);
     await safeUser(client, user, undefined, [], banReason);
 }
 

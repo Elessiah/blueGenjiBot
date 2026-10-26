@@ -16,6 +16,7 @@ import {
     reminderRefusedSuffix,
 } from "./adhesionNotices.js";
 import type {adhesionIntervalObj} from "./types.js";
+import {ADHESION_PAPERS_DM} from "../notifications/dmLanguage.js";
 
 /** Cibles d'un envoi ; `null` pour une cible non demandée. */
 type AdhesionTargets = {
@@ -101,10 +102,13 @@ async function sendToTargets(client: Client,
     }
     // `||` et non `??` : un message vide prend lui aussi le texte par défaut.
     const content = message || DEFAULT_ADHESION_MESSAGE;
+    // Les membres servis en message privé reçoivent le texte par défaut en
+    // bilingue ; le salon et la copie de l'auteur gardent le français.
+    const dmContent = message || ADHESION_PAPERS_DM;
 
     let delivered = true;
     if (!memberPermMissing) {
-        delivered = await deliverToTargets(client, targets, files, content, author);
+        delivered = await deliverToTargets(client, targets, files, content, author, dmContent);
     }
     if (memberPermMissing || !hasTarget(targets)) {
         await deliverToAuthor(client, author, files, authorCopy(content, targets, memberPermMissing));
@@ -117,21 +121,23 @@ async function sendToTargets(client: Client,
  * @param client Client Discord utilisé pour les envois et le journal.
  * @param targets Cibles demandées.
  * @param files Pièces jointes.
- * @param content Message joint.
+ * @param content Message joint dans le salon.
  * @param author Auteur de l'envoi, avisé du résultat de chaque remise.
+ * @param dmContent Message joint en message privé (bilingue par défaut).
  * @returns `true` si chaque cible demandée a reçu les papiers.
  */
 async function deliverToTargets(client: Client,
                                 targets: AdhesionTargets,
                                 files: AttachmentBuilder[],
                                 content: string,
-                                author: User): Promise<boolean> {
+                                author: User,
+                                dmContent: string = content): Promise<boolean> {
     let delivered = true;
     if (targets.channel !== null) {
         delivered = await deliverToChannel(client, targets.channel, files, content, author);
     }
     if (targets.role !== null || targets.member !== null) {
-        delivered = (await deliverToRecipients(client, targets, files, content, author)) && delivered;
+        delivered = (await deliverToRecipients(client, targets, files, dmContent, author)) && delivered;
     }
     return delivered;
 }
