@@ -133,7 +133,7 @@ const DISCORD_DM_MAX_LENGTH = 2000;
  */
 export function loginCodeMessage(code: string, locale: DmLocale | null): string {
   return localizedText(locale, {
-    fr: `BlueGenji Arena - Code de connexion: **${code}** (valide 10 minutes).`,
-    en: `BlueGenji Arena - Login code: **${code}** (valid for 10 minutes).`,
+    fr: `BlueGenji - Code de connexion: **${code}** (valide 10 minutes).`,
+    en: `BlueGenji - Login code: **${code}** (valid for 10 minutes).`,
   });
 }
