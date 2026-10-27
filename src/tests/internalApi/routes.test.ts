@@ -696,8 +696,8 @@ test("/internal/auth/send-code : code envoyé en MP et inscrit au flux sans nomm
   assert.deepEqual(res.body, { success: true });
   // Sans `locale` (site plus ancien, ou compte inconnu) : un seul message bilingue.
   assert.deepEqual(state.dms, [
-    "123456789012345678: BlueGenji Arena - Code de connexion: **042137** (valide 10 minutes)." +
-      "\n\n**— English —**\nBlueGenji Arena - Login code: **042137** (valid for 10 minutes).",
+    "123456789012345678: BlueGenji - Code de connexion: **042137** (valide 10 minutes)." +
+      "\n\n**— English —**\nBlueGenji - Login code: **042137** (valid for 10 minutes).",
   ]);
   const bdd = await getBddInstance();
   const [last] = await bdd.raw<{ type: string; summary: string; target: string | null }>("SELECT type, summary, target FROM FeedEvent ORDER BY id DESC LIMIT 1");
@@ -708,10 +708,10 @@ test("/internal/auth/send-code : code envoyé en MP et inscrit au flux sans nomm
 
 test("/internal/auth/send-code : la langue du compte choisit le message, une valeur inconnue le rend bilingue", async () => {
   const cases: Array<[unknown, string]> = [
-    ["fr", "BlueGenji Arena - Code de connexion: **123123** (valide 10 minutes)."],
-    ["en", "BlueGenji Arena - Login code: **123123** (valid for 10 minutes)."],
-    [null, "BlueGenji Arena - Code de connexion: **123123** (valide 10 minutes).\n\n**— English —**\nBlueGenji Arena - Login code: **123123** (valid for 10 minutes)."],
-    ["de", "BlueGenji Arena - Code de connexion: **123123** (valide 10 minutes).\n\n**— English —**\nBlueGenji Arena - Login code: **123123** (valid for 10 minutes)."],
+    ["fr", "BlueGenji - Code de connexion: **123123** (valide 10 minutes)."],
+    ["en", "BlueGenji - Login code: **123123** (valid for 10 minutes)."],
+    [null, "BlueGenji - Code de connexion: **123123** (valide 10 minutes).\n\n**— English —**\nBlueGenji - Login code: **123123** (valid for 10 minutes)."],
+    ["de", "BlueGenji - Code de connexion: **123123** (valide 10 minutes).\n\n**— English —**\nBlueGenji - Login code: **123123** (valid for 10 minutes)."],
   ];
   for (const [locale, expected] of cases) {
     state.dms.length = 0;

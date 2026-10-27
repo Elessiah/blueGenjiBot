@@ -69,7 +69,7 @@ src/
 
 ## Project Overview
 
-**BlueGenjiBot** est le bot Discord de la plateforme BlueGenji Arena (esports amateur Marvel Rivals / Overwatch 2, FR). Il gère :
+**BlueGenjiBot** est le bot Discord de la plateforme BlueGenji (esports amateur Marvel Rivals / Overwatch 2, FR). Il gère :
 - Les commandes slash Discord (adhésion, services partenaires, ban, broadcast, admin)
 - Une API HTTP interne (`internalApi.ts`) consommée par l'app web sœur `appbluegenji` (auth DM codes, stats, logs de conflits)
 - La distribution de messages, les vérifications cron (intervalles d'adhésion), les channels partenaires
