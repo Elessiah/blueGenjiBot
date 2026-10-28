@@ -132,9 +132,11 @@ rclone copy "$ARCHIVE.age" "$RCLONE_REMOTE:$REMOTE_DIR" \
 # corbeille, qui garderait l'archive purgée 30 jours de plus — la durée annoncée
 # serait fausse d'autant. Ailleurs (Nextcloud/WebDAV), aucune option n'y peut
 # rien : corbeille et versions se coupent côté serveur (doc/backup-onedrive.md).
+# Même seuil que la purge horaire (sync-uploads-onedrive.sh) : une heure sous
+# RETENTION_DAYS jours, pour qu'aucune archive ne dépasse la durée annoncée.
 mapfile -t DELETE_FLAGS < <(provider_delete_flags "$RCLONE_REMOTE")
 rclone delete "$RCLONE_REMOTE:$REMOTE_DIR" \
-  --min-age "${RETENTION_DAYS}d" --include "bluegenji-*.tar.age" \
+  --min-age "$((RETENTION_DAYS * 24 - 1))h" --include "bluegenji-*.tar.age" \
   "${DELETE_FLAGS[@]}" \
   || echo "[backup] purge des anciennes sauvegardes incomplète." >&2
 
