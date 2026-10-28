@@ -2,7 +2,7 @@
 
 # Conditions d'Utilisation — BlueGenji Bot
 
-**Dernière mise à jour** : 29 octobre 2026
+**Dernière mise à jour** : 30 octobre 2026
 
 > Copie du texte publié sur [https://bluegenji-esport.fr/terms-of-service-bot](https://bluegenji-esport.fr/terms-of-service-bot), **qui fait foi** en cas de divergence. Ne modifiez pas ce fichier à la main : il est régénéré depuis le site (`lib/shared/bot-legal-content.ts` d'AppBlueGenji).
 
