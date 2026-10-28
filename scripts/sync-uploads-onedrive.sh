@@ -93,8 +93,9 @@ flock -w 600 9 || die "une autre synchronisation tient le verrou depuis plus de 
 # neuvième (gardée ou non selon la durée du transfert), 35 au dixième — au-delà
 # des RETENTION_DAYS que le site annonce. Refaite ici chaque heure, avec un
 # seuil d'une heure sous la borne (RETENTION_DAYS × 24 − 1 heures), une archive
-# part entre 29 j 23 h et 30 j d'âge, jamais au-delà — même quand la sauvegarde
-# échoue avant sa purge. Un seuil de RETENTION_DAYS jours pile la laisserait
+# part entre 29 j 23 h et 30 j d'âge — même quand la sauvegarde échoue avant
+# sa purge ; un passage manqué (verrou tenu plus de 10 min, serveur arrêté) se
+# rattrape au suivant. Un seuil de RETENTION_DAYS jours pile la laisserait
 # vivre jusqu'à près d'une heure de plus. Elle
 # passe **avant** les contrôles du miroir des images (dossier, chiffrement,
 # dossier vide) : elle ne touche que les archives, et un miroir refusé ne doit pas
