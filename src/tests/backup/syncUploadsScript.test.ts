@@ -13,6 +13,10 @@ const SCRIPT = fs.readFileSync(
   path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "scripts", "sync-uploads-onedrive.sh"),
   "utf8",
 );
+const BACKUP_SCRIPT = fs.readFileSync(
+  path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "scripts", "backup-onedrive.sh"),
+  "utf8",
+);
 
 test("la quarantaine n'est synchronisée que si son dossier local existe", () => {
   assert.match(SCRIPT, /if \[\[ -d "\$QUARANTINE_DIR" \]\]; then\s+rclone sync "\$QUARANTINE_DIR" "\$QUARANTINE_DEST"/);
@@ -50,6 +54,16 @@ test("la purge horaire des archives tourne même si le remote des images est ref
     '[[ -n "$UPLOADS_DIR" ]] || die "UPLOADS_DIR non renseigné dans $CONFIG_FILE"',
     'flock -w 600 9 || die "une autre synchronisation tient le verrou depuis plus de 10 min"',
   ]);
+});
+
+test("les purges effacent une archive avant ses RETENTION_DAYS jours pleins, jamais après (EF-05)", () => {
+  // La purge horaire passe à :17 : un seuil de RETENTION_DAYS jours pile laissait
+  // une archive vivre jusqu'à 30 j 59 min ; une heure de moins la borne à 30 jours.
+  const threshold = /--min-age "\$\(\(RETENTION_DAYS \* 24 - 1\)\)h" --include "bluegenji-\*\.tar\.age"/;
+  for (const source of [SCRIPT, BACKUP_SCRIPT]) {
+    assert.match(source, threshold);
+    assert.doesNotMatch(source, /--min-age "\$\{RETENTION_DAYS\}d"/);
+  }
 });
 
 test("la purge des archives n'est jamais lancée sur une configuration non lue", () => {
