@@ -106,9 +106,9 @@ Vous disposez sur vos données des droits suivants :
 - **Rectification** : faire corriger une donnée inexacte.
 - **Effacement** : faire supprimer vos données ; certaines fonctions du Bot peuvent alors ne plus vous être rendues.
 - **Limitation** : faire geler l'utilisation d'une donnée le temps d'examiner une contestation.
-- **Opposition** : vous opposer, pour des raisons tenant à votre situation particulière, à un traitement fondé sur l'intérêt légitime. Le pseudo d'un joueur dans l'annonce #live d'un tournoi individuel n'en relève pas : il repose sur l'exécution du service auquel il s'inscrit — ne pas y être nommé revient à ne pas s'inscrire ; une annonce passée est supprimée sur demande (formulaire « Signaler un problème » du site, catégorie RGPD).
+- **Opposition** : vous opposer, pour des raisons tenant à votre situation particulière, à un traitement fondé sur l'intérêt légitime. Le pseudo d'un joueur dans l'annonce #live d'un tournoi individuel n'en relève pas : il repose sur l'exécution du service auquel il s'inscrit — ne pas y être nommé revient à ne pas s'inscrire ; une annonce passée est supprimée sur demande (formulaire « Signaler un problème » du site, catégorie RGPD). La conservation par le site de votre choix des messages privés de match n'en relève pas non plus : elle repose sur une obligation légale, celle de continuer d'honorer votre opposition à ces messages.
 
-Le droit à la portabilité ne s'applique pas : ces traitements reposent sur l'intérêt légitime, non sur un consentement ou un contrat. Pour exercer vos droits, utilisez les moyens de la section Contact ; une réponse vous est apportée dans un délai d'un mois.
+Le droit à la portabilité ne s'applique pas aux traitements propres au Bot : ils reposent sur l'intérêt légitime, non sur un consentement ou un contrat ; pour les messages du site qu'il remet, voir la [politique de confidentialité du site](https://bluegenji-esport.fr/rgpd#exercer-vos-droits). Pour exercer vos droits, utilisez les moyens de la section Contact ; une réponse vous est apportée dans un délai d'un mois.
 
 Si vous estimez que vos droits ne sont pas respectés, vous pouvez adresser une réclamation à la [CNIL](https://www.cnil.fr/fr/plaintes).
 
