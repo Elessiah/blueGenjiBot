@@ -300,6 +300,9 @@ La seconde ligne synchronise les images et le journal des suppressions chaque
 heure : une image ou un compte supprimé du site quitte le stockage distant dans
 l'heure. Elle purge aussi les archives de plus de `RETENTION_DAYS` jours — la
 purge des seules sauvegardes (dimanche et mardi) laisserait une archive vivre jusqu'à 35 jours.
+Les deux purges visent les archives d'au moins `RETENTION_DAYS × 24 − 1` heures
+(719 h) : passant chaque heure, la purge efface une archive avant ses 30 jours
+pleins, sauf passage manqué (verrou, serveur arrêté), rattrapé au suivant.
 Renseigner d'abord `UPLOADS_DIR` dans `backup-onedrive.env` (chemin absolu de
 `public/uploads` de l'app) et créer le remote chiffré (3 bis), puis faire un
 premier passage à la main — c'est lui qui envoie tout le dossier, les suivants

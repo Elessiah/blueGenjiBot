@@ -106,9 +106,9 @@ You have the following rights over your data:
 - **Rectification**: have inaccurate data corrected.
 - **Erasure**: have your data deleted; some Bot features may then no longer be available to you.
 - **Restriction**: have the use of data frozen while a dispute is examined.
-- **Objection**: object, on grounds relating to your particular situation, to processing based on legitimate interest. A player's username in the #live announcement of a solo tournament is not covered: it rests on performance of the service they register for — not being named in it means not registering; a past announcement is deleted on request (the website's “Report a problem” form, GDPR category).
+- **Objection**: object, on grounds relating to your particular situation, to processing based on legitimate interest. A player's username in the #live announcement of a solo tournament is not covered: it rests on performance of the service they register for — not being named in it means not registering; a past announcement is deleted on request (the website's “Report a problem” form, GDPR category). Nor is the site's keeping of your match direct messages choice: it rests on a legal obligation, that of continuing to honour your objection to those messages.
 
-The right to data portability does not apply: this processing is based on legitimate interest, not on consent or a contract. To exercise your rights, use the means listed in the Contact section; you will receive a reply within one month.
+The right to data portability does not apply to the Bot's own processing: it is based on legitimate interest, not on consent or a contract; for the website's messages it delivers, see the [website's privacy policy](https://bluegenji-esport.fr/en/rgpd#exercer-vos-droits). To exercise your rights, use the means listed in the Contact section; you will receive a reply within one month.
 
 If you consider that your rights are not respected, you may lodge a complaint with the [CNIL](https://www.cnil.fr/fr/plaintes), the French data protection authority.
 

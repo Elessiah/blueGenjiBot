@@ -89,17 +89,21 @@ flock -w 600 9 || die "une autre synchronisation tient le verrou depuis plus de 
 
 # --- Rétention des archives ----------------------------------------------------
 # La purge de backup-onedrive.sh ne tourne que le dimanche et le mardi : une
-# archive créée un dimanche y a 28 jours au huitième passage (gardée), 30 au
-# neuvième (gardée, à la minute près), 35 au dixième — au-delà des
-# RETENTION_DAYS que le site annonce. Refaite ici chaque heure, la borne tient à
-# une heure près, même quand la sauvegarde échoue avant sa purge. Elle
+# archive créée un dimanche y a 28 jours au huitième passage, à peu près 30 au
+# neuvième (gardée ou non selon la durée du transfert), 35 au dixième — au-delà
+# des RETENTION_DAYS que le site annonce. Refaite ici chaque heure, avec un
+# seuil d'une heure sous la borne (RETENTION_DAYS × 24 − 1 heures), une archive
+# part entre 29 j 23 h et 30 j d'âge — même quand la sauvegarde échoue avant
+# sa purge ; un passage manqué (verrou tenu plus de 10 min, serveur arrêté) se
+# rattrape au suivant. Un seuil de RETENTION_DAYS jours pile la laisserait
+# vivre jusqu'à près d'une heure de plus. Elle
 # passe **avant** les contrôles du miroir des images (dossier, chiffrement,
 # dossier vide) : elle ne touche que les archives, et un miroir refusé ne doit pas
 # prolonger la conservation annoncée. Un échec de purge ne fait pas échouer la
 # synchronisation.
 mapfile -t ARCHIVE_DELETE_FLAGS < <(provider_delete_flags "$RCLONE_REMOTE")
 rclone delete "$RCLONE_REMOTE:$REMOTE_DIR" \
-  --min-age "${RETENTION_DAYS}d" --include "bluegenji-*.tar.age" \
+  --min-age "$((RETENTION_DAYS * 24 - 1))h" --include "bluegenji-*.tar.age" \
   "${ARCHIVE_DELETE_FLAGS[@]}" \
   || echo "[uploads] purge des anciennes archives incomplète." >&2
 
