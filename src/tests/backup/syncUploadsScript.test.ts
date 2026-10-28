@@ -56,7 +56,7 @@ test("la purge horaire des archives tourne même si le remote des images est ref
   ]);
 });
 
-test("les purges effacent une archive avant ses RETENTION_DAYS jours pleins, jamais après (EF-05)", () => {
+test("le seuil des purges est une heure sous RETENTION_DAYS jours (EF-05)", () => {
   // La purge horaire passe à :17 : un seuil de RETENTION_DAYS jours pile laissait
   // une archive vivre jusqu'à 30 j 59 min ; une heure de moins la borne à 30 jours.
   const threshold = /--min-age "\$\(\(RETENTION_DAYS \* 24 - 1\)\)h" --include "bluegenji-\*\.tar\.age"/;
