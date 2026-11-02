@@ -110,6 +110,10 @@ test("sanitizeVoiceChannelName_101CodePoints_cutTo100WithoutSplittingEmoji", () 
   assert.equal(sanitizeVoiceChannelName(name), "a".repeat(99) + "🎮");
 });
 
+test("sanitizeVoiceChannelName_zwjEmojiAndBidiOverride_emojiKeptOverrideRemoved", () => {
+  assert.equal(sanitizeVoiceChannelName("Team \u202Eabc 👨\u200D👩\u200D👧"), "Team abc 👨\u200D👩\u200D👧");
+});
+
 test("sanitizeVoiceChannelName_onlyStrippedChars_fallbackName", () => {
   assert.equal(sanitizeVoiceChannelName("@@**__"), FALLBACK_VOICE_NAME);
 });
@@ -284,6 +288,15 @@ test("countVoiceMembers_channelDeletedByHand_notFoundAndUntracked", async () => 
   assert.deepEqual(await tracked(), []);
 });
 
+test("countVoiceMembers_trackedIdIsNotAVoiceChannel_notFoundAndUntracked", async () => {
+  const voice = addVoice("400000000000000009", 7, CATEGORY);
+  voice.type = ChannelType.GuildText;
+  await track(voice.id, KEY, T0, null);
+
+  await rejectsWith(countVoiceMembers(client, voice.id), "VOICE_CHANNEL_NOT_FOUND");
+  assert.deepEqual(await tracked(), []);
+});
+
 test("countVoiceMembers_discordFetchFails_discordError", async () => {
   const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
   world.fetchVoiceError = new Error("socket hang up");
@@ -404,9 +417,25 @@ test("handleVoiceStateUpdate_deleteFails_loggedWithoutThrowing", async () => {
 test("handleVoiceChannelDeleted_trackedChannel_untracked", async () => {
   const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
 
-  await handleVoiceChannelDeleted(client, channelId);
+  await handleVoiceChannelDeleted(client, { id: channelId, type: ChannelType.GuildVoice, parentId: CATEGORY });
 
   assert.deepEqual(await tracked(), []);
+});
+
+test("handleVoiceChannelDeleted_channelOutsideCategory_rowKeptForSweep", async () => {
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+
+  await handleVoiceChannelDeleted(client, { id: channelId, type: ChannelType.GuildVoice, parentId: "123456789012345678" });
+
+  assert.equal((await tracked()).length, 1);
+});
+
+test("handleVoiceChannelDeleted_textChannel_ignored", async () => {
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+
+  await handleVoiceChannelDeleted(client, { id: channelId, type: ChannelType.GuildText, parentId: CATEGORY });
+
+  assert.equal((await tracked()).length, 1);
 });
 
 // --- Balayage --------------------------------------------------------------
@@ -463,6 +492,53 @@ test("sweepVoiceChannels_keptReleasedChannel_deletedOnLaterDeparture", async () 
   await handleVoiceStateUpdate(client, leftFrom(voice, voice.id));
 
   assert.deepEqual(world.deletions, [voice.id]);
+});
+
+test("sweepVoiceChannels_reclaimedNearThe48hCap_newDelayStarts", async () => {
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  world.voices.get(channelId)!.members.size = 3;
+  await releaseVoiceChannel(client, channelId, T0 + 47 * HOUR);
+  await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0 + 47.5 * HOUR);
+
+  const report = await sweepVoiceChannels(client, T0 + 49 * HOUR);
+
+  assert.deepEqual(report, { deleted: 0, untracked: 0, kept: 1, failed: 0 });
+});
+
+test("sweepVoiceChannels_channelReclaimedAfterRelease_notDeletedOnDeparture", async () => {
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  const voice = world.voices.get(channelId)!;
+  voice.members.size = 3;
+  await releaseVoiceChannel(client, channelId, T0);
+  await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0 + HOUR);
+  await sweepVoiceChannels(client, T0 + 2 * HOUR);
+
+  voice.members.size = 0;
+  await handleVoiceStateUpdate(client, leftFrom(voice, channelId));
+
+  assert.deepEqual(world.deletions, []);
+});
+
+test("sweepVoiceChannels_channelInvisiblePast96h_untracked", async () => {
+  addVoice("500000000000000011", 0, CATEGORY);
+  await track("500000000000000011", "k11", T0, null);
+  world.fetchVoiceError = discordError(50001, "Missing Access");
+
+  const report = await sweepVoiceChannels(client, T0 + 97 * HOUR);
+
+  assert.deepEqual(report, { deleted: 0, untracked: 1, kept: 0, failed: 0 });
+  assert.deepEqual(await tracked(), []);
+});
+
+test("sweepVoiceChannels_channelInvisibleUnder96h_failedAndKept", async () => {
+  addVoice("500000000000000012", 0, CATEGORY);
+  await track("500000000000000012", "k12", T0, null);
+  world.fetchVoiceError = discordError(50001, "Missing Access");
+
+  const report = await sweepVoiceChannels(client, T0 + 95 * HOUR);
+
+  assert.deepEqual(report, { deleted: 0, untracked: 0, kept: 0, failed: 1 });
+  assert.equal((await tracked()).length, 1);
 });
 
 test("sweepVoiceChannels_discordFails_countedFailedAndKept", async () => {

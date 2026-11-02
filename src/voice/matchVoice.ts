@@ -49,6 +49,9 @@ export const UNRELEASED_MAX_AGE_MS = 48 * 60 * 60 * 1000;
 /** Expression cron du balayage : toutes les 30 minutes. */
 export const VOICE_SWEEP_CRON = "*/30 * * * *";
 
+/** Un salon suivi que le bot ne voit plus est oublié après ce délai (le double du plafond de 48 h). */
+const ABANDONED_MAX_AGE_MS = 2 * UNRELEASED_MAX_AGE_MS;
+
 /** Délai entre deux alertes « permission manquante ». */
 const PERMISSION_ALERT_COOLDOWN_MS = 60 * 60 * 1000;
 
@@ -157,7 +160,9 @@ export function parseChannelId(raw: unknown): string | null {
 /**
  * Nom du salon tiré du nom d'équipe envoyé par le site.
  *
- * Caractères de contrôle et invisibles retirés, ainsi que ceux qui servent la
+ * Caractères de contrôle remplacés par une espace, caractères invisibles et de
+ * sens d'écriture (espace sans chasse, marques et forçages bidirectionnels,
+ * BOM) retirés — le liant `ZWJ` des emoji composés est gardé —, ainsi que ceux qui servent la
  * syntaxe des mentions et du Markdown (`@ < > \` * _ ~ | \\ #`) : un nom
  * d'équipe saisi librement ne doit rien appeler ni rien mettre en forme s'il
  * est repris ailleurs. Espaces resserrés, coupe à 100 caractères (points de
@@ -170,7 +175,8 @@ export function sanitizeVoiceChannelName(raw: unknown): string | null {
   if (typeof raw !== "string" || raw.trim() === "" || raw.length > MAX_RAW_NAME_LENGTH) { return null; }
   const cleaned = raw
     .normalize("NFC")
-    .replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, " ")
+    .replace(/[\p{Cc}\p{Zl}\p{Zp}]/gu, " ")
+    .replace(/[\u00AD\u200B\u200E\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/g, "")
     .replace(/[@<>`*_~|\\#]/g, "")
     .replace(/\s+/g, " ")
     .trim();
@@ -215,10 +221,10 @@ async function toVoiceError(client: Client, error: unknown, action: string): Pro
 async function fetchVoice(client: Client, channelId: string): Promise<VoiceHandle | null> {
   try {
     const channel = await client.channels.fetch(channelId);
-    if (!channel) { return null; }
-    const handle = channel as unknown as Partial<VoiceHandle>;
-    if (!handle.members || typeof handle.delete !== "function") { return null; }
-    return handle as VoiceHandle;
+    // Un salon d'un autre type n'est pas un salon vocal de match : ses `members`
+    // seraient ceux qui le voient, pas ses occupants.
+    if (channel?.type !== ChannelType.GuildVoice) { return null; }
+    return channel as unknown as VoiceHandle;
   } catch (error) {
     if (discordJsonCode(error) === UNKNOWN_CHANNEL) { return null; }
     throw await toVoiceError(client, error, "lecture du salon");
@@ -294,6 +300,20 @@ async function withKeyLock<T>(key: string, task: () => Promise<T>): Promise<T> {
   } finally {
     if (pendingByKey.get(key) === run) { pendingByKey.delete(key); }
   }
+}
+
+/**
+ * Exécute `task` sous le verrou de la clé du salon, avec sa ligne relue sous
+ * ce verrou : une reprise par le site (`ensureTeamVoiceChannel`), une
+ * libération, un départ et le balayage ne se croisent jamais sur un même salon.
+ * @param channelId Identifiant du salon.
+ * @param task Tâche, appelée avec la ligne à jour (`null` : salon non suivi).
+ * @returns Le résultat de la tâche.
+ */
+async function withChannelLock<T>(channelId: string, task: (row: TrackedRow | null) => Promise<T>): Promise<T> {
+  const row = await trackedById(channelId);
+  if (!row) { return task(null); }
+  return withKeyLock(row.voice_key, async () => task(await trackedById(channelId)));
 }
 
 /**
@@ -377,7 +397,8 @@ export async function ensureTeamVoiceChannel(
       const channel = await fetchVoice(client, existing.channel_id);
       if (channel) {
         if (existing.released_at !== null) {
-          await db("UPDATE MatchVoiceChannel SET released_at = NULL WHERE channel_id = ?", [existing.channel_id]);
+          // Repris : un nouveau délai de 48 h court, comme pour un salon neuf.
+          await db("UPDATE MatchVoiceChannel SET released_at = NULL, created_at = ? WHERE channel_id = ?", [now, existing.channel_id]);
           releasedIds.delete(existing.channel_id);
         }
         return { channelId: existing.channel_id, created: false };
@@ -420,24 +441,26 @@ export async function releaseVoiceChannel(
   channelId: string,
   now: number = Date.now(),
 ): Promise<{ deleted: boolean }> {
-  if (!(await trackedById(channelId))) {
-    throw new VoiceChannelError("VOICE_CHANNEL_NOT_TRACKED");
-  }
-  await db(
-    "UPDATE MatchVoiceChannel SET released_at = COALESCE(released_at, ?) WHERE channel_id = ?",
-    [now, channelId],
-  );
-  releasedIds.add(channelId);
-  const channel = await fetchVoice(client, channelId);
-  if (!channel) {
-    await untrack(channelId);
-    return { deleted: true };
-  }
-  if (channel.members.size === 0) {
-    await deleteTracked(client, channel);
-    return { deleted: true };
-  }
-  return { deleted: false };
+  return withChannelLock(channelId, async (row) => {
+    if (!row) {
+      throw new VoiceChannelError("VOICE_CHANNEL_NOT_TRACKED");
+    }
+    await db(
+      "UPDATE MatchVoiceChannel SET released_at = COALESCE(released_at, ?) WHERE channel_id = ?",
+      [now, channelId],
+    );
+    releasedIds.add(channelId);
+    const channel = await fetchVoice(client, channelId);
+    if (!channel) {
+      await untrack(channelId);
+      return { deleted: true };
+    }
+    if (channel.members.size === 0) {
+      await deleteTracked(client, channel);
+      return { deleted: true };
+    }
+    return { deleted: false };
+  });
 }
 
 /**
@@ -453,18 +476,35 @@ export async function handleVoiceStateUpdate(client: Client, oldState: Pick<Voic
   const channel = oldState.channel as unknown as VoiceHandle | null;
   if (!channel || channel.members.size > 0) { return; }
   try {
-    await deleteTracked(client, channel);
+    await withChannelLock(channelId, async (row) => {
+      // Relu sous le verrou : repris par le site entre-temps, ou de nouveau occupé.
+      if (row === null) { return; }
+      if (row.released_at === null) {
+        releasedIds.delete(channelId);
+        return;
+      }
+      if (channel.members.size > 0) { return; }
+      await deleteTracked(client, channel);
+    });
   } catch (error) {
     await sendLog(client, `Salon vocal de match ${channelId} : suppression reportée au balayage (${(error as Error).message}).`);
   }
 }
 
 /**
- * `channelDelete` : un salon suivi supprimé à la main cesse d'être suivi. Ne lève jamais.
+ * `channelDelete` : un salon suivi supprimé à la main cesse d'être suivi.
+ * Seul un salon vocal de la catégorie est regardé — aucune écriture en base
+ * pour les salons des serveurs partenaires ; un salon suivi sorti de la
+ * catégorie avant sa suppression est oublié au balayage suivant. Ne lève jamais.
  * @param client Client Discord.
- * @param channelId Identifiant du salon supprimé.
+ * @param channel Salon supprimé.
  */
-export async function handleVoiceChannelDeleted(client: Client, channelId: string): Promise<void> {
+export async function handleVoiceChannelDeleted(
+  client: Client,
+  channel: { id: string; type?: ChannelType; parentId?: string | null },
+): Promise<void> {
+  if (channel.type !== ChannelType.GuildVoice || channel.parentId !== voiceCategoryId()) { return; }
+  const channelId = channel.id;
   try {
     await untrack(channelId);
   } catch (error) {
@@ -494,7 +534,20 @@ export function shouldSweep(row: Pick<TrackedRow, "created_at" | "released_at">,
  * @returns Le sort du salon.
  */
 async function sweepOne(client: Client, row: TrackedRow, now: number): Promise<keyof SweepReport> {
-  const channel = await fetchVoice(client, row.channel_id);
+  let channel: VoiceHandle | null;
+  try {
+    channel = await fetchVoice(client, row.channel_id);
+  } catch (error) {
+    // Salon que le bot ne voit plus (permission retirée, serveur quitté) depuis
+    // longtemps : il ne pourra pas le supprimer, et le garder relancerait
+    // l'alerte toutes les heures. Il est oublié.
+    if (error instanceof VoiceChannelError && error.code === "VOICE_MISSING_PERMISSIONS"
+      && now - Number(row.created_at) > ABANDONED_MAX_AGE_MS) {
+      await untrack(row.channel_id);
+      return "untracked";
+    }
+    throw error;
+  }
   if (!channel) {
     await untrack(row.channel_id);
     return "untracked";
@@ -503,15 +556,20 @@ async function sweepOne(client: Client, row: TrackedRow, now: number): Promise<k
     await deleteTracked(client, channel);
     return "deleted";
   }
-  if (row.released_at !== null) { releasedIds.add(row.channel_id); }
+  if (row.released_at === null) {
+    releasedIds.delete(row.channel_id);
+  } else {
+    releasedIds.add(row.channel_id);
+  }
   return "kept";
 }
 
 /**
  * Balayage des salons suivis, au démarrage et toutes les 30 min : supprime
  * les libérés vides, les libérés depuis plus de 24 h même occupés, et les
- * jamais libérés de plus de 48 h ; oublie ceux supprimés à la main. Recharge
- * le cache des salons libérés. Ne lève jamais ; journalise un bilan s'il y a
+ * jamais libérés de plus de 48 h ; oublie ceux supprimés à la main, et ceux
+ * que le bot ne voit plus depuis plus de 96 h. Tient à jour le cache des
+ * salons libérés (rempli au démarrage). Ne lève jamais ; journalise un bilan s'il y a
  * eu quelque chose à faire.
  * @param client Client Discord.
  * @param now Instant courant (ms), pour les tests.
@@ -526,13 +584,18 @@ export async function sweepVoiceChannels(client: Client, now: number = Date.now(
     await sendLog(client, `Balayage des salons vocaux de match impossible : ${(error as Error).message}`);
     return report;
   }
-  releasedIds.clear();
-  for (const row of rows) {
+  for (const snapshot of rows) {
     try {
-      report[await sweepOne(client, row, now)]++;
+      // Relu sous le verrou de sa clé : la photo du début du balayage a pu
+      // vieillir (salon repris, libéré ou supprimé entre-temps).
+      const outcome = await withKeyLock(snapshot.voice_key, async () => {
+        const row = await trackedById(snapshot.channel_id);
+        return row ? sweepOne(client, row, now) : null;
+      });
+      if (outcome) { report[outcome]++; }
     } catch {
       // Gardé pour le balayage suivant ; toujours libérable par un départ.
-      if (row.released_at !== null) { releasedIds.add(row.channel_id); }
+      if (snapshot.released_at !== null) { releasedIds.add(snapshot.channel_id); }
       report.failed++;
     }
   }

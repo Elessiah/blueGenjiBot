@@ -403,11 +403,15 @@ un salon qu'il n'a pas créé : seuls les salons inscrits dans son suivi
   - Erreurs : `400 INVALID_CHANNEL_ID`, `404 VOICE_CHANNEL_NOT_TRACKED`,
     `503 DISCORD_NOT_READY`, `503 VOICE_MISSING_PERMISSIONS`,
     `502 VOICE_DISCORD_ERROR`.
+  - Un salon supprimé n'est plus suivi : une libération rejouée (réponse
+    perdue, nouvel essai) répond `404 VOICE_CHANNEL_NOT_TRACKED`, que le site
+    lit comme « déjà supprimé ».
 
 - **Balayage** au démarrage du bot puis toutes les 30 minutes : suppression
   des salons libérés et vides, des salons libérés depuis plus de 24 h même
   occupés, et des salons jamais libérés créés depuis plus de 48 h (le site n'a
-  plus répondu) ; un salon supprimé à la main cesse d'être suivi.
+  plus répondu) ; un salon supprimé à la main cesse d'être suivi, comme un
+  salon que le bot ne voit plus (permission retirée) depuis plus de 96 h.
 
 ## Réponses d'erreur
 

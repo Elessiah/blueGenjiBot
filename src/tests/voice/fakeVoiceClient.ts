@@ -9,6 +9,7 @@ import { ChannelType, type Client } from "discord.js";
 /** Salon vocal simulé. */
 export type FakeVoice = {
   id: string;
+  type: ChannelType;
   parentId: string;
   name: string;
   members: { size: number };
@@ -76,6 +77,7 @@ export function resetWorld(): void {
 export function addVoice(id: string, members: number, parentId: string): FakeVoice {
   const voice: FakeVoice = {
     id,
+    type: ChannelType.GuildVoice,
     parentId,
     name: "salon",
     members: { size: members },
