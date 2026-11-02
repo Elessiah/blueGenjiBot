@@ -2,6 +2,9 @@ import type {Client, Message, OmitPartialGroupDMChannel} from "discord.js";
 
 import {sendLog} from "./sendLog.js";
 
+/** Une réponse notifie son seul auteur ; le texte ne mentionne personne. */
+const REPLY_MENTIONS = { parse: [], repliedUser: true } as const;
+
 /**
  * Répond à un message avec garde-fous pour éviter les erreurs bloquantes.
  * @param client Client Discord utilisé pour les appels API.
@@ -16,7 +19,9 @@ async function safeMsgReply(client: Client,
     let err_msg = "";
     while (nTry < 3) {
         try {
-            return await msg.reply(content);
+            // Seul l'auteur du message est notifié (décision du 2026-11-02) :
+            // aucune mention du texte (`@everyone`, rôle, membre) ne notifie.
+            return await msg.reply({ content, allowedMentions: REPLY_MENTIONS });
         } catch (err) {
             err_msg = (err as TypeError).message;
             nTry += 1;

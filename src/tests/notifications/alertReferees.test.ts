@@ -160,6 +160,20 @@ test("aucun rôle configuré : journal seul", async () => {
   assert.deepEqual(trace, ["log Rien"]);
 });
 
+test("alertReferees_logCopy_notifies", async () => {
+  await clearRefereeRoles();
+  const logFlags: unknown[] = [];
+  const client = {
+    users: { fetch: async (id: string) => ({ id, send: async () => ({ id: "dm" }) }) },
+    channels: { fetch: async () => ({ send: async (payload: { flags?: unknown }) => { logFlags.push(payload.flags ?? null); return { id: "log" }; } }) },
+    guilds: { cache: new Map() },
+  } as unknown as Client;
+
+  await alertReferees(client, "Problème");
+
+  assert.deepEqual(logFlags, [null]);
+});
+
 test("ferme la base à la fin de la suite", async () => {
   assert.equal(await resetBddInstance(), true);
   fs.rmSync(TMP_DIR, { recursive: true, force: true });

@@ -4,9 +4,9 @@ import assert from "node:assert/strict";
 process.env.OWNER_ID = "owner-1";
 process.env.INFO_SERV = "admin-channel-1";
 
-import { resetOwnerNoticeThrottle, sendLog, sendLogConfirmed } from "../../safe/sendLog.js";
+import { resetOwnerNoticeThrottle, sendAlert, sendLog, sendLogConfirmed } from "../../safe/sendLog.js";
 import type { idSendLogMsg } from "../../safe/types.js";
-import type { Client } from "discord.js";
+import { MessageFlags, type Client } from "discord.js";
 
 /**
  * Caractérisation de `sendLog` : la trace ordonnée des appels Discord (lecture
@@ -31,14 +31,20 @@ const sentMentions: unknown[] = [];
 /** `allowedMentions` de chaque envoi à options au titulaire. */
 const ownerMentions: unknown[] = [];
 
+/** `flags` de chaque envoi à options au salon de supervision (`null` : aucun). */
+const sentFlags: unknown[] = [];
+
+/** `flags` de chaque envoi à options au titulaire (`null` : aucun). */
+const ownerFlags: unknown[] = [];
+
 function fakeClient(trace: string[], setup: Setup): Client {
   let ownerFetches = 0;
   let ownerSends = 0;
   const owner = {
     id: "owner-1",
-    send: async (payload: string | { content: string; allowedMentions?: { parse: string[] } }) => {
+    send: async (payload: string | { content: string; allowedMentions?: { parse: string[] }; flags?: number }) => {
       const text = typeof payload === "string" ? payload : payload.content;
-      if (typeof payload !== "string") ownerMentions.push(payload.allowedMentions ?? null);
+      if (typeof payload !== "string") { ownerMentions.push(payload.allowedMentions ?? null); ownerFlags.push(payload.flags ?? null); }
       ownerSends++;
       if (ownerSends <= (setup.ownerSendFailures ?? 0)) {
         trace.push("owner.send échoue");
@@ -70,9 +76,9 @@ function fakeClient(trace: string[], setup: Setup): Client {
         if (mode === "fetch-throws") throw new Error("Unknown Channel");
         if (mode === "not-text") return { id: "voice" };
         return {
-          send: async (payload: string | { content: string; allowedMentions?: { parse: string[] } }) => {
+          send: async (payload: string | { content: string; allowedMentions?: { parse: string[] }; flags?: number }) => {
             const text = typeof payload === "string" ? payload : payload.content;
-            if (typeof payload !== "string") { sentMentions.push(payload.allowedMentions ?? null); }
+            if (typeof payload !== "string") { sentMentions.push(payload.allowedMentions ?? null); sentFlags.push(payload.flags ?? null); }
             if (mode === "missing-access") throw Object.assign(new Error("Missing Access"), { code: 50001 });
             if (mode === "send-throws") throw Object.assign(new Error("Rate limited"), { code: 429 });
             if (mode === "send-denied") throw Object.assign(new Error("Missing Permissions"), { code: 50013 });
@@ -317,4 +323,60 @@ test("sendLog : l'avis « Missing Access » au titulaire n'appelle aucune mentio
   const r = await run({ channel: "missing-access" }, { message: "X" });
   assert.equal(r.ok, true);
   assert.deepEqual(ownerMentions, [{ parse: [] }]);
+});
+
+// --- @silent : un log ne notifie pas, une alerte si -------------------------
+
+/** Vide les relevés d'options d'envoi. */
+function resetSent(): void {
+  sentMentions.length = 0;
+  ownerMentions.length = 0;
+  sentFlags.length = 0;
+  ownerFlags.length = 0;
+}
+
+test("sendLog_defaultKind_adminChannelSendIsSilent", async () => {
+  resetSent();
+
+  await sendLog(fakeClient([], {}), "trace");
+
+  assert.deepEqual(sentFlags, [MessageFlags.SuppressNotifications]);
+  assert.deepEqual(sentMentions, [{ parse: [] }]);
+});
+
+test("sendLog_defaultKindWithOwnerCopy_ownerCopyIsSilent", async () => {
+  resetSent();
+
+  await sendLog(fakeClient([], {}), "trace", undefined, true);
+
+  assert.deepEqual(ownerFlags, [MessageFlags.SuppressNotifications]);
+});
+
+test("sendAlert_message_adminChannelSendNotifiesWithoutOwnerCopy", async () => {
+  resetSent();
+  const trace: string[] = [];
+
+  const ok = await sendAlert(fakeClient(trace, {}), "signalement");
+
+  assert.equal(ok, true);
+  assert.deepEqual(sentFlags, [null]);
+  assert.deepEqual(sentMentions, [{ parse: [] }]);
+  assert.ok(!trace.some((line) => line.startsWith("owner.send")));
+});
+
+test("sendLog_alertKindWithOwnerCopy_ownerCopyNotifies", async () => {
+  resetSent();
+
+  await sendLog(fakeClient([], {}), "signalement", undefined, true, "alert");
+
+  assert.deepEqual(ownerFlags, [null]);
+  assert.deepEqual(sentFlags, [null]);
+});
+
+test("sendLog_missingAccess_ownerNoticeNotifies", async () => {
+  resetSent();
+
+  await sendLog(fakeClient([], { channel: "missing-access" }), "trace");
+
+  assert.deepEqual(ownerFlags, [null]);
 });

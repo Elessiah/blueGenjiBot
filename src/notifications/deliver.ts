@@ -1,6 +1,6 @@
 import type { Client, Guild, GuildMember, Role } from "discord.js";
 import { getBddInstance } from "../bdd/Bdd.js";
-import { sendLog } from "../safe/sendLog.js";
+import { sendAlert, sendLog } from "../safe/sendLog.js";
 import { fetchRoleMembers } from "../utils/fetchRoleMembers.js";
 import { findGuildMemberByHandle, parseDiscordHandle } from "./resolveHandle.js";
 import { capRefereeTargets, homeGuildIds, leadershipIds, MAX_REFEREE_DMS } from "./notifications.js";
@@ -177,7 +177,8 @@ export async function deliverDirectMessages(
 export async function alertReferees(client: Client, message: string, dmMessage: string = message): Promise<DeliveryReport> {
   const report: DeliveryReport = { sent: 0, unresolved: [], failed: [] };
 
-  await sendLog(client, message);
+  // Alerte : la copie au journal notifie (pas de `@silent`).
+  await sendAlert(client, message);
 
   const bdd = await getBddInstance();
   const alreadyNotified = new Set<string>();
@@ -284,7 +285,8 @@ async function sendToReferee(member: GuildMember, message: string, report: Deliv
 export async function alertLeadership(client: Client, message: string, dmMessage: string = message): Promise<DeliveryReport> {
   const report: DeliveryReport = { sent: 0, unresolved: [], failed: [] };
 
-  await sendLog(client, message);
+  // Alerte : la copie au journal notifie (pas de `@silent`).
+  await sendAlert(client, message);
 
   for (const id of leadershipIds(process.env)) {
     try {

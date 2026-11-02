@@ -76,7 +76,10 @@ function fakeMessage(trace: string[], setup: MessageSetup): Message {
     attachments: setup.broken ? undefined : attachments,
     author: { id: "author-1", username: "auteur", displayAvatarURL: () => "https://cdn.invalid/avatar.png", toString: () => "<@author-1>" },
     channel: { id: SOURCE_CHANNEL, isTextBased: () => false },
-    reply: async (text: string) => { trace.push("reply " + text); return { delete: async () => undefined }; },
+    reply: async (payload: string | { content: string }) => {
+      trace.push("reply " + (typeof payload === "string" ? payload : payload.content));
+      return { delete: async () => undefined };
+    },
     react: async (emoji: string) => { trace.push("react " + emoji); return null; },
   } as unknown as Message;
 }

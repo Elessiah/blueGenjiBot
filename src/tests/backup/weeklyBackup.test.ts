@@ -3,12 +3,12 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { Client } from "discord.js";
+import { MessageFlags, type Client } from "discord.js";
 
 import { sendDatabaseBackup } from "../../backup/weeklyBackup.js";
 import type { BackupCheckReport } from "../../backup/backupCheck.js";
 
-type Sent = { content: string; allowedMentions?: unknown };
+type Sent = { content: string; allowedMentions?: unknown; flags?: unknown };
 
 /** Faux client : le titulaire reçoit ses messages privés dans `sent`. */
 function ownerClient(sent: Sent[], failFetch = false): Client {
@@ -79,4 +79,32 @@ test("sendDatabaseBackup : un titulaire injoignable rend false sans lever", () =
   withBackupEnv({}, async () => {
     const ok = await sendDatabaseBackup(ownerClient([], true), checksWith(true));
     assert.equal(ok, false);
+  }));
+
+test("sendDatabaseBackup_healthyBackup_sentSilent", async () => {
+  const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "bluegenji-weekly-fresh-"));
+  const statusPath = path.join(dir, "status.json");
+  await fs.promises.writeFile(statusPath, JSON.stringify({ date: new Date().toISOString(), ok: true }));
+  try {
+    await withBackupEnv({ BACKUP_STATUS_PATH: statusPath }, async () => {
+      const sent: Sent[] = [];
+
+      await sendDatabaseBackup(ownerClient(sent), checksWith(true));
+
+      assert.match(sent[0].content, /^🗄️ Rapport de sauvegarde BlueGenji/);
+      assert.equal(sent[0].flags, MessageFlags.SuppressNotifications);
+    });
+  } finally {
+    await fs.promises.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("sendDatabaseBackup_backupToCheck_notifies", () =>
+  withBackupEnv({}, async () => {
+    const sent: Sent[] = [];
+
+    await sendDatabaseBackup(ownerClient(sent), checksWith(false));
+
+    assert.match(sent[0].content, /^🚨 Sauvegarde BlueGenji à vérifier/);
+    assert.equal(sent[0].flags, undefined);
   }));

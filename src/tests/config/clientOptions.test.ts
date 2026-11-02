@@ -88,7 +88,7 @@ function repliableMessage(client: Client, sent: MessagePayload[]): Message {
   return message;
 }
 
-test("safeMsgReply_reply_doesNotPingAuthor", async () => {
+test("safeMsgReply_reply_pingsOnlyAuthor", async () => {
   const client = offlineClient();
   const sent: MessagePayload[] = [];
 
@@ -97,7 +97,7 @@ test("safeMsgReply_reply_doesNotPingAuthor", async () => {
   assert.equal(sent.length, 1);
   const body = sent[0].resolveBody().body as { allowed_mentions?: unknown; message_reference?: { message_id: string } };
   assert.equal(body.message_reference?.message_id, "100000000000000003");
-  assert.deepEqual(body.allowed_mentions, { parse: [], replied_user: false });
+  assert.deepEqual(body.allowed_mentions, { parse: [], replied_user: true });
 });
 
 test("liveAnnouncement_officialChannel_overridesDefaultWithEveryone", () => {

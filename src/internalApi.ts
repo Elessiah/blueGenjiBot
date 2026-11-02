@@ -421,14 +421,25 @@ export function startInternalApi(client: Client) {
     }
   });
 
+  /**
+   * Ligne de journal poussee par le site. `kind: "log"` part en `@silent`
+   * (aucune notification) ; `kind: "alert"` ou **absent** notifie : un site
+   * qui n'envoie pas encore `kind` ne perd aucune alerte. Toute autre valeur
+   * est refusee (`400 INVALID_KIND`).
+   */
   app.post("/internal/log", async (req: Request, res: Response) => {
     const message = String(req.body?.message || "").trim();
     if (!message) {
       res.status(400).json({ error: "MISSING_MESSAGE" });
       return;
     }
+    const kind: unknown = req.body?.kind;
+    if (kind !== undefined && kind !== "log" && kind !== "alert") {
+      res.status(400).json({ error: "INVALID_KIND" });
+      return;
+    }
 
-    await sendLog(client, `[AppBlueGenji] ${message}`);
+    await sendLog(client, `[AppBlueGenji] ${message}`, undefined, false, kind === "log" ? "log" : "alert");
     res.json({ success: true });
   });
 
