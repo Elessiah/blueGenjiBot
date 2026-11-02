@@ -22,7 +22,7 @@ fs.mkdirSync(TMP_DIR, { recursive: true });
 
 const EXPECTED_TABLES = [
   "ActivityDaily", "AdhesionInterval", "Ban", "BotOwner", "ChannelPartner", "ChannelPartnerRank",
-  "ChannelPartnerService", "DPMsg", "DailySnapshot", "FeedEvent", "MessageService", "OGMsg", "Ranks",
+  "ChannelPartnerService", "DPMsg", "DailySnapshot", "FeedEvent", "MatchVoiceChannel", "MessageService", "OGMsg", "Ranks",
   "Recrute", "RefereeRole", "RoleAdmin", "Scrim", "ServerInvite", "ServerModule", "Service", "SiteVisit", "TournamentLink",
 ];
 

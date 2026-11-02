@@ -21,6 +21,7 @@ import {
     DPMSG_TABLE,
     DROP_USER_LINK,
     FEED_EVENT_TABLE,
+    MATCH_VOICE_CHANNEL_TABLE,
     MESSAGE_SERVICE_TABLE,
     OGMSG_TABLE,
     PURGE_RETIRED_MODULES,
@@ -318,6 +319,7 @@ class Bdd {
       ["ActivityDaily error: ", ACTIVITY_DAILY_TABLE],
       ["BotOwner error: ", BOT_OWNER_TABLE],
       ["TournamentLink error: ", TOURNAMENT_LINK_TABLE],
+      ["MatchVoiceChannel error: ", MATCH_VOICE_CHANNEL_TABLE],
     ];
   }
 

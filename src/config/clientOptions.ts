@@ -27,6 +27,9 @@ export function buildClientOptions(): ClientOptions {
       GatewayIntentBits.GuildMembers,
       GatewayIntentBits.GuildMessages,
       GatewayIntentBits.MessageContent,
+      // Occupation des salons vocaux de match (`voice/matchVoice.ts`) : sans
+      // elle, l'effectif d'un salon reste vide et `voiceStateUpdate` muet.
+      GatewayIntentBits.GuildVoiceStates,
     ],
     allowedMentions: { parse: [], repliedUser: false },
   };

@@ -37,6 +37,7 @@ src/
 ├── messages/               # buildServiceMessage, manageDistribution
 ├── safe/                   # wrappers défensifs : safeReply, sendLog
 ├── config/                 # commandes statiques + fillBlueCommands (dynamiques)
+├── voice/                  # salons vocaux d'équipe des matchs (matchVoice, routes /internal/voice/*)
 ├── utils/                  # updateCommands, helpers divers
 └── tests/                  # node:test
 ```
