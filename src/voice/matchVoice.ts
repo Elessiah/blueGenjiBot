@@ -15,7 +15,10 @@
  * - **suppression** : à la libération si le salon est vide, sinon dès qu'il se
  *   vide (`voiceStateUpdate`, sans scrutation) ; balayage au démarrage et toutes
  *   les 30 min (libéré et vide, libéré depuis plus de 24 h, jamais libéré
- *   depuis plus de 48 h) ;
+ *   depuis plus de 48 h et vide — un salon jamais libéré et occupé n'est
+ *   jamais supprimé) ;
+ * - **catégorie** : un salon suivi déplacé hors de la catégorie n'est plus
+ *   compté, rendu ni supprimé : il est oublié ;
  * - **vie privée** : aucun membre, identifiant de membre ni pseudo n'est lu
  *   au-delà du compte, stocké ou journalisé.
  */
@@ -109,7 +112,18 @@ export class VoiceChannelError extends Error {
 type TrackedRow = { channel_id: string; voice_key: string; created_at: number; released_at: number | null };
 
 /** Ce que le bot lit d'un salon vocal suivi : son effectif et sa suppression. */
-type VoiceHandle = { id: string; members: { size: number }; delete(reason?: string): Promise<unknown> };
+type VoiceHandle = { id: string; parentId?: string | null; members: { size: number }; delete(reason?: string): Promise<unknown> };
+
+/**
+ * Un salon est-il encore un salon vocal de match : rangé dans la catégorie ?
+ * Un salon suivi que le staff a déplacé ailleurs (archive, staff) n'est plus
+ * le nôtre : il n'est ni compté, ni rendu au site, ni supprimé — seulement oublié.
+ * @param channel Salon lu.
+ * @returns `true` s'il est dans la catégorie des salons vocaux de match.
+ */
+function inVoiceCategory(channel: Pick<VoiceHandle, "parentId">): boolean {
+  return channel.parentId === voiceCategoryId();
+}
 
 /** Bilan d'un balayage. */
 export type SweepReport = { deleted: number; untracked: number; kept: number; failed: number };
@@ -216,7 +230,7 @@ async function toVoiceError(client: Client, error: unknown, action: string): Pro
  * Lit un salon vocal sur Discord.
  * @param client Client Discord.
  * @param channelId Identifiant du salon.
- * @returns Le salon, ou `null` s'il n'existe plus (supprimé à la main).
+ * @returns Le salon, ou `null` s'il n'existe plus (supprimé à la main) ou n'est plus dans la catégorie (déplacé à la main).
  */
 async function fetchVoice(client: Client, channelId: string): Promise<VoiceHandle | null> {
   try {
@@ -224,7 +238,8 @@ async function fetchVoice(client: Client, channelId: string): Promise<VoiceHandl
     // Un salon d'un autre type n'est pas un salon vocal de match : ses `members`
     // seraient ceux qui le voient, pas ses occupants.
     if (channel?.type !== ChannelType.GuildVoice) { return null; }
-    return channel as unknown as VoiceHandle;
+    const voice = channel as unknown as VoiceHandle;
+    return inVoiceCategory(voice) ? voice : null;
   } catch (error) {
     if (discordJsonCode(error) === UNKNOWN_CHANNEL) { return null; }
     throw await toVoiceError(client, error, "lecture du salon");
@@ -484,6 +499,11 @@ export async function handleVoiceStateUpdate(client: Client, oldState: Pick<Voic
         return;
       }
       if (channel.members.size > 0) { return; }
+      // Déplacé hors de la catégorie entre-temps : plus le nôtre, oublié sans suppression.
+      if (!inVoiceCategory(channel)) {
+        await untrack(channelId);
+        return;
+      }
       await deleteTracked(client, channel);
     });
   } catch (error) {
@@ -523,7 +543,8 @@ export function shouldSweep(row: Pick<TrackedRow, "created_at" | "released_at">,
   if (row.released_at !== null) {
     return members === 0 || now - Number(row.released_at) > RELEASED_MAX_AGE_MS;
   }
-  return now - Number(row.created_at) > UNRELEASED_MAX_AGE_MS;
+  // Jamais libéré : le match peut encore se jouer. Un salon occupé n'est jamais supprimé.
+  return members === 0 && now - Number(row.created_at) > UNRELEASED_MAX_AGE_MS;
 }
 
 /**
@@ -567,7 +588,8 @@ async function sweepOne(client: Client, row: TrackedRow, now: number): Promise<k
 /**
  * Balayage des salons suivis, au démarrage et toutes les 30 min : supprime
  * les libérés vides, les libérés depuis plus de 24 h même occupés, et les
- * jamais libérés de plus de 48 h ; oublie ceux supprimés à la main, et ceux
+ * jamais libérés de plus de 48 h s'ils sont vides ; oublie ceux supprimés ou
+ * sortis de la catégorie à la main, et ceux
  * que le bot ne voit plus depuis plus de 96 h. Tient à jour le cache des
  * salons libérés (rempli au démarrage). Ne lève jamais ; journalise un bilan s'il y a
  * eu quelque chose à faire.

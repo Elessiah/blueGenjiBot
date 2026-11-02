@@ -10,5 +10,5 @@ Texte déplacé tel quel depuis `CLAUDE.md` (allègement du fichier chargé à c
 
 ## Salons vocaux de match (MATCH-VOICE)
 
-- Table `MatchVoiceChannel` : identifiant du salon, clé fournie par le site (`match:<id>:team:<id>`), instants de création et de libération. **Aucune donnée personnelle** : ni nom d'équipe, ni membre. Elle appartient au réseau BlueGenji, pas à un serveur partenaire : hors de `GUILD_CONFIG_TABLES`, une ligne disparaît avec son salon (suppression par le bot, à la main, ou balayage à 24 h / 48 h).
+- Table `MatchVoiceChannel` : identifiant du salon, clé fournie par le site (`match:<id>:team:<id>`), instants de création et de libération. **Aucune donnée personnelle** : ni nom d'équipe, ni membre. Elle appartient au réseau BlueGenji, pas à un serveur partenaire : hors de `GUILD_CONFIG_TABLES`, une ligne disparaît avec son salon (suppression par le bot, à la main, ou balayage à 24 h / 48 h ; une ligne d'un salon sorti de la catégorie est oubliée).
 - L'intention `GuildVoiceStates` sert au seul compte des occupants d'un salon suivi et à la suppression d'un salon libéré quand il se vide. Le bot ne lit, ne garde ni ne journalise **qui** est dans un salon ; il rend un nombre au site. Côté site, ce traitement (lecture de l'occupation) relève du registre et de `/rgpd` (lot site).

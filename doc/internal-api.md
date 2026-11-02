@@ -409,9 +409,14 @@ un salon qu'il n'a pas créé : seuls les salons inscrits dans son suivi
 
 - **Balayage** au démarrage du bot puis toutes les 30 minutes : suppression
   des salons libérés et vides, des salons libérés depuis plus de 24 h même
-  occupés, et des salons jamais libérés créés depuis plus de 48 h (le site n'a
-  plus répondu) ; un salon supprimé à la main cesse d'être suivi, comme un
+  occupés, et des salons jamais libérés créés depuis plus de 48 h **et vides**
+  (le site n'a plus répondu ; un salon jamais libéré et occupé n'est jamais
+  supprimé) ; un salon supprimé à la main cesse d'être suivi, comme un
   salon que le bot ne voit plus (permission retirée) depuis plus de 96 h.
+- Un salon suivi **déplacé hors de la catégorie** à la main n'est plus le
+  salon du match : il n'est plus compté (`404 VOICE_CHANNEL_NOT_FOUND`), ni
+  rendu (une demande `POST` en crée un neuf dans la catégorie), ni supprimé —
+  il est seulement oublié (une libération répond alors `deleted: true`).
 
 ## Réponses d'erreur
 

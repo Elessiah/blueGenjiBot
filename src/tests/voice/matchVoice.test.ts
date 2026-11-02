@@ -47,6 +47,8 @@ const client = fakeVoiceClient(CATEGORY, process.env.INFO_SERV);
 const KEY = "match:12:team:34";
 const HOUR = 60 * 60 * 1000;
 const T0 = 1_800_000_000_000;
+/** Une autre catégorie du serveur (archive, staff). */
+const OTHER_CATEGORY = "123456789012345678";
 
 /** Lignes suivies, par identifiant de salon. */
 async function tracked(): Promise<{ channel_id: string; voice_key: string; released_at: number | null }[]> {
@@ -456,8 +458,32 @@ test("shouldSweep_unreleasedAt48h_false", () => {
   assert.equal(shouldSweep({ created_at: T0, released_at: null }, 0, T0 + UNRELEASED_MAX_AGE_MS), false);
 });
 
-test("shouldSweep_unreleasedOccupiedPast48h_true", () => {
-  assert.equal(shouldSweep({ created_at: T0, released_at: null }, 5, T0 + UNRELEASED_MAX_AGE_MS + 1), true);
+test("shouldSweep_unreleasedOccupiedPast48h_false", () => {
+  assert.equal(shouldSweep({ created_at: T0, released_at: null }, 5, T0 + UNRELEASED_MAX_AGE_MS + 1), false);
+});
+
+test("shouldSweep_unreleasedEmptyPast48h_true", () => {
+  assert.equal(shouldSweep({ created_at: T0, released_at: null }, 0, T0 + UNRELEASED_MAX_AGE_MS + 1), true);
+});
+
+test("sweepVoiceChannels_unreleasedOccupiedPast48h_kept", async () => {
+  addVoice("500000000000000013", 4, CATEGORY);
+  await track("500000000000000013", "k13", T0, null);
+
+  const report = await sweepVoiceChannels(client, T0 + 72 * HOUR);
+
+  assert.deepEqual(report, { deleted: 0, untracked: 0, kept: 1, failed: 0 });
+  assert.deepEqual(world.deletions, []);
+});
+
+test("sweepVoiceChannels_releasedEmptyChannelMovedOut_untrackedNotDeleted", async () => {
+  addVoice("500000000000000014", 0, OTHER_CATEGORY);
+  await track("500000000000000014", "k14", T0, T0);
+
+  const report = await sweepVoiceChannels(client, T0 + HOUR);
+
+  assert.deepEqual(report, { deleted: 0, untracked: 1, kept: 0, failed: 0 });
+  assert.ok(world.voices.has("500000000000000014"));
 });
 
 test("sweepVoiceChannels_mixedChannels_eachRuleAppliedAndSummaryLogged", async () => {
@@ -465,7 +491,7 @@ test("sweepVoiceChannels_mixedChannels_eachRuleAppliedAndSummaryLogged", async (
   addVoice("500000000000000001", 0, CATEGORY); // libéré, vide
   addVoice("500000000000000002", 4, CATEGORY); // libéré depuis 25 h, occupé
   addVoice("500000000000000003", 4, CATEGORY); // libéré depuis 1 h, occupé
-  addVoice("500000000000000004", 5, CATEGORY); // jamais libéré, 72 h
+  addVoice("500000000000000004", 0, CATEGORY); // jamais libéré, 72 h, vide
   addVoice("500000000000000005", 0, CATEGORY); // jamais libéré, 1 h
   await track("500000000000000001", "k1", now - 2 * HOUR, now - HOUR);
   await track("500000000000000002", "k2", now - 26 * HOUR, now - 25 * HOUR);
@@ -568,4 +594,55 @@ test("sweepVoiceChannels_untrackedChannelInCategory_neverTouched", async () => {
   await sweepVoiceChannels(client, T0 + 100 * HOUR);
 
   assert.ok(world.voices.has("500000000000000010"));
+});
+
+// --- Salon suivi déplacé hors de la catégorie -----------------------------
+
+test("countVoiceMembers_channelMovedOutOfCategory_notFoundAndUntracked", async () => {
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  world.voices.get(channelId)!.parentId = OTHER_CATEGORY;
+
+  await rejectsWith(countVoiceMembers(client, channelId), "VOICE_CHANNEL_NOT_FOUND");
+
+  assert.deepEqual(await tracked(), []);
+  assert.deepEqual(world.deletions, []);
+});
+
+test("ensureTeamVoiceChannel_trackedChannelMovedOut_newChannelCreatedInCategory", async () => {
+  const first = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  world.voices.get(first.channelId)!.parentId = OTHER_CATEGORY;
+
+  const second = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0 + HOUR);
+
+  assert.equal(second.created, true);
+  assert.notEqual(second.channelId, first.channelId);
+  assert.equal(world.voices.get(second.channelId)?.parentId, CATEGORY);
+  assert.ok(world.voices.has(first.channelId));
+  assert.deepEqual((await tracked()).map((row) => row.channel_id), [second.channelId]);
+});
+
+test("releaseVoiceChannel_channelMovedOutOfCategory_untrackedNotDeleted", async () => {
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  world.voices.get(channelId)!.parentId = OTHER_CATEGORY;
+
+  const result = await releaseVoiceChannel(client, channelId, T0 + HOUR);
+
+  assert.deepEqual(result, { deleted: true });
+  assert.deepEqual(world.deletions, []);
+  assert.ok(world.voices.has(channelId));
+  assert.deepEqual(await tracked(), []);
+});
+
+test("handleVoiceStateUpdate_releasedChannelMovedThenEmptied_untrackedNotDeleted", async () => {
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  const voice = world.voices.get(channelId)!;
+  voice.members.size = 2;
+  await releaseVoiceChannel(client, channelId, T0);
+  voice.parentId = OTHER_CATEGORY;
+
+  voice.members.size = 0;
+  await handleVoiceStateUpdate(client, leftFrom(voice, channelId));
+
+  assert.deepEqual(world.deletions, []);
+  assert.deepEqual(await tracked(), []);
 });
