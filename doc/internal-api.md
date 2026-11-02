@@ -363,6 +363,61 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     répare au démarrage les lignes antérieures à la règle, **avant** l'ouverture
     de l'API interne. Idempotente, elle ne réécrit rien sur une base propre.
 
+### Salons vocaux d'équipe des matchs (MATCH-VOICE)
+
+Un quart d'heure avant un match, le site demande un salon vocal par équipe ;
+il en lit l'occupation pour autoriser le lancement, puis le rend une fois le
+score confirmé. Les salons sont créés dans la catégorie `VOICE_CATEGORY_ID`
+(défaut : catégorie des matchs du serveur BlueGenji), limités à **5 places**,
+permissions alignées sur la catégorie. Le bot ne compte ni ne supprime jamais
+un salon qu'il n'a pas créé : seuls les salons inscrits dans son suivi
+(table `MatchVoiceChannel`) sont concernés. Le rôle du bot doit avoir
+« Gérer les salons » sur la catégorie.
+
+- `POST /internal/voice/channels`
+  - Body: `{ "key": "match:12:team:34", "name": "Nom de l'équipe" }`
+  - `key` : clé d'idempotence, `[A-Za-z0-9:_-]`, 100 caractères au plus. Même
+    clé, même salon : `201 { "channelId" }` à la création, `200 { "channelId" }`
+    ensuite. Un salon supprimé à la main est recréé (nouvel identifiant) ; un
+    salon libéré mais encore présent est repris et n'est plus libéré.
+  - `name` : nom d'équipe (200 caractères au plus) ; caractères de contrôle,
+    `@`, `<`, `>`, `*`, `_`, `~`, `|`, `\`, `#` et l'accent grave retirés, coupé à 100 caractères ;
+    s'il ne reste rien, « Salon d'équipe ».
+  - Erreurs : `400 INVALID_VOICE_KEY`, `400 INVALID_VOICE_CHANNEL_NAME`,
+    `503 DISCORD_NOT_READY`, `503 VOICE_CATEGORY_UNAVAILABLE` (catégorie
+    introuvable), `503 VOICE_MISSING_PERMISSIONS` (permission refusée : une
+    alerte au staff, au plus une par heure), `502 VOICE_DISCORD_ERROR`,
+    `500 VOICE_STORAGE_ERROR`.
+
+- `GET /internal/voice/channels/:channelId/count`
+  - Retourne `{ "members": 3 }` : le **nombre** de personnes dans le salon,
+    rien d'autre (aucun identifiant ni pseudo, rien de journalisé).
+  - Erreurs : `400 INVALID_CHANNEL_ID`, `404 VOICE_CHANNEL_NOT_TRACKED` (salon
+    non créé par le bot), `404 VOICE_CHANNEL_NOT_FOUND` (supprimé à la main :
+    il n'est plus suivi, une nouvelle demande `POST` le recrée),
+    `503 DISCORD_NOT_READY`, `502 VOICE_DISCORD_ERROR`.
+
+- `POST /internal/voice/channels/:channelId/release`
+  - Libère le salon : supprimé tout de suite s'il est vide, sinon dès que le
+    dernier occupant le quitte. Retourne `{ "released": true, "deleted": true | false }`.
+  - Erreurs : `400 INVALID_CHANNEL_ID`, `404 VOICE_CHANNEL_NOT_TRACKED`,
+    `503 DISCORD_NOT_READY`, `503 VOICE_MISSING_PERMISSIONS`,
+    `502 VOICE_DISCORD_ERROR`.
+  - Un salon supprimé n'est plus suivi : une libération rejouée (réponse
+    perdue, nouvel essai) répond `404 VOICE_CHANNEL_NOT_TRACKED`, que le site
+    lit comme « déjà supprimé ».
+
+- **Balayage** au démarrage du bot puis toutes les 30 minutes : suppression
+  des salons libérés et vides, des salons libérés depuis plus de 24 h même
+  occupés, et des salons jamais libérés créés depuis plus de 48 h **et vides**
+  (le site n'a plus répondu ; un salon jamais libéré et occupé n'est jamais
+  supprimé) ; un salon supprimé à la main cesse d'être suivi, comme un
+  salon que le bot ne voit plus (permission retirée) depuis plus de 96 h.
+- Un salon suivi **déplacé hors de la catégorie** à la main n'est plus le
+  salon du match : il n'est plus compté (`404 VOICE_CHANNEL_NOT_FOUND`), ni
+  rendu (une demande `POST` en crée un neuf dans la catégorie), ni supprimé —
+  il est seulement oublié (une libération répond alors `deleted: true`).
+
 ## Réponses d'erreur
 
 Une erreur ne renvoie **jamais** le message de l'exception, seulement un code

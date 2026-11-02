@@ -1,4 +1,17 @@
-import { GatewayIntentBits, type ClientOptions } from "discord.js";
+import { GatewayIntentBits, Options, type ClientOptions, type VoiceState } from "discord.js";
+import { voiceCategoryId } from "../voice/matchVoice.js";
+
+/**
+ * Garde-t-on en mémoire l'état vocal d'un membre ? Seulement sur le serveur
+ * qui porte la catégorie des salons vocaux de match : l'intention
+ * `GuildVoiceStates` ne sert qu'à compter ces salons, et la présence vocale
+ * des membres des serveurs partenaires n'est ni lue ni gardée.
+ * @param state État vocal reçu de Discord.
+ * @returns `true` pour le serveur BlueGenji de la catégorie.
+ */
+export function keepVoiceState(state: Pick<VoiceState, "guild">): boolean {
+  return state.guild.channels.cache.has(voiceCategoryId());
+}
 
 /**
  * Options du client Discord : intentions et mentions par défaut, tirées de
@@ -27,7 +40,15 @@ export function buildClientOptions(): ClientOptions {
       GatewayIntentBits.GuildMembers,
       GatewayIntentBits.GuildMessages,
       GatewayIntentBits.MessageContent,
+      // Occupation des salons vocaux de match (`voice/matchVoice.ts`) : sans
+      // elle, l'effectif d'un salon reste vide et `voiceStateUpdate` muet.
+      GatewayIntentBits.GuildVoiceStates,
     ],
     allowedMentions: { parse: [], repliedUser: false },
+    // États vocaux gardés pour le seul serveur de la catégorie (`keepVoiceState`).
+    makeCache: Options.cacheWithLimits({
+      ...Options.DefaultMakeCacheSettings,
+      VoiceStateManager: { maxSize: 0, keepOverLimit: (state) => keepVoiceState(state) },
+    }),
   };
 }

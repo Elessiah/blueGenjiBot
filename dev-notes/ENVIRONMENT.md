@@ -27,4 +27,5 @@ BACKUP_STATUS_PATH=             # statut de la sauvegarde distante (défaut /var
 BACKUP_ARCHIVE_DIR=             # /restore-backup : dossier local d'archives .tar.age (facultatif)
 BACKUP_RCLONE_REMOTE=           # /restore-backup : remote:dossier des archives (facultatif)
 BACKUP_AGE_IDENTITY=            # /restore-backup : clé privée age (défaut ~/.bluegenji-backup.key)
+VOICE_CATEGORY_ID=              # catégorie des salons vocaux de match (défaut 676735851119640577, serveur BlueGenji)
 ```

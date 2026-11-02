@@ -37,6 +37,7 @@ import { loginCodeMessage, parseDmLocale } from "./notifications/dmLanguage.js";
 import { deliverDirectMessages, alertLeadership, alertReferees, HomeGuildUnavailableError } from "./notifications/deliver.js";
 import { HandleResolutionTimeoutError, resolveDiscordHandle } from "./notifications/resolveHandle.js";
 import { MESSAGE_RETENTION_DAYS } from "./privacy/retentionPeriods.js";
+import { registerVoiceRoutes } from "./voice/voiceRoutes.js";
 import {
   announceLive,
   isLiveIssueFinal,
@@ -866,6 +867,9 @@ export function startInternalApi(client: Client) {
       res.status(500).json({ error: "INTERNAL_MODULE_TOGGLE_ERROR" });
     }
   });
+
+  // Salons vocaux d'équipe des matchs (MATCH-VOICE) : `voice/voiceRoutes.ts`.
+  registerVoiceRoutes(app, client);
 
   const port = Number(process.env.INTERNAL_API_PORT || 4400);
   const host = process.env.INTERNAL_API_HOST || "127.0.0.1";

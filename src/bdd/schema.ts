@@ -341,3 +341,19 @@ export const TOURNAMENT_LINK_TABLE = `CREATE TABLE IF NOT EXISTS TournamentLink
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
           );
         `;
+
+/**
+ * Salons vocaux d'équipe créés par le bot pour un match (MATCH-VOICE,
+ * `voice/matchVoice.ts`). Seul ce que la table énumère peut être supprimé :
+ * un salon que le bot n'a pas créé n'y entre jamais. `voice_key` est la clé
+ * d'idempotence fournie par le site (`match:<id>:team:<id>`), les dates des
+ * instants en millisecondes. Ni nom d'équipe ni membre : le site les garde.
+ */
+export const MATCH_VOICE_CHANNEL_TABLE = `CREATE TABLE IF NOT EXISTS MatchVoiceChannel
+          (
+            channel_id TEXT PRIMARY KEY,
+            voice_key TEXT NOT NULL UNIQUE,
+            created_at INTEGER NOT NULL,
+            released_at INTEGER
+          );
+        `;

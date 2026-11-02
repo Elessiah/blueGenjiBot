@@ -1,9 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { Client, GatewayIntentBits, Message, MessagePayload, type MessageCreateOptions, type MessageTarget, type TextChannel } from "discord.js";
+import { Client, Collection, GatewayIntentBits, Message, MessagePayload, VoiceState, VoiceStateManager, type MessageCreateOptions, type MessageTarget, type TextChannel } from "discord.js";
 
-import { buildClientOptions } from "../../config/clientOptions.js";
+import { buildClientOptions, keepVoiceState } from "../../config/clientOptions.js";
+import { DEFAULT_VOICE_CATEGORY_ID } from "../../voice/matchVoice.js";
 import { liveAllowedMentions, STREAM_VIEWER_ROLE_ID } from "../../notifications/liveAnnouncement.js";
 import { safeChannel } from "../../safe/safeChannel.js";
 import { safeMsgReply } from "../../safe/safeMsgReply.js";
@@ -39,6 +40,7 @@ test("buildClientOptions_default_setsNoMentionsAndNoReplyPing", () => {
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildVoiceStates,
   ]);
 });
 
@@ -125,4 +127,50 @@ test("liveAnnouncement_followUp_pingsNobody", () => {
   const mentions = resolvedMentions(client, { content: "x", allowedMentions: liveAllowedMentions(undefined, false) });
 
   assert.deepEqual(mentions, { parse: [], roles: [] });
+});
+
+// --- États vocaux : seul le serveur de la catégorie des salons de match ----
+
+/** État vocal d'un membre sur un serveur qui porte, ou non, la catégorie. */
+function voiceStateIn(hasCategory: boolean): VoiceState {
+  const guild = { channels: { cache: { has: (id: string) => hasCategory && id === DEFAULT_VOICE_CATEGORY_ID } } };
+  return { guild } as unknown as VoiceState;
+}
+
+/** Cache que le client donnerait aux états vocaux d'un serveur. */
+function voiceStateCache(): Collection<string, VoiceState> {
+  // discord.js appelle la fabrique avec le gestionnaire, le type gardé et l'instance (dont seul `name` est lu).
+  const makeCache = buildClientOptions().makeCache as unknown as (
+    manager: unknown, holds: unknown, instance: { name: string },
+  ) => Collection<string, VoiceState>;
+  return makeCache(VoiceStateManager, VoiceState, { name: "VoiceStateManager" });
+}
+
+test("keepVoiceState_guildWithVoiceCategory_true", () => {
+  delete process.env.VOICE_CATEGORY_ID;
+  assert.equal(keepVoiceState(voiceStateIn(true)), true);
+});
+
+test("keepVoiceState_partnerGuild_false", () => {
+  delete process.env.VOICE_CATEGORY_ID;
+  assert.equal(keepVoiceState(voiceStateIn(false)), false);
+});
+
+test("buildClientOptions_partnerGuildVoiceState_notCached", () => {
+  delete process.env.VOICE_CATEGORY_ID;
+  const cache = voiceStateCache();
+
+  cache.set("900000000000000002", voiceStateIn(false));
+
+  assert.equal(cache.size, 0);
+});
+
+test("buildClientOptions_homeGuildVoiceStates_allCached", () => {
+  delete process.env.VOICE_CATEGORY_ID;
+  const cache = voiceStateCache();
+
+  cache.set("900000000000000002", voiceStateIn(true));
+  cache.set("900000000000000003", voiceStateIn(true));
+
+  assert.equal(cache.size, 2);
 });

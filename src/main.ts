@@ -27,6 +27,12 @@ import { purgeFeedIdentifiers } from "./feed/feedBus.js";
 import { eraseLeftGuild, runDataRetention } from "./privacy/dataRetention.js";
 import { recordDailySnapshot } from "./snapshots/dailySnapshot.js";
 import { sendDatabaseBackup } from "./backup/weeklyBackup.js";
+import {
+  handleVoiceChannelDeleted,
+  handleVoiceStateUpdate,
+  sweepVoiceChannels,
+  VOICE_SWEEP_CRON,
+} from "./voice/matchVoice.js";
 
 /**
  * Point d'entree du bot : client Discord, listeners d'evenements et taches cron.
@@ -263,6 +269,18 @@ client.on("clientReady", async () => {
       { timezone: "Europe/Paris" },
     );
 
+    // Salons vocaux de match : un balayage au démarrage (ceux libérés pendant
+    // l'arrêt, ceux supprimés à la main), puis toutes les 30 minutes. Il ne
+    // lève jamais ; la garde ne sert que si cela cessait d'être vrai.
+    void sweepVoiceChannels(client).catch((error) => reportError(client, "clientReady sweepVoiceChannels", error));
+    cron.schedule(VOICE_SWEEP_CRON, async () => {
+      try {
+        await sweepVoiceChannels(client);
+      } catch (error) {
+        await reportError(client, "cron sweepVoiceChannels", error);
+      }
+    });
+
     // Peut-être un redémarrage après une panne : une alerte, qui notifie.
     await sendAlert(client, "Bot just started! (If it's not a restart it's a crash)");
   } catch (error) {
@@ -308,7 +326,17 @@ client.on("guildDelete", async (guild) => {
   }
 });
 
+client.on("voiceStateUpdate", async (oldState) => {
+  try {
+    await handleVoiceStateUpdate(client, oldState);
+  } catch (error) {
+    await reportError(client, "voiceStateUpdate", error);
+  }
+});
+
 client.on("channelDelete", async (channel) => {
+  // Un salon vocal de match supprimé à la main cesse d'être suivi ; ne lève jamais.
+  await handleVoiceChannelDeleted(client, channel);
   try {
     const ret = await _resetChannel(client, channel.id, "guild" in channel ? channel.guild.name : undefined);
     if (!ret.success) {
