@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { Client, GatewayIntentBits, MessagePayload, type MessageCreateOptions, type MessageTarget, type TextChannel, type Message } from "discord.js";
+import { Client, GatewayIntentBits, Message, MessagePayload, type MessageCreateOptions, type MessageTarget, type TextChannel } from "discord.js";
 
 import { buildClientOptions } from "../../config/clientOptions.js";
 import { liveAllowedMentions, STREAM_VIEWER_ROLE_ID } from "../../notifications/liveAnnouncement.js";
@@ -74,19 +74,30 @@ test("safeChannel_broadcastText_sendsWithoutOverride", async () => {
   assert.deepEqual(resolvedMentions(client, sent[0]), { parse: [], replied_user: false });
 });
 
+/**
+ * Message de discord.js réel (son `reply` d'origine), sans cache : son salon
+ * garde le contenu que `Message.reply` lui confie, prêt à résoudre.
+ */
+function repliableMessage(client: Client, sent: MessagePayload[]): Message {
+  const message = Object.create(Message.prototype) as Message;
+  Object.defineProperty(message, "client", { value: client });
+  Object.defineProperty(message, "id", { value: "100000000000000003" });
+  Object.defineProperty(message, "channel", {
+    value: { send: async (payload: MessagePayload) => { sent.push(payload); return {}; } },
+  });
+  return message;
+}
+
 test("safeMsgReply_reply_doesNotPingAuthor", async () => {
   const client = offlineClient();
-  const replies: unknown[] = [];
-  const message = {
-    reply: async (options: unknown) => { replies.push(options); return {}; },
-  } as unknown as Message;
+  const sent: MessagePayload[] = [];
 
-  await safeMsgReply(client, message, "Your message has not been sent !");
+  await safeMsgReply(client, repliableMessage(client, sent), "Your message has not been sent ! @everyone");
 
-  assert.deepEqual(replies, ["Your message has not been sent !"]);
-  // `Message.reply` ajoute la référence, sans toucher aux mentions.
-  const asReply = { content: "Your message has not been sent !", reply: { messageReference: "100000000000000003" } };
-  assert.deepEqual(resolvedMentions(client, asReply), { parse: [], replied_user: false });
+  assert.equal(sent.length, 1);
+  const body = sent[0].resolveBody().body as { allowed_mentions?: unknown; message_reference?: { message_id: string } };
+  assert.equal(body.message_reference?.message_id, "100000000000000003");
+  assert.deepEqual(body.allowed_mentions, { parse: [], replied_user: false });
 });
 
 test("liveAnnouncement_officialChannel_overridesDefaultWithEveryone", () => {
