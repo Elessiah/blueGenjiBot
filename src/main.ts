@@ -289,7 +289,8 @@ client.on("guildDelete", async (guild) => {
     // signalé ; ce qui reste sera repris au prochain démarrage ou à la nuit.
     try {
       if (!(await eraseLeftGuild(client, guild.id))) {
-        await sendLog(
+        // Effacement RGPD suspendu, action requise : une alerte, qui notifie.
+        await sendAlert(
           client,
           `guildDelete: configuration du serveur ${guild.id} gardée : base d'une autre application Discord ` +
             "(elle ne sera effacée que par l'application propriétaire), ou base fermée (le rattrapage suivant la reprendra).",

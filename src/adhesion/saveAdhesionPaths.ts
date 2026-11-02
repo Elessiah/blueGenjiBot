@@ -3,7 +3,7 @@ import {PathsAdhesions} from "./types.js";
 import {writeFile} from "node:fs/promises";
 import {adhesionFilePath} from "./adhesionPath.js";
 import {safeFollowUp} from "../safe/safeFollowUp.js";
-import {sendLog} from "../safe/sendLog.js";
+import {sendAlert} from "../safe/sendLog.js";
 
 /**
  * Enregistre la configuration des fichiers d'adhésion dans `paths.json`.
@@ -28,7 +28,9 @@ async function saveAdhesionPaths(paths: PathsAdhesions,
                 []);
         }
         if (client) {
-            await sendLog(client, errmsg);
+            // Les adhésions sont bloquées tant que le fichier ne s'écrit pas :
+            // une alerte, qui notifie.
+            await sendAlert(client, errmsg);
         }
         return false;
     }
