@@ -289,7 +289,8 @@ export async function alertLeadership(client: Client, message: string, dmMessage
   for (const id of leadershipIds(process.env)) {
     try {
       const user = await client.users.fetch(id);
-      await user.send(dmMessage);
+      // Texte venu du site : aucune mention ne notifie.
+      await user.send({ content: dmMessage, allowedMentions: { parse: [] } });
       report.sent += 1;
     } catch {
       report.failed.push(id);

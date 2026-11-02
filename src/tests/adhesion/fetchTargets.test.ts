@@ -64,7 +64,7 @@ function fakeClient(trace: string[], setup: Setup): Client {
     },
     channels: {
       fetch: async () => ({
-        send: async (text: string) => { trace.push("log " + text); return { id: "log-" + trace.length }; },
+        send: async (raw: string | { content: string }) => { const text = typeof raw === "string" ? raw : raw.content; trace.push("log " + text); return { id: "log-" + trace.length }; },
       }),
     },
     guilds: {

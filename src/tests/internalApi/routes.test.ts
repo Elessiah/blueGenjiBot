@@ -85,7 +85,7 @@ function member(id: string, username: string): FakeMember {
   return {
     id,
     user: { username, discriminator: "0", bot: false },
-    send: async (text: string) => {
+    send: async (raw: string | { content: string }) => { const text = typeof raw === "string" ? raw : raw.content;
       if (state.closedDms.has(id)) { throw new Error("Cannot send messages to this user"); }
       state.dms.push(`${id}: ${text}`);
       return { id: "dm" };
@@ -134,7 +134,7 @@ const fakeClient = {
       if (state.unknownUsers.has(id)) { throw new Error("Unknown User"); }
       return {
         id,
-        send: async (text: string) => {
+        send: async (raw: string | { content: string }) => { const text = typeof raw === "string" ? raw : raw.content;
           if (state.closedDms.has(id)) { throw new Error("Cannot send messages to this user"); }
           state.dms.push(`${id}: ${text}`);
           return { id: "dm" };

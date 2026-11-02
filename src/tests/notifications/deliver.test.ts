@@ -18,13 +18,21 @@ const RIVALS = "222222222222222222";
 
 type Trace = { dms: string[]; logs: string[] };
 
+/** Texte d'un envoi, qu'il soit une chaîne ou un objet `{ content }`. */
+function payloadText(payload: unknown): string {
+  return typeof payload === "string" ? payload : String((payload as { content: string }).content);
+}
+
+/** `allowedMentions` de chaque envoi à options des faux clients de direction. */
+const leadershipMentions: unknown[] = [];
+
 /**
  * Faux client : `guilds` associe chaque serveur joignable à ses membres (par
  * identifiant). Un serveur absent de la table lève, comme Discord pour un
  * serveur quitté ou un identifiant faux.
  */
 function fakeClient(guilds: Record<string, string[]>, trace: Trace, closedDms: string[] = []): Client {
-  const log = async (text: unknown) => { trace.logs.push(String(text)); return { id: "log" }; };
+  const log = async (text: unknown) => { trace.logs.push(payloadText(text)); return { id: "log" }; };
   return {
     users: { fetch: async () => ({ send: log }) },
     channels: { fetch: async () => ({ send: log }) },
@@ -126,10 +134,13 @@ function leadershipClient(trace: Trace, reachable: string[]): Client {
     users: {
       fetch: async (id: string) => {
         if (!reachable.includes(id)) throw new Error("Unknown User");
-        return { send: async (message: string) => { trace.dms.push(`${id}:${message}`); } };
+        return { send: async (message: string | { content: string; allowedMentions?: unknown }) => {
+          if (typeof message !== "string") leadershipMentions.push(message.allowedMentions ?? null);
+          trace.dms.push(`${id}:${payloadText(message)}`);
+        } };
       },
     },
-    channels: { fetch: async () => ({ send: async (text: unknown) => { trace.logs.push(String(text)); } }) },
+    channels: { fetch: async () => ({ send: async (text: unknown) => { trace.logs.push(payloadText(text)); } }) },
   } as unknown as Client;
 }
 
@@ -157,6 +168,16 @@ test("alertLeadership : le texte des messages privés part en privé, le salon d
     assert.deepEqual(report, { sent: 1, unresolved: [], failed: [] });
     assert.deepEqual(trace.dms, ["700000000000000001:Signalement #3\n\n**— English —**\nReport #3"]);
     assert.deepEqual(trace.logs, ["Signalement #3"]);
+  }));
+
+test("alertLeadership : un message privé relayé du site n'appelle aucune mention", () =>
+  withLeadership({ OWNER_ID: "700000000000000001", PRESIDENT: "700000000000000002" }, async () => {
+    const trace: Trace = { dms: [], logs: [] };
+    leadershipMentions.length = 0;
+    const text = "@everyone @here <@&123456789012345678> <@123456789012345678>";
+    await alertLeadership(leadershipClient(trace, ["700000000000000001", "700000000000000002"]), "Signalement", text);
+    assert.deepEqual(leadershipMentions, [{ parse: [] }, { parse: [] }]);
+    assert.deepEqual(trace.dms, [`700000000000000001:${text}`, `700000000000000002:${text}`]);
   }));
 
 test("alertLeadership compte en échec un compte injoignable, sans empêcher l'autre", () =>
