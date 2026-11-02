@@ -183,7 +183,7 @@ function resetOwnerNoticeThrottle(): void {
 /**
  * Alerte au journal : comme {@link sendLog}, mais **notifie** (pas de `@silent`).
  * Pour un message qui appelle quelqu'un à agir (signalement, arbitres,
- * direction, `/internal/log` sans `kind` ou avec `kind: "alert"`).
+ * direction, erreur fatale, démarrage du bot, `/internal/log` sans `kind: "log"`).
  * @param client Client Discord utilisé pour les appels API.
  * @param message Contenu de l'alerte.
  * @returns Comme {@link sendLog}.

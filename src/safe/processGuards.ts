@@ -1,6 +1,6 @@
 import type { Client } from "discord.js";
 import { createErrorReporter, type ErrorReporter } from "./reportError.js";
-import { sendLog } from "./sendLog.js";
+import { sendAlert } from "./sendLog.js";
 
 let reporter: ErrorReporter | null = null;
 let installed = false;
@@ -13,7 +13,8 @@ let installed = false;
 function getReporter(client: Client): ErrorReporter {
     reporter ??= createErrorReporter({
         toConsole: (line: string) => console.error(line),
-        toRemote: (line: string) => sendLog(client, line),
+        // Seules les erreurs fatales partent au salon : une alerte, qui notifie.
+        toRemote: (line: string) => sendAlert(client, line),
     });
     return reporter;
 }

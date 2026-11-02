@@ -68,8 +68,7 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
   - Body: `{ "message": "...", "kind": "log" | "alert" }` (`kind` optionnel).
   - Relaye la ligne au salon de supervision. Aucune mention ne notifie (`allowedMentions: { parse: [] }`), quel que soit le texte.
   - `kind: "log"` : trace, envoyée en `@silent` (`SuppressNotifications` : aucune notification push, le message reste dans le salon).
-  - `kind: "alert"`, ou `kind` **absent** : alerte, qui notifie normalement. L'absence vaut alerte pour qu'un site plus ancien, qui n'envoie pas `kind`, ne perde aucune alerte.
-  - Toute autre valeur de `kind` (chaîne inconnue, `null`, nombre) : `400 INVALID_KIND`, rien n'est publié.
+  - `kind: "alert"`, `kind` **absent** ou toute autre valeur (chaîne inconnue, `null`, nombre) : alerte, qui notifie normalement. Ce repli vaut pour qu'un site plus ancien, qui n'envoie pas `kind`, ou une valeur inattendue ne perde ni la ligne ni l'alerte.
 
 - `POST /internal/auth/resolve`
   - Body: `{ "handle": "pseudo" }` (ID numérique, `pseudo`, ou legacy

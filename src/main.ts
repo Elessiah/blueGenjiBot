@@ -17,7 +17,7 @@ import { fillBlueCommands } from "./config/fillBlueCommands.js";
 import { checkIntervalleAdhesion } from "./adhesion/checkIntervalleAdhesion.js";
 import { buildServiceMessage } from "./messages/buildServiceMessage.js";
 import { manageDistribution } from "./messages/manageDistribution.js";
-import { sendLog } from "./safe/sendLog.js";
+import { sendAlert, sendLog } from "./safe/sendLog.js";
 import { installProcessGuards, reportError } from "./safe/processGuards.js";
 import { safeReact } from "./safe/safeReact.js";
 import { safeReply } from "./safe/safeReply.js";
@@ -263,7 +263,8 @@ client.on("clientReady", async () => {
       { timezone: "Europe/Paris" },
     );
 
-    await sendLog(client, "Bot just started! (If it's not a restart it's a crash)");
+    // Peut-être un redémarrage après une panne : une alerte, qui notifie.
+    await sendAlert(client, "Bot just started! (If it's not a restart it's a crash)");
   } catch (error) {
     await reportError(client, "clientReady", error);
   }

@@ -770,27 +770,41 @@ test("internalLog_kindAbsent_notifiesAsAlert", async () => {
   assert.deepEqual(state.logMentions, [{ parse: [] }]);
 });
 
-test("internalLog_unknownKindString_returns400InvalidKind", async () => {
+test("internalLog_unknownKindString_notifiesAsAlert", async () => {
   const res = await call("/internal/log", { body: { message: "x", kind: "LOG" } });
 
-  assert.equal(res.status, 400);
-  assert.deepEqual(res.body, { error: "INVALID_KIND" });
-  assert.deepEqual(state.logs, []);
+  assert.deepEqual(res.body, { success: true });
+  assert.deepEqual(state.logs, ["[AppBlueGenji] x"]);
+  assert.deepEqual(state.logFlags, [null]);
 });
 
-test("internalLog_nonStringKind_returns400InvalidKind", async () => {
+test("internalLog_nonStringKind_notifiesAsAlert", async () => {
   const res = await call("/internal/log", { body: { message: "x", kind: 1 } });
 
-  assert.equal(res.status, 400);
-  assert.deepEqual(res.body, { error: "INVALID_KIND" });
-  assert.deepEqual(state.logs, []);
+  assert.deepEqual(res.body, { success: true });
+  assert.deepEqual(state.logFlags, [null]);
 });
 
-test("internalLog_nullKind_returns400InvalidKind", async () => {
+test("internalLog_nullKind_notifiesAsAlert", async () => {
   const res = await call("/internal/log", { body: { message: "x", kind: null } });
 
-  assert.equal(res.status, 400);
-  assert.deepEqual(res.body, { error: "INVALID_KIND" });
+  assert.deepEqual(res.body, { success: true });
+  assert.deepEqual(state.logFlags, [null]);
+});
+
+test("notifyReferees_deliveryFails_failureLogNotifies", async (t) => {
+  t.mock.method(console, "log", () => {});
+  state.cacheThrows = true;
+  try {
+    const res = await call("/internal/notify/referees", { body: { message: "x", context: "test" } });
+
+    assert.equal(res.status, 500);
+    assert.ok(state.logs.some((line) => line.startsWith("notify/referees error")));
+    assert.ok(state.logFlags.length > 0);
+    assert.ok(state.logFlags.every((flags) => flags === null));
+  } finally {
+    state.cacheThrows = false;
+  }
 });
 
 test("/internal/site-visits : corps inexploitable, 400 INVALID_SITE_VISIT_STATS", async () => {

@@ -13,7 +13,7 @@ the content of the message(*MessageContent*).
 
 No mention sent by the bot notifies anyone by default (`allowedMentions: { parse: [], repliedUser: false }`, `config/clientOptions.ts`): `@everyone`, `@here`, a role or a member written in a message (for instance through `/broadcast`) is displayed without pinging, and a reply pings only the author of the message it answers (`safeMsgReply`: `{ parse: [], repliedUser: true }`). The only message that notifies a wider audience is the #live announcement, which allows its own mention for that message only.
 
-Log messages in the staff channels are sent silently (Discord's `@silent`: no push notification, the message stays in the channel). Alerts that call someone to act still notify: referee and leadership alerts, a backup that needs checking, a missing permission on the #live channel.
+Log messages in the staff channels are sent silently (Discord's `@silent`: no push notification, the message stays in the channel). Alerts that call someone to act still notify: referee and leadership alerts (and a failure to deliver them), fatal errors, the bot start-up notice (it may follow a crash), a backup that needs checking, a missing permission on the #live channel.
 
 `client.login()` link the program to the bot register in the Discord Developper Portal.
 
