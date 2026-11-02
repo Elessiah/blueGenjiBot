@@ -18,8 +18,9 @@ const BEFORE = {
  * Construit un émetteur d'événements qui tient lieu de client Discord.
  * @returns Le faux client et les lignes envoyées au canal de supervision.
  */
-function fakeClient(): { client: Client & EventEmitter; sentLogs: string[] } {
+function fakeClient(): { client: Client & EventEmitter; sentLogs: string[]; sentFlags: unknown[] } {
   const sentLogs: string[] = [];
+  const sentFlags: unknown[] = [];
   const emitter = new EventEmitter() as EventEmitter & {
     users: unknown;
     channels: unknown;
@@ -27,13 +28,14 @@ function fakeClient(): { client: Client & EventEmitter; sentLogs: string[] } {
   emitter.users = { fetch: async () => ({ send: async () => ({ id: "owner-msg" }) }) };
   emitter.channels = {
     fetch: async () => ({
-      send: async (raw: string | { content: string }) => { const content = typeof raw === "string" ? raw : raw.content;
+      send: async (raw: string | { content: string; flags?: unknown }) => { const content = typeof raw === "string" ? raw : raw.content;
         sentLogs.push(content);
+        sentFlags.push(typeof raw === "string" ? null : raw.flags ?? null);
         return { id: "admin-msg" };
       },
     }),
   };
-  return { client: emitter as unknown as Client & EventEmitter, sentLogs };
+  return { client: emitter as unknown as Client & EventEmitter, sentLogs, sentFlags };
 }
 
 test("installProcessGuards branche les garde-fous process et client", () => {
@@ -80,6 +82,15 @@ test("reportError route une erreur applicative vers la supervision", async () =>
 
   assert.equal(sentLogs.length, 1);
   assert.equal(sentLogs[0], "[fatal] messageCreate : boum");
+});
+
+test("reportError_fatalError_sentAsNotifyingAlert", async () => {
+  _resetProcessGuards();
+  const { client, sentFlags } = fakeClient();
+
+  await reportError(client, "messageCreate", new TypeError("boum"));
+
+  assert.deepEqual(sentFlags, [null]);
 });
 
 test("reportError garde une coupure reseau hors du canal de supervision", async () => {

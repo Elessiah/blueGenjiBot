@@ -15,7 +15,7 @@ Les commandes de cette page sont disponibles uniquement sur les serveurs BlueGen
 Envoie les documents d'adhesion (et de statut d'association) avec un message.
 
 Options:
-- `message` (texte, optionnel): message d'accompagnement.
+- `message` (texte, optionnel): message d'accompagnement. Une mention qu'il contient (`@everyone`, `@here`, un role, un membre) s'affiche sans notifier personne, dans un `channel` comme en message prive.
 - `channel` (salon, optionnel): salon cible.
 - `membre` (utilisateur, optionnel): membre cible en message prive.
 - `role` (role, optionnel): envoi en message prive a tous les membres du role (les bots du role sont ignores).

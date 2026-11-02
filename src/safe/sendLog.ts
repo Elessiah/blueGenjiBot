@@ -1,4 +1,4 @@
-import type {Client, TextChannel, User} from "discord.js";
+import {MessageFlags, type Client, type TextChannel, type User} from "discord.js";
 import {idSendLogMsg} from "./types.js";
 import {describeError, discordJsonCode, errorCode} from "./errorGuards.js";
 
@@ -14,6 +14,25 @@ const MISSING_ACCESS = 50001;
  */
 const NO_MENTIONS = { parse: [] } as const;
 
+/**
+ * Nature d'un envoi au journal. Un `log` (trace) part en `@silent`
+ * (`SuppressNotifications` : aucune notification push, le message reste dans
+ * le salon) ; une `alert` (quelqu'un doit agir) notifie normalement.
+ */
+type LogKind = "log" | "alert";
+
+/**
+ * Corps d'un envoi au journal : jamais de mention, et `@silent` pour un `log`.
+ * @param content Texte du message.
+ * @param kind Nature de l'envoi.
+ * @returns Les options d'envoi Discord.
+ */
+function logPayload(content: string, kind: LogKind): { content: string; allowedMentions: typeof NO_MENTIONS; flags?: MessageFlags.SuppressNotifications } {
+    return kind === "log"
+        ? { content, allowedMentions: NO_MENTIONS, flags: MessageFlags.SuppressNotifications }
+        : { content, allowedMentions: NO_MENTIONS };
+}
+
 /** Code Discord d'une ressource d'API surchargée : passager. */
 const API_OVERLOADED = 130_000;
 
@@ -28,22 +47,24 @@ let lastOwnerNoticeAt = Number.NEGATIVE_INFINITY;
  * @param message Contenu du log à envoyer aux canaux owner/admin.
  * @param idMsg Objet optionnel recevant les IDs des messages de log envoyés (owner/admin).
  * @param copyToOwner Envoyer aussi le message en privé au titulaire (`OWNER_ID`) ; par défaut, seulement quand `idMsg` est fourni (comportement d'origine).
+ * @param kind `log` (défaut) : envoyé en `@silent`, sans notification ; `alert` : notifie (salon et copie privée).
  * @returns `true` dès qu'un envoi de log aboutit; `false` si les tentatives échouent ou si le canal admin est inaccessible.
  */
 async function sendLog(client: Client,
                        message: string = "Error",
                        idMsg?: idSendLogMsg,
-                       copyToOwner: boolean = idMsg !== undefined) : Promise<boolean> {
+                       copyToOwner: boolean = idMsg !== undefined,
+                       kind: LogKind = "log") : Promise<boolean> {
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
         try {
             const owner: User = await client.users.fetch(process.env.OWNER_ID as string);
             if (copyToOwner) {
-                const sent = await owner.send({ content: message, allowedMentions: NO_MENTIONS });
+                const sent = await owner.send(logPayload(message, kind));
                 if (idMsg) {
                     idMsg.owner = sent.id;
                 }
             }
-            return await postToAdminChannel(client, owner, message, idMsg);
+            return await postToAdminChannel(client, owner, message, kind, idMsg);
         } catch (error) {
             // `describeError` ne lève pas : une valeur rejetée étrange (null…) ne
             // fait pas lever `sendLog`, dont les appelants comptent qu'il ne lève jamais.
@@ -62,15 +83,16 @@ async function sendLog(client: Client,
  * @param client Client Discord utilisé pour les appels API.
  * @param owner Titulaire, prévenu d'un accès refusé.
  * @param message Contenu du log.
+ * @param kind Nature de l'envoi (`log` : `@silent`).
  * @param idMsg Reçoit l'identifiant du message publié, s'il est fourni.
  * @returns `false` si le salon n'existe pas, `true` sinon.
  */
-async function postToAdminChannel(client: Client, owner: User, message: string, idMsg?: idSendLogMsg): Promise<boolean> {
+async function postToAdminChannel(client: Client, owner: User, message: string, kind: LogKind, idMsg?: idSendLogMsg): Promise<boolean> {
     try {
         const admin_channel: TextChannel | null = await client.channels.fetch(process.env.INFO_SERV as string) as TextChannel;
         if (!admin_channel)
             return false;
-        const sent = await admin_channel.send({ content: message, allowedMentions: NO_MENTIONS });
+        const sent = await admin_channel.send(logPayload(message, kind));
         if (idMsg) {
             idMsg.admin = sent.id;
         }
@@ -97,6 +119,8 @@ async function postToAdminChannel(client: Client, owner: User, message: string, 
  * qu'empiler des requêtes refusées chez Discord, et un envoi tenté sans
  * réponse claire (délai dépassé, coupure), qui a pu arriver. Le titulaire
  * n'est lu que pour l'avertir d'un accès refusé au salon. Ne lève jamais.
+ * Notifie (pas de `@silent`) : son seul appelant signale une action requise
+ * sur Discord (permission manquante du salon #live).
  * @param client Client Discord utilisé pour les appels API.
  * @param message Contenu du log.
  * @returns `false` si un nouvel essai peut réussir sans doublon, `true` sinon.
@@ -156,4 +180,17 @@ function resetOwnerNoticeThrottle(): void {
     lastOwnerNoticeAt = Number.NEGATIVE_INFINITY;
 }
 
-export { sendLog, sendLogConfirmed, resetOwnerNoticeThrottle };
+/**
+ * Alerte au journal : comme {@link sendLog}, mais **notifie** (pas de `@silent`).
+ * Pour un message qui appelle quelqu'un à agir (signalement, arbitres,
+ * direction, erreur fatale, démarrage du bot, `/internal/log` sans `kind: "log"`).
+ * @param client Client Discord utilisé pour les appels API.
+ * @param message Contenu de l'alerte.
+ * @returns Comme {@link sendLog}.
+ */
+async function sendAlert(client: Client, message: string): Promise<boolean> {
+    return sendLog(client, message, undefined, false, "alert");
+}
+
+export { sendLog, sendAlert, sendLogConfirmed, resetOwnerNoticeThrottle };
+export type { LogKind };

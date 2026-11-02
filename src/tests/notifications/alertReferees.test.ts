@@ -66,7 +66,10 @@ function fakeClient(trace: string[], guilds: FakeGuild[]): Client {
   }]));
   return {
     users: { fetch: async (id: string) => ({ id, send: async () => ({ id: "dm" }) }) },
-    channels: { fetch: async () => ({ send: async (raw: string | { content: string }) => { const text = typeof raw === "string" ? raw : raw.content; trace.push("log " + text); return { id: "log" }; } }) },
+    channels: { fetch: async () => ({ send: async (raw: string | { content: string; flags?: unknown }) => { const text = typeof raw === "string" ? raw : raw.content;
+      trace.push("log " + text);
+      if (typeof raw !== "string" && raw.flags !== undefined) trace.push("silent " + text);
+      return { id: "log" }; } }) },
     guilds: { cache },
   } as unknown as Client;
 }
@@ -158,6 +161,20 @@ test("aucun rôle configuré : journal seul", async () => {
   const trace: string[] = [];
   assert.deepEqual(await alertReferees(fakeClient(trace, [{ id: "g1", name: "Un", role: [{ id: "a" }] }]), "Rien"), { sent: 0, unresolved: [], failed: [] });
   assert.deepEqual(trace, ["log Rien"]);
+});
+
+test("alertReferees_logCopy_notifies", async () => {
+  await clearRefereeRoles();
+  const logFlags: unknown[] = [];
+  const client = {
+    users: { fetch: async (id: string) => ({ id, send: async () => ({ id: "dm" }) }) },
+    channels: { fetch: async () => ({ send: async (payload: { flags?: unknown }) => { logFlags.push(payload.flags ?? null); return { id: "log" }; } }) },
+    guilds: { cache: new Map() },
+  } as unknown as Client;
+
+  await alertReferees(client, "Problème");
+
+  assert.deepEqual(logFlags, [null]);
 });
 
 test("ferme la base à la fin de la suite", async () => {

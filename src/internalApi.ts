@@ -16,7 +16,7 @@ import { createHash } from "node:crypto";
 import express, { type Request, type Response, type NextFunction } from "express";
 import type { Client } from "discord.js";
 import { getBddInstance } from "./bdd/Bdd.js";
-import { sendLog, sendLogConfirmed } from "./safe/sendLog.js";
+import { sendAlert, sendLog, sendLogConfirmed, type LogKind } from "./safe/sendLog.js";
 import { describeError } from "./safe/errorGuards.js";
 import { recordEvent, getBacklog, subscribe } from "./feed/feedBus.js";
 import { getSnapshotsBetween } from "./snapshots/dailySnapshot.js";
@@ -421,14 +421,21 @@ export function startInternalApi(client: Client) {
     }
   });
 
+  /**
+   * Ligne de journal poussee par le site. Seul `kind: "log"` part en
+   * `@silent` (aucune notification) ; `kind: "alert"`, absent ou toute autre
+   * valeur notifie : un site qui n'envoie pas encore `kind`, ou une valeur
+   * inattendue, ne perd ni la ligne ni l'alerte.
+   */
   app.post("/internal/log", async (req: Request, res: Response) => {
     const message = String(req.body?.message || "").trim();
     if (!message) {
       res.status(400).json({ error: "MISSING_MESSAGE" });
       return;
     }
+    const kind: LogKind = req.body?.kind === "log" ? "log" : "alert";
 
-    await sendLog(client, `[AppBlueGenji] ${message}`);
+    await sendLog(client, `[AppBlueGenji] ${message}`, undefined, false, kind);
     res.json({ success: true });
   });
 
@@ -483,7 +490,8 @@ export function startInternalApi(client: Client) {
         res.status(503).json({ error: "HOME_GUILD_UNAVAILABLE" });
         return;
       }
-      await sendLog(client, `notify/dm error (${request.context}): ${(error as Error).message}`);
+      // Aucun message n'est parti : l'échec notifie.
+      await sendAlert(client, `notify/dm error (${request.context}): ${(error as Error).message}`);
       res.status(500).json({ error: "NOTIFICATION_DELIVERY_FAILED" });
     }
   });
@@ -503,7 +511,8 @@ export function startInternalApi(client: Client) {
       const report = await alertReferees(client, `[AppBlueGenji] ${request.message}`, dmCopy(request));
       res.json(report);
     } catch (error) {
-      await sendLog(client, `notify/referees error (${request.context}): ${(error as Error).message}`);
+      // L'alerte n'est pas partie : l'échec notifie, lui.
+      await sendAlert(client, `notify/referees error (${request.context}): ${(error as Error).message}`);
       res.status(500).json({ error: "NOTIFICATION_DELIVERY_FAILED" });
     }
   });
@@ -524,7 +533,8 @@ export function startInternalApi(client: Client) {
       const report = await alertLeadership(client, `[AppBlueGenji] ${request.message}`, dmCopy(request));
       res.json(report);
     } catch (error) {
-      await sendLog(client, `notify/leadership error (${request.context}): ${(error as Error).message}`);
+      // L'alerte n'est pas partie : l'échec notifie, lui.
+      await sendAlert(client, `notify/leadership error (${request.context}): ${(error as Error).message}`);
       res.status(500).json({ error: "NOTIFICATION_DELIVERY_FAILED" });
     }
   });
@@ -876,7 +886,8 @@ export function startInternalApi(client: Client) {
       console.error(`Internal API : port ${port} deja occupe, arret pour relance.`);
       process.exit(1);
     }
-    void sendLog(client, `Internal API : ${description}`);
+    // Le site peut perdre l'API du bot : une alerte, qui notifie.
+    void sendAlert(client, `Internal API : ${description}`);
   });
 
   return server;

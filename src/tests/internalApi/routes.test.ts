@@ -31,7 +31,7 @@ process.env.INTERNAL_API_TOKEN = "jeton-de-test";
 process.env.GUILD_ID = "700000000000000001";
 process.env.CLIENT_ID = "600000000000000001";
 
-import type { Client } from "discord.js";
+import { MessageFlags, type Client } from "discord.js";
 import { startInternalApi } from "../../internalApi.js";
 import { getBddInstance, resetBddInstance } from "../../bdd/Bdd.js";
 import { recordEvent } from "../../feed/feedBus.js";
@@ -79,6 +79,8 @@ const state = {
   logSendFailures: 0,
   /** `allowedMentions` de chaque signalement envoyé avec options. */
   logMentions: [] as ({ parse: string[] } | null)[],
+  /** `flags` de chaque signalement envoyé avec options (`null` : aucun). */
+  logFlags: [] as (number | null)[],
 };
 
 function member(id: string, username: string): FakeMember {
@@ -144,7 +146,7 @@ const fakeClient = {
   },
   channels: {
     fetch: async () => ({
-      send: async (payload: string | { content: string; nonce?: string; allowedMentions?: { parse: string[] } }) => {
+      send: async (payload: string | { content: string; nonce?: string; allowedMentions?: { parse: string[] }; flags?: number }) => {
         // L'annonce porte un jeton d'unicité ; un signalement au canal de logs non.
         const live = typeof payload !== "string" && payload.nonce !== undefined;
         if (live && state.liveSendError) { throw state.liveSendError; }
@@ -154,6 +156,7 @@ const fakeClient = {
         }
         if (!live && typeof payload !== "string") {
           state.logMentions.push(payload.allowedMentions ?? null);
+          state.logFlags.push(payload.flags ?? null);
           state.logs.push(payload.content);
         } else {
           state.logs.push(payload as string);
@@ -188,6 +191,7 @@ test.beforeEach(() => {
   state.ping = 42;
   state.logs.length = 0;
   state.logMentions.length = 0;
+  state.logFlags.length = 0;
   state.dms.length = 0;
   state.unknownUsers.clear();
   state.closedDms.clear();
@@ -743,6 +747,66 @@ test("/internal/log : message vide 400 MISSING_MESSAGE, sinon relayé préfixé"
   assert.deepEqual(state.logs, ["[AppBlueGenji] sauvegarde faite"]);
 });
 
+test("internalLog_kindLog_sentSilent", async () => {
+  const res = await call("/internal/log", { body: { message: "action staff", kind: "log" } });
+
+  assert.deepEqual(res.body, { success: true });
+  assert.deepEqual(state.logs, ["[AppBlueGenji] action staff"]);
+  assert.deepEqual(state.logFlags, [MessageFlags.SuppressNotifications]);
+});
+
+test("internalLog_kindAlert_notifies", async () => {
+  const res = await call("/internal/log", { body: { message: "signalement", kind: "alert" } });
+
+  assert.deepEqual(res.body, { success: true });
+  assert.deepEqual(state.logFlags, [null]);
+});
+
+test("internalLog_kindAbsent_notifiesAsAlert", async () => {
+  const res = await call("/internal/log", { body: { message: "ancien site" } });
+
+  assert.deepEqual(res.body, { success: true });
+  assert.deepEqual(state.logFlags, [null]);
+  assert.deepEqual(state.logMentions, [{ parse: [] }]);
+});
+
+test("internalLog_unknownKindString_notifiesAsAlert", async () => {
+  const res = await call("/internal/log", { body: { message: "x", kind: "LOG" } });
+
+  assert.deepEqual(res.body, { success: true });
+  assert.deepEqual(state.logs, ["[AppBlueGenji] x"]);
+  assert.deepEqual(state.logFlags, [null]);
+});
+
+test("internalLog_nonStringKind_notifiesAsAlert", async () => {
+  const res = await call("/internal/log", { body: { message: "x", kind: 1 } });
+
+  assert.deepEqual(res.body, { success: true });
+  assert.deepEqual(state.logFlags, [null]);
+});
+
+test("internalLog_nullKind_notifiesAsAlert", async () => {
+  const res = await call("/internal/log", { body: { message: "x", kind: null } });
+
+  assert.deepEqual(res.body, { success: true });
+  assert.deepEqual(state.logFlags, [null]);
+});
+
+test("notifyReferees_deliveryFails_failureLogNotifies", async (t) => {
+  t.mock.method(console, "log", () => {});
+  state.cacheThrows = true;
+  try {
+    const res = await call("/internal/notify/referees", { body: { message: "x", context: "test" } });
+
+    assert.equal(res.status, 500);
+    assert.ok(state.logs.some((line) => line.startsWith("notify/referees error")));
+    assert.ok(state.logFlags.length > 0);
+    assert.ok(state.logFlags.every((flags) => flags === null));
+  } finally {
+    state.cacheThrows = false;
+  }
+});
+
 test("/internal/site-visits : corps inexploitable, 400 INVALID_SITE_VISIT_STATS", async () => {
   for (const body of [[], { autre: 1 }]) {
     const res = await call("/internal/site-visits", { body });
@@ -1130,6 +1194,7 @@ test("erreur de socket ordinaire : journalisée, le bot continue", async (t) => 
     await new Promise((r) => setImmediate(r));
   }
   assert.ok(state.logs.some((l) => l.startsWith("Internal API : ") && l.includes("connexion coupee")));
+  assert.deepEqual(state.logFlags, [null], "une alerte : notifie");
 });
 
 test("port déjà pris : sortie du process pour relance par pm2", async (t) => {

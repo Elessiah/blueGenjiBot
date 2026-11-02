@@ -1,4 +1,4 @@
-import { type Client, type User } from "discord.js";
+import { MessageFlags, type Client, type User } from "discord.js";
 import { formatDiskUsage, getDiskUsage } from "./diskSpace.js";
 import { formatBackupStatus, isBackupFresh, readBackupStatus } from "./backupStatus.js";
 import { resolveBddPath } from "../bdd/Bdd.js";
@@ -42,7 +42,8 @@ export async function sendDatabaseBackup(
 
     // Une sauvegarde absente ou périmée est la seule situation qui demande une
     // action : elle mérite d'être annoncée dès la première ligne du message.
-    const header = isBackupFresh(status) && backupChecksPassed(checks)
+    const healthy = isBackupFresh(status) && backupChecksPassed(checks);
+    const header = healthy
       ? `🗄️ Rapport de sauvegarde BlueGenji — ${stamp}`
       : `🚨 Sauvegarde BlueGenji à vérifier — ${stamp}`;
 
@@ -52,6 +53,9 @@ export async function sendDatabaseBackup(
     await owner.send({
       content: `${header}\n${cloudLine}\n${diskLine}\n\n${formatBackupChecks(checks)}`,
       allowedMentions: { parse: [] },
+      // Rapport sain : un journal, en `@silent` (aucune notification).
+      // Sauvegarde à vérifier : une alerte, qui notifie.
+      ...(healthy ? { flags: MessageFlags.SuppressNotifications } : {}),
     });
 
     console.log(`[backup] Rapport hebdomadaire envoyé (${stamp}).`);

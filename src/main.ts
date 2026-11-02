@@ -3,7 +3,6 @@ import {
   Attachment,
   ChatInputCommandInteraction,
   Client,
-  GatewayIntentBits,
   Message,
   TextChannel,
 } from "discord.js";
@@ -12,12 +11,13 @@ import { getBddInstance, closeBddInstance } from "./bdd/Bdd.js";
 import { deleteDPMsgs } from "./bdd/deleteDPMsgs.js";
 import { checkBan } from "./check/checkBan.js";
 import { _resetChannel } from "./commandsHandlers/services/resetChannel.js";
+import { buildClientOptions } from "./config/clientOptions.js";
 import { commands } from "./config/commands.js";
 import { fillBlueCommands } from "./config/fillBlueCommands.js";
 import { checkIntervalleAdhesion } from "./adhesion/checkIntervalleAdhesion.js";
 import { buildServiceMessage } from "./messages/buildServiceMessage.js";
 import { manageDistribution } from "./messages/manageDistribution.js";
-import { sendLog } from "./safe/sendLog.js";
+import { sendAlert, sendLog } from "./safe/sendLog.js";
 import { installProcessGuards, reportError } from "./safe/processGuards.js";
 import { safeReact } from "./safe/safeReact.js";
 import { safeReply } from "./safe/safeReply.js";
@@ -40,14 +40,8 @@ import { sendDatabaseBackup } from "./backup/weeklyBackup.js";
  * capturee y devient un `unhandledRejection` qui tue le process (voir
  * `installProcessGuards`, `safe/processGuards.ts`).
  */
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-  ],
-});
+// Aucune mention ne notifie par défaut : voir `config/clientOptions.ts`.
+const client = new Client(buildClientOptions());
 
 installProcessGuards(client);
 
@@ -269,7 +263,8 @@ client.on("clientReady", async () => {
       { timezone: "Europe/Paris" },
     );
 
-    await sendLog(client, "Bot just started! (If it's not a restart it's a crash)");
+    // Peut-être un redémarrage après une panne : une alerte, qui notifie.
+    await sendAlert(client, "Bot just started! (If it's not a restart it's a crash)");
   } catch (error) {
     await reportError(client, "clientReady", error);
   }
@@ -294,7 +289,8 @@ client.on("guildDelete", async (guild) => {
     // signalé ; ce qui reste sera repris au prochain démarrage ou à la nuit.
     try {
       if (!(await eraseLeftGuild(client, guild.id))) {
-        await sendLog(
+        // Effacement RGPD suspendu, action requise : une alerte, qui notifie.
+        await sendAlert(
           client,
           `guildDelete: configuration du serveur ${guild.id} gardée : base d'une autre application Discord ` +
             "(elle ne sera effacée que par l'application propriétaire), ou base fermée (le rattrapage suivant la reprendra).",

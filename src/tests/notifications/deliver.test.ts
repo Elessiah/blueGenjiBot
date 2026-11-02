@@ -187,3 +187,30 @@ test("alertLeadership compte en échec un compte injoignable, sans empêcher l'a
     const report = await alertLeadership(client, "Signalement #2");
     assert.deepEqual(report, { sent: 1, unresolved: [], failed: ["700000000000000001"] });
   }));
+
+test("alertLeadership_logCopy_notifies", () =>
+  withLeadership({ OWNER_ID: "700000000000000001", PRESIDENT: "" }, async () => {
+    const logFlags: unknown[] = [];
+    const client = {
+      users: { fetch: async () => ({ id: "700000000000000001", send: async () => ({ id: "dm" }) }) },
+      channels: { fetch: async () => ({ send: async (payload: { flags?: unknown }) => { logFlags.push(payload.flags ?? null); return { id: "log" }; } }) },
+    } as unknown as Client;
+
+    await alertLeadership(client, "Signalement");
+
+    assert.deepEqual(logFlags, [null]);
+  }));
+
+test("deliverDirectMessages_noHomeGuild_alertNotifies", () =>
+  withEnv({}, async () => {
+    const logFlags: unknown[] = [];
+    const client = {
+      users: { fetch: async () => ({ send: async () => ({ id: "dm" }) }) },
+      channels: { fetch: async () => ({ send: async (payload: { flags?: unknown }) => { logFlags.push(payload.flags ?? null); return { id: "log" }; } }) },
+      guilds: { fetch: async () => { throw new Error("Unknown Guild"); } },
+    } as unknown as Client;
+
+    await assert.rejects(deliverDirectMessages(client, "Bonjour", [recipient("900000000000000001")]), HomeGuildUnavailableError);
+
+    assert.deepEqual(logFlags, [null]);
+  }));
