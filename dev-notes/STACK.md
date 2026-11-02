@@ -61,6 +61,7 @@ src/
   10062, 50013…) restent en console, le reste part au canal de supervision.
   **Tout listener `client.on(...)` et tout callback `cron`/`setTimeout` doit avoir sa
   propre garde** : ils s'exécutent hors de toute pile applicative.
+- **Mentions** : aucune ne notifie par défaut. Le client porte `allowedMentions: { parse: [], repliedUser: false }` (`config/clientOptions.ts`), que discord.js applique à tout `send`, `reply`, `edit`, `followUp` ou `editReply` sans option propre : un `@everyone`, `<@&rôle>` ou `<@membre>` venu de `/broadcast`, d'un papier d'adhésion ou d'un texte du site s'affiche sans notifier, et une réponse ne notifie pas l'auteur du message. Un envoi qui doit appeler quelqu'un l'autorise lui-même, au plus juste (`{ roles: [id] }`, `{ users: [id] }`, jamais `parse`) ; aujourd'hui seule l'annonce #live le fait (`liveAllowedMentions`). Les `{ parse: [] }` explicites des journaux et des MP restent : ils ne coûtent rien et survivent à un changement du défaut.
 - **Réactions Discord** : `safeReact()` plutôt que `message.react()` — un message
   supprimé entre-temps lève un `10008` qui interromprait la diffusion en cours.
 - **Commandes Discord** : enregistrer via `updateCommands()`, déclarer dans `config/commands.ts` (statiques) ou `fillBlueCommands()` (dynamiques).

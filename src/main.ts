@@ -3,7 +3,6 @@ import {
   Attachment,
   ChatInputCommandInteraction,
   Client,
-  GatewayIntentBits,
   Message,
   TextChannel,
 } from "discord.js";
@@ -12,6 +11,7 @@ import { getBddInstance, closeBddInstance } from "./bdd/Bdd.js";
 import { deleteDPMsgs } from "./bdd/deleteDPMsgs.js";
 import { checkBan } from "./check/checkBan.js";
 import { _resetChannel } from "./commandsHandlers/services/resetChannel.js";
+import { buildClientOptions } from "./config/clientOptions.js";
 import { commands } from "./config/commands.js";
 import { fillBlueCommands } from "./config/fillBlueCommands.js";
 import { checkIntervalleAdhesion } from "./adhesion/checkIntervalleAdhesion.js";
@@ -40,14 +40,8 @@ import { sendDatabaseBackup } from "./backup/weeklyBackup.js";
  * capturee y devient un `unhandledRejection` qui tue le process (voir
  * `installProcessGuards`, `safe/processGuards.ts`).
  */
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-  ],
-});
+// Aucune mention ne notifie par défaut : voir `config/clientOptions.ts`.
+const client = new Client(buildClientOptions());
 
 installProcessGuards(client);
 
