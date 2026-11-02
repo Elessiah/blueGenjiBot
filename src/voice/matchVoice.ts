@@ -139,7 +139,7 @@ export function voiceCategoryId(): string {
 /**
  * Valide la clé d'idempotence fournie par le site.
  * @param raw Valeur brute du corps.
- * @returns La clé, ou `null` si elle est absente ou hors du motif `[A-Za-z0-9:_-]{1,100}`.
+ * @returns La clé, ou `null` si elle est absente ou hors du motif (lettres, chiffres, `:`, `_`, `-`, 100 caractères au plus).
  */
 export function parseVoiceKey(raw: unknown): string | null {
   return typeof raw === "string" && VOICE_KEY_PATTERN.test(raw) ? raw : null;
