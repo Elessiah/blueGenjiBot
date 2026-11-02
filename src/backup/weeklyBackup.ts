@@ -2,7 +2,7 @@ import { type Client, type User } from "discord.js";
 import { formatDiskUsage, getDiskUsage } from "./diskSpace.js";
 import { formatBackupStatus, isBackupFresh, readBackupStatus } from "./backupStatus.js";
 import { resolveBddPath } from "../bdd/Bdd.js";
-import { backupChecksPassed, formatBackupChecks, runBackupChecks } from "./backupCheck.js";
+import { backupChecksPassed, formatBackupChecks, runBackupChecks, type BackupCheckReport } from "./backupCheck.js";
 
 /**
  * Envoie au propriétaire (OWNER_ID) le rapport hebdomadaire de sauvegarde.
@@ -15,9 +15,13 @@ import { backupChecksPassed, formatBackupChecks, runBackupChecks } from "./backu
  * relit** (`backupCheck.ts` : déchiffrement en flux de la dernière archive,
  * miroir chiffré des images, clé publique à comparer à la copie hors ligne).
  * @param client Client Discord utilisé pour joindre le propriétaire.
+ * @param runChecks Contrôles de relecture (remplaçables en test).
  * @returns `true` si le rapport a été envoyé, `false` sinon.
  */
-export async function sendDatabaseBackup(client: Client): Promise<boolean> {
+export async function sendDatabaseBackup(
+  client: Client,
+  runChecks: () => Promise<BackupCheckReport> = runBackupChecks,
+): Promise<boolean> {
   const ownerId = process.env.OWNER_ID;
   if (!ownerId) {
     console.error("[backup] OWNER_ID non défini — rapport annulé.");
@@ -34,7 +38,7 @@ export async function sendDatabaseBackup(client: Client): Promise<boolean> {
     // L'état du disque intéresse surtout quand la place manque : on le joint dans les deux cas.
     const diskLine = formatDiskUsage(await getDiskUsage(dbPath));
     // Une archive présente mais illisible ne vaut pas mieux qu'une absente.
-    const checks = await runBackupChecks();
+    const checks = await runChecks();
 
     // Une sauvegarde absente ou périmée est la seule situation qui demande une
     // action : elle mérite d'être annoncée dès la première ligne du message.
@@ -43,7 +47,12 @@ export async function sendDatabaseBackup(client: Client): Promise<boolean> {
       : `🚨 Sauvegarde BlueGenji à vérifier — ${stamp}`;
 
     const owner: User = await client.users.fetch(ownerId);
-    await owner.send(`${header}\n${cloudLine}\n${diskLine}\n\n${formatBackupChecks(checks)}`);
+    // Aucune mention ne notifie : le rapport cite des chemins et des sorties
+    // de commandes, comme tout log.
+    await owner.send({
+      content: `${header}\n${cloudLine}\n${diskLine}\n\n${formatBackupChecks(checks)}`,
+      allowedMentions: { parse: [] },
+    });
 
     console.log(`[backup] Rapport hebdomadaire envoyé (${stamp}).`);
     return true;

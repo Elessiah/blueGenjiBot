@@ -36,7 +36,7 @@ function fakeClient(world: World): Client {
     users: {
       fetch: async (id: string) => ({
         id,
-        send: async (text: string) => { world.ownerDms.push(text); return { id: `owner-msg-${++next}` }; },
+        send: async (raw: string | { content: string }) => { const text = typeof raw === "string" ? raw : raw.content; world.ownerDms.push(text); return { id: `owner-msg-${++next}` }; },
         createDM: async () => ({ messages: { delete: async (msgId: string) => { world.trace.push(`dm-delete ${msgId}`); } } }),
       }),
     },
@@ -44,7 +44,7 @@ function fakeClient(world: World): Client {
       fetch: async (id: string) => {
         if (id === process.env.INFO_SERV) {
           return {
-            send: async (text: string) => { world.logs.push(text); return { id: `admin-msg-${++next}` }; },
+            send: async (raw: string | { content: string }) => { const text = typeof raw === "string" ? raw : raw.content; world.logs.push(text); return { id: `admin-msg-${++next}` }; },
             messages: { delete: async (msgId: string) => { world.trace.push(`admin-delete ${msgId}`); } },
           };
         }

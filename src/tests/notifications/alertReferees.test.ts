@@ -46,7 +46,7 @@ function fakeClient(trace: string[], guilds: FakeGuild[]): Client {
           members: new Map(members.map((m) => [m.id, {
             id: m.id,
             user: { bot: Boolean(m.bot), username: "pseudo-" + m.id },
-            send: async (text: string) => {
+            send: async (raw: string | { content: string }) => { const text = typeof raw === "string" ? raw : raw.content;
               if (m.closed) throw new Error("Cannot send messages to this user");
               trace.push(`dm:${m.id} ${text}`);
             },
@@ -66,7 +66,7 @@ function fakeClient(trace: string[], guilds: FakeGuild[]): Client {
   }]));
   return {
     users: { fetch: async (id: string) => ({ id, send: async () => ({ id: "dm" }) }) },
-    channels: { fetch: async () => ({ send: async (text: string) => { trace.push("log " + text); return { id: "log" }; } }) },
+    channels: { fetch: async () => ({ send: async (raw: string | { content: string }) => { const text = typeof raw === "string" ? raw : raw.content; trace.push("log " + text); return { id: "log" }; } }) },
     guilds: { cache },
   } as unknown as Client;
 }

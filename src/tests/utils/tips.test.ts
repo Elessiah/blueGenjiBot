@@ -37,7 +37,7 @@ function fakeClient(trace: string[], states: Record<string, ChannelState>): Clie
     channels: {
       fetch: async (id: string) => {
         if (id === process.env.INFO_SERV) {
-          return { send: async (text: string) => { trace.push("log " + text); return { id: "log" }; } };
+          return { send: async (raw: string | { content: string }) => { const text = typeof raw === "string" ? raw : raw.content; trace.push("log " + text); return { id: "log" }; } };
         }
         trace.push("channels.fetch " + id);
         const state = states[id] ?? "empty";

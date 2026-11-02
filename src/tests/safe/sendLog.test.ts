@@ -28,12 +28,17 @@ type Setup = {
 /** `allowedMentions` de chaque envoi à options au salon de supervision. */
 const sentMentions: unknown[] = [];
 
+/** `allowedMentions` de chaque envoi à options au titulaire. */
+const ownerMentions: unknown[] = [];
+
 function fakeClient(trace: string[], setup: Setup): Client {
   let ownerFetches = 0;
   let ownerSends = 0;
   const owner = {
     id: "owner-1",
-    send: async (text: string) => {
+    send: async (payload: string | { content: string; allowedMentions?: { parse: string[] } }) => {
+      const text = typeof payload === "string" ? payload : payload.content;
+      if (typeof payload !== "string") ownerMentions.push(payload.allowedMentions ?? null);
       ownerSends++;
       if (ownerSends <= (setup.ownerSendFailures ?? 0)) {
         trace.push("owner.send échoue");
@@ -293,4 +298,23 @@ test("sendLogConfirmed : un titulaire illisible (rien n'est parti) laisse retent
     console.error = original;
   }
   assert.equal(trace.filter((line) => line === "owner.send Missing Access to admin channel").length, 1);
+});
+
+const PINGS = "@everyone @here <@&123456789012345678> <@123456789012345678>";
+
+test("sendLog : salon et copie au titulaire n'appellent aucune mention", async () => {
+  sentMentions.length = 0;
+  ownerMentions.length = 0;
+  const r = await run({}, { message: PINGS, idMsg: { owner: "", admin: "" } });
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.trace.slice(-1), ["admin.send " + PINGS]);
+  assert.deepEqual(ownerMentions, [{ parse: [] }]);
+  assert.deepEqual(sentMentions, [{ parse: [] }]);
+});
+
+test("sendLog : l'avis « Missing Access » au titulaire n'appelle aucune mention", async () => {
+  ownerMentions.length = 0;
+  const r = await run({ channel: "missing-access" }, { message: "X" });
+  assert.equal(r.ok, true);
+  assert.deepEqual(ownerMentions, [{ parse: [] }]);
 });

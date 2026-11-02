@@ -29,7 +29,7 @@ function fakeInteraction(lang: string | null, logs: string[] = []): { interactio
   const sent: Sent[] = [];
   const client = {
     users: { fetch: async (id: string) => ({ id, send: async () => ({ id: "dm" }) }) },
-    channels: { fetch: async () => ({ send: async (text: string) => { logs.push(text); return { id: "log" }; } }) },
+    channels: { fetch: async () => ({ send: async (raw: string | { content: string }) => { const text = typeof raw === "string" ? raw : raw.content; logs.push(text); return { id: "log" }; } }) },
   };
   const interaction = {
     client,

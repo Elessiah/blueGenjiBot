@@ -8,6 +8,12 @@ const MAX_ATTEMPTS = 3;
 /** Code Discord d'un accès refusé au salon de supervision. */
 const MISSING_ACCESS = 50001;
 
+/**
+ * Aucune mention ne notifie dans un log : le texte vient du site ou d'un
+ * utilisateur, et ne doit appeler ni `@everyone`, ni rôle, ni personne.
+ */
+const NO_MENTIONS = { parse: [] } as const;
+
 /** Code Discord d'une ressource d'API surchargée : passager. */
 const API_OVERLOADED = 130_000;
 
@@ -32,7 +38,7 @@ async function sendLog(client: Client,
         try {
             const owner: User = await client.users.fetch(process.env.OWNER_ID as string);
             if (copyToOwner) {
-                const sent = await owner.send(message);
+                const sent = await owner.send({ content: message, allowedMentions: NO_MENTIONS });
                 if (idMsg) {
                     idMsg.owner = sent.id;
                 }
@@ -64,7 +70,7 @@ async function postToAdminChannel(client: Client, owner: User, message: string, 
         const admin_channel: TextChannel | null = await client.channels.fetch(process.env.INFO_SERV as string) as TextChannel;
         if (!admin_channel)
             return false;
-        const sent = await admin_channel.send(message);
+        const sent = await admin_channel.send({ content: message, allowedMentions: NO_MENTIONS });
         if (idMsg) {
             idMsg.admin = sent.id;
         }
@@ -73,7 +79,7 @@ async function postToAdminChannel(client: Client, owner: User, message: string, 
         // rejet non capturé, donc un arrêt du process.
         if (errorCode(error) === MISSING_ACCESS) {
             try {
-                await owner.send("Missing Access to admin channel");
+                await owner.send({ content: "Missing Access to admin channel", allowedMentions: NO_MENTIONS });
             } catch { /* le canal de secours est lui aussi injoignable */ }
         }
     }
@@ -108,7 +114,7 @@ async function sendLogConfirmed(client: Client, message: string): Promise<boolea
     try {
         // Aucune mention ne notifie : le signalement cite un texte et un lien
         // venus du site, qui ne doivent appeler ni un rôle ni une personne.
-        await admin_channel.send({ content: message, allowedMentions: { parse: [] } });
+        await admin_channel.send({ content: message, allowedMentions: NO_MENTIONS });
         return true;
     } catch (error) {
         console.error("Erreur while sending to the admin channel : ", describeError(error));
@@ -140,7 +146,7 @@ async function logRefusalHandled(client: Client, error: unknown): Promise<boolea
         }
         // Un envoi qui échoue garde l'heure : refusé (messages privés
         // fermés), ou peut-être parti malgré l'erreur.
-        await owner?.send("Missing Access to admin channel").catch(() => undefined);
+        await owner?.send({ content: "Missing Access to admin channel", allowedMentions: NO_MENTIONS }).catch(() => undefined);
     }
     return code !== null && code !== API_OVERLOADED;
 }

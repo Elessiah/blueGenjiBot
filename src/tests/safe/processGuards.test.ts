@@ -27,7 +27,7 @@ function fakeClient(): { client: Client & EventEmitter; sentLogs: string[] } {
   emitter.users = { fetch: async () => ({ send: async () => ({ id: "owner-msg" }) }) };
   emitter.channels = {
     fetch: async () => ({
-      send: async (content: string) => {
+      send: async (raw: string | { content: string }) => { const content = typeof raw === "string" ? raw : raw.content;
         sentLogs.push(content);
         return { id: "admin-msg" };
       },

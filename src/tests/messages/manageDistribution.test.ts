@@ -41,7 +41,7 @@ function fakeClient(trace: string[]): Client {
       fetch: async (id: string) => {
         if (id === process.env.INFO_SERV) {
           return {
-            send: async (text: string) => { trace.push("log " + text); return { id: "log" }; },
+            send: async (raw: string | { content: string }) => { const text = typeof raw === "string" ? raw : raw.content; trace.push("log " + text); return { id: "log" }; },
             messages: { fetch: async () => ({ content: "Spam" }) },
           };
         }

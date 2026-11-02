@@ -33,8 +33,8 @@ function fakeClient(joinedGuildIds: string[], applicationId = "app-prod", ready 
     application: { id: applicationId },
     user: { id: `user-of-${applicationId}` },
     guilds: { cache: new Map(joinedGuildIds.map((id) => [id, { id }])) },
-    users: { fetch: async () => ({ send: async (msg: string) => { logs.push(msg); return { id: "m1" }; } }) },
-    channels: { fetch: async () => ({ send: async (msg: string) => { logs.push(msg); return { id: "m2" }; } }) },
+    users: { fetch: async () => ({ send: async (msg: string | { content: string }) => { logs.push(typeof msg === "string" ? msg : msg.content); return { id: "m1" }; } }) },
+    channels: { fetch: async () => ({ send: async (msg: string | { content: string }) => { logs.push(typeof msg === "string" ? msg : msg.content); return { id: "m2" }; } }) },
   } as unknown as Client;
 }
 
@@ -282,14 +282,14 @@ function channelClient(
     guilds: {
       cache: new Map([[guildId, { id: guildId, available, channels: { cache: new Map(cachedChannelIds.map((id) => [id, { id }])) } }]]),
     },
-    users: { fetch: async () => ({ send: async (msg: string) => { logs.push(msg); return { id: "m1" }; } }) },
+    users: { fetch: async () => ({ send: async (msg: string | { content: string }) => { logs.push(typeof msg === "string" ? msg : msg.content); return { id: "m1" }; } }) },
     channels: {
       fetched,
       fetch: async (id: string) => {
         fetched.push(id);
         if (gone.includes(id)) { throw apiError(RESTJSONErrorCodes.UnknownChannel); }
         if (hidden.includes(id)) { throw apiError(RESTJSONErrorCodes.MissingAccess); }
-        return { id, send: async (msg: string) => { logs.push(msg); return { id: "m2" }; } };
+        return { id, send: async (msg: string | { content: string }) => { logs.push(typeof msg === "string" ? msg : msg.content); return { id: "m2" }; } };
       },
     },
   } as unknown as Client;

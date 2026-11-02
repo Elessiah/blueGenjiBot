@@ -66,7 +66,7 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
 
 - `POST /internal/log`
   - Body: `{ "message": "..." }`
-  - Relaye un log vers `sendLog()`.
+  - Relaye un log vers `sendLog()`. Aucune mention ne notifie (`allowedMentions: { parse: [] }`), quel que soit le texte.
 
 - `POST /internal/auth/resolve`
   - Body: `{ "handle": "pseudo" }` (ID numérique, `pseudo`, ou legacy
