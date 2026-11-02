@@ -490,7 +490,8 @@ export function startInternalApi(client: Client) {
         res.status(503).json({ error: "HOME_GUILD_UNAVAILABLE" });
         return;
       }
-      await sendLog(client, `notify/dm error (${request.context}): ${(error as Error).message}`);
+      // Aucun message n'est parti : l'échec notifie.
+      await sendAlert(client, `notify/dm error (${request.context}): ${(error as Error).message}`);
       res.status(500).json({ error: "NOTIFICATION_DELIVERY_FAILED" });
     }
   });
@@ -885,7 +886,8 @@ export function startInternalApi(client: Client) {
       console.error(`Internal API : port ${port} deja occupe, arret pour relance.`);
       process.exit(1);
     }
-    void sendLog(client, `Internal API : ${description}`);
+    // Le site peut perdre l'API du bot : une alerte, qui notifie.
+    void sendAlert(client, `Internal API : ${description}`);
   });
 
   return server;

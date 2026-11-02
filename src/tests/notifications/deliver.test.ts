@@ -200,3 +200,17 @@ test("alertLeadership_logCopy_notifies", () =>
 
     assert.deepEqual(logFlags, [null]);
   }));
+
+test("deliverDirectMessages_noHomeGuild_alertNotifies", () =>
+  withEnv({}, async () => {
+    const logFlags: unknown[] = [];
+    const client = {
+      users: { fetch: async () => ({ send: async () => ({ id: "dm" }) }) },
+      channels: { fetch: async () => ({ send: async (payload: { flags?: unknown }) => { logFlags.push(payload.flags ?? null); return { id: "log" }; } }) },
+      guilds: { fetch: async () => { throw new Error("Unknown Guild"); } },
+    } as unknown as Client;
+
+    await assert.rejects(deliverDirectMessages(client, "Bonjour", [recipient("900000000000000001")]), HomeGuildUnavailableError);
+
+    assert.deepEqual(logFlags, [null]);
+  }));

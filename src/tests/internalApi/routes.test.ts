@@ -1194,6 +1194,7 @@ test("erreur de socket ordinaire : journalisée, le bot continue", async (t) => 
     await new Promise((r) => setImmediate(r));
   }
   assert.ok(state.logs.some((l) => l.startsWith("Internal API : ") && l.includes("connexion coupee")));
+  assert.deepEqual(state.logFlags, [null], "une alerte : notifie");
 });
 
 test("port déjà pris : sortie du process pour relance par pm2", async (t) => {

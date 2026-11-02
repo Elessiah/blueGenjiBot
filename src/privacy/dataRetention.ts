@@ -34,7 +34,7 @@ import { RESTJSONErrorCodes } from "discord-api-types/v10";
 import { getBddInstance, type Bdd } from "../bdd/Bdd.js";
 import { manageMsgExpiration } from "../messages/manageMsgExpiration.js";
 import { reportError } from "../safe/processGuards.js";
-import { sendLog } from "../safe/sendLog.js";
+import { sendAlert, sendLog } from "../safe/sendLog.js";
 
 import { purgeOldRollbacks } from "../backup/restoreDatabase.js";
 import { purgeOldFeedEvents } from "../feed/feedBus.js";
@@ -159,7 +159,8 @@ export async function forgetDepartedGuilds(client: Client): Promise<string[] | n
   const owned = await ownsDatabase(client);
   if (owned === null) { return null; }
   if (!owned) {
-    await sendLog(
+    // Purge RGPD suspendue, action requise : une alerte, qui notifie.
+    await sendAlert(
       client,
       "Rattrapage des serveurs quittés ignoré : cette base appartient à une autre application Discord " +
         "(si le bot a changé d'application, vider la table BotOwner).",

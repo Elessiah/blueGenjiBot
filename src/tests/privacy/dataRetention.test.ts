@@ -25,6 +25,8 @@ import { _resetServer } from "../../commandsHandlers/services/resetServer.js";
 import { _resetChannel } from "../../commandsHandlers/services/resetChannel.js";
 
 const logs: string[] = [];
+/** `flags` de chaque envoi au salon de supervision (`null` : notifie). */
+const channelFlags: unknown[] = [];
 
 /** Client minimal : `sendLog` écrit au propriétaire et au salon d'administration. */
 function fakeClient(joinedGuildIds: string[], applicationId = "app-prod", ready = true): Client {
@@ -34,7 +36,11 @@ function fakeClient(joinedGuildIds: string[], applicationId = "app-prod", ready 
     user: { id: `user-of-${applicationId}` },
     guilds: { cache: new Map(joinedGuildIds.map((id) => [id, { id }])) },
     users: { fetch: async () => ({ send: async (msg: string | { content: string }) => { logs.push(typeof msg === "string" ? msg : msg.content); return { id: "m1" }; } }) },
-    channels: { fetch: async () => ({ send: async (msg: string | { content: string }) => { logs.push(typeof msg === "string" ? msg : msg.content); return { id: "m2" }; } }) },
+    channels: { fetch: async () => ({ send: async (msg: string | { content: string; flags?: unknown }) => {
+      logs.push(typeof msg === "string" ? msg : msg.content);
+      if (typeof msg !== "string") channelFlags.push(msg.flags ?? null);
+      return { id: "m2" };
+    } }) },
   } as unknown as Client;
 }
 
@@ -192,6 +198,7 @@ test("le rattrapage n'efface rien pour une autre application Discord que celle d
   assert.equal(await forgetDepartedGuilds(fakeClient(["g-dev"], "app-dev")), null);
   assert.equal(await count("SELECT COUNT(*) AS n FROM ChannelPartner WHERE id_guild IN ('g-a', 'g-b', 'g-c', 'g-d', 'g-stay')"), 5);
   assert.ok(logs.some((line) => line.includes("autre application")));
+  assert.deepEqual(channelFlags.slice(-1), [null], "une alerte : notifie");
   // L'application propriétaire, elle, rattrape tout l'arriéré d'un coup.
   const forgotten = await forgetDepartedGuilds(fakeClient(["g-stay"]));
   assert.deepEqual([...(forgotten ?? [])].sort(), ["g-a", "g-b", "g-c", "g-d"]);

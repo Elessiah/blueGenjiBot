@@ -66,7 +66,10 @@ function fakeClient(trace: string[], guilds: FakeGuild[]): Client {
   }]));
   return {
     users: { fetch: async (id: string) => ({ id, send: async () => ({ id: "dm" }) }) },
-    channels: { fetch: async () => ({ send: async (raw: string | { content: string }) => { const text = typeof raw === "string" ? raw : raw.content; trace.push("log " + text); return { id: "log" }; } }) },
+    channels: { fetch: async () => ({ send: async (raw: string | { content: string; flags?: unknown }) => { const text = typeof raw === "string" ? raw : raw.content;
+      trace.push("log " + text);
+      if (typeof raw !== "string" && raw.flags !== undefined) trace.push("silent " + text);
+      return { id: "log" }; } }) },
     guilds: { cache },
   } as unknown as Client;
 }

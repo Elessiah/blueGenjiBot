@@ -1,6 +1,6 @@
 import type { Client, Guild, GuildMember, Role } from "discord.js";
 import { getBddInstance } from "../bdd/Bdd.js";
-import { sendAlert, sendLog } from "../safe/sendLog.js";
+import { sendAlert } from "../safe/sendLog.js";
 import { fetchRoleMembers } from "../utils/fetchRoleMembers.js";
 import { findGuildMemberByHandle, parseDiscordHandle } from "./resolveHandle.js";
 import { capRefereeTargets, homeGuildIds, leadershipIds, MAX_REFEREE_DMS } from "./notifications.js";
@@ -136,7 +136,8 @@ export async function deliverDirectMessages(
     // Sans serveur de référence, l'appartenance est invérifiable : on n'écrit à
     // personne plutôt que d'écrire à n'importe qui — et on le **dit**, au lieu
     // de déclarer tout le monde absent du serveur.
-    await sendLog(
+    // Panne de configuration qui bloque tout message privé : une alerte.
+    await sendAlert(
       client,
       "notify/dm: aucun serveur BlueGenji joignable (GUILD_ID, sinon SERV_GENJI / SERV_RIVALS), aucun message envoyé.",
     );
@@ -244,7 +245,8 @@ async function capReferees(client: Client, guild: Guild, members: GuildMember[],
   const { kept, skipped } = capRefereeTargets(humans);
   if (skipped > 0) {
     report.unresolved.push(`${guild.name}: ${skipped} membre(s) au-delà du plafond de ${MAX_REFEREE_DMS}`);
-    await sendLog(
+    // Des arbitres ne sont pas prévenus, le rôle est à resserrer : une alerte.
+    await sendAlert(
       client,
       `notify/referees: role arbitre de ${guild.name} trop large (${humans.length} membres), ${skipped} non prevenu(s).`,
     );
