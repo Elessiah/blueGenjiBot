@@ -28,12 +28,22 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     déploiement.
 
 - `POST /internal/auth/send-code`
-  - Body: `{ "discordId": "123...", "code": "123456", "locale": "fr" }`
-  - Envoie un DM Discord avec le code de connexion, **rédigé par le bot** dans
-    la langue du compte du site (`locale` : `"fr"` ou `"en"`, lue dans
-    `bg_users.locale`). `locale` absent, vide ou autre valeur (ancien site,
-    compte inconnu) : **un seul** message bilingue, français d'abord puis
-    anglais après `**— English —**`. Le bot ne garde pas cette langue.
+  - Body: `{ "discordId": "123...", "code": "123456", "locale": "fr", "purpose": "login" }`
+  - `discordId` : identifiant Discord (17 à 20 chiffres), sinon **400**
+    `INVALID_PAYLOAD`. En cas d'échec d'envoi, le journal ne porte que le code
+    d'erreur de Discord, jamais son texte (qui peut citer l'identifiant reçu).
+  - Envoie un DM Discord avec un code à six chiffres, **rédigé par le bot**.
+    `purpose` en dit l'objet : `"login"` (défaut, et toute autre valeur) pour
+    la connexion au site par Discord ; `"handle"` pour la certification ou le
+    changement du tag Discord d'un compte du site — le message dit alors qu'il
+    sert à rattacher le tag à un compte, pas à se connecter, et de ne le
+    transmettre à personne sans en être à l'origine (le demandeur n'est pas
+    forcément le titulaire du tag).
+  - `locale` (`"fr"` ou `"en"`) est la langue du compte du site **déjà
+    rattaché au Discord destinataire** (`bg_users.locale`), jamais celle du
+    demandeur. `locale` absent, vide ou autre valeur (ancien site, Discord
+    rattaché à aucun compte) : **un seul** message bilingue, français d'abord
+    puis anglais après `**— English —**`. Le bot ne garde pas cette langue.
 
 ### Langue des messages privés (BOT-NOTIF-LANG)
 
@@ -46,7 +56,9 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
 - Les messages privés **propres au bot** destinés à un membre (papiers et avis
   d'adhésion par défaut, avis d'exclusion du relais) sont bilingues : le bot ne
   connaît pas le compte du site de leur destinataire. Les retours à l'auteur
-  d'une commande et les diagnostics du propriétaire restent en français.
+  d'une commande, les diagnostics du propriétaire et le message de bienvenue
+  envoyé au propriétaire d'un serveur qui ajoute le bot (assistant de
+  configuration) restent en français.
 - Séparateur commun aux deux dépôts : `\n\n**— English —**\n`.
 - Compatibilité : un site ancien qui n'envoie ni `locale` ni `dmMessage` reçoit
   le comportement d'avant (le même `message` en salon et en privé), le code en
@@ -100,9 +112,11 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     `handle` (même résolution que `/internal/auth/resolve`) — les joueurs sont
     sur le serveur BlueGenji, l'ID n'est donc pas requis.
   - **Messages de match : tags certifiés seulement.** L'app n'adresse un
-    horaire, un rappel, un avis « Match retiré », les réglages du salon d'un
-    match (`context` `lobby-brief`) ou l'avis du retrait d'un cast
-    (`cast-released`) qu'aux destinataires dont le tag Discord est **certifié**
+    horaire (`context` `match-scheduled`), un rappel (`match-reminder`), un
+    horaire retiré (`match-schedule-cleared`), un avis « Match retiré »
+    (`match-withdrawn`), les réglages du salon d'un match (`lobby-brief`) ou
+    l'avis du retrait d'un cast (`cast-released`) qu'aux destinataires dont le
+    tag Discord est **certifié**
     sur le site (`handle` et `discordId` fournis
     ensemble) ; un tag saisi à la main, ou rattaché par la connexion Discord
     sans certification, n'est jamais transmis et ne reçoit rien (lutte contre

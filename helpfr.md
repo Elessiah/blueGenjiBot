@@ -7,7 +7,7 @@ Si vous postez dans un salon assigné avec le bon préfixe, votre message est re
 ## Jeux couverts
 Le bot ne rend pas les mêmes services selon le jeu :
 - **Marvel Rivals** : diffusion des annonces entre serveurs partenaires (tous les services ci-dessous) **et** gestion des tournois BlueGenji.
-- **Overwatch** : gestion des tournois BlueGenji **uniquement** (rappels de match, alertes d'arbitrage, journal du tournoi). Aucune annonce Overwatch n'est diffusée entre serveurs.
+- **Overwatch** : gestion des tournois BlueGenji **uniquement** (horaires et rappels de match, réglages du salon de jeu d'un match, avis « Match retiré », avis du retrait d'un cast, alertes d'arbitrage, journal du tournoi). Aucune annonce Overwatch n'est diffusée entre serveurs.
 
 ## Services (préfixes)
 Tous les services ci-dessous, annonces de tournoi comprises, sont réservés
@@ -90,12 +90,12 @@ Admins BlueGenji (serveurs BlueGenji uniquement) :
 - Suivi des messages relayés (identifiants, date) : 7 jours, effacé au plus tard dans la nuit qui suit. Les copies publiées dans les salons partenaires restent ensuite sur Discord (voir « Effacer un message retransmis »).
 - Scrims et recherches (`/scrim`, `/recrute`) : 30 jours avec leur auteur. Dans la nuit qui suit, ils sont repliés en simples nombres par jour, serveur et niveau (ou rôle) : ni auteur, ni heure, ni ordre ne restent.
 - Fil d'activité public (heure, serveur, niveau ou rôle de chaque annonce) : 30 jours, supprimé dans la nuit qui suit.
-- Exclusions du réseau : jusqu'à leur levée. Leur avis et leur motif (salon de journal privé du staff ; le motif aussi en message privé au titulaire du bot) sont supprimés à la levée (pour une exclusion prononcée avant cette règle, seul le motif publié au salon : le reste l'est au bout d'un an).
+- Exclusions du réseau : jusqu'à leur levée. Leur avis et leur motif (salon de journal privé du staff ; le motif aussi en message privé au titulaire du bot et dans l'avis remis à l'exclu) sont supprimés à la levée (pour une exclusion prononcée avant cette règle, seul le motif publié au salon : le reste l'est au bout d'un an).
 - Autres messages du salon de journal privé du staff : 1 an.
 - Configuration d'un serveur : effacée quand le bot le quitte — y compris s'il l'a quitté pendant un arrêt du bot, au démarrage suivant. De même pour un salon relayé supprimé : il est retiré de la base, au démarrage suivant s'il a été supprimé pendant un arrêt.
 
 ## `/ban-list` et exclusions du réseau
-Une exclusion s'applique à **tout le réseau** : c'est une modération communautaire, prononcée par les administrateurs des serveurs de 50 membres et plus. `/ban-list` montre donc à l'administrateur de tout serveur partenaire la liste complète des exclusions du réseau (joueur exclu, modérateur, motif, date), pour qu'il sache qui ne peut plus publier par le bot et pourquoi. Un joueur exclu qui tente de publier reçoit en message privé un avis bilingue (français puis anglais) suivi du motif.
+Une exclusion s'applique à **tout le réseau** : c'est une modération communautaire, prononcée par les administrateurs des serveurs de 50 membres et plus. `/ban-list` montre donc à l'administrateur de tout serveur partenaire la liste complète des exclusions du réseau (joueur exclu, modérateur, motif, date), pour qu'il sache qui ne peut plus publier par le bot et pourquoi. Un joueur exclu qui tente de publier reçoit en message privé un avis bilingue (français puis anglais) suivi du motif (abrégé s'il est très long), au plus une fois par jour ; le bot ne garde que l'identifiant de ce message, et le supprime à la levée de l'exclusion.
 
 ## Support
 Besoin d'aide, une suggestion ou un problème ?

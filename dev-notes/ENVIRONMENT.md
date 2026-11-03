@@ -24,6 +24,7 @@ INTERNAL_API_PORT=4400          # défaut
 INTERNAL_API_TOKEN=             # doit matcher BOT_INTERNAL_TOKEN côté appbluegenji
 GUILD_ID=                       # facultatif — surcharge les serveurs démarchés par /internal/notify/dm
 BACKUP_STATUS_PATH=             # statut de la sauvegarde distante (défaut /var/lib/bluegenji/backup-status.json)
+BACKUP_STATUS_HISTORY_PATH=     # historique des statuts (défaut : BACKUP_STATUS_PATH sans .json + -history.jsonl)
 BACKUP_ARCHIVE_DIR=             # /restore-backup : dossier local d'archives .tar.age (facultatif)
 BACKUP_RCLONE_REMOTE=           # /restore-backup : remote:dossier des archives (facultatif)
 BACKUP_AGE_IDENTITY=            # /restore-backup : clé privée age (défaut ~/.bluegenji-backup.key)

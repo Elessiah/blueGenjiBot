@@ -7,7 +7,7 @@ If you post in an assigned channel with the right prefix, your message is forwar
 ## Games covered
 The bot does not offer the same services for each game:
 - **Marvel Rivals**: announcements dispatched across partner servers (every service below) **and** BlueGenji tournament management.
-- **Overwatch**: BlueGenji tournament management **only** (match reminders, referee alerts, tournament log). No Overwatch announcement is dispatched across servers.
+- **Overwatch**: BlueGenji tournament management **only** (match times and reminders, lobby settings of a match, « Match retiré » (match withdrawn) notices, notice that a cast was withdrawn, referee alerts, tournament log). No Overwatch announcement is dispatched across servers.
 
 ## Services (prefixes)
 Every service below, tournament announcements included, is for
@@ -54,11 +54,11 @@ Everyone:
 - `/stats-site`: shows BlueGenji website traffic (total visits, and unique visitors over the last 25 months).
 - `/tournoi`: posts the BlueGenji tournament links in the channel: rules in French and in English, and the form to apply as a caster.
 
-Bans are **network-wide**: this is community moderation, decided by the admins of servers with 50+ members. `/ban-list` therefore shows the admin of any partner server the full list of network bans (banned player, moderator, reason, date), so they know who can no longer post through the bot and why. A banned player who tries to post receives a bilingual private notice (French then English) followed by the reason.
+Bans are **network-wide**: this is community moderation, decided by the admins of servers with 50+ members. `/ban-list` therefore shows the admin of any partner server the full list of network bans (banned player, moderator, reason, date), so they know who can no longer post through the bot and why. A banned player who tries to post receives a bilingual private notice (French then English) followed by the reason (shortened if it is very long), at most once a day; the bot keeps only the ID of that message, and deletes it when the ban is lifted.
 
 To link your Discord account to the BlueGenji website, sign in to the website with Discord, or use « Applications connectées » on your profile (the former `/link` command is gone).
 
-Retention: tracking of relayed messages (IDs, date) 7 days, erased at the latest during the following night — the copies posted in partner channels then stay on Discord; `/scrim` and `/recrute` posts 30 days with their author, then folded during the following night into plain counts per day, server and level (or role) — no author, time or order remains; the public activity feed (time, server, level or role of each post) 30 days, deleted during the following night; network bans until they are lifted — their notice and reason (staff's private log channel; the reason also in a private message to the bot owner) are deleted when the ban is lifted (for a ban issued before this rule, only the reason posted in the channel; the rest after one year); the other messages of the staff's private log channel 1 year; a server's configuration is erased when the bot leaves it — including when it left while the bot was offline, at the next startup; likewise a deleted relay channel is removed from the database, at the next startup if it was deleted while the bot was offline.
+Retention: tracking of relayed messages (IDs, date) 7 days, erased at the latest during the following night — the copies posted in partner channels then stay on Discord; `/scrim` and `/recrute` posts 30 days with their author, then folded during the following night into plain counts per day, server and level (or role) — no author, time or order remains; the public activity feed (time, server, level or role of each post) 30 days, deleted during the following night; network bans until they are lifted — their notice and reason (staff's private log channel; the reason also in a private message to the bot owner and in the notice sent to the banned player) are deleted when the ban is lifted (for a ban issued before this rule, only the reason posted in the channel; the rest after one year); the other messages of the staff's private log channel 1 year; a server's configuration is erased when the bot leaves it — including when it left while the bot was offline, at the next startup; likewise a deleted relay channel is removed from the database, at the next startup if it was deleted while the bot was offline.
 
 Server admins:
 - `/ban-list` (network-wide list, see above)
