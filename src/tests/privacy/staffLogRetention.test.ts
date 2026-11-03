@@ -12,6 +12,7 @@ import type { Client } from "discord.js";
 import { closeBddInstance } from "../../bdd/Bdd.js";
 import {
   banMessageIds,
+  deleteBanMessages,
   MAX_LOG_PAGES_PER_RUN,
   purgeLogChannel,
   purgeStaffLogs,
@@ -185,4 +186,53 @@ test.after(async () => {
   await closeBddInstance();
   await new Promise((r) => setTimeout(r, 50));
   try { fs.unlinkSync(TMP_DB); } catch { /* noop */ }
+});
+
+/** Faux client pour `deleteBanMessages` : relève chaque suppression par conversation. */
+function banClient(deleted: string[], unreachableUser: string | null = null): Client {
+  const conversation = (owner: string) => ({
+    messages: { delete: async (id: string) => { deleted.push(`${owner}:${id}`); } },
+  });
+  return {
+    channels: { fetch: async () => conversation("salon") },
+    users: {
+      fetch: async (id: string) => {
+        if (id === unreachableUser) { throw new Error("Unknown User"); }
+        return { createDM: async () => conversation(id) };
+      },
+    },
+  } as unknown as Client;
+}
+
+const BAN: Ban = {
+  id_user: "600000000000000001",
+  id_moderator: "600000000000000002",
+  id_reason: "reason-1",
+  date: new Date(0),
+  id_reason_owner: null,
+  id_notice_admin: null,
+  id_notice_user: "notice-1",
+};
+
+test("deleteBanMessages_noticeUserSet_deletesDmInBannedUsersConversation", async () => {
+  process.env.INFO_SERV = "info-1";
+  const deleted: string[] = [];
+  const count = await deleteBanMessages(banClient(deleted), BAN);
+  assert.equal(count, 2);
+  assert.deepEqual(deleted.sort(), ["600000000000000001:notice-1", "salon:reason-1"]);
+});
+
+test("deleteBanMessages_noNoticeUser_bannedUserNotFetched", async () => {
+  process.env.INFO_SERV = "info-1";
+  const deleted: string[] = [];
+  await deleteBanMessages(banClient(deleted), { ...BAN, id_notice_user: null });
+  assert.deepEqual(deleted, ["salon:reason-1"]);
+});
+
+test("deleteBanMessages_bannedUserUnreachable_otherMessagesStillDeleted", async () => {
+  process.env.INFO_SERV = "info-1";
+  const deleted: string[] = [];
+  const count = await deleteBanMessages(banClient(deleted, BAN.id_user), BAN);
+  assert.equal(count, 1);
+  assert.deepEqual(deleted, ["salon:reason-1"]);
 });

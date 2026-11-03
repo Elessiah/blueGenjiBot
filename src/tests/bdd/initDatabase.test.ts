@@ -9,6 +9,7 @@ import sqlite3 from "sqlite3";
 
 import { Bdd } from "../../bdd/Bdd.js";
 import { ranks, services } from "../../utils/globals.js";
+import { ADHESION_EXPIRED_REMINDER_DM, LEGACY_ADHESION_EXPIRED_REMINDER_FR } from "../../notifications/dmLanguage.js";
 
 /**
  * Caractérisation de `Bdd.initDatabase` : le schéma obtenu sur une base neuve
@@ -93,8 +94,33 @@ test("base ancienne : colonnes ajoutées, table UserLink et modules retirés sup
   assert.deepEqual(await tables(bdd), EXPECTED_TABLES);
   assert.ok((await columns(bdd, "ChannelPartner")).includes("region"));
   assert.deepEqual(await bdd.raw("SELECT region FROM ChannelPartner WHERE id_channel = 'c1'", []), [{ region: 0 }]);
-  assert.deepEqual((await columns(bdd, "Ban")).slice(-2), ["id_reason_owner", "id_notice_admin"]);
+  assert.deepEqual((await columns(bdd, "Ban")).slice(-4), ["id_reason_owner", "id_notice_admin", "id_notice_user", "notice_user_at"]);
   assert.deepEqual(await bdd.raw("SELECT module_key FROM ServerModule", []), [{ module_key: "annonces" }]);
+});
+
+const ADHESION_INTERVAL_OLD = `
+    CREATE TABLE AdhesionInterval (id INTEGER PRIMARY KEY AUTOINCREMENT, message TEXT NOT NULL, guild_id TEXT NOT NULL,
+      channel_id TEXT, member_id TEXT, role_id TEXT, author_id TEXT NOT NULL, interval_days INTEGER NOT NULL,
+      iteration INTEGER NOT NULL DEFAULT -1, nextTransmission DATETIME DEFAULT CURRENT_TIMESTAMP);`;
+
+test("initDatabase_legacyDefaultReminder_rewrittenBilingual", async (t) => {
+  const file = path.join(TMP_DIR, "rappels-anciens.sqlite");
+  await prepare(file, ADHESION_INTERVAL_OLD);
+  const db = await open({ filename: file, driver: sqlite3.Database });
+  await db.run("INSERT INTO AdhesionInterval (message, guild_id, author_id, interval_days) VALUES (?, 'g1', 'a1', 0)", [LEGACY_ADHESION_EXPIRED_REMINDER_FR]);
+  await db.close();
+  const { bdd } = await create(file, t);
+  assert.deepEqual(await bdd.raw("SELECT message FROM AdhesionInterval", []), [{ message: ADHESION_EXPIRED_REMINDER_DM }]);
+});
+
+test("initDatabase_customReminderText_untouched", async (t) => {
+  const file = path.join(TMP_DIR, "rappels-perso.sqlite");
+  await prepare(file, ADHESION_INTERVAL_OLD);
+  const db = await open({ filename: file, driver: sqlite3.Database });
+  await db.run("INSERT INTO AdhesionInterval (message, guild_id, author_id, interval_days) VALUES ('Pense à renouveler !', 'g1', 'a1', 0)");
+  await db.close();
+  const { bdd } = await create(file, t);
+  assert.deepEqual(await bdd.raw("SELECT message FROM AdhesionInterval", []), [{ message: "Pense à renouveler !" }]);
 });
 
 test("étape en échec : écrite sous son libellé, les suivantes jouées", async (t) => {

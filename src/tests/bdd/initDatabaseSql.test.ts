@@ -46,15 +46,16 @@ const sha256 = (value: unknown): string => createHash("sha256").update(JSON.stri
 test("instructions envoyées : mêmes textes, même ordre, mêmes paramètres", async (t) => {
   const { calls, errors } = await play(t);
   assert.deepEqual(errors, []);
-  // 31 `exec` (27 créations ou réglages, PRAGMA et ALTER de ChannelPartner,
-  // 2 ALTER de Ban), 3 `get` (une colonne vérifiée chacun), puis un `all` et
-  // un `run` par service et par rang semés.
+  // 33 `exec` (27 créations ou réglages, PRAGMA et ALTER de ChannelPartner,
+  // 4 ALTER de Ban), 5 `get` (une colonne vérifiée chacun), puis un `all` et
+  // un `run` par service et par rang semés, et le `run` qui remet au texte
+  // bilingue les rappels d'adhésion à l'ancien texte par défaut.
   assert.equal(calls.filter(([m]) => m === "all").length, services.length + ranks.length);
-  assert.equal(calls.filter(([m]) => m === "run").length, services.length + ranks.length);
-  assert.equal(calls.length, 31 + 3 + 2 * (services.length + ranks.length));
-  // MatchVoiceChannel, ajoutée en dernier : tout ce qui la précède garde l'empreinte d'avant.
-  assert.equal(sha256(calls.slice(0, -1)), "c0ec0a6839db978fd5c96fe8b11ac5e8d8fb7485640c3b0c6b911c14234d18a9");
-  assert.equal(sha256(calls), "9f1d46921b8743d73a71d2dabbee68bbb9b68eb11be83fd5096fceddb7f8da0f");
+  assert.equal(calls.filter(([m]) => m === "run").length, services.length + ranks.length + 1);
+  assert.equal(calls.length, 33 + 5 + 2 * (services.length + ranks.length) + 1);
+  // Empreintes du jeu d'instructions (EF-14 : colonnes d'avis de Ban, remise des rappels d'adhésion).
+  assert.equal(sha256(calls.slice(0, -1)), "d5670f4225b43dfd8420cdb182965c2b316070c60eb363240af5ae9612823198");
+  assert.equal(sha256(calls), "d50f6914cdf1a6ebb1d099ff102d1dc250204769c1d7cc973532d2a3faab7059");
 });
 
 test("chaque étape en échec : son libellé, dans l'ordre, une fois", async (t) => {
@@ -71,8 +72,12 @@ test("chaque étape en échec : son libellé, dans l'ordre, une fois", async (t)
   // Seule l'étape des services joint l'erreur entière à son message.
   assert.deepEqual(errors.map((parts) => parts.length), errors.map((parts) => (parts[0] === "Service&Co" ? 3 : 2)));
   assert.ok(errors.every((parts) => parts[1] === "exec refusé"));
-  // Une étape qui échoue s'arrête à sa première instruction.
-  assert.deepEqual(calls.map(([m]) => m), errors.map(() => "exec"));
-  assert.equal(sha256(calls.slice(0, -1)), "5f9aaceaa19aee22936e8eceaad58024bbdc172f34be0e3a3e5d21b61d74bb56");
-  assert.equal(sha256(calls), "9c547106668af8937c202c446a49a9f6f71ef88ba07ef29c0cfea825caed3997");
+  // Une étape qui échoue s'arrête à sa première instruction ; la remise au
+  // texte bilingue des rappels d'adhésion (un `run`, que la base factice ne
+  // refuse pas) passe entre AdhesionInterval et RoleAdmin.
+  const expected = errors.map(() => "exec");
+  expected.splice(12, 0, "run");
+  assert.deepEqual(calls.map(([m]) => m), expected);
+  assert.equal(sha256(calls.slice(0, -1)), "4d1b266a930cc5d9b20d1a27db0a2bbe3fc54e12e3bf89b0e7864feb386a027c");
+  assert.equal(sha256(calls), "d63ac99e69ab95e7ae46e38d95fd0dbeead8c0c9aa6f638556cd702fd2bc5b9d");
 });

@@ -108,3 +108,25 @@ test("sendDatabaseBackup_backupToCheck_notifies", () =>
     assert.match(sent[0].content, /^🚨 Sauvegarde BlueGenji à vérifier/);
     assert.equal(sent[0].flags, undefined);
   }));
+
+test("sendDatabaseBackup_failureSinceLastReport_alertsWithFailureLine", async () => {
+  const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "bluegenji-weekly-history-"));
+  const statusPath = path.join(dir, "status.json");
+  const failedAt = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString();
+  await fs.promises.writeFile(statusPath, JSON.stringify({ date: new Date().toISOString(), ok: true }));
+  // Même défaut que le script : à côté du statut, `-history.jsonl`.
+  await fs.promises.writeFile(path.join(dir, "status-history.jsonl"), JSON.stringify({ date: failedAt, ok: false, error: "rclone injoignable" }) + "\n");
+  try {
+    await withBackupEnv({ BACKUP_STATUS_PATH: statusPath }, async () => {
+      const sent: Sent[] = [];
+
+      await sendDatabaseBackup(ownerClient(sent), checksWith(true));
+
+      assert.match(sent[0].content, /^🚨 Sauvegarde BlueGenji à vérifier/);
+      assert.ok(sent[0].content.includes(`❌ Échec depuis le rapport précédent : ${failedAt.slice(0, 10)} — rclone injoignable.`));
+      assert.equal(sent[0].flags, undefined);
+    });
+  } finally {
+    await fs.promises.rm(dir, { recursive: true, force: true });
+  }
+});

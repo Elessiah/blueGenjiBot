@@ -682,6 +682,7 @@ test("/internal/auth/resolve : serveurs muets, 504 BOT_RESOLVE_TIMEOUT sans jour
 test("/internal/auth/send-code : identifiant ou code invalide, 400", async () => {
   const bodies = [
     { discordId: "123", code: "123456" },
+    { discordId: "12345678901234567890123456789012", code: "123456" },
     { discordId: "123456789012345678", code: "12345" },
     { discordId: "123456789012345678", code: "abcdef" },
     { discordId: "123456789012345678" },
@@ -723,6 +724,56 @@ test("/internal/auth/send-code : la langue du compte choisit le message, une val
     assert.equal(res.status, 200, String(locale));
     assert.deepEqual(state.dms, [`123456789012345678: ${expected}`], String(locale));
   }
+});
+
+test("sendCode_discordIdOutsideSnowflakeLength_returns400", async () => {
+  for (const discordId of ["1".repeat(16), "1".repeat(21)]) {
+    const res = await call("/internal/auth/send-code", { body: { discordId, code: "123456" } });
+    assert.equal(res.status, 400, discordId);
+    assert.deepEqual(res.body, { error: "INVALID_PAYLOAD" });
+  }
+  assert.deepEqual(state.dms, []);
+});
+
+test("sendCode_discordIdAtSnowflakeBounds_sent", async () => {
+  for (const discordId of ["1".repeat(17), "1".repeat(20)]) {
+    const res = await call("/internal/auth/send-code", { body: { discordId, code: "123456", locale: "fr" } });
+    assert.equal(res.status, 200, discordId);
+  }
+  assert.equal(state.dms.length, 2);
+});
+
+test("sendCode_purposeHandle_sendsHandleVerificationText", async () => {
+  const res = await call("/internal/auth/send-code", {
+    body: { discordId: "123456789012345678", code: "654321", locale: "en", purpose: "handle" },
+  });
+  assert.equal(res.status, 200);
+  assert.deepEqual(state.dms, [
+    "123456789012345678: BlueGenji - Verification code for your Discord tag: **654321** (valid for 10 minutes). It links this tag to a BlueGenji account; it does not sign you in. If you did not request it, ignore this message and never share this code.",
+  ]);
+});
+
+test("sendCode_discordErrorWithCode_logsCodeOnly", async () => {
+  const users = (fakeClient as unknown as { users: { fetch: unknown } }).users;
+  const savedFetch = users.fetch;
+  users.fetch = async (id: string) => {
+    if (id !== "123456789012345678") { return (savedFetch as (id: string) => Promise<unknown>)(id); }
+    throw Object.assign(new Error("Invalid Form Body 123456789012345678 is not snowflake"), { code: 50035 });
+  };
+  try {
+    const res = await call("/internal/auth/send-code", { body: { discordId: "123456789012345678", code: "111111" } });
+    assert.equal(res.status, 500);
+    assert.ok(state.logs.includes("Failed to send auth code to a player: code 50035"), JSON.stringify(state.logs));
+    assert.ok(state.logs.every((l) => !l.includes("snowflake")), "le texte de Discord ne part pas au journal");
+  } finally {
+    users.fetch = savedFetch;
+  }
+});
+
+test("sendCode_errorWithoutCode_logsUnknownCode", async () => {
+  state.closedDms.add("123456789012345678");
+  await call("/internal/auth/send-code", { body: { discordId: "123456789012345678", code: "111111" } });
+  assert.ok(state.logs.includes("Failed to send auth code to a player: code inconnu"), JSON.stringify(state.logs));
 });
 
 test("/internal/auth/send-code : MP fermés, 500 DISCORD_DM_FAILED", async () => {
@@ -882,6 +933,30 @@ test("/internal/notify/referees : corps invalide 400, sinon journal préfixé et
   assert.equal(res.status, 200);
   assert.deepEqual(res.body, { sent: 0, unresolved: ["alpha: rôle role-perdu introuvable"], failed: [] });
   assert.deepEqual(state.logs, ["[AppBlueGenji] Litige match 4"]);
+});
+
+test("notifyReferees_dmMessage_sentPrivatelyLogStaysFrench", async () => {
+  await sql("DELETE FROM RefereeRole");
+  await sql("INSERT INTO RefereeRole (id_guild, id_role) VALUES (?, 'role-arbitre')", [ALPHA.id]);
+  const referee = member("777777777777777777", "arbitre");
+  const alpha = ALPHA as unknown as { roles: unknown; members: Record<string, unknown> };
+  const savedRoles = alpha.roles;
+  // Cache complet (taille ≥ memberCount) : les membres du rôle sont lus tels quels.
+  alpha.members.cache = { size: 1000 };
+  alpha.roles = { fetch: async () => ({ id: "role-arbitre", members: new Map([[referee.id, referee]]) }) };
+  try {
+    const res = await call("/internal/notify/referees", {
+      body: { message: "Litige match 4", dmMessage: "Litige match 4\n\n**— English —**\nDispute on match 4" },
+    });
+    assert.equal(res.status, 200);
+    assert.deepEqual(state.dms, ["777777777777777777: [AppBlueGenji] Litige match 4\n\n**— English —**\nDispute on match 4"]);
+    assert.ok(state.logs.includes("[AppBlueGenji] Litige match 4"));
+    assert.ok(state.logs.every((l) => !l.includes("English")), "le salon de logs reste en français");
+  } finally {
+    alpha.roles = savedRoles;
+    delete alpha.members.cache;
+    await sql("DELETE FROM RefereeRole");
+  }
 });
 
 test("/internal/notify/leadership : propriétaire et président prévenus, échec par identifiant", async () => {

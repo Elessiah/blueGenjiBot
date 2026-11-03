@@ -229,3 +229,12 @@ test("leadershipIds écarte une valeur absente, vide ou qui n'est pas un identif
   assert.deepEqual(leadershipIds({ OWNER_ID: "", PRESIDENT: "owner-test" }), []);
   assert.deepEqual(leadershipIds({}), []);
 });
+
+test("truncateMessage_cutInsideEmoji_noLoneSurrogate", () => {
+  // 1800 caractères au plus, suffixe compris : l'émoji chevauche le point de coupe.
+  const suffix = "\n… (message tronqué)";
+  const cut = 1800 - suffix.length;
+  const message = "a".repeat(cut - 1) + "😀" + "b".repeat(100);
+  const actual = truncateMessage(message);
+  assert.equal(actual, "a".repeat(cut - 1) + suffix);
+});

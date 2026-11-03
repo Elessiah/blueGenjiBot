@@ -5,9 +5,12 @@ import os from "node:os";
 import path from "node:path";
 
 import {
+  formatBackupFailures,
   formatBackupStatus,
   isBackupFresh,
+  readBackupFailures,
   readBackupStatus,
+  STALE_AFTER_MS,
   type BackupStatus,
 } from "../../backup/backupStatus.js";
 
@@ -72,7 +75,7 @@ test("isBackupFresh refuse une sauvegarde en échec, même récente", () => {
   assert.equal(isBackupFresh({ ...OK_STATUS, ok: false }, NOW), false);
 });
 
-test("isBackupFresh refuse une sauvegarde de plus de huit jours", () => {
+test("isBackupFresh refuse une sauvegarde de plus de trois jours", () => {
   const old = { ...OK_STATUS, date: "2026-08-25T04:00:00+02:00" };
 
   assert.equal(isBackupFresh(old, NOW), false);
@@ -110,4 +113,69 @@ test("formatBackupStatus alerte sur une sauvegarde périmée", () => {
 
   assert.match(line, /^⚠️ /);
   assert.match(line, /Sauvegarde périmée/);
+});
+
+test("isBackupFresh_justUnderThreeDays_true", () => {
+  const status = { ...OK_STATUS, date: new Date(NOW - STALE_AFTER_MS + 1).toISOString() };
+  assert.equal(isBackupFresh(status, NOW), true);
+});
+
+test("isBackupFresh_exactlyThreeDays_false", () => {
+  // Dimanche manqué : la dernière réussie serait celle du mardi, six jours plus tôt.
+  const status = { ...OK_STATUS, date: new Date(NOW - STALE_AFTER_MS).toISOString() };
+  assert.equal(STALE_AFTER_MS, 3 * 24 * 60 * 60 * 1000);
+  assert.equal(isBackupFresh(status, NOW), false);
+});
+
+/** Écrit un historique temporaire (une ligne par entrée) et renvoie son chemin. */
+async function writeHistoryFile(lines: string[]): Promise<string> {
+  const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "bluegenji-history-"));
+  const file = path.join(dir, "backup-status-history.jsonl");
+  await fs.promises.writeFile(file, lines.join("\n") + "\n", "utf8");
+  return file;
+}
+
+test("readBackupFailures_missingFile_empty", async () => {
+  assert.deepEqual(await readBackupFailures("/chemin/absent/history.jsonl", NOW), []);
+});
+
+test("readBackupFailures_failureInWindow_returned", async () => {
+  const file = await writeHistoryFile([
+    '{"date":"2026-09-02T23:49:00+02:00","ok":false,"error":"rclone injoignable"}',
+    '{"date":"2026-09-06T23:49:00+02:00","ok":true,"error":""}',
+  ]);
+  assert.deepEqual(await readBackupFailures(file, NOW), [
+    { date: "2026-09-02T23:49:00+02:00", ok: false, error: "rclone injoignable" },
+  ]);
+});
+
+test("readBackupFailures_oldFutureOrInvalidLines_ignored", async () => {
+  const file = await writeHistoryFile([
+    '{"date":"2026-08-25T23:49:00+02:00","ok":false,"error":"trop ancien"}',
+    '{"date":"2026-09-20T23:49:00+02:00","ok":false,"error":"dans le futur"}',
+    "pas du json",
+    '{"ok":false}',
+    "",
+  ]);
+  assert.deepEqual(await readBackupFailures(file, NOW), []);
+});
+
+test("readBackupFailures_missingError_emptyString", async () => {
+  const file = await writeHistoryFile(['{"date":"2026-09-08T23:49:00+02:00","ok":false}']);
+  assert.deepEqual(await readBackupFailures(file, NOW), [{ date: "2026-09-08T23:49:00+02:00", ok: false, error: "" }]);
+});
+
+test("formatBackupFailures_none_null", () => {
+  assert.equal(formatBackupFailures([]), null);
+});
+
+test("formatBackupFailures_some_oneLinePerFailure", () => {
+  assert.equal(
+    formatBackupFailures([
+      { date: "2026-09-02T23:49:00+02:00", ok: false, error: "rclone injoignable" },
+      { date: "2026-09-03T23:49:00+02:00", ok: false, error: "" },
+    ]),
+    "❌ Échec depuis le rapport précédent : 2026-09-02 — rclone injoignable.\n" +
+      "❌ Échec depuis le rapport précédent : 2026-09-03 — cause inconnue.",
+  );
 });
