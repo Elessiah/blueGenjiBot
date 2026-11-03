@@ -114,6 +114,12 @@ const DM_TIME_ZONE = "Europe/Paris";
 /** Une date SQLite `CURRENT_TIMESTAMP` (« AAAA-MM-JJ HH:MM:SS », en UTC). */
 const SQLITE_UTC_DATETIME = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2})$/;
 
+/** Formateurs construits une fois (la construction d'un `Intl.DateTimeFormat` est coûteuse). */
+const BAN_DATE_FORMATTERS: Record<DmLocale, Intl.DateTimeFormat> = {
+  fr: new Intl.DateTimeFormat("fr-FR", { dateStyle: "long", timeStyle: "short", timeZone: DM_TIME_ZONE }),
+  en: new Intl.DateTimeFormat("en-GB", { dateStyle: "long", timeStyle: "short", timeZone: DM_TIME_ZONE }),
+};
+
 /**
  * Date d'une exclusion, écrite à l'heure de Paris dans la langue voulue.
  *
@@ -133,11 +139,7 @@ export function formatBanDate(date: Date | string, locale: DmLocale): string {
     parsed = new Date(sqlite ? `${sqlite[1]}T${sqlite[2]}Z` : String(date));
   }
   if (Number.isNaN(parsed.getTime())) { return String(date); }
-  return new Intl.DateTimeFormat(locale === "fr" ? "fr-FR" : "en-GB", {
-    dateStyle: "long",
-    timeStyle: "short",
-    timeZone: DM_TIME_ZONE,
-  }).format(parsed);
+  return BAN_DATE_FORMATTERS[locale].format(parsed);
 }
 
 /**

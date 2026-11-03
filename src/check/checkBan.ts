@@ -19,6 +19,17 @@ import type {BanInfo, BanVerdict} from "./types.js";
  */
 export const BAN_NOTICE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
+/** Avis en cours d'envoi en arrière-plan (suivis pour les tests et l'arrêt propre). */
+const pendingNotices = new Set<Promise<unknown>>();
+
+/**
+ * Attend la fin des avis d'exclusion partis en arrière-plan.
+ * @returns Une promesse qui se résout quand ils sont tous terminés.
+ */
+export async function settleBanNotices(): Promise<void> {
+    await Promise.allSettled([...pendingNotices]);
+}
+
 /** Exclus dont un avis est en cours d'envoi : deux messages simultanés n'en font partir qu'un. */
 const noticesInFlight = new Set<string>();
 
@@ -61,9 +72,9 @@ async function notifyBannedUser(client: Client, banInfo: BanInfo, now: number): 
         if (claimed === 0) {
             return;
         }
-        const [current] = await bdd.raw<{ id_notice_user: string | null }>(
-            "SELECT id_notice_user FROM Ban WHERE id_user = ?", [banInfo.id_user]);
-        const previousNotice = current?.id_notice_user ?? null;
+        // L'avis précédent est celui que `checkBan` vient de lire : la réservation
+        // réussie prouve qu'aucun autre n'est parti depuis (il aurait renouvelé `notice_user_at`).
+        const previousNotice = banInfo.id_notice_user ?? null;
         const user: User = await client.users.fetch(banInfo.id_user);
         const logChannel: TextChannel = await client.channels.fetch(process.env.INFO_SERV!) as TextChannel;
         if (!logChannel) {
@@ -126,12 +137,14 @@ async function checkBan(client: Client,
     if (!alertUser) {
         return "BANNED";
     }
-    try {
-        await notifyBannedUser(client, banInfo, now);
-    } catch (error) {
-        // Le verdict est déjà rendu : prévenir est un service, pas une condition.
-        await sendLog(client, "Failed to notify banned user : " + (error as Error).message);
-    }
+    // Le verdict est déjà rendu : prévenir est un service, pas une condition, et
+    // il coûte une demi-douzaine d'appels Discord séquentiels. Il part donc en
+    // arrière-plan, au plus une fois par jour : le message relayé n'attend pas.
+    const notice: Promise<unknown> = notifyBannedUser(client, banInfo, now)
+        .catch((error: unknown) => sendLog(client, "Failed to notify banned user : " + (error as Error).message))
+        .catch(() => undefined)
+        .finally(() => pendingNotices.delete(notice));
+    pendingNotices.add(notice);
     return "BANNED";
 }
 

@@ -274,26 +274,19 @@ export async function deleteBanMessages(client: Client, ban: Ban): Promise<numbe
       attempts.push(...channelIds.map((id) => settle(text.messages.delete(id))));
     }
   }
-  if (process.env.OWNER_ID && ban.id_reason_owner) {
-    const dmId = ban.id_reason_owner;
-    const dm = await client.users
-      .fetch(process.env.OWNER_ID)
-      .then((owner) => owner.createDM())
-      .catch(() => null);
-    if (dm) {
-      attempts.push(settle(dm.messages.delete(dmId)));
-    }
-  }
-  if (ban.id_notice_user) {
-    // L'avis remis à l'exclu (motif compris) n'a plus d'objet non plus.
-    const noticeId = ban.id_notice_user;
-    const dm = await client.users
-      .fetch(ban.id_user)
-      .then((user) => user.createDM())
-      .catch(() => null);
-    if (dm) {
-      attempts.push(settle(dm.messages.delete(noticeId)));
-    }
-  }
+  // Messages privés à effacer : celui du propriétaire (le motif) et l'avis remis à
+  // l'exclu par `checkBan`. Chaque conversation n'est résolue que si un message y
+  // attend, toutes en même temps.
+  const dmDeletions: [string, string][] = [];
+  if (process.env.OWNER_ID && ban.id_reason_owner) { dmDeletions.push([process.env.OWNER_ID, ban.id_reason_owner]); }
+  if (ban.id_notice_user) { dmDeletions.push([ban.id_user, ban.id_notice_user]); }
+  const dms = await Promise.all(dmDeletions.map(([userId]) => client.users
+    .fetch(userId)
+    .then((user) => user.createDM())
+    .catch(() => null)));
+  dmDeletions.forEach(([, messageId], index) => {
+    const dm = dms[index];
+    if (dm) { attempts.push(settle(dm.messages.delete(messageId))); }
+  });
   return (await Promise.all(attempts)).filter(Boolean).length;
 }
