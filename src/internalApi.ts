@@ -17,7 +17,7 @@ import express, { type Request, type Response, type NextFunction } from "express
 import type { Client } from "discord.js";
 import { getBddInstance } from "./bdd/Bdd.js";
 import { sendAlert, sendLog, sendLogConfirmed, type LogKind } from "./safe/sendLog.js";
-import { describeError } from "./safe/errorGuards.js";
+import { describeError, errorCode } from "./safe/errorGuards.js";
 import { recordEvent, getBacklog, subscribe } from "./feed/feedBus.js";
 import { getSnapshotsBetween } from "./snapshots/dailySnapshot.js";
 import { listModules, isValidModule, setModuleEnabled, MODULE_KEYS, type ModuleKey } from "./modules/moduleGuard.js";
@@ -33,7 +33,7 @@ import {
 } from "./internalApi/helpers.js";
 import { parseSiteVisitStats, saveSiteVisitStats } from "./siteVisits/siteVisits.js";
 import { parseDirectMessageRequest, parseRefereeAlert, refereeDmMessage as dmCopy } from "./notifications/notifications.js";
-import { loginCodeMessage, parseDmLocale } from "./notifications/dmLanguage.js";
+import { loginCodeMessage, parseCodePurpose, parseDmLocale } from "./notifications/dmLanguage.js";
 import { deliverDirectMessages, alertLeadership, alertReferees, HomeGuildUnavailableError } from "./notifications/deliver.js";
 import { HandleResolutionTimeoutError, resolveDiscordHandle } from "./notifications/resolveHandle.js";
 import { MESSAGE_RETENTION_DAYS } from "./privacy/retentionPeriods.js";
@@ -402,7 +402,9 @@ export function startInternalApi(client: Client) {
     const discordId = String(req.body?.discordId || "").trim();
     const code = String(req.body?.code || "").trim();
 
-    if (!/^\d{5,32}$/.test(discordId) || !/^\d{6}$/.test(code)) {
+    // Un identifiant Discord (snowflake) compte 17 à 20 chiffres : hors de
+    // cette forme, l'erreur de Discord recopierait la valeur reçue.
+    if (!/^\d{17,20}$/.test(discordId) || !/^\d{6}$/.test(code)) {
       res.status(400).json({ error: "INVALID_PAYLOAD" });
       return;
     }
@@ -410,14 +412,16 @@ export function startInternalApi(client: Client) {
     try {
       const user = await client.users.fetch(discordId);
       // Langue du compte du site quand il existe ; sans elle (pas de compte,
-      // site plus ancien qui ne l'envoie pas), un message bilingue.
-      await user.send(loginCodeMessage(code, parseDmLocale(req.body?.locale)));
+      // site plus ancien qui ne l'envoie pas), un message bilingue. `purpose`
+      // distingue un code de tag (certification, changement) d'une connexion.
+      await user.send(loginCodeMessage(code, parseDmLocale(req.body?.locale), parseCodePurpose(req.body?.purpose)));
       await recordEvent(client, 'auth', 'Code DM envoye a un joueur');
       res.json({ success: true });
     } catch (error) {
       // Jamais l'identifiant Discord du joueur ni le code : le salon de logs est
-      // un message Discord (« un joueur », RGPD_LOGS_AND_VISITS du site).
-      await sendLog(client, `Failed to send auth code to a player: ${(error as Error).message}`);
+      // un message Discord (« un joueur », RGPD_LOGS_AND_VISITS du site). Seul
+      // le code d'erreur part, le texte de Discord pouvant citer la valeur reçue.
+      await sendLog(client, `Failed to send auth code to a player: code ${errorCode(error) ?? "inconnu"}`);
       res.status(500).json({ error: "DISCORD_DM_FAILED" });
     }
   });

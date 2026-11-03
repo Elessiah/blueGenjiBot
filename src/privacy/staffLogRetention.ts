@@ -10,7 +10,8 @@
  *   qui décrivent une exclusion **en cours** : son motif est relu pour
  *   prévenir l'exclu (`checkBan`), il vit autant qu'elle ;
  * - **à la levée d'une exclusion** (`/unban`), ses messages sont supprimés
- *   sur-le-champ (`deleteBanMessages`), quel que soit leur âge.
+ *   sur-le-champ (`deleteBanMessages`), quel que soit leur âge — avec l'avis
+ *   remis en message privé à l'exclu.
  *
  * Seuls les messages écrits par le bot sont touchés : ce que le staff écrit
  * lui-même dans le salon n'est pas un journal du bot.
@@ -251,7 +252,8 @@ export async function purgeStaffLogs(client: Client, now: number = Date.now()): 
 }
 
 /**
- * Supprime les messages du journal qui décrivent une exclusion levée.
+ * Supprime les messages du journal qui décrivent une exclusion levée, et le
+ * dernier avis remis en message privé à l'exclu (`checkBan`).
  *
  * Au mieux : un message déjà effacé (ménage du staff, purge d'un an) ou un
  * salon injoignable n'empêche pas les autres de partir. Ce qui resterait est
@@ -280,6 +282,17 @@ export async function deleteBanMessages(client: Client, ban: Ban): Promise<numbe
       .catch(() => null);
     if (dm) {
       attempts.push(settle(dm.messages.delete(dmId)));
+    }
+  }
+  if (ban.id_notice_user) {
+    // L'avis remis à l'exclu (motif compris) n'a plus d'objet non plus.
+    const noticeId = ban.id_notice_user;
+    const dm = await client.users
+      .fetch(ban.id_user)
+      .then((user) => user.createDM())
+      .catch(() => null);
+    if (dm) {
+      attempts.push(settle(dm.messages.delete(noticeId)));
     }
   }
   return (await Promise.all(attempts)).filter(Boolean).length;

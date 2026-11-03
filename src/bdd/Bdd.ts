@@ -8,6 +8,7 @@ import type {status, Query} from "../types.js";
 import {ranks, services} from '../utils/globals.js';
 import {toSQLiteDate} from '../utils/toSQLiteDatetime.js';
 import {RECRUIT_ROLE_CHOICES, SCRIM_LEVEL_CHOICES, normalizeLegacyChoice} from '../config/searchChoices.js';
+import {ADHESION_EXPIRED_REMINDER_DM, LEGACY_ADHESION_EXPIRED_REMINDER_FR} from '../notifications/dmLanguage.js';
 import {
     ACTIVITY_DAILY_TABLE,
     ADHESION_INTERVAL_TABLE,
@@ -305,6 +306,7 @@ class Bdd {
       ["Error rank filter : ", () => this.createRanks()],
       ["ChannelPartnerRank: ", CHANNEL_PARTNER_RANK_TABLE],
       ["AdhesionInterval error: ", ADHESION_INTERVAL_TABLE],
+      ["AdhesionInterval default text error: ", () => this.upgradeAdhesionDefaults()],
       ["RoleAdmin error: ", ROLE_ADMIN_TABLE],
       ["ServerModule error: ", SERVER_MODULE_TABLE],
       ["FeedEvent error: ", FEED_EVENT_TABLE],
@@ -392,16 +394,36 @@ class Bdd {
     // (`/unban`) : le motif en message privé au propriétaire, et l'avis
     // « un joueur a été exclu » au salon. `NULL` pour une exclusion
     // antérieure à ces colonnes — seul son motif au salon (`id_reason`)
-    // peut alors être effacé.
-    for (const column of ["id_reason_owner", "id_notice_admin"]) {
+    // peut alors être effacé. Puis l'avis remis en message privé à l'exclu
+    // (`checkBan`) et l'instant de son dernier essai, qui le borne à un par
+    // jour : l'avis aussi est effacé à la levée.
+    const columns: [string, string][] = [
+      ["id_reason_owner", "TEXT"],
+      ["id_notice_admin", "TEXT"],
+      ["id_notice_user", "TEXT"],
+      ["notice_user_at", "INTEGER"],
+    ];
+    for (const [column, type] of columns) {
       const exists = await this.Database?.get(
         "SELECT 1 FROM pragma_table_info('Ban') WHERE name = ?",
         [column],
       );
       if (!exists) {
-        await this.Database?.exec(`ALTER TABLE Ban ADD COLUMN ${column} TEXT`);
+        await this.Database?.exec(`ALTER TABLE Ban ADD COLUMN ${column} ${type}`);
       }
     }
+  }
+
+  /**
+   * Rappels d'adhésion programmés avec l'ancien avis de péremption par défaut
+   * (français seul) : remis au texte bilingue d'aujourd'hui. Seul le texte par
+   * défaut exact est visé, jamais un message écrit par l'auteur de la commande.
+   */
+  private async upgradeAdhesionDefaults(): Promise<void> {
+    await this.Database?.run(
+      "UPDATE AdhesionInterval SET message = ? WHERE message = ?",
+      [ADHESION_EXPIRED_REMINDER_DM, LEGACY_ADHESION_EXPIRED_REMINDER_FR],
+    );
   }
 
   /**

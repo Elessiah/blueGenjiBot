@@ -40,6 +40,10 @@ source "$SCRIPT_DIR/rclone-backend.sh"
 # La changer ici sans la changer là-bas rendrait la page fausse.
 : "${RETENTION_DAYS:=30}"
 : "${STATUS_FILE:=/var/lib/bluegenji/backup-status.json}"
+# Historique des statuts, une ligne JSON par exécution : le rapport du lundi y
+# relit les échecs depuis le précédent, que le dernier statut écraserait (deux
+# sauvegardes par semaine).
+: "${STATUS_HISTORY_FILE:=${STATUS_FILE%.json}-history.jsonl}"
 : "${MYSQL_DEFAULTS_FILE:=}"
 : "${DB_DATABASE:=}"
 : "${UPLOADS_DIR:=}"
@@ -56,11 +60,16 @@ STATUS_ERROR=""
 STATUS_PARTS=""
 STATUS_SIZE=0
 
+# Lignes gardées dans l'historique : un peu plus de deux mois.
+STATUS_HISTORY_LINES=20
+
 write_status() {
   mkdir -p "$(dirname "$STATUS_FILE")"
+  local now
+  now="$(date --iso-8601=seconds)"
   cat > "$STATUS_FILE" <<JSON
 {
-  "date": "$(date --iso-8601=seconds)",
+  "date": "$now",
   "ok": $STATUS_OK,
   "remote": "$RCLONE_REMOTE:$REMOTE_DIR/bluegenji-$STAMP.tar.age",
   "sizeBytes": $STATUS_SIZE,
@@ -68,6 +77,12 @@ write_status() {
   "error": "$STATUS_ERROR"
 }
 JSON
+  # Au mieux : un historique qui ne s'écrit pas ne fait pas échouer la sauvegarde.
+  {
+    printf '{"date":"%s","ok":%s,"error":"%s"}\n' "$now" "$STATUS_OK" "$STATUS_ERROR" >> "$STATUS_HISTORY_FILE" \
+      && tail -n "$STATUS_HISTORY_LINES" "$STATUS_HISTORY_FILE" > "$STATUS_HISTORY_FILE.tmp" \
+      && mv "$STATUS_HISTORY_FILE.tmp" "$STATUS_HISTORY_FILE"
+  } || echo "[backup] historique des statuts non écrit." >&2
 }
 
 fail() {
@@ -78,6 +93,12 @@ fail() {
   echo "[backup] ÉCHEC : $1" >&2
   exit 1
 }
+
+# Un nombre de jours, au moins 1 : 0 ou une valeur négative donnerait un seuil
+# négatif à la purge, qui effacerait alors toutes les archives.
+[[ "$RETENTION_DAYS" =~ ^[1-9][0-9]*$ ]] || fail "RETENTION_DAYS invalide ($RETENTION_DAYS) : un nombre de jours, au moins 1"
+# Marge des purges sous la borne, la même que sync-uploads-onedrive.sh.
+PURGE_MARGIN_HOURS=3
 
 # --- 0. Dépendances -----------------------------------------------------------
 # Vérifiées avant tout travail : un binaire manquant doit produire un statut
@@ -132,11 +153,12 @@ rclone copy "$ARCHIVE.age" "$RCLONE_REMOTE:$REMOTE_DIR" \
 # corbeille, qui garderait l'archive purgée 30 jours de plus — la durée annoncée
 # serait fausse d'autant. Ailleurs (Nextcloud/WebDAV), aucune option n'y peut
 # rien : corbeille et versions se coupent côté serveur (doc/backup-onedrive.md).
-# Même seuil que la purge horaire (sync-uploads-onedrive.sh) : une heure sous
-# RETENTION_DAYS jours, pour qu'aucune archive ne dépasse la durée annoncée.
+# Même seuil que la purge horaire (sync-uploads-onedrive.sh) : PURGE_MARGIN_HOURS
+# heures sous RETENTION_DAYS jours, pour qu'aucune archive ne dépasse la durée
+# annoncée, même quand un passage attend le verrou.
 mapfile -t DELETE_FLAGS < <(provider_delete_flags "$RCLONE_REMOTE")
 rclone delete "$RCLONE_REMOTE:$REMOTE_DIR" \
-  --min-age "$((RETENTION_DAYS * 24 - 1))h" --include "bluegenji-*.tar.age" \
+  --min-age "$((RETENTION_DAYS * 24 - PURGE_MARGIN_HOURS))h" --include "bluegenji-*.tar.age" \
   "${DELETE_FLAGS[@]}" \
   || echo "[backup] purge des anciennes sauvegardes incomplète." >&2
 

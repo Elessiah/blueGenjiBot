@@ -3,6 +3,10 @@ export type BanInfo = {
     id_moderator: string;
     id_reason: string;
     date: Date;
+    /** Dernier avis remis en message privé à l'exclu ; `null` sans avis. */
+    id_notice_user?: string | null;
+    /** Instant (ms) du dernier essai d'avis ; `null` sans essai. */
+    notice_user_at?: number | null;
 };
 
 /**

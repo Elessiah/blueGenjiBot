@@ -242,6 +242,9 @@ function readOptionalFile(file: string): string | null {
   }
 }
 
+/** Code de sortie d'un processus qui intercepte SIGTERM (128 + 15), comme `rclone`. */
+const SIGTERM_EXIT_CODE = 143;
+
 /**
  * Enchaîne des processus par leurs tubes et rend la sortie du dernier.
  *
@@ -264,10 +267,13 @@ export function runPipeline(
     const children: ChildProcess[] = [];
     const diagnostics: string[] = [];
     // Étapes en échec **par elles-mêmes** (code de sortie, binaire absent) ;
-    // celles que l'on arrête ensuite ne comptent pas, quel que soit leur code
-    // (`rclone` intercepte SIGTERM et sort en 143). L'étape nommée est la **première** du tube : quand
-    // `rclone` échoue, `age` échoue aussi faute d'entrée, et c'est le stockage
-    // qu'il faut mettre en cause, pas la clé.
+    // celles que l'on arrête ensuite ne comptent pas quand elles sortent par
+    // le signal (code `null`) ou en 143 (`rclone` intercepte SIGTERM). L'étape
+    // nommée est la **première** du tube : quand `rclone` échoue, `age` échoue
+    // aussi faute d'entrée, et c'est le stockage qu'il faut mettre en cause,
+    // pas la clé. Une étape arrêtée qui sort sur **un autre code** a échoué
+    // d'elle-même : sous charge, `tar` (privé d'entrée) peut sortir avant `age`
+    // qui vient d'échouer, et `age`, arrêté entre-temps, doit rester en cause.
     const failed = new Set<number>();
     // Binaire introuvable : le défaut est certain, il l'emporte sur tout code
     // de sortie (les autres étapes, arrêtées aussitôt, ne disent rien).
@@ -299,7 +305,7 @@ export function runPipeline(
       settled.add(index);
       if (code !== 0) {
         interrupted = true;
-        if (code !== null && !killed.has(index)) {
+        if (code !== null && !(killed.has(index) && code === SIGTERM_EXIT_CODE)) {
           failed.add(index);
         }
         killAll();

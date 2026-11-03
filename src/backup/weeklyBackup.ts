@@ -1,6 +1,6 @@
 import { MessageFlags, type Client, type User } from "discord.js";
 import { formatDiskUsage, getDiskUsage } from "./diskSpace.js";
-import { formatBackupStatus, isBackupFresh, readBackupStatus } from "./backupStatus.js";
+import { formatBackupFailures, formatBackupStatus, isBackupFresh, readBackupFailures, readBackupStatus } from "./backupStatus.js";
 import { resolveBddPath } from "../bdd/Bdd.js";
 import { backupChecksPassed, formatBackupChecks, runBackupChecks, type BackupCheckReport } from "./backupCheck.js";
 
@@ -30,11 +30,16 @@ export async function sendDatabaseBackup(
 
   const dbPath = resolveBddPath();
   const statusPath = process.env.BACKUP_STATUS_PATH || "/var/lib/bluegenji/backup-status.json";
+  // Même défaut que le script (`STATUS_HISTORY_FILE`) : à côté du statut.
+  const historyPath = process.env.BACKUP_STATUS_HISTORY_PATH || statusPath.replace(/\.json$/, "") + "-history.jsonl";
   const stamp = new Date().toISOString().slice(0, 10);
 
   try {
     const status = await readBackupStatus(statusPath);
-    const cloudLine = formatBackupStatus(status);
+    // Deux sauvegardes par semaine : un échec du mardi ne doit pas disparaître
+    // derrière le succès du dimanche.
+    const failuresLine = formatBackupFailures(await readBackupFailures(historyPath));
+    const cloudLine = failuresLine === null ? formatBackupStatus(status) : `${formatBackupStatus(status)}\n${failuresLine}`;
     // L'état du disque intéresse surtout quand la place manque : on le joint dans les deux cas.
     const diskLine = formatDiskUsage(await getDiskUsage(dbPath));
     // Une archive présente mais illisible ne vaut pas mieux qu'une absente.
@@ -42,7 +47,7 @@ export async function sendDatabaseBackup(
 
     // Une sauvegarde absente ou périmée est la seule situation qui demande une
     // action : elle mérite d'être annoncée dès la première ligne du message.
-    const healthy = isBackupFresh(status) && backupChecksPassed(checks);
+    const healthy = isBackupFresh(status) && failuresLine === null && backupChecksPassed(checks);
     const header = healthy
       ? `🗄️ Rapport de sauvegarde BlueGenji — ${stamp}`
       : `🚨 Sauvegarde BlueGenji à vérifier — ${stamp}`;

@@ -141,7 +141,9 @@ export const BAN_TABLE = `CREATE TABLE IF NOT EXISTS Ban
                DEFAULT
                  CURRENT_TIMESTAMP,
              id_reason_owner TEXT,
-             id_notice_admin TEXT
+             id_notice_admin TEXT,
+             id_notice_user TEXT,
+             notice_user_at INTEGER
            );`;
 
 /** Table `Ranks` (sans effet si elle existe déjà). */

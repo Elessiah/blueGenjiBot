@@ -72,6 +72,12 @@ source "$SCRIPT_DIR/rclone-backend.sh"
 log() { echo "[uploads] $*"; }
 die() { echo "[uploads] ÉCHEC : $*" >&2; exit 1; }
 
+# Un nombre de jours, au moins 1 : 0 ou une valeur négative donnerait un seuil
+# négatif à la purge, qui effacerait alors toutes les archives.
+[[ "$RETENTION_DAYS" =~ ^[1-9][0-9]*$ ]] || die "RETENTION_DAYS invalide ($RETENTION_DAYS) : un nombre de jours, au moins 1"
+# Marge des purges sous la borne : voir « Rétention des archives » ci-dessous.
+PURGE_MARGIN_HOURS=3
+
 for binary in rclone flock; do
   command -v "$binary" >/dev/null 2>&1 || die "binaire manquant : $binary"
 done
@@ -92,18 +98,20 @@ flock -w 600 9 || die "une autre synchronisation tient le verrou depuis plus de 
 # archive créée un dimanche y a 28 jours au huitième passage, à peu près 30 au
 # neuvième (gardée ou non selon la durée du transfert), 35 au dixième — au-delà
 # des RETENTION_DAYS que le site annonce. Refaite ici chaque heure, avec un
-# seuil d'une heure sous la borne (RETENTION_DAYS × 24 − 1 heures), une archive
-# part entre 29 j 23 h et 30 j d'âge — même quand la sauvegarde échoue avant
-# sa purge ; un passage manqué (verrou tenu plus de 10 min, serveur arrêté) se
-# rattrape au suivant. Un seuil de RETENTION_DAYS jours pile la laisserait
-# vivre jusqu'à près d'une heure de plus. Elle
+# seuil de PURGE_MARGIN_HOURS (3) heures sous la borne (RETENTION_DAYS × 24 − 3
+# heures), une archive part entre 29 j 21 h et 29 j 22 h d'âge — même quand la
+# sauvegarde échoue avant sa purge. La marge couvre un passage qui attend le
+# verrou : une sauvegarde du dimanche de plus de 28 min tient le verrou au
+# passage de 0 h 17, et sa propre purge ne vient qu'après le transfert ; avec
+# une heure seulement, l'archive d'il y a 30 jours dépassait la borne de
+# quelques minutes. Un passage manqué (serveur arrêté) se rattrape au suivant. Elle
 # passe **avant** les contrôles du miroir des images (dossier, chiffrement,
 # dossier vide) : elle ne touche que les archives, et un miroir refusé ne doit pas
 # prolonger la conservation annoncée. Un échec de purge ne fait pas échouer la
 # synchronisation.
 mapfile -t ARCHIVE_DELETE_FLAGS < <(provider_delete_flags "$RCLONE_REMOTE")
 rclone delete "$RCLONE_REMOTE:$REMOTE_DIR" \
-  --min-age "$((RETENTION_DAYS * 24 - 1))h" --include "bluegenji-*.tar.age" \
+  --min-age "$((RETENTION_DAYS * 24 - PURGE_MARGIN_HOURS))h" --include "bluegenji-*.tar.age" \
   "${ARCHIVE_DELETE_FLAGS[@]}" \
   || echo "[uploads] purge des anciennes archives incomplète." >&2
 
