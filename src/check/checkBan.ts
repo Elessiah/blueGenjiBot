@@ -66,8 +66,8 @@ async function notifyBannedUser(client: Client, banInfo: BanInfo, now: number): 
     try {
         const bdd: Bdd = await getBddInstance();
         const claimed = await bdd.write(
-            "UPDATE Ban SET notice_user_at = ? WHERE id_user = ? AND (notice_user_at IS NULL OR notice_user_at <= ?)",
-            [now, banInfo.id_user, now - BAN_NOTICE_INTERVAL_MS]);
+            "UPDATE Ban SET notice_user_at = ? WHERE id_user = ? AND (notice_user_at IS NULL OR notice_user_at <= ? OR notice_user_at > ?)",
+            [now, banInfo.id_user, now - BAN_NOTICE_INTERVAL_MS, now]);
         if (claimed === 0) {
             return;
         }
@@ -141,7 +141,9 @@ async function checkBan(client: Client,
     // il coûte une demi-douzaine d'appels Discord séquentiels. Il part donc en
     // arrière-plan, au plus une fois par jour : le message relayé n'attend pas.
     // Rien à faire dans l'intervalle : aucune promesse n'est créée pour les messages suivants.
-    if (now - Number(banInfo.notice_user_at ?? 0) < BAN_NOTICE_INTERVAL_MS) {
+    // Un instant dans le futur (horloge reculée) ne bloque pas l'avis : il est périmé.
+    const elapsed = now - Number(banInfo.notice_user_at ?? 0);
+    if (elapsed >= 0 && elapsed < BAN_NOTICE_INTERVAL_MS) {
         return "BANNED";
     }
     const notice: Promise<unknown> = notifyBannedUser(client, banInfo, now)
