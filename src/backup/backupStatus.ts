@@ -1,5 +1,7 @@
 import fs from "node:fs";
 
+import { sliceWithoutSplittingPair } from "../notifications/dmLanguage.js";
+
 /** Statut déposé par `scripts/backup-onedrive.sh` après chaque exécution. */
 export interface BackupStatus {
   /** Date ISO de la tentative. */
@@ -141,8 +143,21 @@ function parseHistoryLine(line: string): BackupHistoryEntry | null {
 export function formatBackupFailures(failures: BackupHistoryEntry[]): string | null {
   if (failures.length === 0) { return null; }
   return failures
-    .map((failure) => `❌ Échec depuis le rapport précédent : ${failure.date.slice(0, 10)} — ${failure.error || "cause inconnue"}.`)
+    .map((failure) => `❌ Échec depuis le rapport précédent : ${failure.date.slice(0, 10)} — ${shortCause(failure.error)}.`)
     .join("\n");
+}
+
+/** Longueur maximale d'une cause recopiée de l'historique (le message privé plafonne à 2 000 caractères). */
+export const FAILURE_CAUSE_MAX_LENGTH = 200;
+
+/**
+ * Abrège une cause d'échec de l'historique, sans couper un émoji.
+ * @param error Cause enregistrée par le script (vide si inconnue).
+ * @returns La cause, abrégée au besoin, ou « cause inconnue ».
+ */
+function shortCause(error: string): string {
+  if (!error) { return "cause inconnue"; }
+  return error.length > FAILURE_CAUSE_MAX_LENGTH ? `${sliceWithoutSplittingPair(error, FAILURE_CAUSE_MAX_LENGTH)}…` : error;
 }
 
 /**

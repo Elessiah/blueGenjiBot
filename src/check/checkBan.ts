@@ -35,8 +35,11 @@ const noticesInFlight = new Set<string>();
  * débannissait silencieusement — un modérateur qui range son salon levait les
  * bannissements qu'il venait d'y motiver.
  *
- * L'essai est daté **avant** les lectures : un essai qui échoue (messages
- * privés fermés, motif effacé) ne se répète pas non plus à chaque message.
+ * L'essai est **réservé en une instruction** (`UPDATE … WHERE notice_user_at`
+ * périmé), avant les lectures : deux messages rapprochés n'envoient qu'un avis,
+ * et un essai qui échoue (messages privés fermés, motif effacé) ne se répète
+ * pas non plus à chaque message. Si l'exclusion est levée pendant l'envoi
+ * (ligne disparue), l'avis tout juste remis est aussitôt effacé.
  * Seul l'identifiant du message remis est gardé (`id_notice_user`), jamais un
  * nom : l'avis précédent est effacé quand un nouveau part, et le dernier à la
  * levée de l'exclusion (`deleteBanMessages`).
@@ -52,7 +55,15 @@ async function notifyBannedUser(client: Client, banInfo: BanInfo, now: number): 
     noticesInFlight.add(banInfo.id_user);
     try {
         const bdd: Bdd = await getBddInstance();
-        await bdd.update("Ban", {notice_user_at: now}, {id_user: banInfo.id_user});
+        const claimed = await bdd.write(
+            "UPDATE Ban SET notice_user_at = ? WHERE id_user = ? AND (notice_user_at IS NULL OR notice_user_at <= ?)",
+            [now, banInfo.id_user, now - BAN_NOTICE_INTERVAL_MS]);
+        if (claimed === 0) {
+            return;
+        }
+        const [current] = await bdd.raw<{ id_notice_user: string | null }>(
+            "SELECT id_notice_user FROM Ban WHERE id_user = ?", [banInfo.id_user]);
+        const previousNotice = current?.id_notice_user ?? null;
         const user: User = await client.users.fetch(banInfo.id_user);
         const logChannel: TextChannel = await client.channels.fetch(process.env.INFO_SERV!) as TextChannel;
         if (!logChannel) {
@@ -69,11 +80,13 @@ async function notifyBannedUser(client: Client, banInfo: BanInfo, now: number): 
         if (!sent) {
             return;
         }
-        await bdd.update("Ban", {id_notice_user: sent.id}, {id_user: banInfo.id_user});
-        if (banInfo.id_notice_user && banInfo.id_notice_user !== sent.id) {
-            // Un seul avis à la fois dans la conversation : l'ancien n'a plus d'objet.
+        const stored = await bdd.write("UPDATE Ban SET id_notice_user = ? WHERE id_user = ?", [sent.id, banInfo.id_user]);
+        // Exclusion levée pendant l'envoi : l'avis (et son motif) ne doit pas rester.
+        // Sinon, un seul avis à la fois dans la conversation : l'ancien n'a plus d'objet.
+        const obsolete = stored === 0 ? sent.id : previousNotice;
+        if (obsolete && (stored === 0 || obsolete !== sent.id)) {
             await user.createDM()
-                .then((dm) => dm.messages.delete(banInfo.id_notice_user!))
+                .then((dm) => dm.messages.delete(obsolete!))
                 .catch(() => undefined);
         }
     } finally {

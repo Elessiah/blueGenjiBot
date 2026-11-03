@@ -64,7 +64,7 @@ STATUS_SIZE=0
 STATUS_HISTORY_LINES=20
 
 write_status() {
-  mkdir -p "$(dirname "$STATUS_FILE")"
+  mkdir -p "$(dirname "$STATUS_FILE")" "$(dirname "$STATUS_HISTORY_FILE")"
   local now
   now="$(date --iso-8601=seconds)"
   cat > "$STATUS_FILE" <<JSON

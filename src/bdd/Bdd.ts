@@ -1121,6 +1121,19 @@ class Bdd {
     if (!this.Database) { return []; }
     return this.Database.all(query, values) as Promise<T[]>;
   }
+
+  /**
+   * Exécute une écriture SQL paramétrée et rend le nombre de lignes touchées,
+   * pour réserver une ligne en une instruction (`UPDATE … WHERE` + `changes`).
+   * @param query Requête SQL avec placeholders `?`.
+   * @param values Valeurs à binder (défaut: []).
+   * @returns Lignes modifiées (0 sans base ouverte).
+   */
+  async write(query: string, values: unknown[] = []): Promise<number> {
+    if (!this.Database) { return 0; }
+    const result = await this.Database.run(query, values);
+    return result.changes ?? 0;
+  }
 }
 
 export { Bdd, getBddInstance, closeBddInstance, resetBddInstance, resolveBddPath };
