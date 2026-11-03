@@ -303,3 +303,14 @@ test("checkBan_noticeRunsInBackground_verdictNotBlocked", async () => {
   await settleBanNotices();
   assert.equal(trace.dms.length, 1);
 });
+
+test("checkBan_noticeInstantInFuture_treatedAsStale", async () => {
+  const trace = newTrace();
+  await seedBan("banni-15");
+  const bdd = await getBddInstance();
+  // Horloge reculée ou valeur erronée : l'instant gardé est postérieur à « maintenant ».
+  await bdd.raw("UPDATE Ban SET notice_user_at = ? WHERE id_user = ?", [T0 + 10 * BAN_NOTICE_INTERVAL_MS, "banni-15"]);
+  await checkBan(fakeClient("none", trace), "banni-15", true, T0);
+  assert.equal(trace.dms.length, 1);
+  assert.deepEqual(await banRow("banni-15"), { id_notice_user: "msg-1", notice_user_at: T0 });
+});
