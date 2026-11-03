@@ -229,6 +229,41 @@ test("checkBan_dmRefused_attemptStillThrottled", async () => {
   assert.equal(trace.logs.length, logsAfterFirst);
 });
 
+test("checkBan_unbannedDuringSend_freshNoticeDeleted", async () => {
+  const trace = newTrace();
+  await seedBan("banni-12");
+  const base = fakeClient("none", trace) as unknown as { users: { fetch: (id: string) => Promise<Record<string, unknown>> } };
+  const client = {
+    ...base,
+    users: {
+      fetch: async (id: string) => {
+        const user = await base.users.fetch(id);
+        if (id === process.env.OWNER_ID) { return user; }
+        const send = user.send as (payload: unknown) => Promise<{ id: string }>;
+        // `/unban` passe pendant l'envoi : la ligne disparait avant l'enregistrement.
+        return { ...user, send: async (payload: unknown) => {
+          const bdd = await getBddInstance();
+          await bdd.raw("DELETE FROM Ban WHERE id_user = ?", ["banni-12"]);
+          return send(payload);
+        } };
+      },
+    },
+  } as unknown as Client;
+  await checkBan(client, "banni-12", true, T0);
+  assert.equal(trace.dms.length, 1);
+  assert.deepEqual(trace.deleted, ["banni-12:msg-1"]);
+});
+
+test("checkBan_recentNoticeInDatabase_noNotice", async () => {
+  // Un autre message a déjà réservé l'avis : la réservation conditionnelle refuse.
+  const trace = newTrace();
+  await seedBan("banni-13");
+  const bdd = await getBddInstance();
+  await bdd.raw("UPDATE Ban SET notice_user_at = ? WHERE id_user = ?", [T0 - 1000, "banni-13"]);
+  await checkBan(fakeClient("none", trace), "banni-13", true, T0);
+  assert.deepEqual(trace.dms, []);
+});
+
 test("checkBan_notice_datePrintedInParisTime", async () => {
   const trace = newTrace();
   const bdd = await getBddInstance();

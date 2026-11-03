@@ -82,6 +82,7 @@ test("scripts_retentionDaysValidated_beforePurge", () => {
 test("backupScript_writeStatus_appendsToHistory", () => {
   assert.match(BACKUP_SCRIPT, /: "\$\{STATUS_HISTORY_FILE:=\$\{STATUS_FILE%\.json\}-history\.jsonl\}"/);
   assert.match(BACKUP_SCRIPT, />> "\$STATUS_HISTORY_FILE"/);
+  assert.match(BACKUP_SCRIPT, /mkdir -p "\$\(dirname "\$STATUS_FILE"\)" "\$\(dirname "\$STATUS_HISTORY_FILE"\)"/);
   assert.match(BACKUP_SCRIPT, /tail -n "\$STATUS_HISTORY_LINES"/);
 });
 

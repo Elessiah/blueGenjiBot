@@ -9,6 +9,7 @@ import {
   formatBackupStatus,
   isBackupFresh,
   readBackupFailures,
+  FAILURE_CAUSE_MAX_LENGTH,
   readBackupStatus,
   STALE_AFTER_MS,
   type BackupStatus,
@@ -177,5 +178,13 @@ test("formatBackupFailures_some_oneLinePerFailure", () => {
     ]),
     "❌ Échec depuis le rapport précédent : 2026-09-02 — rclone injoignable.\n" +
       "❌ Échec depuis le rapport précédent : 2026-09-03 — cause inconnue.",
+  );
+});
+
+test("formatBackupFailures_longCause_shortened", () => {
+  const cause = "x".repeat(FAILURE_CAUSE_MAX_LENGTH + 50);
+  assert.equal(
+    formatBackupFailures([{ date: "2026-09-01T23:49:00+02:00", ok: false, error: cause }]),
+    `❌ Échec depuis le rapport précédent : 2026-09-01 — ${"x".repeat(FAILURE_CAUSE_MAX_LENGTH)}….`,
   );
 });

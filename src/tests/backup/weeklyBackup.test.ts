@@ -130,3 +130,22 @@ test("sendDatabaseBackup_failureSinceLastReport_alertsWithFailureLine", async ()
     await fs.promises.rm(dir, { recursive: true, force: true });
   }
 });
+
+test("sendDatabaseBackup_latestRunFailed_failureNotRepeatedFromHistory", async () => {
+  const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "bluegenji-weekly-latest-"));
+  const statusPath = path.join(dir, "status.json");
+  const date = new Date().toISOString();
+  await fs.promises.writeFile(statusPath, JSON.stringify({ date, ok: false, error: "rclone injoignable" }));
+  await fs.promises.writeFile(path.join(dir, "status-history.jsonl"), JSON.stringify({ date, ok: false, error: "rclone injoignable" }) + "\n");
+  try {
+    await withBackupEnv({ BACKUP_STATUS_PATH: statusPath }, async () => {
+      const sent: Sent[] = [];
+
+      await sendDatabaseBackup(ownerClient(sent), checksWith(true));
+
+      assert.doesNotMatch(sent[0].content, /Échec depuis le rapport précédent/);
+    });
+  } finally {
+    await fs.promises.rm(dir, { recursive: true, force: true });
+  }
+});

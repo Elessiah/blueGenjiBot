@@ -37,6 +37,20 @@ test("bdd.raw supporte les requetes GROUP BY (cas reel: stats par bucket)", asyn
   assert.equal(mapped["b"], 1);
 });
 
+test("bddWrite_matchingRows_returnsChangedCount", async () => {
+  const bdd = await getBddInstance();
+  await bdd.set("OGMsg", ["id_msg", "id_author"], ["write-1", "w-author"]);
+  await bdd.set("OGMsg", ["id_msg", "id_author"], ["write-2", "w-author"]);
+  const changed = await bdd.write("UPDATE OGMsg SET id_author = ? WHERE id_author = ?", ["w-author-2", "w-author"]);
+  assert.equal(changed, 2);
+});
+
+test("bddWrite_noMatchingRow_returnsZero", async () => {
+  const bdd = await getBddInstance();
+  const changed = await bdd.write("UPDATE OGMsg SET id_author = ? WHERE id_author = ?", ["x", "personne"]);
+  assert.equal(changed, 0);
+});
+
 test.after(async () => {
   await closeBddInstance();
   await new Promise((r) => setTimeout(r, 50));
