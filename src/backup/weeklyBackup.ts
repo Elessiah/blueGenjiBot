@@ -35,11 +35,12 @@ export async function sendDatabaseBackup(
   const stamp = new Date().toISOString().slice(0, 10);
 
   try {
-    const status = await readBackupStatus(statusPath);
+    // Deux lectures indépendantes : le statut et l'historique des échecs.
+    const [status, history] = await Promise.all([readBackupStatus(statusPath), readBackupFailures(historyPath)]);
     // Deux sauvegardes par semaine : un échec du mardi ne doit pas disparaître
     // derrière le succès du dimanche.
     // Le dernier passage figure déjà dans la ligne du statut : pas deux ❌ pour un incident.
-    const failures = (await readBackupFailures(historyPath)).filter((failure) => failure.date !== status?.date);
+    const failures = history.filter((failure) => failure.date !== status?.date);
     const failuresLine = formatBackupFailures(failures);
     const cloudLine = failuresLine === null ? formatBackupStatus(status) : `${formatBackupStatus(status)}\n${failuresLine}`;
     // L'état du disque intéresse surtout quand la place manque : on le joint dans les deux cas.

@@ -143,7 +143,7 @@ async function checkBan(client: Client,
     // Rien à faire dans l'intervalle : aucune promesse n'est créée pour les messages suivants.
     // Un instant dans le futur (horloge reculée) ne bloque pas l'avis : il est périmé.
     const elapsed = now - Number(banInfo.notice_user_at ?? 0);
-    if (elapsed >= 0 && elapsed < BAN_NOTICE_INTERVAL_MS) {
+    if ((elapsed >= 0 && elapsed < BAN_NOTICE_INTERVAL_MS) || noticesInFlight.has(banInfo.id_user)) {
         return "BANNED";
     }
     const notice: Promise<unknown> = notifyBannedUser(client, banInfo, now)

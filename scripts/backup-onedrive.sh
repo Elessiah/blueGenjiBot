@@ -80,8 +80,8 @@ JSON
   # Au mieux : un historique qui ne s'écrit pas ne fait pas échouer la sauvegarde.
   {
     printf '{"date":"%s","ok":%s,"error":"%s"}\n' "$now" "$STATUS_OK" "$STATUS_ERROR" >> "$STATUS_HISTORY_FILE" \
-      && tail -n "$STATUS_HISTORY_LINES" "$STATUS_HISTORY_FILE" > "$STATUS_HISTORY_FILE.tmp" \
-      && mv "$STATUS_HISTORY_FILE.tmp" "$STATUS_HISTORY_FILE"
+      && tail -n "$STATUS_HISTORY_LINES" "$STATUS_HISTORY_FILE" > "$STATUS_HISTORY_FILE.tmp.$$" \
+      && mv "$STATUS_HISTORY_FILE.tmp.$$" "$STATUS_HISTORY_FILE"
   } || echo "[backup] historique des statuts non écrit." >&2
 }
 
