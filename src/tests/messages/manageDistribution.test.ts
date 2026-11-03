@@ -14,6 +14,7 @@ process.env.INFO_SERV = "admin-channel-1";
 
 import { getBddInstance, resetBddInstance } from "../../bdd/Bdd.js";
 import { manageDistribution } from "../../messages/manageDistribution.js";
+import { settleBanNotices } from "../../check/checkBan.js";
 import type { Client, Message } from "discord.js";
 
 /**
@@ -234,13 +235,18 @@ test("auteur exclu : réaction d'exclusion puis liste des mots-clés", async () 
   await resetTables();
   await getBddInstance().then((bdd) => bdd.raw("INSERT INTO Ban (id_user, id_moderator, id_reason) VALUES ('author-1', 'mod', 'raison')", []));
   const r = await run({ content: "lfs eu gold" });
+  // L'avis part en arrière-plan : il n'a pas d'ordre garanti face à la réaction.
+  await settleBanNotices();
   assert.equal(r.ok, false);
   assert.equal(r.trace.length, 4);
-  assert.equal(r.trace[0], NO_REGION_NOTE);
+  const notice = r.trace.filter((line) => line.startsWith("dm:"));
+  const others = r.trace.filter((line) => !line.startsWith("dm:"));
+  assert.equal(others[0], NO_REGION_NOTE);
   // Bilingue (BOT-NOTIF-LANG) : français, anglais, puis le motif une seule fois.
-  assert.match(r.trace[1], /^dm:author-1 Vous êtes exclu du relais depuis le .+ :\n\n\*\*— English —\*\*\nYou have been banned from the relay since .+: \nSpam$/);
-  assert.equal(r.trace[2], "react 🚫");
-  assert.match(r.trace[3], /^reply Your message has no keyword for a targeted service/);
+  assert.equal(notice.length, 1);
+  assert.match(notice[0], /^dm:author-1 Vous êtes exclu du relais depuis le .+ :\n\n\*\*— English —\*\*\nYou have been banned from the relay since .+: \nSpam$/);
+  assert.equal(others[1], "react 🚫");
+  assert.match(others[2], /^reply Your message has no keyword for a targeted service/);
 });
 
 test("salon partenaire perdu : journalisé, compté comme aucun relais", async () => {

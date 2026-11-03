@@ -13,8 +13,15 @@ process.env.OWNER_ID = "owner-1";
 process.env.INFO_SERV = "admin-channel-1";
 
 import { getBddInstance, closeBddInstance } from "../../bdd/Bdd.js";
-import { BAN_NOTICE_INTERVAL_MS, checkBan } from "../../check/checkBan.js";
+import { BAN_NOTICE_INTERVAL_MS, checkBan as checkBanNow, settleBanNotices } from "../../check/checkBan.js";
 import type { Client } from "discord.js";
+
+/** `checkBan`, puis l'attente de l'avis parti en arrière-plan. */
+async function checkBan(...args: Parameters<typeof checkBanNow>): ReturnType<typeof checkBanNow> {
+  const verdict = await checkBanNow(...args);
+  await settleBanNotices();
+  return verdict;
+}
 
 /** Ce que le faux client a recu, pour distinguer « pas appele » de « a echoue ». */
 type Trace = { dms: string[]; logs: string[]; deleted: string[] };
@@ -277,4 +284,22 @@ test.after(async () => {
   await closeBddInstance();
   await new Promise((resolve) => setTimeout(resolve, 100));
   try { fs.unlinkSync(TMP_DB); } catch { /* deja parti */ }
+});
+
+test("checkBan_noticeRunsInBackground_verdictNotBlocked", async () => {
+  const trace = newTrace();
+  await seedBan("banni-14");
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const base = fakeClient("none", trace) as unknown as { users: { fetch: (id: string) => Promise<Record<string, unknown>> } };
+  const client = {
+    ...base,
+    users: { fetch: async (id: string) => { await gate; return base.users.fetch(id); } },
+  } as unknown as Client;
+  const verdict = await checkBanNow(client, "banni-14", true, T0);
+  assert.equal(verdict, "BANNED");
+  assert.equal(trace.dms.length, 0);
+  release();
+  await settleBanNotices();
+  assert.equal(trace.dms.length, 1);
 });
