@@ -282,7 +282,7 @@ export async function deleteBanMessages(client: Client, ban: Ban): Promise<numbe
   if (ban.id_notice_user) { dmDeletions.push([ban.id_user, ban.id_notice_user]); }
   const dms = await Promise.all(dmDeletions.map(([userId]) => client.users
     .fetch(userId)
-    .then((user) => user.createDM())
+    .then((user) => user.dmChannel ?? user.createDM())
     .catch(() => null)));
   dmDeletions.forEach(([, messageId], index) => {
     const dm = dms[index];

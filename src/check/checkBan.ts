@@ -19,7 +19,7 @@ import type {BanInfo, BanVerdict} from "./types.js";
  */
 export const BAN_NOTICE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
-/** Avis en cours d'envoi en arrière-plan (suivis pour les tests et l'arrêt propre). */
+/** Avis en cours d'envoi en arrière-plan (suivis pour que les tests les attendent ; un arrêt du bot en plein envoi perd l'avis du jour, au mieux par nature). */
 const pendingNotices = new Set<Promise<unknown>>();
 
 /**
@@ -59,8 +59,7 @@ const noticesInFlight = new Set<string>();
  * @param now Instant de l'essai (ms).
  */
 async function notifyBannedUser(client: Client, banInfo: BanInfo, now: number): Promise<void> {
-    const lastTry = Number(banInfo.notice_user_at ?? 0);
-    if (now - lastTry < BAN_NOTICE_INTERVAL_MS || noticesInFlight.has(banInfo.id_user)) {
+    if (noticesInFlight.has(banInfo.id_user)) {
         return;
     }
     noticesInFlight.add(banInfo.id_user);
@@ -95,9 +94,10 @@ async function notifyBannedUser(client: Client, banInfo: BanInfo, now: number): 
         // Exclusion levée pendant l'envoi : l'avis (et son motif) ne doit pas rester.
         // Sinon, un seul avis à la fois dans la conversation : l'ancien n'a plus d'objet.
         const obsolete = stored === 0 ? sent.id : previousNotice;
-        if (obsolete && (stored === 0 || obsolete !== sent.id)) {
-            await user.createDM()
-                .then((dm) => dm.messages.delete(obsolete!))
+        if (obsolete) {
+            // La conversation est déjà en cache après l'envoi : pas d'appel de plus.
+            await Promise.resolve(user.dmChannel ?? user.createDM())
+                .then((dm) => dm.messages.delete(obsolete))
                 .catch(() => undefined);
         }
     } finally {
@@ -140,6 +140,10 @@ async function checkBan(client: Client,
     // Le verdict est déjà rendu : prévenir est un service, pas une condition, et
     // il coûte une demi-douzaine d'appels Discord séquentiels. Il part donc en
     // arrière-plan, au plus une fois par jour : le message relayé n'attend pas.
+    // Rien à faire dans l'intervalle : aucune promesse n'est créée pour les messages suivants.
+    if (now - Number(banInfo.notice_user_at ?? 0) < BAN_NOTICE_INTERVAL_MS) {
+        return "BANNED";
+    }
     const notice: Promise<unknown> = notifyBannedUser(client, banInfo, now)
         .catch((error: unknown) => sendLog(client, "Failed to notify banned user : " + (error as Error).message))
         .catch(() => undefined)

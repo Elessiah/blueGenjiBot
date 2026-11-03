@@ -418,6 +418,8 @@ class Bdd {
    * Rappels d'adhésion programmés avec l'ancien avis de péremption par défaut
    * (français seul) : remis au texte bilingue d'aujourd'hui. Seul le texte par
    * défaut exact est visé, jamais un message écrit par l'auteur de la commande.
+   * Migration transitoire : à retirer une fois jouée sur la production (une seule
+   * instruction sur une table de quelques lignes d'ici là).
    */
   private async upgradeAdhesionDefaults(): Promise<void> {
     await this.Database?.run(
