@@ -690,8 +690,8 @@ test("retryBanNoticeWithdrawals_morePendingThanCap_cappedPerRun", async () => {
   await clearWithdrawals();
 });
 
-test("retryBanNoticeWithdrawals_lastTryWriteFails_refusalStillAnnouncedAndNotCountedUntried", async () => {
-  // Dernier essai refusé, oubli en échec : le refus est dit, le bloc ne le compte pas « sans essai ».
+test("retryBanNoticeWithdrawals_lastTryWriteFails_announcedOnceByBulkDrop", async () => {
+  // Dernier essai refusé, oubli en échec : l'abandon d'un bloc l'emporte et l'annonce, une seule fois.
   await clearWithdrawals();
   const bdd = await getBddInstance();
   await bdd.raw("INSERT INTO BanNoticeWithdrawal (id_user, id_message, queued_at) VALUES (?, ?, ?)", [BAN.id_user, "notice-t", NOW]);
@@ -707,8 +707,30 @@ test("retryBanNoticeWithdrawals_lastTryWriteFails_refusalStillAnnouncedAndNotCou
     bdd.write = original;
   }
 
-  assert.deepEqual(logs, ["Ban notice withdrawal refused by Discord"]);
+  assert.deepEqual(logs, ["1 ban notice withdrawals abandoned after " + BAN_NOTICE_WITHDRAWAL_RETRY_DAYS + " days"]);
   assert.deepEqual(await pendingWithdrawals(), []);
+});
+
+test("retryBanNoticeWithdrawals_recentRefusedWriteFails_notAnnouncedAndKept", async () => {
+  // Écriture en échec : rien n'est annoncé, la ligne reste pour la nuit suivante.
+  await clearWithdrawals();
+  const bdd = await getBddInstance();
+  await bdd.raw("INSERT INTO BanNoticeWithdrawal (id_user, id_message, queued_at) VALUES (?, ?, ?)", [BAN.id_user, "notice-u", NOW]);
+  const original = bdd.write.bind(bdd);
+  bdd.write = async (query: string, values?: unknown[]) => {
+    if (query.startsWith("UPDATE Ban SET id_notice_user = NULL WHERE id_user")) { throw new Error("SQLITE_BUSY"); }
+    return original(query, values);
+  };
+  const logs: string[] = [];
+  try {
+    await assert.rejects(retryBanNoticeWithdrawals(noticeFailureClient(logs, REFUSED(50001)), NOW + DAY), /SQLITE_BUSY/);
+  } finally {
+    bdd.write = original;
+  }
+
+  assert.deepEqual(logs, []);
+  assert.equal((await pendingWithdrawals()).length, 1);
+  await clearWithdrawals();
 });
 
 test("retryBanNoticeWithdrawals_expiredAndRecent_expiredTriedFirst", async () => {
