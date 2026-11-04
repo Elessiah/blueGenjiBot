@@ -78,11 +78,6 @@ test("createVoiceChannel_noToken_returns401", async () => {
   assert.deepEqual(world.creations, []);
 });
 
-test("countVoiceChannel_wrongToken_returns401", async () => {
-  const reply = await call(`/internal/voice/channels/${UNTRACKED}/count`, { token: "faux" });
-  assert.equal(reply.status, 401);
-});
-
 test("releaseVoiceChannel_noToken_returns401", async () => {
   const reply = await call(`/internal/voice/channels/${UNTRACKED}/release`, { method: "POST", token: null });
   assert.equal(reply.status, 401);
@@ -132,34 +127,15 @@ test("createVoiceChannel_clientNotReady_returns503", async () => {
   assert.deepEqual(reply, { status: 503, body: { error: "DISCORD_NOT_READY" } });
 });
 
-test("countVoiceChannel_invalidId_returns400", async () => {
-  const reply = await call("/internal/voice/channels/abc/count");
-  assert.deepEqual(reply, { status: 400, body: { error: "INVALID_CHANNEL_ID" } });
-});
-
-test("countVoiceChannel_trackedChannel_returnsMembersOnly", async () => {
+test("countVoiceChannel_routeRemoved_returns404", async () => {
+  // EF-43 : le site ne demande plus jamais combien de personnes sont dans un salon.
   const { body } = await create({ key: "match:1:team:2", name: "Les Genji" });
-  const channelId = String(body.channelId);
-  world.voices.get(channelId)!.members.size = 4;
 
-  const reply = await call(`/internal/voice/channels/${channelId}/count`);
+  const response = await fetch(`${baseUrl}/internal/voice/channels/${String(body.channelId)}/count`, {
+    headers: { "x-internal-token": TOKEN },
+  });
 
-  assert.deepEqual(reply, { status: 200, body: { members: 4 } });
-});
-
-test("countVoiceChannel_untrackedChannel_returns404", async () => {
-  addVoice(UNTRACKED, 5, DEFAULT_VOICE_CATEGORY_ID);
-  const reply = await call(`/internal/voice/channels/${UNTRACKED}/count`);
-  assert.deepEqual(reply, { status: 404, body: { error: "VOICE_CHANNEL_NOT_TRACKED" } });
-});
-
-test("countVoiceChannel_deletedByHand_returns404NotFound", async () => {
-  const { body } = await create({ key: "match:1:team:2", name: "Les Genji" });
-  world.voices.delete(String(body.channelId));
-
-  const reply = await call(`/internal/voice/channels/${String(body.channelId)}/count`);
-
-  assert.deepEqual(reply, { status: 404, body: { error: "VOICE_CHANNEL_NOT_FOUND" } });
+  assert.equal(response.status, 404);
 });
 
 test("releaseVoiceChannel_invalidId_returns400", async () => {
@@ -194,13 +170,3 @@ test("releaseVoiceChannel_untrackedChannel_returns404AndNothingDeleted", async (
   assert.deepEqual(world.deletions, []);
 });
 
-test("countVoiceChannel_discordFails_returns502AndLogsWithoutMembers", async () => {
-  const { body } = await create({ key: "match:1:team:2", name: "Les Genji" });
-  world.fetchVoiceError = new Error("socket hang up");
-
-  const reply = await call(`/internal/voice/channels/${String(body.channelId)}/count`);
-
-  assert.deepEqual(reply, { status: 502, body: { error: "VOICE_DISCORD_ERROR" } });
-  assert.equal(world.logs.length, 1);
-  assert.match(world.logs[0], /VOICE_DISCORD_ERROR/);
-});
