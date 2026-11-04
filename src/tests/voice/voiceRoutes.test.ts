@@ -78,11 +78,6 @@ test("createVoiceChannel_noToken_returns401", async () => {
   assert.deepEqual(world.creations, []);
 });
 
-test("countVoiceChannel_wrongToken_returns401", async () => {
-  const reply = await call(`/internal/voice/channels/${UNTRACKED}/count`, { token: "faux" });
-  assert.equal(reply.status, 401);
-});
-
 test("releaseVoiceChannel_noToken_returns401", async () => {
   const reply = await call(`/internal/voice/channels/${UNTRACKED}/release`, { method: "POST", token: null });
   assert.equal(reply.status, 401);
@@ -120,6 +115,18 @@ test("createVoiceChannel_missingPermissions_returns503", async () => {
   assert.deepEqual(reply, { status: 503, body: { error: "VOICE_MISSING_PERMISSIONS" } });
 });
 
+test("createVoiceChannel_discordErrorQuotingName_logsCodeOnly", async () => {
+  world.createError = discordError(50035, "Invalid Form Body name: Equipe Bleue");
+
+  const reply = await create({ key: "match:1:team:2", name: "Equipe Bleue" });
+
+  assert.deepEqual(reply, { status: 502, body: { error: "VOICE_DISCORD_ERROR" } });
+  // Le message de Discord recopie le nom reçu : seul le code part au salon de logs.
+  assert.equal(world.logs.length, 1);
+  assert.match(world.logs[0], /code 50035/);
+  assert.doesNotMatch(world.logs[0], /Equipe/);
+});
+
 test("createVoiceChannel_categoryMissing_returns503", async () => {
   world.category = "missing";
   const reply = await create({ key: "match:1:team:2", name: "Les Genji" });
@@ -132,34 +139,102 @@ test("createVoiceChannel_clientNotReady_returns503", async () => {
   assert.deepEqual(reply, { status: 503, body: { error: "DISCORD_NOT_READY" } });
 });
 
-test("countVoiceChannel_invalidId_returns400", async () => {
-  const reply = await call("/internal/voice/channels/abc/count");
-  assert.deepEqual(reply, { status: 400, body: { error: "INVALID_CHANNEL_ID" } });
-});
-
-test("countVoiceChannel_trackedChannel_returnsMembersOnly", async () => {
+test("countVoiceChannel_routeRemoved_returns404WithCode", async () => {
+  // EF-43 : le site ne demande plus jamais combien de personnes sont dans un salon.
   const { body } = await create({ key: "match:1:team:2", name: "Les Genji" });
-  const channelId = String(body.channelId);
-  world.voices.get(channelId)!.members.size = 4;
-
-  const reply = await call(`/internal/voice/channels/${channelId}/count`);
-
-  assert.deepEqual(reply, { status: 200, body: { members: 4 } });
-});
-
-test("countVoiceChannel_untrackedChannel_returns404", async () => {
-  addVoice(UNTRACKED, 5, DEFAULT_VOICE_CATEGORY_ID);
-  const reply = await call(`/internal/voice/channels/${UNTRACKED}/count`);
-  assert.deepEqual(reply, { status: 404, body: { error: "VOICE_CHANNEL_NOT_TRACKED" } });
-});
-
-test("countVoiceChannel_deletedByHand_returns404NotFound", async () => {
-  const { body } = await create({ key: "match:1:team:2", name: "Les Genji" });
-  world.voices.delete(String(body.channelId));
 
   const reply = await call(`/internal/voice/channels/${String(body.channelId)}/count`);
 
-  assert.deepEqual(reply, { status: 404, body: { error: "VOICE_CHANNEL_NOT_FOUND" } });
+  // Un code JSON, jamais la page HTML d'Express qui recopie le chemin.
+  assert.deepEqual(reply, { status: 404, body: { error: "INTERNAL_ROUTE_NOT_FOUND" } });
+});
+
+test("countVoiceChannel_postOnRemovedRoute_returns404Code", async () => {
+  const reply = await call(`/internal/voice/channels/${UNTRACKED}/count`, { method: "POST", body: {} });
+
+  assert.deepEqual(reply, { status: 404, body: { error: "INTERNAL_ROUTE_NOT_FOUND" } });
+});
+
+test("unknownRouteOutsideInternal_returns404Code", async () => {
+  const reply = await call("/foo", { token: null });
+
+  // Hors de `/internal`, le code ne désigne pas l'API.
+  assert.deepEqual(reply, { status: 404, body: { error: "NOT_FOUND" } });
+});
+
+/** Corps JSON illisible : envoyé tel quel, sans passer par `JSON.stringify`. */
+async function postMalformed(token: string | null): Promise<Reply> {
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  if (token !== null) { headers["x-internal-token"] = token; }
+  const response = await fetch(`${baseUrl}/internal/voice/channels`, { method: "POST", headers, body: "{bad" });
+  return { status: response.status, body: JSON.parse(await response.text()) };
+}
+
+test("createVoiceChannel_malformedJson_returns400InvalidJson", async () => {
+  const reply = await postMalformed(TOKEN);
+
+  // Un code, jamais la page d'erreur d'Express (pile d'appel, chemins).
+  assert.deepEqual(reply, { status: 400, body: { error: "INVALID_JSON" } });
+  assert.deepEqual(world.creations, []);
+});
+
+test("createVoiceChannel_malformedJson_logsCodeOnly", async (t) => {
+  const logged = t.mock.method(console, "error", () => undefined);
+
+  await postMalformed(TOKEN);
+
+  // Le message d'un JSON illisible recopie le corps : seul le code part au journal.
+  assert.deepEqual(logged.mock.calls.map((c) => c.arguments), [["[internalApi] INVALID_JSON"]]);
+});
+
+test("unknownRouteOutsideInternal_malformedBodyNoToken_returns404Code", async () => {
+  const response = await fetch(`${baseUrl}/foo`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{bad",
+  });
+
+  // Hors de `/internal`, le corps n'est jamais lu.
+  assert.deepEqual(
+    { status: response.status, body: JSON.parse(await response.text()) },
+    { status: 404, body: { error: "NOT_FOUND" } },
+  );
+});
+
+/** POST brut vers la création, avec le jeton : seul le corps et son type varient. */
+async function postRaw(contentType: string, body: string): Promise<Reply> {
+  const headers = { "content-type": contentType, "x-internal-token": TOKEN };
+  const response = await fetch(`${baseUrl}/internal/voice/channels`, { method: "POST", headers, body });
+  return { status: response.status, body: JSON.parse(await response.text()) };
+}
+
+test("createVoiceChannel_oversizedBody_returns413", async (t) => {
+  t.mock.method(console, "error", () => undefined);
+
+  const reply = await postRaw("application/json", JSON.stringify({ pad: "x".repeat(200_000) }));
+
+  assert.deepEqual(reply, { status: 413, body: { error: "PAYLOAD_TOO_LARGE" } });
+});
+
+test("createVoiceChannel_unknownCharset_returns415", async (t) => {
+  t.mock.method(console, "error", () => undefined);
+
+  const reply = await postRaw("application/json; charset=foo", "{}");
+
+  assert.deepEqual(reply, { status: 415, body: { error: "UNSUPPORTED_ENCODING" } });
+});
+
+test("createVoiceChannel_malformedJsonNoToken_returns401", async () => {
+  const reply = await postMalformed(null);
+
+  // La garde passe avant la lecture du corps.
+  assert.deepEqual(reply, { status: 401, body: { error: "UNAUTHORIZED" } });
+});
+
+test("unknownInternalRoute_noToken_returns401", async () => {
+  const reply = await call("/internal/unknown", { token: null });
+
+  assert.deepEqual(reply, { status: 401, body: { error: "UNAUTHORIZED" } });
 });
 
 test("releaseVoiceChannel_invalidId_returns400", async () => {
@@ -194,13 +269,3 @@ test("releaseVoiceChannel_untrackedChannel_returns404AndNothingDeleted", async (
   assert.deepEqual(world.deletions, []);
 });
 
-test("countVoiceChannel_discordFails_returns502AndLogsWithoutMembers", async () => {
-  const { body } = await create({ key: "match:1:team:2", name: "Les Genji" });
-  world.fetchVoiceError = new Error("socket hang up");
-
-  const reply = await call(`/internal/voice/channels/${String(body.channelId)}/count`);
-
-  assert.deepEqual(reply, { status: 502, body: { error: "VOICE_DISCORD_ERROR" } });
-  assert.equal(world.logs.length, 1);
-  assert.match(world.logs[0], /VOICE_DISCORD_ERROR/);
-});

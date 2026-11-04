@@ -8,13 +8,14 @@ import { ChannelType, type VoiceState } from "discord.js";
 
 import { getBddInstance, resetBddInstance } from "../../bdd/Bdd.js";
 import {
+  ABANDONED_MAX_AGE_MS,
   DEFAULT_VOICE_CATEGORY_ID,
   FALLBACK_VOICE_NAME,
   RELEASED_MAX_AGE_MS,
   UNRELEASED_MAX_AGE_MS,
+  VOICE_SWEEP_CRON,
   VOICE_USER_LIMIT,
   VoiceChannelError,
-  countVoiceMembers,
   ensureTeamVoiceChannel,
   handleVoiceChannelDeleted,
   handleVoiceStateUpdate,
@@ -26,6 +27,7 @@ import {
   shouldSweep,
   sweepVoiceChannels,
   voiceCategoryId,
+  voiceErrorDetail,
 } from "../../voice/matchVoice.js";
 import { addVoice, discordError, fakeVoiceClient, resetWorld, world } from "./fakeVoiceClient.js";
 
@@ -244,6 +246,15 @@ test("ensureTeamVoiceChannel_categoryUnknown_categoryUnavailable", async () => {
   assert.deepEqual(await tracked(), []);
 });
 
+test("ensureTeamVoiceChannel_categoryUnknown_messageNamesCategoryId", async () => {
+  // L'identifiant de la catégorie est de la configuration : il dit laquelle manque.
+  world.category = "missing";
+  await assert.rejects(ensureTeamVoiceChannel(client, KEY, "Les Genji", T0), {
+    name: "VoiceChannelError",
+    message: `catégorie ${CATEGORY} introuvable`,
+  });
+});
+
 test("ensureTeamVoiceChannel_categoryIsNotACategory_categoryUnavailable", async () => {
   world.category = "text";
   await rejectsWith(ensureTeamVoiceChannel(client, KEY, "Les Genji", T0), "VOICE_CATEGORY_UNAVAILABLE");
@@ -268,43 +279,34 @@ test("ensureTeamVoiceChannel_otherDiscordError_discordErrorWithoutAlert", async 
   assert.deepEqual(world.logs, []);
 });
 
-// --- Compte ----------------------------------------------------------------
-
-test("countVoiceMembers_trackedChannel_returnsCountOnly", async () => {
-  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
-  world.voices.get(channelId)!.members.size = 3;
-
-  assert.equal(await countVoiceMembers(client, channelId), 3);
+test("voiceErrorDetail_discordError_returnsCodeOnly", () => {
+  assert.equal(voiceErrorDetail(discordError(50035, "Invalid Form Body name: Equipe Bleue")), "code 50035");
 });
 
-test("countVoiceMembers_untrackedChannel_notTracked", async () => {
-  addVoice("400000000000000001", 4, CATEGORY);
-  await rejectsWith(countVoiceMembers(client, "400000000000000001"), "VOICE_CHANNEL_NOT_TRACKED");
+test("voiceErrorDetail_codeWithSpaces_returnsUnknownCode", () => {
+  assert.equal(voiceErrorDetail(Object.assign(new Error("x"), { code: "texte d'un joueur" })), "code inconnu");
 });
 
-test("countVoiceMembers_channelDeletedByHand_notFoundAndUntracked", async () => {
-  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
-  world.voices.delete(channelId);
+test("voiceErrorDetail_errorWithStatus_appendsStatus", () => {
+  // Limite de débit de Discord : le statut distingue un 429 d'une panne.
+  const error = Object.assign(new Error("You are being rate limited"), { status: 429 });
 
-  await rejectsWith(countVoiceMembers(client, channelId), "VOICE_CHANNEL_NOT_FOUND");
-  assert.deepEqual(await tracked(), []);
+  assert.equal(voiceErrorDetail(error), "code inconnu, statut 429");
 });
 
-test("countVoiceMembers_trackedIdIsNotAVoiceChannel_notFoundAndUntracked", async () => {
-  const voice = addVoice("400000000000000009", 7, CATEGORY);
-  voice.type = ChannelType.GuildText;
-  await track(voice.id, KEY, T0, null);
-
-  await rejectsWith(countVoiceMembers(client, voice.id), "VOICE_CHANNEL_NOT_FOUND");
-  assert.deepEqual(await tracked(), []);
+test("voiceErrorDetail_voiceChannelError_returnsCodeAndContext", () => {
+  assert.equal(voiceErrorDetail(new VoiceChannelError("VOICE_CATEGORY_UNAVAILABLE", "catégorie 1 introuvable")),
+    "VOICE_CATEGORY_UNAVAILABLE (catégorie 1 introuvable)");
 });
 
-test("countVoiceMembers_discordFetchFails_discordError", async () => {
-  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
-  world.fetchVoiceError = new Error("socket hang up");
+test("VoiceChannelError_causeWithMessage_messageHasContextAndCodeOnly", () => {
+  const error = new VoiceChannelError("VOICE_DISCORD_ERROR", "création du salon", discordError(50035, "Invalid Form Body name: Equipe Bleue"));
 
-  await rejectsWith(countVoiceMembers(client, channelId), "VOICE_DISCORD_ERROR");
-  assert.equal((await tracked()).length, 1);
+  assert.equal(error.message, "création du salon : code 50035");
+});
+
+test("voiceErrorDetail_noCode_returnsUnknownCode", () => {
+  assert.equal(voiceErrorDetail(new Error("UNIQUE constraint failed: Equipe Bleue")), "code inconnu");
 });
 
 // --- Libération ------------------------------------------------------------
@@ -598,16 +600,6 @@ test("sweepVoiceChannels_untrackedChannelInCategory_neverTouched", async () => {
 
 // --- Salon suivi déplacé hors de la catégorie -----------------------------
 
-test("countVoiceMembers_channelMovedOutOfCategory_notFoundAndUntracked", async () => {
-  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
-  world.voices.get(channelId)!.parentId = OTHER_CATEGORY;
-
-  await rejectsWith(countVoiceMembers(client, channelId), "VOICE_CHANNEL_NOT_FOUND");
-
-  assert.deepEqual(await tracked(), []);
-  assert.deepEqual(world.deletions, []);
-});
-
 test("ensureTeamVoiceChannel_trackedChannelMovedOut_newChannelCreatedInCategory", async () => {
   const first = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
   world.voices.get(first.channelId)!.parentId = OTHER_CATEGORY;
@@ -645,4 +637,25 @@ test("handleVoiceStateUpdate_releasedChannelMovedThenEmptied_untrackedNotDeleted
 
   assert.deepEqual(world.deletions, []);
   assert.deepEqual(await tracked(), []);
+});
+
+// Le site recopie ces durées (`VOICE_BOT_*` de `lib/shared/match-voice.ts`) dans
+// /rgpd et le registre (T18) : les changer ici impose de changer le site et ses
+// textes légaux dans le même temps (ERREUR.txt, EF-43).
+const HOUR_MS = 60 * 60 * 1000;
+
+test("voiceDurations_releasedMaxAge_matchesSiteDeclared24Hours", () => {
+  assert.equal(RELEASED_MAX_AGE_MS, 24 * HOUR_MS);
+});
+
+test("voiceDurations_unreleasedMaxAge_matchesSiteDeclared48Hours", () => {
+  assert.equal(UNRELEASED_MAX_AGE_MS, 48 * HOUR_MS);
+});
+
+test("voiceDurations_abandonedMaxAge_matchesSiteDeclared96Hours", () => {
+  assert.equal(ABANDONED_MAX_AGE_MS, 96 * HOUR_MS);
+});
+
+test("voiceDurations_sweepCron_matchesSiteDeclared30Minutes", () => {
+  assert.equal(VOICE_SWEEP_CRON, "*/30 * * * *");
 });

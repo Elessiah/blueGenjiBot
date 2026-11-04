@@ -379,14 +379,19 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
 
 ### Salons vocaux d'équipe des matchs (MATCH-VOICE)
 
-Un quart d'heure avant un match, le site demande un salon vocal par équipe ;
-il en lit l'occupation pour autoriser le lancement, puis le rend une fois le
-score confirmé. Les salons sont créés dans la catégorie `VOICE_CATEGORY_ID`
+Un quart d'heure avant un match, le site demande un salon vocal par équipe,
+puis le rend une fois le score confirmé. Le lancement du match n'en dépend
+pas, et le site ne demande jamais qui se trouve dans un salon, ni combien
+(la route de comptage `GET …/count` est retirée : elle répond, comme toute
+route inconnue, `404 INTERNAL_ROUTE_NOT_FOUND`). Les salons sont créés dans la catégorie `VOICE_CATEGORY_ID`
 (défaut : catégorie des matchs du serveur BlueGenji), limités à **5 places**,
-permissions alignées sur la catégorie. Le bot ne compte ni ne supprime jamais
+permissions alignées sur la catégorie. Le bot ne supprime jamais
 un salon qu'il n'a pas créé : seuls les salons inscrits dans son suivi
 (table `MatchVoiceChannel`) sont concernés. Le rôle du bot doit avoir
-« Gérer les salons » sur la catégorie.
+« Gérer les salons » sur la catégorie. Une erreur vocale ne part au salon de logs
+que par son code (`code 50035, statut 400`) et l'opération en cours, jamais par le
+message de Discord ou de SQLite, qui peut recopier le nom ou la clé reçus (une
+catégorie introuvable est nommée par son identifiant, qui est de la configuration).
 
 - `POST /internal/voice/channels`
   - Body: `{ "key": "match:12:team:34", "name": "Nom de l'équipe" }`
@@ -402,14 +407,6 @@ un salon qu'il n'a pas créé : seuls les salons inscrits dans son suivi
     introuvable), `503 VOICE_MISSING_PERMISSIONS` (permission refusée : une
     alerte au staff, au plus une par heure), `502 VOICE_DISCORD_ERROR`,
     `500 VOICE_STORAGE_ERROR`.
-
-- `GET /internal/voice/channels/:channelId/count`
-  - Retourne `{ "members": 3 }` : le **nombre** de personnes dans le salon,
-    rien d'autre (aucun identifiant ni pseudo, rien de journalisé).
-  - Erreurs : `400 INVALID_CHANNEL_ID`, `404 VOICE_CHANNEL_NOT_TRACKED` (salon
-    non créé par le bot), `404 VOICE_CHANNEL_NOT_FOUND` (supprimé à la main :
-    il n'est plus suivi, une nouvelle demande `POST` le recrée),
-    `503 DISCORD_NOT_READY`, `502 VOICE_DISCORD_ERROR`.
 
 - `POST /internal/voice/channels/:channelId/release`
   - Libère le salon : supprimé tout de suite s'il est vide, sinon dès que le
@@ -428,16 +425,20 @@ un salon qu'il n'a pas créé : seuls les salons inscrits dans son suivi
   supprimé) ; un salon supprimé à la main cesse d'être suivi, comme un
   salon que le bot ne voit plus (permission retirée) depuis plus de 96 h.
 - Un salon suivi **déplacé hors de la catégorie** à la main n'est plus le
-  salon du match : il n'est plus compté (`404 VOICE_CHANNEL_NOT_FOUND`), ni
+  salon du match : il n'est ni
   rendu (une demande `POST` en crée un neuf dans la catégorie), ni supprimé —
   il est seulement oublié (une libération répond alors `deleted: true`).
 
 ## Réponses d'erreur
 
 Une erreur ne renvoie **jamais** le message de l'exception, seulement un code
-stable en majuscules : `{ "error": "INTERNAL_STATS_ERROR" }`. Le détail — pile
-d'appel, chemin de fichier, fragment de SQL — part au canal de logs Discord par
-`sendLog()`, qui est l'endroit où l'exploitant le lit de toute façon.
+stable en majuscules : `{ "error": "INTERNAL_STATS_ERROR" }`. Pour une erreur
+attrapée dans une route, le détail — pile d'appel, chemin de fichier, fragment de
+SQL — part au canal de logs Discord par `sendLog()`, qui est l'endroit où
+l'exploitant le lit de toute façon. Une erreur levée hors d'une route (lecture du
+corps, exception non attrapée) ne va qu'au journal du processus (pm2), réduite à
+son code de réponse et, pour un `500`, au type de l'erreur et à son code
+(`SQLITE_BUSY`…) : jamais son message ni sa pile.
 
 Ce n'était pas le cas : huit routes écrivaient
 `{ error: (error as Error).message || "INTERNAL_STATS_ERROR" }`, où le code
@@ -450,7 +451,18 @@ Les codes en usage : `INTERNAL_FEED_ERROR`, `INTERNAL_STATUS_ERROR`,
 `INTERNAL_STATS_ERROR`, `INTERNAL_KPIS_ERROR`, `INTERNAL_SERVERS_ERROR`,
 `INTERNAL_ACTIVITY_ERROR`, `INTERNAL_MODULES_ERROR`,
 `INTERNAL_MODULE_TOGGLE_ERROR`, plus les codes propres aux routes d'écriture
-déjà décrits ci-dessus. `GET /internal/servers/:id/modules` et
+déjà décrits ci-dessus. Une route inconnue (sous `/internal`, jeton valide)
+répond `404 INTERNAL_ROUTE_NOT_FOUND` — hors de `/internal`, `404 NOT_FOUND`, qui
+ne désigne pas l'API —, jamais la page HTML d'Express qui recopie le chemin ; un corps JSON illisible `400 INVALID_JSON`, trop gros
+`413 PAYLOAD_TOO_LARGE`, d'encodage ou de jeu de caractères inconnu
+`415 UNSUPPORTED_ENCODING`, interrompu `400 REQUEST_ABORTED`, de longueur contraire à
+son `Content-Length` `400 INVALID_CONTENT_LENGTH`, toute autre erreur hors route
+`500 INTERNAL_ERROR` (le statut porté par une erreur Discord n'est jamais repris ;
+un refus n'est reconnu que si son type et son statut sont ceux que pose body-parser).
+Une réponse déjà commencée (flux) voit sa connexion coupée : le lecteur voit une
+réponse tronquée, jamais une fin normale. Toute route qui lit un corps vit sous
+`/internal` (ailleurs, le corps n'est pas lu). Le
+jeton est vérifié avant la lecture du corps, et le corps n'est lu que sous `/internal`. `GET /internal/servers/:id/modules` et
 `PUT /internal/servers/:id/modules/:moduleKey` répondent en outre
 `404 GUILD_NOT_JOINED` pour un serveur que le bot n'a pas rejoint : le
 réglage serait effacé au prochain rattrapage des serveurs quittés, on le refuse

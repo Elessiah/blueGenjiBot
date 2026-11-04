@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import type { Request, Response } from "express";
 import {
   absDelta,
   deterministicColor,
@@ -8,6 +9,9 @@ import {
   relayStatus,
   sparklineFromBuckets,
   SPARKLINE_POINTS,
+  internalErrorHandler,
+  internalErrorLogLine,
+  internalErrorReply,
 } from "../../internalApi/helpers.js";
 
 test("absDelta formate le signe correctement", () => {
@@ -115,4 +119,110 @@ test("sparklineFromBuckets range la tranche la plus récente en dernier et ignor
     ]),
     [1, 0, 0, 0, 0, 0, 7, 0, 0, 5],
   );
+});
+
+test("internalErrorReply_bodyParserRefusal_returnsItsCodeAndStatus", () => {
+  assert.deepEqual(internalErrorReply({ type: "entity.parse.failed", status: 400 }), { code: "INVALID_JSON", status: 400 });
+  assert.deepEqual(internalErrorReply({ type: "entity.too.large", status: 413 }), { code: "PAYLOAD_TOO_LARGE", status: 413 });
+  assert.deepEqual(internalErrorReply({ type: "encoding.unsupported", status: 415 }), { code: "UNSUPPORTED_ENCODING", status: 415 });
+  assert.deepEqual(internalErrorReply({ type: "charset.unsupported", status: 415 }), { code: "UNSUPPORTED_ENCODING", status: 415 });
+  assert.deepEqual(internalErrorReply({ type: "request.aborted", status: 400 }), { code: "REQUEST_ABORTED", status: 400 });
+  assert.deepEqual(internalErrorReply({ type: "request.size.invalid", status: 400 }), { code: "INVALID_CONTENT_LENGTH", status: 400 });
+});
+
+test("internalErrorReply_foreignErrorWith4xxStatus_returns500", () => {
+  // Une erreur Discord (« Unknown Channel ») porte un `status` 404 : jamais repris.
+  assert.deepEqual(internalErrorReply({ status: 404, code: 10003 }), { code: "INTERNAL_ERROR", status: 500 });
+});
+
+test("internalErrorReply_unknownOrInheritedType_returns500", () => {
+  assert.deepEqual(internalErrorReply({ type: "toString" }), { code: "INTERNAL_ERROR", status: 500 });
+  assert.deepEqual(internalErrorReply({ type: "stream.not.readable", status: 500 }), { code: "INTERNAL_ERROR", status: 500 });
+  assert.deepEqual(internalErrorReply({ type: "entity.verify.failed", status: 403 }), { code: "INTERNAL_ERROR", status: 500 });
+});
+
+test("internalErrorReply_bodyParserTypeWithWrongStatus_returns500", () => {
+  // Même `type` que body-parser sans son statut : une erreur du serveur, jamais un refus.
+  assert.deepEqual(internalErrorReply({ type: "entity.parse.failed", status: 500 }), { code: "INTERNAL_ERROR", status: 500 });
+  assert.deepEqual(internalErrorReply({ type: "request.aborted" }), { code: "INTERNAL_ERROR", status: 500 });
+});
+
+test("internalErrorReply_nullOrPlainError_returns500", () => {
+  assert.deepEqual(internalErrorReply(null), { code: "INTERNAL_ERROR", status: 500 });
+  assert.deepEqual(internalErrorReply(new Error("x")), { code: "INTERNAL_ERROR", status: 500 });
+});
+
+test("internalErrorLogLine_bodyParserRefusal_returnsCodeOnly", () => {
+  const error = Object.assign(new SyntaxError('"{Equipe Bleue" is not valid JSON'), { type: "entity.parse.failed", status: 400 });
+
+  assert.equal(internalErrorLogLine(error), "[internalApi] INVALID_JSON");
+});
+
+test("internalErrorLogLine_unexpectedError_returnsNameAndCodeWithoutMessage", () => {
+  const error = Object.assign(new Error("UNIQUE constraint failed: Team.name 'Equipe Bleue'"), { code: "SQLITE_CONSTRAINT" });
+
+  assert.equal(internalErrorLogLine(error), "[internalApi] INTERNAL_ERROR (Error SQLITE_CONSTRAINT)");
+});
+
+test("internalErrorLogLine_codeWithSpaces_dropsCode", () => {
+  const error = Object.assign(new TypeError("x"), { code: "texte libre d'un joueur" });
+
+  assert.equal(internalErrorLogLine(error), "[internalApi] INTERNAL_ERROR (TypeError)");
+});
+
+test("internalErrorLogLine_nonError_returnsItsType", () => {
+  assert.equal(internalErrorLogLine("Equipe Bleue"), "[internalApi] INTERNAL_ERROR (string)");
+});
+
+/** Réponse Express factice : retient ce qui lui est écrit. */
+function fakeResponse(headersSent: boolean) {
+  const written = { status: 0, json: undefined as unknown, destroyed: false };
+  const res = {
+    headersSent,
+    status(code: number) { written.status = code; return res; },
+    json(body: unknown) { written.json = body; return res; },
+    destroy() { written.destroyed = true; return res; },
+  };
+  return { res: res as unknown as Response, written };
+}
+
+test("internalErrorHandler_unexpectedError_replies500AndLogs", () => {
+  const lines: string[] = [];
+  const { res, written } = fakeResponse(false);
+
+  internalErrorHandler((line) => lines.push(line))(new Error("secret"), {} as Request, res, () => undefined);
+
+  assert.deepEqual(written, { status: 500, json: { error: "INTERNAL_ERROR" }, destroyed: false });
+  assert.deepEqual(lines, ["[internalApi] INTERNAL_ERROR (Error)"]);
+});
+
+test("internalErrorHandler_headersAlreadySent_destroysSocketWithoutBodyNorNext", () => {
+  const lines: string[] = [];
+  const { res, written } = fakeResponse(true);
+  let nextCalled = false;
+
+  internalErrorHandler((line) => lines.push(line))(new Error("x"), {} as Request, res, () => { nextCalled = true; });
+
+  // Connexion coupée : le lecteur voit une réponse tronquée, jamais une fin normale.
+  assert.deepEqual(written, { status: 0, json: undefined, destroyed: true });
+  assert.equal(nextCalled, false);
+  assert.deepEqual(lines, ["[internalApi] INTERNAL_ERROR (Error)"]);
+});
+
+test("internalErrorLogLine_freeTextName_fallsBackToError", () => {
+  const error = Object.assign(new Error("x"), { name: "Equipe Bleue a triché" });
+
+  assert.equal(internalErrorLogLine(error), "[internalApi] INTERNAL_ERROR (Error)");
+});
+
+test("internalErrorHandler_destroyThrowsAfterHeadersSent_swallowsIt", () => {
+  const res = { headersSent: true, destroy() { throw new Error("socket closed"); } } as unknown as Response;
+
+  assert.doesNotThrow(() => internalErrorHandler(() => undefined)(new Error("x"), {} as Request, res, () => undefined));
+});
+
+test("internalErrorReply_throwingTypeGetter_returns500", () => {
+  const error = { get type(): string { throw new Error("revoked"); } };
+
+  assert.deepEqual(internalErrorReply(error), { code: "INTERNAL_ERROR", status: 500 });
 });

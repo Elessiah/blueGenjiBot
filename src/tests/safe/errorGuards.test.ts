@@ -8,6 +8,9 @@ import {
   isIgnorableDiscordError,
   isTransientNetworkError,
   MAX_CAUSE_DEPTH,
+  safeErrorCode,
+  safeErrorKind,
+  safeErrorStatus,
 } from "../../safe/errorGuards.js";
 
 /**
@@ -174,4 +177,45 @@ test("describeError ne prend pas un objet deguise en Error pour une Error", () =
   const description = describeError(disguised);
   assert.doesNotMatch(description, /pseudo/);
   assert.match(description, /^valeur levée non standard/);
+});
+
+test("safeErrorCode_identifierCode_returnsIt", () => {
+  assert.equal(safeErrorCode(Object.assign(new Error("x"), { code: "SQLITE_BUSY" })), "SQLITE_BUSY");
+  assert.equal(safeErrorCode(Object.assign(new Error("x"), { code: 50035 })), 50035);
+});
+
+test("safeErrorCode_sentenceCode_returnsNull", () => {
+  assert.equal(safeErrorCode(Object.assign(new Error("x"), { code: "Equipe Bleue introuvable" })), null);
+});
+
+test("safeErrorKind_freeTextName_returnsError", () => {
+  assert.equal(safeErrorKind(Object.assign(new Error("x"), { name: "Equipe Bleue" })), "Error");
+  assert.equal(safeErrorKind(new TypeError("x")), "TypeError");
+});
+
+test("safeErrorKind_discordApiErrorWithCodeSuffix_returnsBareName", () => {
+  // discord.js nomme ses erreurs `DiscordAPIError[50035]` : le code se journalise à part.
+  assert.equal(safeErrorKind(Object.assign(new Error("x"), { name: "DiscordAPIError[50035]" })), "DiscordAPIError");
+});
+
+test("safeErrorKind_throwingNameGetter_returnsError", () => {
+  const error = new Error("x");
+  Object.defineProperty(error, "name", { get(): string { throw new Error("revoked"); } });
+
+  assert.equal(safeErrorKind(error), "Error");
+});
+
+test("safeErrorKind_nonError_returnsTypeof", () => {
+  assert.equal(safeErrorKind("Equipe Bleue"), "string");
+  assert.equal(safeErrorKind(null), "object");
+});
+
+test("safeErrorStatus_httpStatus_returnsIt", () => {
+  assert.equal(safeErrorStatus(Object.assign(new Error("x"), { status: 429 })), 429);
+});
+
+test("safeErrorStatus_outOfRangeOrThrowing_returnsNull", () => {
+  assert.equal(safeErrorStatus({ status: 99 }), null);
+  assert.equal(safeErrorStatus({ status: "500" }), null);
+  assert.equal(safeErrorStatus({ get status(): number { throw new Error("revoked"); } }), null);
 });

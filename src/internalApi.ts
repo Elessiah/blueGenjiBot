@@ -29,6 +29,7 @@ import {
   relayStatus,
   sparklineFromBuckets,
   SPARKLINE_POINTS,
+  internalErrorHandler,
   type RelayStatus,
 } from "./internalApi/helpers.js";
 import { parseSiteVisitStats, saveSiteVisitStats } from "./siteVisits/siteVisits.js";
@@ -196,8 +197,10 @@ export function startInternalApi(client: Client) {
   const app = express();
   // Pas d'en-tête `X-Powered-By` : la version du framework n'a pas à être annoncée.
   app.disable("x-powered-by");
-  app.use(express.json());
-  app.use("/internal", authorize);
+  // Garde avant la lecture du corps, et corps lu sous `/internal` seulement : un corps
+  // envoyé sans jeton, ou hors de l'API, n'est jamais analysé. Toute route qui lit
+  // `req.body` doit donc vivre sous `/internal` (ailleurs, `req.body` reste vide).
+  app.use("/internal", authorize, express.json());
 
   app.get("/internal/feed/stream", async (req: Request, res: Response) => {
     try {
@@ -874,6 +877,18 @@ export function startInternalApi(client: Client) {
 
   // Salons vocaux d'équipe des matchs (MATCH-VOICE) : `voice/voiceRoutes.ts`.
   registerVoiceRoutes(app, client);
+
+  // Route inconnue (dont `GET /internal/voice/channels/:id/count`, retirée) : un code,
+  // jamais la page HTML d'Express qui recopie le chemin demandé. Après toutes les routes.
+  // Sous `/internal` (jeton déjà vérifié) le code dit l'API ; ailleurs, rien ne la désigne.
+  app.use("/internal", (_req: Request, res: Response) => {
+    res.status(404).json({ error: "INTERNAL_ROUTE_NOT_FOUND" });
+  });
+  app.use((_req: Request, res: Response) => {
+    res.status(404).json({ error: "NOT_FOUND" });
+  });
+  // Erreur levée hors d'une route (corps illisible, trop gros…) : `internalApi/helpers.ts`.
+  app.use(internalErrorHandler());
 
   const port = Number(process.env.INTERNAL_API_PORT || 4400);
   const host = process.env.INTERNAL_API_HOST || "127.0.0.1";

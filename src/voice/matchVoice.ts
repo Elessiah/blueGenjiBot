@@ -2,14 +2,14 @@
  * Salons vocaux d'équipe d'un match (MATCH-VOICE).
  *
  * Le site demande, un quart d'heure avant un match, un salon vocal par équipe
- * dans la catégorie `VOICE_CATEGORY_ID` ; il en lit l'occupation (un nombre,
- * jamais qui) pour autoriser le lancement, puis le rend une fois le score
- * confirmé. Le bot crée, compte et supprime ; il ne décide de rien.
+ * dans la catégorie `VOICE_CATEGORY_ID`, puis le rend une fois le score
+ * confirmé ; le lancement du match n'en dépend pas, et le site ne demande
+ * jamais qui s'y trouve, ni combien. Le bot crée et supprime ; il ne décide de rien.
  *
  * Règles tenues ici :
  * - **idempotence** : une même clé (`match:<id>:team:<id>`) rend toujours le
  *   même salon, recréé s'il a été supprimé à la main ;
- * - **seul un salon suivi** (table `MatchVoiceChannel`) peut être compté ou
+ * - **seul un salon suivi** (table `MatchVoiceChannel`) peut être rendu ou
  *   supprimé : un identifiant quelconque envoyé par le site n'y donne accès à
  *   rien ;
  * - **suppression** : à la libération si le salon est vide, sinon dès qu'il se
@@ -18,14 +18,14 @@
  *   depuis plus de 48 h et vide — un salon jamais libéré et occupé n'est
  *   jamais supprimé) ;
  * - **catégorie** : un salon suivi déplacé hors de la catégorie n'est plus
- *   compté, rendu ni supprimé : il est oublié ;
- * - **vie privée** : aucun membre, identifiant de membre ni pseudo n'est lu
- *   au-delà du compte, stocké ou journalisé.
+ *   rendu ni supprimé : il est oublié ;
+ * - **vie privée** : seul importe qu'un salon soit vide ou non ; aucun membre,
+ *   identifiant de membre ni pseudo n'est rendu au site, stocké ou journalisé.
  */
 
 import { ChannelType, type Client, type VoiceState } from "discord.js";
 import { getBddInstance } from "../bdd/Bdd.js";
-import { discordJsonCode } from "../safe/errorGuards.js";
+import { discordJsonCode, safeErrorCode, safeErrorStatus } from "../safe/errorGuards.js";
 import { sendAlert, sendLog } from "../safe/sendLog.js";
 
 /** Catégorie des salons vocaux de match sur le serveur BlueGenji, quand `VOICE_CATEGORY_ID` n'est pas posé. */
@@ -53,7 +53,7 @@ export const UNRELEASED_MAX_AGE_MS = 48 * 60 * 60 * 1000;
 export const VOICE_SWEEP_CRON = "*/30 * * * *";
 
 /** Un salon suivi que le bot ne voit plus est oublié après ce délai (le double du plafond de 48 h). */
-const ABANDONED_MAX_AGE_MS = 2 * UNRELEASED_MAX_AGE_MS;
+export const ABANDONED_MAX_AGE_MS = 2 * UNRELEASED_MAX_AGE_MS;
 
 /** Délai entre deux alertes « permission manquante ». */
 const PERMISSION_ALERT_COOLDOWN_MS = 60 * 60 * 1000;
@@ -78,7 +78,6 @@ export type VoiceErrorCode =
   | "VOICE_MISSING_PERMISSIONS"
   | "VOICE_DISCORD_ERROR"
   | "VOICE_CHANNEL_NOT_TRACKED"
-  | "VOICE_CHANNEL_NOT_FOUND"
   | "VOICE_STORAGE_ERROR";
 
 /** Statut HTTP de chaque code. */
@@ -87,9 +86,17 @@ const STATUS_BY_CODE: Readonly<Record<VoiceErrorCode, number>> = {
   VOICE_MISSING_PERMISSIONS: 503,
   VOICE_DISCORD_ERROR: 502,
   VOICE_CHANNEL_NOT_TRACKED: 404,
-  VOICE_CHANNEL_NOT_FOUND: 404,
   VOICE_STORAGE_ERROR: 500,
 };
+
+/** Opération en cours d'un échec, seul texte libre du journal d'un `VoiceChannelError`. */
+export type VoiceErrorContext =
+  | "lecture du salon"
+  | "suppression du salon"
+  | "lecture de la catégorie"
+  | "création du salon"
+  | `catégorie ${string} introuvable`
+  | "stockage";
 
 /** Échec d'une opération sur un salon vocal, porteur du code rendu au site. */
 export class VoiceChannelError extends Error {
@@ -97,11 +104,14 @@ export class VoiceChannelError extends Error {
   readonly status: number;
 
   /**
+   * Le message, seul journalisé, est fait du contexte (texte du bot) et du code de
+   * la cause (`voiceErrorDetail`) : jamais d'un texte reçu.
    * @param code Code rendu au site.
-   * @param detail Détail technique, pour le journal seulement.
+   * @param context Opération en cours.
+   * @param cause Erreur d'origine, réduite à son code.
    */
-  constructor(code: VoiceErrorCode, detail: string = code) {
-    super(detail);
+  constructor(code: VoiceErrorCode, context?: VoiceErrorContext, cause?: unknown) {
+    super(cause === undefined ? context ?? code : `${context ?? code} : ${voiceErrorDetail(cause)}`);
     this.name = "VoiceChannelError";
     this.code = code;
     this.status = STATUS_BY_CODE[code];
@@ -117,7 +127,7 @@ type VoiceHandle = { id: string; parentId?: string | null; members: { size: numb
 /**
  * Un salon est-il encore un salon vocal de match : rangé dans la catégorie ?
  * Un salon suivi que le staff a déplacé ailleurs (archive, staff) n'est plus
- * le nôtre : il n'est ni compté, ni rendu au site, ni supprimé — seulement oublié.
+ * le nôtre : il n'est ni rendu au site, ni supprimé — seulement oublié.
  * @param channel Salon lu.
  * @returns `true` s'il est dans la catégorie des salons vocaux de match.
  */
@@ -199,6 +209,22 @@ export function sanitizeVoiceChannelName(raw: unknown): string | null {
 }
 
 /**
+ * Désigne une erreur pour le journal par son seul code : le message d'une erreur
+ * Discord ou SQLite peut recopier une valeur reçue (nom d'équipe, clé).
+ * @param error Erreur capturée.
+ * Un `VoiceChannelError` est rendu par son code et son message (déjà sûr) ; une
+ * autre erreur par son code et son statut HTTP s'il y en a un (429, 5xx de Discord).
+ * @returns `code <code>[, statut <n>]`, `code inconnu`, ou `<CODE> (<message>)`.
+ */
+export function voiceErrorDetail(error: unknown): string {
+  if (error instanceof VoiceChannelError) { return `${error.code} (${error.message})`; }
+  const code = safeErrorCode(error);
+  const status = safeErrorStatus(error);
+  const shownStatus = status === null ? "" : ", statut " + String(status);
+  return `code ${code ?? "inconnu"}${shownStatus}`;
+}
+
+/**
  * Traduit une erreur Discord en code rendu au site. Une permission manquante
  * déclenche une alerte au staff (au plus une par heure) : il faut accorder
  * « Gérer les salons » au rôle du bot sur la catégorie.
@@ -207,10 +233,9 @@ export function sanitizeVoiceChannelName(raw: unknown): string | null {
  * @param action Action en cours, pour le journal.
  * @returns L'erreur à lever.
  */
-async function toVoiceError(client: Client, error: unknown, action: string): Promise<VoiceChannelError> {
+async function toVoiceError(client: Client, error: unknown, action: VoiceErrorContext): Promise<VoiceChannelError> {
   if (error instanceof VoiceChannelError) { return error; }
   const code = discordJsonCode(error);
-  const detail = `${action} : ${(error as Error)?.message ?? String(error)}`;
   if (code === MISSING_PERMISSIONS || code === MISSING_ACCESS) {
     const now = Date.now();
     if (now - lastPermissionAlertAt >= PERMISSION_ALERT_COOLDOWN_MS) {
@@ -221,9 +246,9 @@ async function toVoiceError(client: Client, error: unknown, action: string): Pro
           `sur la catégorie ${voiceCategoryId()} (action requise sur Discord ; signalé au plus une fois par heure).`,
       );
     }
-    return new VoiceChannelError("VOICE_MISSING_PERMISSIONS", detail);
+    return new VoiceChannelError("VOICE_MISSING_PERMISSIONS", action, error);
   }
-  return new VoiceChannelError("VOICE_DISCORD_ERROR", detail);
+  return new VoiceChannelError("VOICE_DISCORD_ERROR", action, error);
 }
 
 /**
@@ -256,7 +281,7 @@ async function db<T>(query: string, values: unknown[] = []): Promise<T[]> {
   try {
     return await (await getBddInstance()).raw<T>(query, values);
   } catch (error) {
-    throw new VoiceChannelError("VOICE_STORAGE_ERROR", (error as Error).message);
+    throw new VoiceChannelError("VOICE_STORAGE_ERROR", "stockage", error);
   }
 }
 
@@ -425,25 +450,6 @@ export async function ensureTeamVoiceChannel(
 }
 
 /**
- * Nombre de personnes dans un salon suivi (`GET …/count`). Le compte seul :
- * aucun membre n'est lu ni rendu.
- * @param client Client Discord.
- * @param channelId Identifiant validé.
- * @returns L'effectif du salon.
- */
-export async function countVoiceMembers(client: Client, channelId: string): Promise<number> {
-  if (!(await trackedById(channelId))) {
-    throw new VoiceChannelError("VOICE_CHANNEL_NOT_TRACKED");
-  }
-  const channel = await fetchVoice(client, channelId);
-  if (!channel) {
-    await untrack(channelId);
-    throw new VoiceChannelError("VOICE_CHANNEL_NOT_FOUND");
-  }
-  return channel.members.size;
-}
-
-/**
  * Libère un salon suivi (`POST …/release`) : supprimé tout de suite s'il est
  * vide, sinon dès que le dernier occupant le quitte.
  * @param client Client Discord.
@@ -507,7 +513,7 @@ export async function handleVoiceStateUpdate(client: Client, oldState: Pick<Voic
       await deleteTracked(client, channel);
     });
   } catch (error) {
-    await sendLog(client, `Salon vocal de match ${channelId} : suppression reportée au balayage (${(error as Error).message}).`);
+    await sendLog(client, `Salon vocal de match ${channelId} : suppression reportée au balayage (${voiceErrorDetail(error)}).`);
   }
 }
 
@@ -528,7 +534,7 @@ export async function handleVoiceChannelDeleted(
   try {
     await untrack(channelId);
   } catch (error) {
-    await sendLog(client, `channelDelete : retrait du suivi vocal ${channelId} échoué (${(error as Error).message}).`);
+    await sendLog(client, `channelDelete : retrait du suivi vocal ${channelId} échoué (${voiceErrorDetail(error)}).`);
   }
 }
 
@@ -603,7 +609,7 @@ export async function sweepVoiceChannels(client: Client, now: number = Date.now(
   try {
     rows = await db<TrackedRow>("SELECT channel_id, voice_key, created_at, released_at FROM MatchVoiceChannel");
   } catch (error) {
-    await sendLog(client, `Balayage des salons vocaux de match impossible : ${(error as Error).message}`);
+    await sendLog(client, `Balayage des salons vocaux de match impossible : ${voiceErrorDetail(error)}`);
     return report;
   }
   for (const snapshot of rows) {

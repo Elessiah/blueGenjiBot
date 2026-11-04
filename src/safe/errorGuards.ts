@@ -203,6 +203,52 @@ const DISCORD_UNKNOWN_USER = 10013;
 /** Code Discord d'un salon inconnu : la conversation n'existe plus. */
 const DISCORD_UNKNOWN_CHANNEL = 10003;
 
+/** Code d'erreur assez court et sans espace pour être un identifiant (`SQLITE_BUSY`, 50035). */
+const SAFE_ERROR_CODE = /^[\w.-]{1,40}$/;
+
+/**
+ * Code d'une erreur sûr à journaliser : son `code` s'il a la forme d'un
+ * identifiant — jamais une phrase qui recopierait une valeur reçue.
+ * @param error Valeur capturée.
+ * @returns Le code, ou `null`.
+ */
+function safeErrorCode(error: unknown): string | number | null {
+    const code = errorCode(error);
+    return code !== null && SAFE_ERROR_CODE.test(String(code)) ? code : null;
+}
+
+/**
+ * Type d'une erreur sûr à journaliser : le `name` d'une `Error` s'il a la forme d'un
+ * identifiant (il se règle à l'exécution), sinon `Error` ; le `typeof` d'une autre valeur.
+ * @param error Valeur capturée.
+ * @returns Le type de l'erreur.
+ */
+function safeErrorKind(error: unknown): string {
+    try {
+        if (!isNativeError(error)) return typeof error;
+        // discord.js suffixe le code au nom (`DiscordAPIError[50035]`) : le code se journalise à part.
+        const name = String(error.name).replace(/\[\d{1,10}\]$/, "");
+        return SAFE_ERROR_CODE.test(name) ? name : "Error";
+    } catch {
+        return "Error";
+    }
+}
+
+/**
+ * Statut HTTP porté par une erreur (Discord, HTTP), lu sans jamais lever.
+ * @param error Valeur capturée.
+ * @returns Le statut (100–599), ou `null`.
+ */
+function safeErrorStatus(error: unknown): number | null {
+    try {
+        if (typeof error !== "object" || error === null) return null;
+        const status = (error as { status?: unknown }).status;
+        return typeof status === "number" && Number.isInteger(status) && status >= 100 && status <= 599 ? status : null;
+    } catch {
+        return null;
+    }
+}
+
 /** Codes Discord d'un accès refusé : une nouvelle tentative n'y changera rien. */
 const DISCORD_MISSING_ACCESS = 50001;
 const DISCORD_MISSING_PERMISSIONS = 50013;
@@ -218,6 +264,9 @@ export {
     MAX_CAUSE_DEPTH,
     describeError,
     errorCode,
+    safeErrorCode,
+    safeErrorKind,
+    safeErrorStatus,
     isIgnorableDiscordError,
     isTransientNetworkError,
     IGNORABLE_DISCORD_CODES,

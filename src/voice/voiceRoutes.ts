@@ -1,6 +1,6 @@
 /**
- * Routes `/internal/voice/*` de l'API interne (MATCH-VOICE) : création, compte
- * et libération des salons vocaux d'équipe. Montées par `startInternalApi`
+ * Routes `/internal/voice/*` de l'API interne (MATCH-VOICE) : création et
+ * libération des salons vocaux d'équipe (aucune route de comptage). Montées par `startInternalApi`
  * derrière la même garde `x-internal-token` que les autres routes ; la logique
  * vit dans `voice/matchVoice.ts`.
  *
@@ -12,8 +12,8 @@ import type { Express, Request, Response } from "express";
 import type { Client } from "discord.js";
 import { sendLog } from "../safe/sendLog.js";
 import {
+  voiceErrorDetail,
   VoiceChannelError,
-  countVoiceMembers,
   ensureTeamVoiceChannel,
   parseChannelId,
   parseVoiceKey,
@@ -33,12 +33,14 @@ async function replyVoiceError(client: Client, res: Response, route: string, err
   if (error instanceof VoiceChannelError) {
     res.status(error.status).json({ error: error.code });
     if (error.status >= 500) {
-      await sendLog(client, `${route} : ${error.code} (${error.message})`);
+      // Message fait du contexte et du code de la cause (constructeur) : jamais un texte reçu.
+      await sendLog(client, `${route} : ${voiceErrorDetail(error)}`);
     }
     return;
   }
   res.status(500).json({ error: "VOICE_INTERNAL_ERROR" });
-  await sendLog(client, `${route} error: ${(error as Error)?.message ?? String(error)}`);
+  // Le code seul : le message peut recopier une valeur reçue (nom, clé).
+  await sendLog(client, `${route} : VOICE_INTERNAL_ERROR (${voiceErrorDetail(error)})`);
 }
 
 /**
@@ -76,20 +78,6 @@ export function registerVoiceRoutes(app: Express, client: Client): void {
       res.status(created ? 201 : 200).json({ channelId });
     } catch (error) {
       await replyVoiceError(client, res, "POST /internal/voice/channels", error);
-    }
-  });
-
-  app.get("/internal/voice/channels/:channelId/count", async (req: Request, res: Response) => {
-    const channelId = parseChannelId(req.params.channelId);
-    if (!channelId) {
-      res.status(400).json({ error: "INVALID_CHANNEL_ID" });
-      return;
-    }
-    if (refuseNotReady(client, res)) { return; }
-    try {
-      res.json({ members: await countVoiceMembers(client, channelId) });
-    } catch (error) {
-      await replyVoiceError(client, res, "GET /internal/voice/channels/:id/count", error);
     }
   });
 
