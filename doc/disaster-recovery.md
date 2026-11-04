@@ -205,6 +205,8 @@ Les rappels programmés vivent dans la base : ils reviennent **tels qu'à la dat
 
 **Rappels envoyés deux fois.** Un rappel parti entre l'archive et la perte est revenu « dû » avec la base : il **repart une fois** au prochain contrôle — une fois seulement, son échéance suivante étant recalculée à partir de l'envoi. C'est le cas d'un avis de péremption déjà reçu (`/adhesion-valide`) ou d'un rappel récurrent (`/get-adhesion … interval:`) passé depuis l'archive (jusqu'à 5 jours). Pour l'éviter, **avant 10 h** : `/show-rappel-adhesion` liste les rappels avec leur prochain envoi ; un envoi daté d'avant la restauration est dû. Un **avis de péremption** (« Péremption — 1 envoi restant ») dont on sait qu'il est déjà parti (salon de logs du bot, message reçu par le membre) se supprime par `/delete-rappel-adhesion` : il n'avait plus rien à envoyer. Un **rappel récurrent**, lui, se laisse partir : le supprimer l'arrêterait pour de bon, et le reposer par `/get-adhesion` enverrait les fichiers sur-le-champ — le doublon qu'on voulait éviter. Dans le doute, laisser partir : un doublon vaut mieux qu'un rappel perdu.
 
+**Avis d'exclusion.** La base restaurée connaît l'avis remis à chaque exclu tel qu'il était à la date de l'archive : un avis envoyé depuis (au plus un par jour, chacun remplaçant le précédent) n'y figure plus, et ne sera pas effacé à la levée de l'exclusion — il reste dans la conversation privée de l'exclu, où seul le bot pourrait le retrouver. Une exclusion levée après l'archive revient aussi : la lever de nouveau (`/unban`) sitôt la base restaurée.
+
 ## 4. Le site : base de données
 
 Récupérer **la même archive** qu'à l'étape 3 et n'en extraire que le dump du
