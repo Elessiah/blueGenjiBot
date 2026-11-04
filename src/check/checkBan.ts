@@ -256,9 +256,11 @@ async function notifyBannedUser(client: Client, banInfo: BanInfo, now: number): 
     if (noticesStopped) {
         // Arrêt pendant le retrait : la réservation est rendue, l'avis repartira
         // au premier message après le redémarrage plutôt que dans un jour.
-        await bdd.write("UPDATE Ban SET notice_user_at = NULL WHERE id_user = ? AND id_reason = ? AND notice_user_at = ?",
+        const released = await bdd.write("UPDATE Ban SET notice_user_at = NULL WHERE id_user = ? AND id_reason = ? AND notice_user_at = ?",
             [banInfo.id_user, banInfo.id_reason, now]).catch(() => 0);
-        banInfo.notice_user_at = null;
+        if (released > 0) {
+            banInfo.notice_user_at = null;
+        }
         return;
     }
     // Un seul envoi, sans nouvel essai : un envoi accepté par Discord mais dont

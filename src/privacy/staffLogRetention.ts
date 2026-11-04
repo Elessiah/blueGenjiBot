@@ -305,6 +305,9 @@ export async function deleteDirectMessage(client: Client, idUser: string, messag
 /** Avis repris au plus par purge de nuit : chacun coûte trois appels Discord, sur la file que partage le relais. */
 export const MAX_NOTICE_WITHDRAWALS_PER_RUN = 50;
 
+/** Part du plafond laissée au dernier essai des lignes échues : le reste revient aux plus récentes. */
+export const MAX_EXPIRED_LAST_TRIES_PER_RUN = MAX_NOTICE_WITHDRAWALS_PER_RUN / 2;
+
 /**
  * La ligne `Ban` d'une exclusion en cours oublie un avis qui ne sera jamais
  * effacé : l'avis du jour ne le remet pas en file, et le remplace.
@@ -344,13 +347,19 @@ export async function withdrawBanNotice(client: Client, idUser: string, messageI
     [idUser, messageId, now],
   );
   let keepQueued = deletion === "retry";
-  if (deletion === "refused") {
+  // Refus annoncé par la purge de nuit quand c'est elle qui refera l'oubli.
+  let refusalLeftToNight = false;
+  if (deletion !== "retry") {
+    // Effacé ou jamais effaçable : la ligne `Ban` ne le désigne plus.
     try {
       await forgetBanNotice(idUser, messageId);
     } catch {
-      // Gardé en file : la purge de nuit, refusée de nouveau, refera l'oubli.
-      await sendLog(client, "Ban notice refusal not recorded");
-      keepQueued = true;
+      if (deletion === "refused") {
+        // Gardé en file : la purge de nuit, refusée de nouveau, refera l'oubli.
+        await sendLog(client, "Ban notice refusal not recorded");
+        keepQueued = true;
+        refusalLeftToNight = true;
+      }
     }
   }
   if (keepQueued) {
@@ -361,6 +370,8 @@ export async function withdrawBanNotice(client: Client, idUser: string, messageI
         await sendLog(client, "Ban notice could not be withdrawn");
         return "lost";
       }
+      await sendLog(client, "Ban notice withdrawal not queued");
+      refusalLeftToNight = false;
     }
   } else {
     try {
@@ -374,7 +385,9 @@ export async function withdrawBanNotice(client: Client, idUser: string, messageI
     return "gone";
   }
   if (deletion === "refused") {
-    await sendLog(client, "Ban notice withdrawal refused by Discord");
+    if (!refusalLeftToNight) {
+      await sendLog(client, "Ban notice withdrawal refused by Discord");
+    }
     return "refused";
   }
   await sendLog(client, "Ban notice withdrawal postponed to the nightly purge");
@@ -388,10 +401,11 @@ export async function withdrawBanNotice(client: Client, idUser: string, messageI
  * jours, aussi, signalé au staff — et la ligne `Ban` encore en cours l'oublie,
  * pour que l'avis du jour ne le remette pas en file (comme un avis effacé :
  * la ligne `Ban` ne pointe jamais un message parti). Une ligne qui échoue
- * n'arrête pas les suivantes. Au plus `MAX_NOTICE_WITHDRAWALS_PER_RUN` lignes
- * par nuit : les échues d'abord (un dernier essai, les plus anciennes en
- * tête), puis les autres tirées au hasard — des avis durablement en échec ne
- * bloquent pas les plus récents.
+ * n'arrête pas les suivantes. Au plus `MAX_NOTICE_WITHDRAWALS_PER_RUN` appels
+ * par nuit : la moitié au plus pour un dernier essai des lignes échues (les
+ * plus anciennes en tête), le reste pour les autres, tirées au hasard — des
+ * avis durablement en échec ne bloquent pas les plus récents. Les échues
+ * au-delà sont abandonnées sans appel : aucune ne passe l'échéance annoncée.
  * @param client Client Discord connecté.
  * @param now Instant de référence (ms).
  * @returns Le nombre d'avis retirés de la table (effacés ou abandonnés).
@@ -405,31 +419,36 @@ export async function retryBanNoticeWithdrawals(client: Client, now: number = Da
   const deadline = now - (BAN_NOTICE_WITHDRAWAL_RETRY_DAYS - 1) * day;
   type Pending = { id_user: string; id_message: string };
   const expired = await bdd.raw<Pending>(
-    "SELECT id_user, id_message FROM BanNoticeWithdrawal WHERE queued_at <= ? OR queued_at > ? ORDER BY queued_at LIMIT ?",
-    [deadline, now + day, MAX_NOTICE_WITHDRAWALS_PER_RUN],
+    "SELECT id_user, id_message FROM BanNoticeWithdrawal WHERE queued_at <= ? OR queued_at > ? ORDER BY queued_at",
+    [deadline, now + day],
   );
-  const pending = expired.length >= MAX_NOTICE_WITHDRAWALS_PER_RUN ? [] : await bdd.raw<Pending>(
+  const lastTries = expired.slice(0, MAX_EXPIRED_LAST_TRIES_PER_RUN);
+  const overflow = expired.slice(MAX_EXPIRED_LAST_TRIES_PER_RUN);
+  const pending = await bdd.raw<Pending>(
     "SELECT id_user, id_message FROM BanNoticeWithdrawal WHERE queued_at > ? AND queued_at <= ? ORDER BY RANDOM() LIMIT ?",
-    [deadline, now + day, MAX_NOTICE_WITHDRAWALS_PER_RUN - expired.length],
+    [deadline, now + day, MAX_NOTICE_WITHDRAWALS_PER_RUN - lastTries.length],
   );
   let settled = 0;
   let failure: unknown = null;
+  // L'oubli d'abord : si la ligne de file restait, la nuit suivante le refait.
+  const drop = async (row: Pending): Promise<void> => {
+    await forgetBanNotice(row.id_user, row.id_message);
+    await bdd.write("DELETE FROM BanNoticeWithdrawal WHERE id_user = ? AND id_message = ?", [row.id_user, row.id_message]);
+    settled += 1;
+  };
   const attempt = async (row: Pending, isExpired: boolean): Promise<void> => {
     const deletion = await deleteDirectMessage(client, row.id_user, row.id_message);
     if (deletion === "retry" && !isExpired) {
       return;
     }
-    // L'oubli d'abord : si la ligne de file restait, la nuit suivante le refait.
-    await forgetBanNotice(row.id_user, row.id_message);
-    await bdd.write("DELETE FROM BanNoticeWithdrawal WHERE id_user = ? AND id_message = ?", [row.id_user, row.id_message]);
+    await drop(row);
     if (deletion === "refused") {
       await sendLog(client, "Ban notice withdrawal refused by Discord");
     } else if (deletion === "retry") {
       await sendLog(client, "Ban notice withdrawal abandoned after " + BAN_NOTICE_WITHDRAWAL_RETRY_DAYS + " days");
     }
-    settled += 1;
   };
-  for (const [rows, isExpired] of [[expired, true], [pending, false]] as const) {
+  for (const [rows, isExpired] of [[lastTries, true], [pending, false]] as const) {
     for (const row of rows) {
       try {
         await attempt(row, isExpired);
@@ -437,6 +456,18 @@ export async function retryBanNoticeWithdrawals(client: Client, now: number = Da
         failure ??= error;
       }
     }
+  }
+  let dropped = 0;
+  for (const row of overflow) {
+    try {
+      await drop(row);
+      dropped += 1;
+    } catch (error) {
+      failure ??= error;
+    }
+  }
+  if (dropped > 0) {
+    await sendLog(client, dropped + " ban notice withdrawals abandoned after " + BAN_NOTICE_WITHDRAWAL_RETRY_DAYS + " days without a last try");
   }
   if (failure !== null) {
     throw failure;
