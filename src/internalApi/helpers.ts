@@ -113,23 +113,40 @@ export function sparklineFromBuckets(rows: ReadonlyArray<{ bucket: number; count
  * Code rendu pour une erreur levée hors d'une route (lecture du corps).
  *
  * @param error Erreur transmise par Express.
- * @returns `INVALID_JSON`, `PAYLOAD_TOO_LARGE` ou `INTERNAL_ERROR`.
+ * @returns `INVALID_JSON`, `PAYLOAD_TOO_LARGE`, `UNSUPPORTED_ENCODING`, `REQUEST_ABORTED` ou `INTERNAL_ERROR`.
  */
 export function internalErrorCode(error: unknown): string {
+  return bodyParserRefusal(error)?.code ?? "INTERNAL_ERROR";
+}
+
+/** Refus de la lecture du corps (`express.json()`), par `type` d'erreur. */
+const BODY_PARSER_REFUSALS: Readonly<Record<string, { code: string; status: number }>> = {
+  "entity.parse.failed": { code: "INVALID_JSON", status: 400 },
+  "entity.too.large": { code: "PAYLOAD_TOO_LARGE", status: 413 },
+  "encoding.unsupported": { code: "UNSUPPORTED_ENCODING", status: 415 },
+  "charset.unsupported": { code: "UNSUPPORTED_ENCODING", status: 415 },
+  "request.aborted": { code: "REQUEST_ABORTED", status: 400 },
+};
+
+/**
+ * Refus de la lecture du corps porté par une erreur, ou `null` si elle ne vient
+ * pas de `express.json()` (une erreur Discord porte aussi un `status`, jamais ce `type`).
+ *
+ * @param error Erreur transmise par Express.
+ * @returns Code et statut du refus, ou `null`.
+ */
+export function bodyParserRefusal(error: unknown): { code: string; status: number } | null {
   const type = (error as { type?: unknown } | null)?.type;
-  if (type === "entity.parse.failed") { return "INVALID_JSON"; }
-  if (type === "entity.too.large") { return "PAYLOAD_TOO_LARGE"; }
-  return "INTERNAL_ERROR";
+  return typeof type === "string" && Object.hasOwn(BODY_PARSER_REFUSALS, type) ? BODY_PARSER_REFUSALS[type] : null;
 }
 
 /**
- * Statut HTTP d'une erreur levée hors d'une route : celui qu'elle porte s'il
- * s'agit d'un refus (4xx), sinon 500.
+ * Statut HTTP d'une erreur levée hors d'une route : celui du refus de lecture du
+ * corps, sinon 500 (le `status` d'une autre erreur n'est jamais repris).
  *
  * @param error Erreur transmise par Express.
  * @returns Statut HTTP.
  */
 export function internalErrorStatus(error: unknown): number {
-  const status = Number((error as { status?: unknown } | null)?.status);
-  return Number.isInteger(status) && status >= 400 && status < 500 ? status : 500;
+  return bodyParserRefusal(error)?.status ?? 500;
 }

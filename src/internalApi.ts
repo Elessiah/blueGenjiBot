@@ -198,9 +198,9 @@ export function startInternalApi(client: Client) {
   const app = express();
   // Pas d'en-tête `X-Powered-By` : la version du framework n'a pas à être annoncée.
   app.disable("x-powered-by");
-  // Garde avant la lecture du corps : un corps illisible envoyé sans jeton n'est jamais analysé.
-  app.use("/internal", authorize);
-  app.use(express.json());
+  // Garde avant la lecture du corps, et corps lu sous `/internal` seulement : un corps
+  // envoyé sans jeton, ou hors de l'API, n'est jamais analysé.
+  app.use("/internal", authorize, express.json());
 
   app.get("/internal/feed/stream", async (req: Request, res: Response) => {
     try {
@@ -885,8 +885,15 @@ export function startInternalApi(client: Client) {
   });
   // Erreur levée avant une route (corps JSON illisible ou trop gros) : un code, jamais
   // la page d'erreur d'Express (pile d'appel et chemins hors production).
-  app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
-    res.status(internalErrorStatus(error)).json({ error: internalErrorCode(error) });
+  app.use((error: unknown, _req: Request, res: Response, next: NextFunction) => {
+    // Réponse déjà partie (flux) : Express ferme la connexion.
+    if (res.headersSent) { next(error); return; }
+    const status = internalErrorStatus(error);
+    // Le détail va au journal du processus, jamais dans la réponse ; un refus de
+    // lecture n'y met que son code (le message d'un JSON illisible recopie le corps).
+    const detail = status === 500 ? ": " + describeError(error) : "";
+    console.error(`[internalApi] ${internalErrorCode(error)}${detail}`);
+    res.status(status).json({ error: internalErrorCode(error) });
   });
 
   const port = Number(process.env.INTERNAL_API_PORT || 4400);
