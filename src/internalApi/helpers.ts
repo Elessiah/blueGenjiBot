@@ -108,3 +108,28 @@ export function sparklineFromBuckets(rows: ReadonlyArray<{ bucket: number; count
   }
   return sparkline;
 }
+
+/**
+ * Code rendu pour une erreur levée hors d'une route (lecture du corps).
+ *
+ * @param error Erreur transmise par Express.
+ * @returns `INVALID_JSON`, `PAYLOAD_TOO_LARGE` ou `INTERNAL_ERROR`.
+ */
+export function internalErrorCode(error: unknown): string {
+  const type = (error as { type?: unknown } | null)?.type;
+  if (type === "entity.parse.failed") { return "INVALID_JSON"; }
+  if (type === "entity.too.large") { return "PAYLOAD_TOO_LARGE"; }
+  return "INTERNAL_ERROR";
+}
+
+/**
+ * Statut HTTP d'une erreur levée hors d'une route : celui qu'elle porte s'il
+ * s'agit d'un refus (4xx), sinon 500.
+ *
+ * @param error Erreur transmise par Express.
+ * @returns Statut HTTP.
+ */
+export function internalErrorStatus(error: unknown): number {
+  const status = Number((error as { status?: unknown } | null)?.status);
+  return Number.isInteger(status) && status >= 400 && status < 500 ? status : 500;
+}

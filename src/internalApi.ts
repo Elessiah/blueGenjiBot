@@ -29,6 +29,8 @@ import {
   relayStatus,
   sparklineFromBuckets,
   SPARKLINE_POINTS,
+  internalErrorCode,
+  internalErrorStatus,
   type RelayStatus,
 } from "./internalApi/helpers.js";
 import { parseSiteVisitStats, saveSiteVisitStats } from "./siteVisits/siteVisits.js";
@@ -196,8 +198,9 @@ export function startInternalApi(client: Client) {
   const app = express();
   // Pas d'en-tête `X-Powered-By` : la version du framework n'a pas à être annoncée.
   app.disable("x-powered-by");
-  app.use(express.json());
+  // Garde avant la lecture du corps : un corps illisible envoyé sans jeton n'est jamais analysé.
   app.use("/internal", authorize);
+  app.use(express.json());
 
   app.get("/internal/feed/stream", async (req: Request, res: Response) => {
     try {
@@ -877,8 +880,13 @@ export function startInternalApi(client: Client) {
 
   // Route inconnue (dont `GET /internal/voice/channels/:id/count`, retirée) : un code,
   // jamais la page HTML d'Express qui recopie le chemin demandé. Après toutes les routes.
-  app.use("/internal", (_req: Request, res: Response) => {
+  app.use((_req: Request, res: Response) => {
     res.status(404).json({ error: "INTERNAL_ROUTE_NOT_FOUND" });
+  });
+  // Erreur levée avant une route (corps JSON illisible ou trop gros) : un code, jamais
+  // la page d'erreur d'Express (pile d'appel et chemins hors production).
+  app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
+    res.status(internalErrorStatus(error)).json({ error: internalErrorCode(error) });
   });
 
   const port = Number(process.env.INTERNAL_API_PORT || 4400);
