@@ -54,7 +54,7 @@ src/
 - **Imports ESM** : toujours suffixer `.js` (même pour les fichiers `.ts`), TypeScript ESM l'exige.
 - **Requêtes SQL** : exclusivement paramétrées via `Bdd.get/set/...`. Jamais de concat de strings. Seule exception : un **nom** de table ou de colonne tiré d'une constante du code (`GUILD_CONFIG_TABLES`, `GUILD_CHANNEL_TABLE`), vérifié par `assertSqlIdentifier` au chargement du module — les valeurs, elles, restent toujours bindées.
 - **Flux d'activité** : rien de ce qui entre dans `recordEvent()` ne doit nommer une personne. L'app web republie ce flux sur `/bot`, page de vitrine lue **sans compte**, et la table `FeedEvent` conserve ses lignes 30 jours (`FEED_EVENT_RETENTION_DAYS`, purge de `runDataRetention`) — un identifiant écrit ici repart à chaque rattrapage d'historique jusque-là. `feed/feedPrivacy.ts` remplace mention et identifiant nu par « un joueur » ; la règle est posée dans `recordEvent`, **unique écrivain**, jamais chez l'appelant. Un évènement dit *ce qui se passe*, jamais *à qui*.
-- **Erreurs runtime** : try/catch + `sendLog()` ; ne jamais laisser une exception planter le bot.
+- **Erreurs runtime** : try/catch + `sendLog()` ; ne jamais laisser une exception planter le bot. Seule exception : pendant l'arrêt (`stopBanNotices`, fenêtre d'une seconde avant `client.destroy()`), une erreur va au journal local (`console.error`, pm2) — un envoi à Discord n'y tiendrait pas.
   `installProcessGuards()` (`safe/processGuards.ts`) capte `unhandledRejection`,
   `uncaughtException` et les événements `error`/`shardError` du client — sans quoi une
   coupure DNS suffit à tuer le process. `reportError()` trie les erreurs via
