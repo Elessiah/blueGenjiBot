@@ -863,3 +863,36 @@ test("checkBan_stoppedDuringWithdrawal_otherBanReservationKept", async () => {
 
   assert.equal((await banRow("stop-d")).notice_user_at, T0);
 });
+
+test("checkBan_stopReleaseFails_staffWarned", async () => {
+  // Base qui ferme pendant l'arrêt : la réservation reste, le staff le sait.
+  const trace = newTrace();
+  const base = fakeClient("none", trace) as unknown as { users: { fetch: (id: string) => Promise<Record<string, unknown>> } };
+  const client = {
+    ...base,
+    users: {
+      fetch: async (id: string) => ({
+        ...await base.users.fetch(id),
+        createDM: async () => ({ messages: { delete: async () => { stopBanNotices(); } } }),
+      }),
+    },
+  } as unknown as Client;
+  await seedBan("stop-e");
+  const bdd = await getBddInstance();
+  await bdd.raw("UPDATE Ban SET id_notice_user = ?, notice_user_at = ? WHERE id_user = ?", ["old-notice", T0 - BAN_NOTICE_INTERVAL_MS, "stop-e"]);
+  const original = bdd.write.bind(bdd);
+  bdd.write = async (query: string, values?: unknown[]) => {
+    if (query.startsWith("UPDATE Ban SET notice_user_at = NULL")) { throw new Error("Database is not open"); }
+    return original(query, values);
+  };
+
+  try {
+    await checkBan(client, "stop-e", true, T0);
+  } finally {
+    bdd.write = original;
+    stopBanNotices(false);
+  }
+
+  assert.ok(trace.logs.some((log) => log.includes("Ban notice reservation not released")), JSON.stringify(trace.logs));
+  assert.equal((await banRow("stop-e")).notice_user_at, T0);
+});
