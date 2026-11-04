@@ -429,9 +429,13 @@ un salon qu'il n'a pas créé : seuls les salons inscrits dans son suivi
 ## Réponses d'erreur
 
 Une erreur ne renvoie **jamais** le message de l'exception, seulement un code
-stable en majuscules : `{ "error": "INTERNAL_STATS_ERROR" }`. Le détail — pile
-d'appel, chemin de fichier, fragment de SQL — part au canal de logs Discord par
-`sendLog()`, qui est l'endroit où l'exploitant le lit de toute façon.
+stable en majuscules : `{ "error": "INTERNAL_STATS_ERROR" }`. Pour une erreur
+attrapée dans une route, le détail — pile d'appel, chemin de fichier, fragment de
+SQL — part au canal de logs Discord par `sendLog()`, qui est l'endroit où
+l'exploitant le lit de toute façon. Une erreur levée hors d'une route (lecture du
+corps, exception non attrapée) ne va qu'au journal du processus (pm2), réduite à
+son code de réponse et, pour un `500`, au type de l'erreur et à son code
+(`SQLITE_BUSY`…) : jamais son message ni sa pile.
 
 Ce n'était pas le cas : huit routes écrivaient
 `{ error: (error as Error).message || "INTERNAL_STATS_ERROR" }`, où le code
@@ -445,12 +449,13 @@ Les codes en usage : `INTERNAL_FEED_ERROR`, `INTERNAL_STATUS_ERROR`,
 `INTERNAL_ACTIVITY_ERROR`, `INTERNAL_MODULES_ERROR`,
 `INTERNAL_MODULE_TOGGLE_ERROR`, plus les codes propres aux routes d'écriture
 déjà décrits ci-dessus. Une route inconnue (sous `/internal`, jeton valide)
-répond `404 INTERNAL_ROUTE_NOT_FOUND`, jamais la page HTML d'Express qui
-recopie le chemin ; un corps JSON illisible `400 INVALID_JSON`, trop gros
+répond `404 INTERNAL_ROUTE_NOT_FOUND` — hors de `/internal`, `404 NOT_FOUND`, qui
+ne désigne pas l'API —, jamais la page HTML d'Express qui recopie le chemin ; un corps JSON illisible `400 INVALID_JSON`, trop gros
 `413 PAYLOAD_TOO_LARGE`, d'encodage ou de jeu de caractères inconnu
-`415 UNSUPPORTED_ENCODING`, interrompu `400 REQUEST_ABORTED`, toute autre erreur
-hors route `500 INTERNAL_ERROR` (le statut porté par une erreur Discord n'est
-jamais repris ; son détail va au journal du processus, jamais dans la réponse). Le
+`415 UNSUPPORTED_ENCODING`, interrompu `400 REQUEST_ABORTED`, de longueur contraire à
+son `Content-Length` `400 INVALID_CONTENT_LENGTH`, toute autre erreur hors route
+`500 INTERNAL_ERROR` (le statut porté par une erreur Discord n'est jamais repris).
+Une réponse déjà commencée (flux) est simplement close. Le
 jeton est vérifié avant la lecture du corps, et le corps n'est lu que sous `/internal`. `GET /internal/servers/:id/modules` et
 `PUT /internal/servers/:id/modules/:moduleKey` répondent en outre
 `404 GUILD_NOT_JOINED` pour un serveur que le bot n'a pas rejoint : le
