@@ -53,10 +53,10 @@ async function unban(client: Client,
         removed = await bdd.writeReturning<Ban>("DELETE FROM Ban WHERE id_user = ? RETURNING *", [target]);
     } catch (error) {
         // Base fermée (restauration) ou occupée : « ID inconnu » serait faux.
-        // L'avis mis en file reste : la purge de nuit l'effacera, ce qui ne fait
-        // que retirer un rappel à l'exclu (l'avis du jour suivant le remplace) —
-        // le retirer de la file, au contraire, pouvait perdre un avis qu'un
-        // retrait concurrent y croyait gardé.
+        // L'avis mis en file reste : la purge de nuit l'effacera et la ligne
+        // `Ban` l'oubliera, ce qui ne fait que retirer un rappel à l'exclu
+        // (l'avis du jour suivant le remplace) — le retirer de la file, au
+        // contraire, pouvait perdre un avis qu'un retrait concurrent y croyait gardé.
         await sendLog(client, `Failed to unban: code ${errorCode(error) ?? "inconnu"}`);
         await safeReply(interaction, "The database is unavailable. Please try again in a few minutes.");
         return true;

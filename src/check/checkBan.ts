@@ -256,8 +256,9 @@ async function notifyBannedUser(client: Client, banInfo: BanInfo, now: number): 
     if (noticesStopped) {
         // Arrêt pendant le retrait : la réservation est rendue, l'avis repartira
         // au premier message après le redémarrage plutôt que dans un jour.
-        await bdd.write("UPDATE Ban SET notice_user_at = NULL WHERE id_user = ? AND notice_user_at = ?", [banInfo.id_user, now])
-            .catch(() => 0);
+        await bdd.write("UPDATE Ban SET notice_user_at = NULL WHERE id_user = ? AND id_reason = ? AND notice_user_at = ?",
+            [banInfo.id_user, banInfo.id_reason, now]).catch(() => 0);
+        banInfo.notice_user_at = null;
         return;
     }
     // Un seul envoi, sans nouvel essai : un envoi accepté par Discord mais dont
@@ -284,9 +285,7 @@ async function notifyBannedUser(client: Client, banInfo: BanInfo, now: number): 
         // Exclusion levée pendant l'envoi : l'avis (et son motif) ne doit pas rester.
         forgetBanVerdict(banInfo.id_user);
         await withdrawBanNotice(client, banInfo.id_user, sent.id, now);
-        return;
     }
-    banInfo.id_notice_user = sent.id;
 }
 
 /**
