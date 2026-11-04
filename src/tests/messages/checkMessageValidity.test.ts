@@ -11,6 +11,7 @@ process.env.INFO_SERV = "700000000000000001";
 
 import type { Client, Message } from "discord.js";
 import { checkMessageValidity, type BanCheckMemo } from "../../messages/checkMessageValidity.js";
+import { settleBanNotices } from "../../check/checkBan.js";
 import { closeBddInstance, getBddInstance } from "../../bdd/Bdd.js";
 import type { Service } from "../../bdd/types.js";
 
@@ -63,6 +64,7 @@ test("un exclu visant deux services n'est prévenu et marqué qu'une fois", asyn
   for (const service of services) {
     assert.equal(await checkMessageValidity(client, service, "lfs lfp", message, hasValidService, memo), false);
   }
+  await settleBanNotices();
   assert.equal(memo.verdict, "BANNED");
   assert.equal(hasValidService.value, true);
   assert.equal(sent.length, 1);

@@ -8,7 +8,7 @@ import fs from "node:fs";
 const TMP_DB = path.join(os.tmpdir(), `bgenji-raw-${randomUUID()}.sqlite`);
 process.env.BDD_PATH = TMP_DB;
 
-import { getBddInstance, closeBddInstance } from "../../bdd/Bdd.js";
+import { Bdd, getBddInstance, closeBddInstance } from "../../bdd/Bdd.js";
 
 test("bdd.raw execute une requete parametree et retourne les lignes typees", async () => {
   const bdd = await getBddInstance();
@@ -35,6 +35,32 @@ test("bdd.raw supporte les requetes GROUP BY (cas reel: stats par bucket)", asyn
   const mapped = Object.fromEntries(rows.map((r) => [r.id_author, Number(r.n)]));
   assert.equal(mapped["a"], 2);
   assert.equal(mapped["b"], 1);
+});
+
+test("bddWrite_matchingRows_returnsChangedCount", async () => {
+  const bdd = await getBddInstance();
+  await bdd.set("OGMsg", ["id_msg", "id_author"], ["write-1", "w-author"]);
+  await bdd.set("OGMsg", ["id_msg", "id_author"], ["write-2", "w-author"]);
+  const changed = await bdd.write("UPDATE OGMsg SET id_author = ? WHERE id_author = ?", ["w-author-2", "w-author"]);
+  assert.equal(changed, 2);
+});
+
+test("bddWrite_noMatchingRow_returnsZero", async () => {
+  const bdd = await getBddInstance();
+  const changed = await bdd.write("UPDATE OGMsg SET id_author = ? WHERE id_author = ?", ["x", "personne"]);
+  assert.equal(changed, 0);
+});
+
+test("bddWrite_noDatabaseOpen_throws", async () => {
+  // « Aucune ligne » voudrait dire « ligne disparue » : une base fermée lève.
+  const closed = new Bdd(TMP_DB);
+  await assert.rejects(closed.write("UPDATE OGMsg SET id_author = ?", ["x"]), /Database is not open/);
+});
+
+test("bddWriteReturning_noDatabaseOpen_throws", async () => {
+  // `/unban` pendant une restauration : « aucune ligne » répondrait « ID inconnu » à tort.
+  const closed = new Bdd(TMP_DB);
+  await assert.rejects(closed.writeReturning("DELETE FROM Ban WHERE id_user = ? RETURNING *", ["x"]), /Database is not open/);
 });
 
 test.after(async () => {

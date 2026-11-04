@@ -22,8 +22,11 @@ sans rétention, et qui ignorait la base MySQL du site). Elle est assurée par
 Le script est indépendant du bot : la sauvegarde continue même si le process
 Discord est arrêté. Le bot n'envoie plus aucun fichier — les sauvegardes vivent
 uniquement sur le stockage distant. Son message hebdomadaire du lundi 4 h se
-limite au statut de la dernière sauvegarde et à l'espace disque restant, et
-passe en alerte dès qu'aucune sauvegarde réussie n'a moins de huit jours.
+limite au statut de la dernière sauvegarde, aux échecs survenus depuis le
+rapport précédent (relus dans l'historique des statuts : un échec du mardi
+n'est pas effacé par le succès du dimanche) et à l'espace disque restant, et
+passe en alerte dès qu'aucune sauvegarde réussie n'a moins de trois jours ou
+qu'une exécution a échoué depuis le rapport précédent.
 
 **Tout part chiffré depuis le Raspberry** : `age` pour les archives, un remote
 `rclone crypt` pour les images, les logos masqués et le journal des
@@ -300,9 +303,13 @@ La seconde ligne synchronise les images et le journal des suppressions chaque
 heure : une image ou un compte supprimé du site quitte le stockage distant dans
 l'heure. Elle purge aussi les archives de plus de `RETENTION_DAYS` jours — la
 purge des seules sauvegardes (dimanche et mardi) laisserait une archive vivre jusqu'à 35 jours.
-Les deux purges visent les archives d'au moins `RETENTION_DAYS × 24 − 1` heures
-(719 h) : passant chaque heure, la purge efface une archive avant ses 30 jours
-pleins, sauf passage manqué (verrou, serveur arrêté), rattrapé au suivant.
+Les deux purges visent les archives d'au moins `RETENTION_DAYS × 24 − 3` heures
+(717 h) : passant chaque heure, la purge efface une archive entre 29 j 21 h et
+29 j 22 h, avant ses 30 jours pleins même quand un passage attend le verrou
+d'une longue sauvegarde du dimanche ; un passage manqué (serveur arrêté) se
+rattrape au suivant. `RETENTION_DAYS` doit être un nombre entier de jours, au
+moins 1 : toute autre valeur fait échouer les deux scripts avant la purge (un
+seuil nul ou négatif effacerait toutes les archives).
 Renseigner d'abord `UPLOADS_DIR` dans `backup-onedrive.env` (chemin absolu de
 `public/uploads` de l'app) et créer le remote chiffré (3 bis), puis faire un
 premier passage à la main — c'est lui qui envoie tout le dossier, les suivants
@@ -501,6 +508,7 @@ mettent dans `rclone.conf`, ou dans des variables `RCLONE_CONFIG_<REMOTE>_*`.
 | Variable | Défaut | Rôle |
 | --- | --- | --- |
 | `BACKUP_STATUS_PATH` | `/var/lib/bluegenji/backup-status.json` | Fichier de statut relu pour le rapport hebdomadaire. |
+| `BACKUP_STATUS_HISTORY_PATH` | `BACKUP_STATUS_PATH` sans `.json`, suivi de `-history.jsonl` (même défaut que `STATUS_HISTORY_FILE` du script) | Historique des statuts (une ligne JSON par exécution, 20 dernières gardées) : le rapport y relit les échecs des sept derniers jours. Le script l'écrit sous verrou `flock` (fichier voisin `.lock`) : deux exécutions qui se chevauchent n'y perdent aucune ligne. |
 | `BACKUP_UPLOADS_REMOTE` | `UPLOADS_RCLONE_REMOTE:UPLOADS_REMOTE_DIR` de `scripts/backup-onedrive.env` (défauts du script compris) ; sans objet si `UPLOADS_DIR` est vide | Remote `crypt` et dossier des images, lu par la vérification. |
 | `BACKUP_RECIPIENTS_FILE` | `AGE_RECIPIENTS_FILE` du même fichier (chemin absolu, `$SCRIPT_DIR`, `~` ou `$HOME` en tête — un chemin relatif n'est pas deviné, régler alors cette variable), sinon `scripts/backup-recipients.txt` (`$SCRIPT_DIR` est le dossier du script, même si sa configuration vit ailleurs) | Clés publiques autorisées, comparées à la clé du bot. |
 | `BACKUP_ONEDRIVE_ENV` (ou `BACKUP_CONFIG`) | `scripts/backup-onedrive.env` | Fichier de configuration du script, relu (jamais exécuté) pour les défauts ci-dessus. |

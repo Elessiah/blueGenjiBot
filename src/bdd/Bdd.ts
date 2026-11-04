@@ -8,9 +8,11 @@ import type {status, Query} from "../types.js";
 import {ranks, services} from '../utils/globals.js';
 import {toSQLiteDate} from '../utils/toSQLiteDatetime.js';
 import {RECRUIT_ROLE_CHOICES, SCRIM_LEVEL_CHOICES, normalizeLegacyChoice} from '../config/searchChoices.js';
+import {ADHESION_EXPIRED_REMINDER_DM, LEGACY_ADHESION_EXPIRED_REMINDER_FR} from '../notifications/dmLanguage.js';
 import {
     ACTIVITY_DAILY_TABLE,
     ADHESION_INTERVAL_TABLE,
+    BAN_NOTICE_WITHDRAWAL_TABLE,
     BAN_TABLE,
     BOT_OWNER_TABLE,
     BUSY_TIMEOUT_PRAGMA,
@@ -305,6 +307,7 @@ class Bdd {
       ["Error rank filter : ", () => this.createRanks()],
       ["ChannelPartnerRank: ", CHANNEL_PARTNER_RANK_TABLE],
       ["AdhesionInterval error: ", ADHESION_INTERVAL_TABLE],
+      ["AdhesionInterval default text error: ", () => this.upgradeAdhesionDefaults()],
       ["RoleAdmin error: ", ROLE_ADMIN_TABLE],
       ["ServerModule error: ", SERVER_MODULE_TABLE],
       ["FeedEvent error: ", FEED_EVENT_TABLE],
@@ -320,6 +323,7 @@ class Bdd {
       ["BotOwner error: ", BOT_OWNER_TABLE],
       ["TournamentLink error: ", TOURNAMENT_LINK_TABLE],
       ["MatchVoiceChannel error: ", MATCH_VOICE_CHANNEL_TABLE],
+      ["BanNoticeWithdrawal error: ", BAN_NOTICE_WITHDRAWAL_TABLE],
     ];
   }
 
@@ -392,16 +396,38 @@ class Bdd {
     // (`/unban`) : le motif en message privé au propriétaire, et l'avis
     // « un joueur a été exclu » au salon. `NULL` pour une exclusion
     // antérieure à ces colonnes — seul son motif au salon (`id_reason`)
-    // peut alors être effacé.
-    for (const column of ["id_reason_owner", "id_notice_admin"]) {
+    // peut alors être effacé. Puis l'avis remis en message privé à l'exclu
+    // (`checkBan`) et l'instant de son dernier essai, qui le borne à un par
+    // jour : l'avis aussi est effacé à la levée.
+    const columns: [string, string][] = [
+      ["id_reason_owner", "TEXT"],
+      ["id_notice_admin", "TEXT"],
+      ["id_notice_user", "TEXT"],
+      ["notice_user_at", "INTEGER"],
+    ];
+    for (const [column, type] of columns) {
       const exists = await this.Database?.get(
         "SELECT 1 FROM pragma_table_info('Ban') WHERE name = ?",
         [column],
       );
       if (!exists) {
-        await this.Database?.exec(`ALTER TABLE Ban ADD COLUMN ${column} TEXT`);
+        await this.Database?.exec(`ALTER TABLE Ban ADD COLUMN ${assertSqlIdentifier(column)} ${assertSqlIdentifier(type)}`);
       }
     }
+  }
+
+  /**
+   * Rappels d'adhésion programmés avec l'ancien avis de péremption par défaut
+   * (français seul) : remis au texte bilingue d'aujourd'hui. Seul le texte par
+   * défaut exact est visé, jamais un message écrit par l'auteur de la commande.
+   * Migration transitoire : à retirer une fois jouée sur la production (une seule
+   * instruction sur une table de quelques lignes d'ici là).
+   */
+  private async upgradeAdhesionDefaults(): Promise<void> {
+    await this.Database?.run(
+      "UPDATE AdhesionInterval SET message = ? WHERE message = ?",
+      [ADHESION_EXPIRED_REMINDER_DM, LEGACY_ADHESION_EXPIRED_REMINDER_FR],
+    );
   }
 
   /**
@@ -1098,6 +1124,34 @@ class Bdd {
   async raw<T = unknown>(query: string, values: unknown[] = []): Promise<T[]> {
     if (!this.Database) { return []; }
     return this.Database.all(query, values) as Promise<T[]>;
+  }
+
+  /**
+   * Exécute une écriture `… RETURNING` et rend les lignes touchées.
+   * @param query Requête SQL avec placeholders `?`.
+   * @param values Valeurs à binder (défaut: []).
+   * @returns Lignes rendues par `RETURNING`.
+   * @throws Sans base ouverte (restauration en cours) : « aucune ligne » voudrait
+   *   dire « ligne disparue », ce qui n'est pas le cas.
+   */
+  async writeReturning<T = unknown>(query: string, values: unknown[] = []): Promise<T[]> {
+    if (!this.Database) { throw new Error("Database is not open"); }
+    return this.Database.all(query, values) as Promise<T[]>;
+  }
+
+  /**
+   * Exécute une écriture SQL paramétrée et rend le nombre de lignes touchées,
+   * pour réserver une ligne en une instruction (`UPDATE … WHERE` + `changes`).
+   * @param query Requête SQL avec placeholders `?`.
+   * @param values Valeurs à binder (défaut: []).
+   * @returns Lignes modifiées.
+   * @throws Sans base ouverte (restauration en cours) : « aucune ligne » voudrait
+   *   dire « ligne disparue », ce qui n'est pas le cas.
+   */
+  async write(query: string, values: unknown[] = []): Promise<number> {
+    if (!this.Database) { throw new Error("Database is not open"); }
+    const result = await this.Database.run(query, values);
+    return result.changes ?? 0;
   }
 }
 

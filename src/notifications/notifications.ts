@@ -10,6 +10,8 @@
  * ni à Discord ni à la base. La distribution vit dans `deliver.ts`.
  */
 
+import { sliceWithoutSplittingPair } from "./dmLanguage.js";
+
 /** Destinataire d'un message privé, tel que l'app le connaît. */
 export interface DirectMessageRecipient {
   /** Discord ID quand l'app le connaît (compte lié par code Discord). */
@@ -107,7 +109,9 @@ function toTrimmedString(value: unknown): string | null {
 export function truncateMessage(message: string): string {
   if (message.length <= MAX_MESSAGE_LENGTH) { return message; }
   const suffix = "\n… (message tronqué)";
-  return message.slice(0, MAX_MESSAGE_LENGTH - suffix.length) + suffix;
+  // Une coupe au milieu d'un émoji (paire de substitution) laisserait un
+  // caractère cassé : même garde que l'avis d'exclusion.
+  return sliceWithoutSplittingPair(message, MAX_MESSAGE_LENGTH - suffix.length) + suffix;
 }
 
 /**

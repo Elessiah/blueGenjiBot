@@ -45,3 +45,12 @@ export const STAFF_LOG_RETENTION_DAYS = 365;
  * `BACKUP_RETENTION_DAYS` côté site) : la copie est la base d'avant, en clair.
  */
 export const ROLLBACK_RETENTION_DAYS = 30;
+
+/**
+ * Jours pendant lesquels un avis d'exclusion que Discord n'a pas laissé
+ * effacer est réessayé, chaque nuit (`BanNoticeWithdrawal`). La ligne part à
+ * la dernière purge de nuit qui précède l'échéance d'au moins une demi-journée
+ * (l'heure de passage glisse) : jamais gardée au-delà
+ * (jours comptés sur l'horloge du serveur, depuis la date notée).
+ */
+export const BAN_NOTICE_WITHDRAWAL_RETRY_DAYS = 30;

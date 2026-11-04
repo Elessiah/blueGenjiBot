@@ -107,7 +107,7 @@ Droits:
 
 Comportement:
 - Le message "valide" est envoye immediatement en message prive au membre.
-- Le message "perimee" est programme pour la date de peremption (envoi unique). Sans texte personnalise, les messages "valide" et "perimee" par defaut sont bilingues (francais puis anglais).
+- Le message "perimee" est programme pour la date de peremption (envoi unique). Sans texte personnalise, les messages "valide" et "perimee" par defaut sont bilingues (francais puis anglais). Un rappel programme avant les messages bilingues avec l'ancien texte "perimee" par defaut (francais seul) est remis au texte bilingue au demarrage du bot ; un texte personnalise n'est jamais modifie.
 - **Le format de la date compte.** `DD/MM/YYYY`, et rien d'autre: une date
   ecrite autrement (la forme ISO `2026-12-31`, par exemple) n'est pas comprise.
   Le bot repond alors "Echeance invalide" et **ne programme aucun rappel** --

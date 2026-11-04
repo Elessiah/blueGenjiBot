@@ -9,9 +9,15 @@ const TMP_DB = path.join(os.tmpdir(), `bgenji-stafflog-${randomUUID()}.sqlite`);
 process.env.BDD_PATH = TMP_DB;
 
 import type { Client } from "discord.js";
-import { closeBddInstance } from "../../bdd/Bdd.js";
+import { closeBddInstance, getBddInstance } from "../../bdd/Bdd.js";
+import { BAN_NOTICE_WITHDRAWAL_RETRY_DAYS } from "../../privacy/retentionPeriods.js";
 import {
+  MAX_NOTICE_WITHDRAWALS_PER_RUN,
+  deleteDirectMessage,
+  retryBanNoticeWithdrawals,
+  withdrawBanNotice,
   banMessageIds,
+  deleteBanMessages,
   MAX_LOG_PAGES_PER_RUN,
   purgeLogChannel,
   purgeStaffLogs,
@@ -185,4 +191,626 @@ test.after(async () => {
   await closeBddInstance();
   await new Promise((r) => setTimeout(r, 50));
   try { fs.unlinkSync(TMP_DB); } catch { /* noop */ }
+});
+
+/** Faux client pour `deleteBanMessages` : relève chaque suppression par conversation. */
+function banClient(deleted: string[], unreachableUser: string | null = null): Client {
+  const conversation = (owner: string) => ({
+    messages: { delete: async (id: string) => { deleted.push(`${owner}:${id}`); } },
+  });
+  return {
+    channels: { fetch: async () => conversation("salon") },
+    users: {
+      fetch: async (id: string) => {
+        if (id === unreachableUser) { throw new Error("Unknown User"); }
+        return { createDM: async () => conversation(id) };
+      },
+    },
+  } as unknown as Client;
+}
+
+const BAN: Ban = {
+  id_user: "600000000000000001",
+  id_moderator: "600000000000000002",
+  id_reason: "reason-1",
+  date: new Date(0),
+  id_reason_owner: null,
+  id_notice_admin: null,
+  id_notice_user: "notice-1",
+};
+
+test("deleteBanMessages_noticeUserSet_deletesDmInBannedUsersConversation", async () => {
+  process.env.INFO_SERV = "info-1";
+  const deleted: string[] = [];
+  const count = await deleteBanMessages(banClient(deleted), BAN);
+  assert.equal(count, 2);
+  assert.deepEqual(deleted.sort(), ["600000000000000001:notice-1", "salon:reason-1"]);
+});
+
+test("deleteBanMessages_noNoticeUser_bannedUserNotFetched", async () => {
+  process.env.INFO_SERV = "info-1";
+  const deleted: string[] = [];
+  await deleteBanMessages(banClient(deleted), { ...BAN, id_notice_user: null });
+  assert.deepEqual(deleted, ["salon:reason-1"]);
+});
+
+test("deleteBanMessages_bannedUserUnreachable_otherMessagesStillDeleted", async () => {
+  process.env.INFO_SERV = "info-1";
+  const deleted: string[] = [];
+  const count = await deleteBanMessages(banClient(deleted, BAN.id_user), BAN);
+  assert.equal(count, 1);
+  assert.deepEqual(deleted, ["salon:reason-1"]);
+});
+
+// --- Revue sécurité EF-14, cycle 4 : un avis resté chez l'exclu est signalé ---
+
+/** Faux client dont l'effacement de l'avis lève `noticeError` ; relève les journaux du salon. */
+function noticeFailureClient(logs: string[], noticeError: (Error & { code?: number }) | null, unreachableUser: string | null = null): Client {
+  const conversation = (owner: string) => ({
+    send: async (payload: { content: string }) => { logs.push(payload.content); return { id: "log-1" }; },
+    messages: { delete: async (id: string) => {
+      if (owner === BAN.id_user && noticeError) { throw noticeError; }
+      return id;
+    } },
+  });
+  return {
+    channels: { fetch: async () => conversation("salon") },
+    users: {
+      fetch: async (id: string) => {
+        if (id === unreachableUser) { throw new Error("Unknown User"); }
+        return { id, send: async () => ({ id: "dm-1" }), createDM: async () => conversation(id) };
+      },
+    },
+  } as unknown as Client;
+}
+
+/** Avis en attente de retrait, tels que la table les garde. */
+async function pendingWithdrawals(): Promise<unknown[]> {
+  const bdd = await getBddInstance();
+  return bdd.raw("SELECT id_user, id_message, queued_at FROM BanNoticeWithdrawal ORDER BY id_message");
+}
+
+async function clearWithdrawals(): Promise<void> {
+  const bdd = await getBddInstance();
+  await bdd.raw("DELETE FROM BanNoticeWithdrawal");
+}
+
+const UNAVAILABLE = (): Error & { code?: number } => Object.assign(new Error("Service Unavailable"), { code: 0 });
+const RETRY_WINDOW_MS = BAN_NOTICE_WITHDRAWAL_RETRY_DAYS * DAY;
+
+test("deleteBanMessages_noticeDeleteFails_withdrawalQueued", async () => {
+  process.env.INFO_SERV = "info-1";
+  await clearWithdrawals();
+  const logs: string[] = [];
+  const client = noticeFailureClient(logs, UNAVAILABLE());
+
+  const count = await deleteBanMessages(client, BAN);
+
+  assert.equal(count, 1);
+  assert.deepEqual(logs, ["Ban notice withdrawal postponed to the nightly purge"]);
+  assert.equal((await pendingWithdrawals()).length, 1);
+});
+
+test("deleteBanMessages_noticeAlreadyGone_noWithdrawLog", async () => {
+  process.env.INFO_SERV = "info-1";
+  await clearWithdrawals();
+  const logs: string[] = [];
+  const client = noticeFailureClient(logs, Object.assign(new Error("Unknown Message"), { code: 10008 }));
+
+  await deleteBanMessages(client, BAN);
+
+  assert.deepEqual(logs, []);
+  assert.deepEqual(await pendingWithdrawals(), []);
+});
+
+test("deleteBanMessages_bannedUserUnreachable_withdrawalQueued", async () => {
+  process.env.INFO_SERV = "info-1";
+  await clearWithdrawals();
+  const logs: string[] = [];
+  const client = noticeFailureClient(logs, null, BAN.id_user);
+
+  await deleteBanMessages(client, BAN);
+
+  assert.deepEqual(logs, ["Ban notice withdrawal postponed to the nightly purge"]);
+});
+
+test("withdrawBanNotice_deleteFails_queuedForNightlyPurge", async () => {
+  await clearWithdrawals();
+  const logs: string[] = [];
+
+  const outcome = await withdrawBanNotice(noticeFailureClient(logs, UNAVAILABLE()), BAN.id_user, "notice-q", NOW);
+
+  assert.equal(outcome, "queued");
+  assert.deepEqual(await pendingWithdrawals(), [{ id_user: BAN.id_user, id_message: "notice-q", queued_at: NOW }]);
+  assert.deepEqual(logs, ["Ban notice withdrawal postponed to the nightly purge"]);
+});
+
+test("retryBanNoticeWithdrawals_deleteNowSucceeds_rowRemoved", async () => {
+  await clearWithdrawals();
+  await withdrawBanNotice(noticeFailureClient([], UNAVAILABLE()), BAN.id_user, "notice-r", NOW);
+  const deleted: string[] = [];
+
+  const settled = await retryBanNoticeWithdrawals(banClient(deleted), NOW + DAY);
+
+  assert.equal(settled, 1);
+  assert.deepEqual(deleted, [`${BAN.id_user}:notice-r`]);
+  assert.deepEqual(await pendingWithdrawals(), []);
+});
+
+test("retryBanNoticeWithdrawals_stillFailingWithinRetryWindow_rowKept", async () => {
+  await clearWithdrawals();
+  await withdrawBanNotice(noticeFailureClient([], UNAVAILABLE()), BAN.id_user, "notice-k", NOW);
+
+  const settled = await retryBanNoticeWithdrawals(noticeFailureClient([], UNAVAILABLE()), NOW + DAY);
+
+  assert.equal(settled, 0);
+  assert.equal((await pendingWithdrawals()).length, 1);
+});
+
+test("retryBanNoticeWithdrawals_stillFailingAfterRetryWindow_rowDroppedAndLogged", async () => {
+  await clearWithdrawals();
+  await withdrawBanNotice(noticeFailureClient([], UNAVAILABLE()), BAN.id_user, "notice-x", NOW);
+  const logs: string[] = [];
+
+  const settled = await retryBanNoticeWithdrawals(noticeFailureClient(logs, UNAVAILABLE()), NOW + RETRY_WINDOW_MS);
+
+  assert.equal(settled, 1);
+  assert.deepEqual(await pendingWithdrawals(), []);
+  assert.deepEqual(logs, ["Ban notice withdrawal abandoned after 30 days"]);
+});
+
+// --- Revue sécurité EF-14, cycle 6 : refus définitifs, échéance, oubli de l'avis ---
+
+const REFUSED = (code: number): Error & { code?: number } => Object.assign(new Error("Refused"), { code });
+
+test("withdrawBanNotice_discordRefusesForGood_refusedAndNotQueued", async () => {
+  await clearWithdrawals();
+  const logs: string[] = [];
+
+  const outcome = await withdrawBanNotice(noticeFailureClient(logs, REFUSED(50001)), BAN.id_user, "notice-f", NOW);
+
+  assert.equal(outcome, "refused");
+  assert.deepEqual(await pendingWithdrawals(), []);
+  assert.deepEqual(logs, ["Ban notice withdrawal refused by Discord"]);
+});
+
+test("withdrawBanNotice_queuedNoticeNowGone_rowRemoved", async () => {
+  await clearWithdrawals();
+  await withdrawBanNotice(noticeFailureClient([], UNAVAILABLE()), BAN.id_user, "notice-g", NOW);
+
+  const outcome = await withdrawBanNotice(banClient([]), BAN.id_user, "notice-g", NOW + 1);
+
+  assert.equal(outcome, "gone");
+  assert.deepEqual(await pendingWithdrawals(), []);
+});
+
+test("retryBanNoticeWithdrawals_lastNightBeforeDeadline_rowDroppedAndBanForgetsNotice", async () => {
+  // La purge passe une fois par nuit : à 29 jours, la suivante dépasserait les 30 annoncés.
+  await clearWithdrawals();
+  const bdd = await getBddInstance();
+  await bdd.raw("DELETE FROM Ban WHERE id_user = ?", [BAN.id_user]);
+  await bdd.set("Ban", ["id_user", "id_moderator", "id_reason"], [BAN.id_user, BAN.id_moderator, BAN.id_reason]);
+  await bdd.raw("UPDATE Ban SET id_notice_user = ? WHERE id_user = ?", ["notice-d", BAN.id_user]);
+  await withdrawBanNotice(noticeFailureClient([], UNAVAILABLE()), BAN.id_user, "notice-d", NOW);
+
+  const settled = await retryBanNoticeWithdrawals(noticeFailureClient([], UNAVAILABLE()), NOW + 29 * DAY);
+
+  assert.equal(settled, 1);
+  assert.deepEqual(await pendingWithdrawals(), []);
+  // Sans quoi l'avis du jour le remettrait en file, pour 30 jours de plus.
+  assert.deepEqual(await bdd.raw("SELECT id_notice_user FROM Ban WHERE id_user = ?", [BAN.id_user]), [{ id_notice_user: null }]);
+  await bdd.raw("DELETE FROM Ban WHERE id_user = ?", [BAN.id_user]);
+});
+
+test("retryBanNoticeWithdrawals_queuedInFuture_keptWithItsDate", async () => {
+  // Horloge fautive : rien n'est réécrit, la ligne attend parmi les récentes.
+  await clearWithdrawals();
+  await withdrawBanNotice(noticeFailureClient([], UNAVAILABLE()), BAN.id_user, "notice-z", NOW + 2 * DAY);
+  const attempts: string[] = [];
+
+  const settled = await retryBanNoticeWithdrawals(countingClient(attempts), NOW);
+
+  assert.equal(settled, 0);
+  assert.deepEqual(attempts, ["notice-z"]);
+  assert.deepEqual(await pendingWithdrawals(), [{ id_user: BAN.id_user, id_message: "notice-z", queued_at: NOW + 2 * DAY }]);
+  await clearWithdrawals();
+});
+
+test("retryBanNoticeWithdrawals_unsettledRowRemovedBeforeBulk_onlyDroppedRowsAnnounced", async () => {
+  // Dernier essai refusé, écriture en échec, ligne partie par ailleurs avant le bloc : seule l'échue réellement emportée est annoncée.
+  await clearWithdrawals();
+  const bdd = await getBddInstance();
+  const previousInfoServ = process.env.INFO_SERV;
+  process.env.INFO_SERV = "info-1";
+  await bdd.raw("INSERT INTO BanNoticeWithdrawal (id_user, id_message, queued_at) VALUES (?, ?, ?)", [BAN.id_user, "notice-q", NOW]);
+  const original = bdd.write.bind(bdd);
+  let bulkReached = false;
+  bdd.write = async (query: string, values?: unknown[]) => {
+    if (query.startsWith("UPDATE Ban SET id_notice_user = NULL WHERE id_user")) { throw new Error("SQLITE_BUSY"); }
+    if (query.startsWith("UPDATE Ban SET id_notice_user = NULL WHERE EXISTS")) {
+      bulkReached = true;
+      await bdd.raw("DELETE FROM BanNoticeWithdrawal WHERE id_message = ?", ["notice-q"]);
+      // Une autre échue, restée en file : c'est elle que le bloc doit emporter.
+      await bdd.raw("INSERT INTO BanNoticeWithdrawal (id_user, id_message, queued_at) VALUES (?, ?, ?)", [BAN.id_user, "notice-r", NOW]);
+    }
+    return original(query, values);
+  };
+  const logs: string[] = [];
+  try {
+    await assert.rejects(retryBanNoticeWithdrawals(noticeFailureClient(logs, REFUSED(50001)), NOW + 29 * DAY), /SQLITE_BUSY/);
+  } finally {
+    bdd.write = original;
+    if (previousInfoServ === undefined) { delete process.env.INFO_SERV; } else { process.env.INFO_SERV = previousInfoServ; }
+  }
+
+  assert.equal(bulkReached, true);
+  // Seule l'échue jamais essayée est annoncée : la ligne partie avant le bloc ne compte pas.
+  assert.deepEqual(logs, ["1 ban notice withdrawals abandoned after " + BAN_NOTICE_WITHDRAWAL_RETRY_DAYS + " days"]);
+  assert.deepEqual(await pendingWithdrawals(), []);
+});
+
+test("retryBanNoticeWithdrawals_refusedForGood_rowDroppedAndLogged", async () => {
+  await clearWithdrawals();
+  await withdrawBanNotice(noticeFailureClient([], UNAVAILABLE()), BAN.id_user, "notice-c", NOW);
+  const logs: string[] = [];
+
+  const settled = await retryBanNoticeWithdrawals(noticeFailureClient(logs, REFUSED(10003)), NOW + DAY);
+
+  assert.equal(settled, 1);
+  assert.deepEqual(await pendingWithdrawals(), []);
+  assert.deepEqual(logs, ["Ban notice withdrawal refused by Discord"]);
+});
+
+// --- Revue sécurité EF-14, cycle 7 ---
+
+test("deleteDirectMessage_staleCachedChannel_reopenedAndDeleted", async () => {
+  // Conversation gardée en cache que Discord ne connaît plus : rouverte une fois.
+  const deleted: string[] = [];
+  const client = {
+    users: {
+      fetch: async () => ({
+        dmChannel: { messages: { delete: async () => { throw REFUSED(10003); } } },
+        createDM: async () => ({ messages: { delete: async (id: string) => { deleted.push(id); } } }),
+      }),
+    },
+  } as unknown as Client;
+
+  const outcome = await deleteDirectMessage(client, BAN.id_user, "notice-s");
+
+  assert.equal(outcome, "deleted");
+  assert.deepEqual(deleted, ["notice-s"]);
+});
+
+test("deleteDirectMessage_messageAlreadyGone_gone", async () => {
+  const outcome = await deleteDirectMessage(noticeFailureClient([], REFUSED(10008)), BAN.id_user, "notice-a");
+
+  assert.equal(outcome, "gone");
+});
+
+test("withdrawBanNotice_refused_banForgetsNotice", async () => {
+  // Jamais effaçable : la ligne `Ban` l'oublie, l'avis du jour ne le reprend pas.
+  await clearWithdrawals();
+  const bdd = await getBddInstance();
+  await bdd.raw("DELETE FROM Ban WHERE id_user = ?", [BAN.id_user]);
+  await bdd.set("Ban", ["id_user", "id_moderator", "id_reason"], [BAN.id_user, BAN.id_moderator, BAN.id_reason]);
+  await bdd.raw("UPDATE Ban SET id_notice_user = ? WHERE id_user = ?", ["notice-n", BAN.id_user]);
+
+  const outcome = await withdrawBanNotice(noticeFailureClient([], REFUSED(50013)), BAN.id_user, "notice-n", NOW);
+
+  assert.equal(outcome, "refused");
+  assert.deepEqual(await bdd.raw("SELECT id_notice_user FROM Ban WHERE id_user = ?", [BAN.id_user]), [{ id_notice_user: null }]);
+  await bdd.raw("DELETE FROM Ban WHERE id_user = ?", [BAN.id_user]);
+});
+
+test("deleteBanMessages_ownerMessageAlreadyGone_notCounted", async () => {
+  // Un `OWNER_ID` erroné ou un message déjà effacé ne passent pas pour un effacement.
+  const previousOwner = process.env.OWNER_ID;
+  process.env.OWNER_ID = BAN.id_user;
+  try {
+    const count = await deleteBanMessages(noticeFailureClient([], REFUSED(10008)), {
+      ...BAN,
+      id_reason: "",
+      id_reason_owner: "owner-msg",
+      id_notice_user: null,
+    });
+
+    assert.equal(count, 0);
+  } finally {
+    process.env.OWNER_ID = previousOwner;
+  }
+});
+
+// --- Revue sécurité EF-14, cycle 8 ---
+
+/** Faux client qui compte les effacements tentés auprès de Discord, tous en échec passager. */
+function countingClient(attempts: string[]): Client {
+  return {
+    channels: { fetch: async () => ({ send: async () => ({ id: "log-1" }) }) },
+    users: {
+      fetch: async (id: string) => ({
+        id,
+        send: async () => ({ id: "dm-1" }),
+        createDM: async () => ({ messages: { delete: async (messageId: string) => { attempts.push(messageId); throw UNAVAILABLE(); } } }),
+      }),
+    },
+  } as unknown as Client;
+}
+
+test("deleteDirectMessage_freshChannelUnknown_refusedWithoutReopen", async () => {
+  // Conversation ouverte à l'instant : un « canal inconnu » n'est pas réessayé.
+  let opened = 0;
+  const client = {
+    users: {
+      fetch: async () => ({
+        dmChannel: null,
+        createDM: async () => { opened += 1; return { messages: { delete: async () => { throw REFUSED(10003); } } }; },
+      }),
+    },
+  } as unknown as Client;
+
+  const outcome = await deleteDirectMessage(client, BAN.id_user, "notice-r");
+
+  assert.equal(outcome, "refused");
+  assert.equal(opened, 1);
+});
+
+test("withdrawBanNotice_refusedAndForgetFails_keptForNightlyRetry", async () => {
+  await clearWithdrawals();
+  const bdd = await getBddInstance();
+  const original = bdd.write.bind(bdd);
+  bdd.write = async (query: string, values?: unknown[]) => {
+    if (query.startsWith("UPDATE Ban SET id_notice_user = NULL")) { throw new Error("database is locked"); }
+    return original(query, values);
+  };
+  const logs: string[] = [];
+  let outcome;
+  try {
+    outcome = await withdrawBanNotice(noticeFailureClient(logs, REFUSED(50013)), BAN.id_user, "notice-l", NOW);
+  } finally {
+    bdd.write = original;
+  }
+
+  assert.equal(outcome, "refused");
+  // Une seule alerte : la purge de nuit annoncera le refus s'il se répète.
+  assert.deepEqual(logs, ["Ban notice refusal not recorded"]);
+  // Gardé en file : la purge de nuit refera l'oubli.
+  assert.deepEqual(await pendingWithdrawals(), [{ id_user: BAN.id_user, id_message: "notice-l", queued_at: NOW }]);
+  await clearWithdrawals();
+});
+
+test("retryBanNoticeWithdrawals_expiredRow_lastAttemptThenAbandoned", async () => {
+  // Échue : un dernier essai, puis abandon s'il échoue encore.
+  await clearWithdrawals();
+  const bdd = await getBddInstance();
+  await bdd.raw("INSERT INTO BanNoticeWithdrawal (id_user, id_message, queued_at) VALUES (?, ?, ?)", [BAN.id_user, "notice-e", NOW]);
+  const attempts: string[] = [];
+
+  const settled = await retryBanNoticeWithdrawals(countingClient(attempts), NOW + 29 * DAY);
+
+  assert.equal(settled, 1);
+  assert.deepEqual(attempts, ["notice-e"]);
+  assert.deepEqual(await pendingWithdrawals(), []);
+});
+
+test("retryBanNoticeWithdrawals_moreExpiredThanCap_spareBudgetUsedThenRestDropped", async () => {
+  // Les appels restent plafonnés, et aucune ligne échue ne passe l'échéance.
+  await clearWithdrawals();
+  const bdd = await getBddInstance();
+  for (let i = 0; i < MAX_NOTICE_WITHDRAWALS_PER_RUN + 5; i++) {
+    await bdd.raw("INSERT INTO BanNoticeWithdrawal (id_user, id_message, queued_at) VALUES (?, ?, ?)", [BAN.id_user, `old-${i}`, NOW + i]);
+  }
+  const attempts: string[] = [];
+
+  const settled = await retryBanNoticeWithdrawals(countingClient(attempts), NOW + 29 * DAY + DAY);
+
+  // Aucune ligne récente : tout le plafond va aux échues, les 5 restantes partent sans appel.
+  assert.equal(settled, MAX_NOTICE_WITHDRAWALS_PER_RUN + 5);
+  assert.equal(attempts.length, MAX_NOTICE_WITHDRAWALS_PER_RUN);
+  assert.deepEqual(await pendingWithdrawals(), []);
+});
+
+test("retryBanNoticeWithdrawals_futureRowInBacklog_triedAndKeptWithItsDate", async () => {
+  // Datée du futur au milieu d'un arriéré : essayée parmi les récentes, ni réécrite ni abandonnée.
+  await clearWithdrawals();
+  const bdd = await getBddInstance();
+  for (let i = 0; i < MAX_NOTICE_WITHDRAWALS_PER_RUN; i++) {
+    await bdd.raw("INSERT INTO BanNoticeWithdrawal (id_user, id_message, queued_at) VALUES (?, ?, ?)", [BAN.id_user, `old-${i}`, NOW]);
+  }
+  await bdd.raw("INSERT INTO BanNoticeWithdrawal (id_user, id_message, queued_at) VALUES (?, ?, ?)", [BAN.id_user, "future", NOW + 40 * DAY]);
+  const attempts: string[] = [];
+
+  await retryBanNoticeWithdrawals(countingClient(attempts), NOW + 30 * DAY);
+
+  assert.ok(attempts.includes("future"));
+  assert.deepEqual(await pendingWithdrawals(), [{ id_user: BAN.id_user, id_message: "future", queued_at: NOW + 40 * DAY }]);
+  await clearWithdrawals();
+});
+
+test("withdrawBanNotice_goneAndForgetFails_staffWarned", async () => {
+  await clearWithdrawals();
+  const bdd = await getBddInstance();
+  const original = bdd.write.bind(bdd);
+  bdd.write = async (query: string, values?: unknown[]) => {
+    if (query.startsWith("UPDATE Ban")) { throw new Error("database is locked"); }
+    return original(query, values);
+  };
+  const logs: string[] = [];
+  let outcome;
+  try {
+    outcome = await withdrawBanNotice(noticeFailureClient(logs, null), BAN.id_user, "notice-g2", NOW);
+  } finally {
+    bdd.write = original;
+  }
+
+  assert.equal(outcome, "gone");
+  assert.deepEqual(logs, ["Ban notice deletion not recorded"]);
+});
+
+test("retryBanNoticeWithdrawals_expiredBacklog_freshRowStillTried", async () => {
+  // Un arriéré d'échues ne prive pas les avis récents de leur essai.
+  await clearWithdrawals();
+  const bdd = await getBddInstance();
+  for (let i = 0; i < MAX_NOTICE_WITHDRAWALS_PER_RUN; i++) {
+    await bdd.raw("INSERT INTO BanNoticeWithdrawal (id_user, id_message, queued_at) VALUES (?, ?, ?)", [BAN.id_user, `old-${i}`, NOW]);
+  }
+  await bdd.raw("INSERT INTO BanNoticeWithdrawal (id_user, id_message, queued_at) VALUES (?, ?, ?)", [BAN.id_user, "fresh", NOW + 29 * DAY]);
+  const attempts: string[] = [];
+
+  await retryBanNoticeWithdrawals(countingClient(attempts), NOW + 29 * DAY + DAY);
+
+  assert.ok(attempts.includes("fresh"));
+  await clearWithdrawals();
+});
+
+test("withdrawBanNotice_gone_banForgetsNotice", async () => {
+  // Effacé : la ligne `Ban` ne désigne plus un message parti.
+  await clearWithdrawals();
+  const bdd = await getBddInstance();
+  await bdd.raw("DELETE FROM Ban WHERE id_user = ?", [BAN.id_user]);
+  await bdd.set("Ban", ["id_user", "id_moderator", "id_reason"], [BAN.id_user, BAN.id_moderator, BAN.id_reason]);
+  await bdd.raw("UPDATE Ban SET id_notice_user = ? WHERE id_user = ?", ["notice-x", BAN.id_user]);
+
+  const outcome = await withdrawBanNotice(banClient([]), BAN.id_user, "notice-x", NOW);
+
+  assert.equal(outcome, "gone");
+  assert.deepEqual(await bdd.raw("SELECT id_notice_user FROM Ban WHERE id_user = ?", [BAN.id_user]), [{ id_notice_user: null }]);
+  await bdd.raw("DELETE FROM Ban WHERE id_user = ?", [BAN.id_user]);
+});
+
+test("withdrawBanNotice_refusedForgetAndQueueFail_staffWarned", async () => {
+  // Ni oubli ni file : le staff le sait, et le refus est annoncé tout de suite.
+  await clearWithdrawals();
+  const bdd = await getBddInstance();
+  const original = bdd.write.bind(bdd);
+  bdd.write = async (query: string, values?: unknown[]) => {
+    if (query.startsWith("UPDATE Ban") || query.startsWith("INSERT OR IGNORE")) { throw new Error("database is locked"); }
+    return original(query, values);
+  };
+  const logs: string[] = [];
+  try {
+    await withdrawBanNotice(noticeFailureClient(logs, REFUSED(50013)), BAN.id_user, "notice-k", NOW);
+  } finally {
+    bdd.write = original;
+  }
+
+  assert.deepEqual(logs, ["Ban notice refusal not recorded", "Ban notice withdrawal not queued", "Ban notice withdrawal refused by Discord"]);
+});
+
+test("retryBanNoticeWithdrawals_noticeDeleted_liveBanForgetsNotice", async () => {
+  // Avis encore désigné par une exclusion en cours (levée échouée) : effacé, il est oublié.
+  await clearWithdrawals();
+  const bdd = await getBddInstance();
+  await bdd.raw("DELETE FROM Ban WHERE id_user = ?", [BAN.id_user]);
+  await bdd.set("Ban", ["id_user", "id_moderator", "id_reason"], [BAN.id_user, BAN.id_moderator, BAN.id_reason]);
+  await bdd.raw("UPDATE Ban SET id_notice_user = ? WHERE id_user = ?", ["notice-v", BAN.id_user]);
+  await bdd.raw("INSERT INTO BanNoticeWithdrawal (id_user, id_message, queued_at) VALUES (?, ?, ?)", [BAN.id_user, "notice-v", NOW]);
+
+  const settled = await retryBanNoticeWithdrawals(banClient([]), NOW + DAY);
+
+  assert.equal(settled, 1);
+  assert.deepEqual(await bdd.raw("SELECT id_notice_user FROM Ban WHERE id_user = ?", [BAN.id_user]), [{ id_notice_user: null }]);
+  await bdd.raw("DELETE FROM Ban WHERE id_user = ?", [BAN.id_user]);
+});
+
+test("retryBanNoticeWithdrawals_morePendingThanCap_cappedPerRun", async () => {
+  await clearWithdrawals();
+  const bdd = await getBddInstance();
+  for (let i = 0; i < MAX_NOTICE_WITHDRAWALS_PER_RUN + 5; i++) {
+    await bdd.raw("INSERT INTO BanNoticeWithdrawal (id_user, id_message, queued_at) VALUES (?, ?, ?)", [BAN.id_user, `notice-${i}`, NOW]);
+  }
+  const attempts: string[] = [];
+
+  const settled = await retryBanNoticeWithdrawals(countingClient(attempts), NOW + DAY);
+
+  assert.equal(settled, 0);
+  assert.equal(attempts.length, MAX_NOTICE_WITHDRAWALS_PER_RUN);
+  await clearWithdrawals();
+});
+
+/**
+ * Une ligne en file depuis `NOW`, essayée à `now` alors que l'oubli sur la
+ * ligne `Ban` échoue (`SQLITE_BUSY`, relancé en fin de nuit) : rend les alertes.
+ */
+async function retryWithFailingForget(messageId: string, noticeError: (Error & { code?: number }) | null, now: number): Promise<string[]> {
+  await clearWithdrawals();
+  const bdd = await getBddInstance();
+  await bdd.raw("INSERT INTO BanNoticeWithdrawal (id_user, id_message, queued_at) VALUES (?, ?, ?)", [BAN.id_user, messageId, NOW]);
+  const original = bdd.write.bind(bdd);
+  bdd.write = async (query: string, values?: unknown[]) => {
+    if (query.startsWith("UPDATE Ban SET id_notice_user = NULL WHERE id_user")) { throw new Error("SQLITE_BUSY"); }
+    return original(query, values);
+  };
+  const logs: string[] = [];
+  try {
+    await assert.rejects(retryBanNoticeWithdrawals(noticeFailureClient(logs, noticeError), now), /SQLITE_BUSY/);
+  } finally {
+    bdd.write = original;
+  }
+  return logs;
+}
+
+test("retryBanNoticeWithdrawals_lastTryRefusedWriteFails_refusalAnnouncedByBulkDrop", async () => {
+  // Dernier essai refusé, oubli en échec : le bloc l'emporte et dit bien « refusé », une seule fois.
+  const logs = await retryWithFailingForget("notice-t", REFUSED(50001), NOW + 29 * DAY);
+
+  assert.deepEqual(logs, ["1 ban notice withdrawals refused by Discord"]);
+  assert.deepEqual(await pendingWithdrawals(), []);
+});
+
+test("retryBanNoticeWithdrawals_recentRefusedWriteFails_notAnnouncedAndKept", async () => {
+  // Écriture en échec : rien n'est annoncé, la ligne reste pour la nuit suivante.
+  const logs = await retryWithFailingForget("notice-u", REFUSED(50001), NOW + DAY);
+
+  assert.deepEqual(logs, []);
+  assert.equal((await pendingWithdrawals()).length, 1);
+  await clearWithdrawals();
+});
+
+test("retryBanNoticeWithdrawals_expiredAndRecent_expiredTriedFirst", async () => {
+  // Une nuit interrompue après les échues ne laisse aucune ligne passer l'échéance.
+  await clearWithdrawals();
+  const bdd = await getBddInstance();
+  await bdd.raw("INSERT INTO BanNoticeWithdrawal (id_user, id_message, queued_at) VALUES (?, ?, ?)", [BAN.id_user, "recent", NOW + 20 * DAY]);
+  await bdd.raw("INSERT INTO BanNoticeWithdrawal (id_user, id_message, queued_at) VALUES (?, ?, ?)", [BAN.id_user, "expired", NOW]);
+  const attempts: string[] = [];
+
+  await retryBanNoticeWithdrawals(countingClient(attempts), NOW + 29 * DAY);
+
+  assert.deepEqual(attempts, ["expired", "recent"]);
+  await clearWithdrawals();
+});
+
+test("retryBanNoticeWithdrawals_lastTryDeletedWriteFails_notAnnouncedAsAbandoned", async () => {
+  // Dernier essai réussi, écriture en échec : l'avis est effacé, le bloc ne l'annonce pas abandonné.
+  const logs = await retryWithFailingForget("notice-y", null, NOW + 29 * DAY);
+
+  assert.deepEqual(logs, []);
+  assert.deepEqual(await pendingWithdrawals(), []);
+});
+
+test("retryBanNoticeWithdrawals_lateNightWithinMargin_lastTryThenDropped", async () => {
+  // Passage décalé : une ligne de 28 j 13 h a son dernier essai cette nuit, sans attendre 30 jours passés.
+  await clearWithdrawals();
+  const bdd = await getBddInstance();
+  await bdd.raw("INSERT INTO BanNoticeWithdrawal (id_user, id_message, queued_at) VALUES (?, ?, ?)", [BAN.id_user, "late", NOW]);
+  const attempts: string[] = [];
+
+  const settled = await retryBanNoticeWithdrawals(countingClient(attempts), NOW + 28 * DAY + 13 * 60 * 60 * 1000);
+
+  assert.deepEqual(attempts, ["late"]);
+  assert.equal(settled, 1);
+  assert.deepEqual(await pendingWithdrawals(), []);
+});
+
+test("retryBanNoticeWithdrawals_youngerThanMargin_keptForNextNight", async () => {
+  // 28 j 11 h : encore une nuit avant l'échéance, la ligne reste.
+  await clearWithdrawals();
+  const bdd = await getBddInstance();
+  await bdd.raw("INSERT INTO BanNoticeWithdrawal (id_user, id_message, queued_at) VALUES (?, ?, ?)", [BAN.id_user, "young", NOW]);
+
+  const settled = await retryBanNoticeWithdrawals(countingClient([]), NOW + 28 * DAY + 11 * 60 * 60 * 1000);
+
+  assert.equal(settled, 0);
+  assert.equal((await pendingWithdrawals()).length, 1);
+  await clearWithdrawals();
 });

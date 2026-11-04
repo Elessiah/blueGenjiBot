@@ -4,6 +4,9 @@ import {Bdd, getBddInstance} from "../../bdd/Bdd.js";
 import type {ChatInputCommandInteraction, Client, Guild} from "discord.js";
 import {Ban} from "../../bdd/types.js";
 import {deleteBanMessages} from "../../privacy/staffLogRetention.js";
+import {forgetBanVerdict} from "../../check/checkBan.js";
+import {sendLog} from "../../safe/sendLog.js";
+import {errorCode} from "../../safe/errorGuards.js";
 
 /**
  * Retire un utilisateur de la liste de bannissement.
@@ -35,18 +38,41 @@ async function unban(client: Client,
         await safeReply(interaction, "Parameter 'id_ban' was not found ! Please try again !");
         return false;
     }
-    const user: Ban[] = await bdd.get("Ban", ["*"], {}, {query: "id_user = ?", values: [target]}) as Ban[];
-    if (user.length === 0) {
+    // L'avis remis à l'exclu est mis en file **avant** la levée : la ligne
+    // `Ban` est le seul endroit qui garde son identifiant, et un arrêt du bot
+    // entre les deux le laisserait sinon introuvable. Effacé ci-dessous, il en
+    // sort. Au mieux : une table ou une colonne d'avis absente (étape du schéma
+    // en échec) n'empêche jamais la levée — le staff en est averti.
+    await bdd.write("INSERT OR IGNORE INTO BanNoticeWithdrawal (id_user, id_message, queued_at) "
+        + "SELECT id_user, id_notice_user, ? FROM Ban WHERE id_user = ? AND id_notice_user IS NOT NULL", [Date.now(), target])
+        .catch((error: unknown) => sendLog(client, `Ban notice not queued before unban: code ${errorCode(error) ?? "inconnu"}`));
+    let removed: Ban[];
+    try {
+        // La ligne effacée est rendue par la même instruction : un avis remis
+        // pendant la levée y figure déjà (sinon, il se voit sans ligne et s'efface lui-même).
+        removed = await bdd.writeReturning<Ban>("DELETE FROM Ban WHERE id_user = ? RETURNING *", [target]);
+    } catch (error) {
+        // Base fermée (restauration) ou occupée : « ID inconnu » serait faux.
+        // L'avis mis en file reste : la purge de nuit l'effacera et la ligne
+        // `Ban` l'oubliera, ce qui ne fait que retirer un rappel à l'exclu
+        // (l'avis du jour suivant le remplace) — le retirer de la file, au
+        // contraire, pouvait perdre un avis qu'un retrait concurrent y croyait gardé.
+        await sendLog(client, `Failed to unban: code ${errorCode(error) ?? "inconnu"}`);
+        await safeReply(interaction, "The database is unavailable. Please try again in a few minutes.");
+        return true;
+    }
+    if (removed.length === 0) {
         await safeReply(interaction, "Unknown ID ban !");
     } else {
-        await bdd.rm("Ban", {}, {query: "id_user = ?", values: [target]});
+        // Le relais garde une minute le verdict « exclu » : la levée vaut sur-le-champ.
+        forgetBanVerdict(target);
         // Réponse d'abord : Discord n'attend que 3 s, et les suppressions
         // ci-dessous font plusieurs appels.
         await safeReply(interaction, "User successfully unbanned.");
         // Le motif et l'avis de l'exclusion n'ont plus d'objet : effacés du
         // salon du staff et des messages privés du propriétaire. Au mieux — ce
         // qui resterait n'est plus protégé de la purge d'un an du journal.
-        for (const ban of user) {
+        for (const ban of removed) {
             await deleteBanMessages(client, ban);
         }
     }

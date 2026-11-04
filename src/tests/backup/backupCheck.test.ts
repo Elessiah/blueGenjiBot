@@ -148,6 +148,28 @@ test("runPipeline ne met pas en cause une étape arrêtée, même sortie avec un
   );
 });
 
+test("runPipeline_downstreamExitsFirstThenKilledUpstreamOwnCode_blamesUpstream", async () => {
+  // Sous charge : `tar`, privé d'entrée, sort (2) avant `age` qui a échoué (1).
+  // `age`, arrêté entre-temps, sort sur son propre code : c'est lui le fautif.
+  const fake: SpawnFn = (command) => {
+    const child = new EventEmitter() as unknown as ChildProcess & EventEmitter;
+    Object.assign(child, {
+      stdin: new PassThrough(),
+      stdout: new PassThrough(),
+      stderr: new PassThrough(),
+      kill: () => true,
+    });
+    if (command === "tar") { setTimeout(() => child.emit("close", 2), 5); }
+    if (command === "age") { setTimeout(() => child.emit("close", 1), 30); }
+    if (command === "rclone") { setTimeout(() => child.emit("close", 0), 1); }
+    return child;
+  };
+  await assert.rejects(
+    runPipeline([{ command: "rclone", args: [] }, { command: "age", args: [] }, { command: "tar", args: [] }], fake),
+    /étape age$/,
+  );
+});
+
 test("runPipeline arrête le tube au-delà du délai", async () => {
   const slow: SpawnFn = (_command, _args, options) => spawn(process.execPath, ["-e", "setTimeout(() => {}, 60000)"], options);
   await assert.rejects(runPipeline([{ command: "age", args: [] }], slow, 200), /délai dépassé/);

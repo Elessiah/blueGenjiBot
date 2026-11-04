@@ -141,7 +141,9 @@ export const BAN_TABLE = `CREATE TABLE IF NOT EXISTS Ban
                DEFAULT
                  CURRENT_TIMESTAMP,
              id_reason_owner TEXT,
-             id_notice_admin TEXT
+             id_notice_admin TEXT,
+             id_notice_user TEXT,
+             notice_user_at INTEGER
            );`;
 
 /** Table `Ranks` (sans effet si elle existe déjà). */
@@ -355,5 +357,21 @@ export const MATCH_VOICE_CHANNEL_TABLE = `CREATE TABLE IF NOT EXISTS MatchVoiceC
             voice_key TEXT NOT NULL UNIQUE,
             created_at INTEGER NOT NULL,
             released_at INTEGER
+          );
+        `;
+
+/**
+ * Avis d'exclusion remis à un exclu qui n'ont pas pu être retirés (Discord
+ * indisponible à la levée, ou au remplacement par l'avis du jour). La purge de
+ * nuit les réessaie (`retryBanNoticeWithdrawals`) pendant 30 jours au plus
+ * (comptés sur l'horloge du serveur, depuis la date notée).
+ * Seuls les identifiants Discord (compte, message) et l'instant (ms).
+ */
+export const BAN_NOTICE_WITHDRAWAL_TABLE = `CREATE TABLE IF NOT EXISTS BanNoticeWithdrawal
+          (
+            id_user TEXT NOT NULL,
+            id_message TEXT NOT NULL,
+            queued_at INTEGER NOT NULL,
+            PRIMARY KEY (id_user, id_message)
           );
         `;
