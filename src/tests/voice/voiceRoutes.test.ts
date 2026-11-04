@@ -146,7 +146,8 @@ test("countVoiceChannel_postOnRemovedRoute_returns404Code", async () => {
 test("unknownRouteOutsideInternal_returns404Code", async () => {
   const reply = await call("/foo", { token: null });
 
-  assert.deepEqual(reply, { status: 404, body: { error: "INTERNAL_ROUTE_NOT_FOUND" } });
+  // Hors de `/internal`, le code ne désigne pas l'API.
+  assert.deepEqual(reply, { status: 404, body: { error: "NOT_FOUND" } });
 });
 
 /** Corps JSON illisible : envoyé tel quel, sans passer par `JSON.stringify`. */
@@ -184,8 +185,31 @@ test("unknownRouteOutsideInternal_malformedBodyNoToken_returns404Code", async ()
   // Hors de `/internal`, le corps n'est jamais lu.
   assert.deepEqual(
     { status: response.status, body: JSON.parse(await response.text()) },
-    { status: 404, body: { error: "INTERNAL_ROUTE_NOT_FOUND" } },
+    { status: 404, body: { error: "NOT_FOUND" } },
   );
+});
+
+/** POST brut vers la création, avec le jeton : seul le corps et son type varient. */
+async function postRaw(contentType: string, body: string): Promise<Reply> {
+  const headers = { "content-type": contentType, "x-internal-token": TOKEN };
+  const response = await fetch(`${baseUrl}/internal/voice/channels`, { method: "POST", headers, body });
+  return { status: response.status, body: JSON.parse(await response.text()) };
+}
+
+test("createVoiceChannel_oversizedBody_returns413", async (t) => {
+  t.mock.method(console, "error", () => undefined);
+
+  const reply = await postRaw("application/json", JSON.stringify({ pad: "x".repeat(200_000) }));
+
+  assert.deepEqual(reply, { status: 413, body: { error: "PAYLOAD_TOO_LARGE" } });
+});
+
+test("createVoiceChannel_unknownCharset_returns415", async (t) => {
+  t.mock.method(console, "error", () => undefined);
+
+  const reply = await postRaw("application/json; charset=foo", "{}");
+
+  assert.deepEqual(reply, { status: 415, body: { error: "UNSUPPORTED_ENCODING" } });
 });
 
 test("createVoiceChannel_malformedJsonNoToken_returns401", async () => {
