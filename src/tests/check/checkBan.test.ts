@@ -833,3 +833,33 @@ test("checkBan_stoppedDuringWithdrawal_claimReleased", async () => {
   assert.deepEqual(trace.dms, []);
   assert.equal((await banRow("stop-c")).notice_user_at, null);
 });
+
+test("checkBan_stoppedDuringWithdrawal_otherBanReservationKept", async () => {
+  // La réservation rendue est celle de **cette** exclusion (`id_reason`), jamais une autre.
+  const trace = newTrace();
+  const base = fakeClient("none", trace) as unknown as { users: { fetch: (id: string) => Promise<Record<string, unknown>> } };
+  const bdd = await getBddInstance();
+  const client = {
+    ...base,
+    users: {
+      fetch: async (id: string) => ({
+        ...await base.users.fetch(id),
+        createDM: async () => ({ messages: { delete: async () => {
+          // Levée puis nouvelle exclusion pendant le retrait, réservée au même instant.
+          await bdd.raw("UPDATE Ban SET id_reason = ? WHERE id_user = ?", ["reason-msg-2", "stop-d"]);
+          stopBanNotices();
+        } } }),
+      }),
+    },
+  } as unknown as Client;
+  await seedBan("stop-d");
+  await bdd.raw("UPDATE Ban SET id_notice_user = ?, notice_user_at = ? WHERE id_user = ?", ["old-notice", T0 - BAN_NOTICE_INTERVAL_MS, "stop-d"]);
+
+  try {
+    await checkBan(client, "stop-d", true, T0);
+  } finally {
+    stopBanNotices(false);
+  }
+
+  assert.equal((await banRow("stop-d")).notice_user_at, T0);
+});
