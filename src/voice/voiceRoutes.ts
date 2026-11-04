@@ -13,7 +13,6 @@ import type { Client } from "discord.js";
 import { sendLog } from "../safe/sendLog.js";
 import {
   VoiceChannelError,
-  countVoiceMembers,
   ensureTeamVoiceChannel,
   parseChannelId,
   parseVoiceKey,
@@ -76,20 +75,6 @@ export function registerVoiceRoutes(app: Express, client: Client): void {
       res.status(created ? 201 : 200).json({ channelId });
     } catch (error) {
       await replyVoiceError(client, res, "POST /internal/voice/channels", error);
-    }
-  });
-
-  app.get("/internal/voice/channels/:channelId/count", async (req: Request, res: Response) => {
-    const channelId = parseChannelId(req.params.channelId);
-    if (!channelId) {
-      res.status(400).json({ error: "INVALID_CHANNEL_ID" });
-      return;
-    }
-    if (refuseNotReady(client, res)) { return; }
-    try {
-      res.json({ members: await countVoiceMembers(client, channelId) });
-    } catch (error) {
-      await replyVoiceError(client, res, "GET /internal/voice/channels/:id/count", error);
     }
   });
 

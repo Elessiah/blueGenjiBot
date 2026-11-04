@@ -53,7 +53,7 @@ export const UNRELEASED_MAX_AGE_MS = 48 * 60 * 60 * 1000;
 export const VOICE_SWEEP_CRON = "*/30 * * * *";
 
 /** Un salon suivi que le bot ne voit plus est oublié après ce délai (le double du plafond de 48 h). */
-const ABANDONED_MAX_AGE_MS = 2 * UNRELEASED_MAX_AGE_MS;
+export const ABANDONED_MAX_AGE_MS = 2 * UNRELEASED_MAX_AGE_MS;
 
 /** Délai entre deux alertes « permission manquante ». */
 const PERMISSION_ALERT_COOLDOWN_MS = 60 * 60 * 1000;
@@ -422,25 +422,6 @@ export async function ensureTeamVoiceChannel(
     }
     return { channelId: await createInCategory(client, key, name, now), created: true };
   });
-}
-
-/**
- * Nombre de personnes dans un salon suivi (`GET …/count`). Le compte seul :
- * aucun membre n'est lu ni rendu.
- * @param client Client Discord.
- * @param channelId Identifiant validé.
- * @returns L'effectif du salon.
- */
-export async function countVoiceMembers(client: Client, channelId: string): Promise<number> {
-  if (!(await trackedById(channelId))) {
-    throw new VoiceChannelError("VOICE_CHANNEL_NOT_TRACKED");
-  }
-  const channel = await fetchVoice(client, channelId);
-  if (!channel) {
-    await untrack(channelId);
-    throw new VoiceChannelError("VOICE_CHANNEL_NOT_FOUND");
-  }
-  return channel.members.size;
 }
 
 /**
