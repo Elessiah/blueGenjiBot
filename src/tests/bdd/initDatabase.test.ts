@@ -22,7 +22,7 @@ const TMP_DIR = path.join(os.tmpdir(), "bgenji-init-db-" + randomUUID());
 fs.mkdirSync(TMP_DIR, { recursive: true });
 
 const EXPECTED_TABLES = [
-  "ActivityDaily", "AdhesionInterval", "Ban", "BotOwner", "ChannelPartner", "ChannelPartnerRank",
+  "ActivityDaily", "AdhesionInterval", "Ban", "BanNoticeWithdrawal", "BotOwner", "ChannelPartner", "ChannelPartnerRank",
   "ChannelPartnerService", "DPMsg", "DailySnapshot", "FeedEvent", "MatchVoiceChannel", "MessageService", "OGMsg", "Ranks",
   "Recrute", "RefereeRole", "RoleAdmin", "Scrim", "ServerInvite", "ServerModule", "Service", "SiteVisit", "TournamentLink",
 ];

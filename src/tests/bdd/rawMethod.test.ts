@@ -57,6 +57,12 @@ test("bddWrite_noDatabaseOpen_throws", async () => {
   await assert.rejects(closed.write("UPDATE OGMsg SET id_author = ?", ["x"]), /Database is not open/);
 });
 
+test("bddWriteReturning_noDatabaseOpen_throws", async () => {
+  // `/unban` pendant une restauration : « aucune ligne » répondrait « ID inconnu » à tort.
+  const closed = new Bdd(TMP_DB);
+  await assert.rejects(closed.writeReturning("DELETE FROM Ban WHERE id_user = ? RETURNING *", ["x"]), /Database is not open/);
+});
+
 test.after(async () => {
   await closeBddInstance();
   await new Promise((r) => setTimeout(r, 50));

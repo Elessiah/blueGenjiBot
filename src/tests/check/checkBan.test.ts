@@ -473,7 +473,9 @@ function failingDeleteClient(trace: Trace, error: Error & { code?: number }): Cl
   } as unknown as Client;
 }
 
-test("checkBan_previousNoticeNotDeletable_noNewNoticeAndIdKept", async () => {
+test("checkBan_previousNoticeNotDeletable_queuedAndNewNoticeSent", async () => {
+  // Un effacement durablement refusé ne bloque plus l'avis du jour : l'ancien
+  // est remis à la purge de nuit, qui le réessaie.
   const trace = newTrace();
   await seedBan("prev-1");
   const bdd = await getBddInstance();
@@ -481,9 +483,9 @@ test("checkBan_previousNoticeNotDeletable_noNewNoticeAndIdKept", async () => {
 
   await checkBan(failingDeleteClient(trace, Object.assign(new Error("Service Unavailable"), { code: 0 })), "prev-1", true, T0);
 
-  assert.deepEqual(trace.dms, []);
-  assert.deepEqual(await banRow("prev-1"), { id_notice_user: "old-notice", notice_user_at: T0 });
-  assert.match(trace.logs.join("\n"), /Ban notice skipped: the previous notice could not be deleted/);
+  assert.equal(trace.dms.length, 1);
+  assert.deepEqual(await banRow("prev-1"), { id_notice_user: "msg-1", notice_user_at: T0 });
+  assert.deepEqual(await bdd.raw("SELECT id_message FROM BanNoticeWithdrawal WHERE id_user = ?", ["prev-1"]), [{ id_message: "old-notice" }]);
 });
 
 test("checkBan_previousNoticeAlreadyGone_newNoticeSent", async () => {
@@ -697,7 +699,7 @@ test("forgetBanVerdict_capReachedDuringRead_verdictStillNotCached", async () => 
 
 // --- Revue sécurité EF-14, cycle 4 : un avis non gardé qui ne s'efface pas est signalé ---
 
-test("checkBan_unbannedDuringSendAndDeleteFails_withdrawFailureLogged", async () => {
+test("checkBan_unbannedDuringSendAndDeleteFails_withdrawalQueued", async () => {
   const trace = newTrace();
   await seedBan("withdraw-1");
   const base = failingDeleteClient(trace, Object.assign(new Error("Service Unavailable"), { code: 0 })) as unknown as { users: { fetch: (id: string) => Promise<Record<string, unknown>> } };
@@ -721,10 +723,12 @@ test("checkBan_unbannedDuringSendAndDeleteFails_withdrawFailureLogged", async ()
   await checkBan(client, "withdraw-1", true, T0);
 
   assert.equal(trace.dms.length, 1);
-  assert.match(trace.logs.join("\n"), /Ban notice could not be withdrawn/);
+  assert.match(trace.logs.join("\n"), /Ban notice withdrawal postponed to the nightly purge/);
+  const bdd = await getBddInstance();
+  assert.deepEqual(await bdd.raw("SELECT id_message FROM BanNoticeWithdrawal WHERE id_user = ?", ["withdraw-1"]), [{ id_message: "msg-1" }]);
 });
 
-test("checkBan_storeWriteThrowsAndDeleteFails_withdrawFailureLogged", async () => {
+test("checkBan_storeWriteThrowsAndDeleteFails_withdrawalQueuedAndCodeLogged", async () => {
   const trace = newTrace();
   await seedBan("withdraw-2");
   const bdd = await getBddInstance();
@@ -740,6 +744,8 @@ test("checkBan_storeWriteThrowsAndDeleteFails_withdrawFailureLogged", async () =
   }
 
   assert.equal(trace.dms.length, 1);
-  assert.match(trace.logs.join("\n"), /Ban notice could not be withdrawn/);
-  assert.match(trace.logs.join("\n"), /Failed to notify banned user/);
+  assert.match(trace.logs.join("\n"), /Ban notice withdrawal postponed to the nightly purge/);
+  // Le code seul, jamais le texte de l'erreur (il peut citer un identifiant).
+  assert.match(trace.logs.join("\n"), /Failed to notify banned user: code inconnu/);
+  assert.doesNotMatch(trace.logs.join("\n"), /SQLITE_BUSY/);
 });

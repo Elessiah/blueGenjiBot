@@ -9,8 +9,11 @@ const TMP_DB = path.join(os.tmpdir(), `bgenji-stafflog-${randomUUID()}.sqlite`);
 process.env.BDD_PATH = TMP_DB;
 
 import type { Client } from "discord.js";
-import { closeBddInstance } from "../../bdd/Bdd.js";
+import { closeBddInstance, getBddInstance } from "../../bdd/Bdd.js";
 import {
+  BAN_NOTICE_WITHDRAWAL_RETRY_DAYS,
+  retryBanNoticeWithdrawals,
+  withdrawBanNotice,
   banMessageIds,
   deleteBanMessages,
   MAX_LOG_PAGES_PER_RUN,
@@ -259,33 +262,97 @@ function noticeFailureClient(logs: string[], noticeError: (Error & { code?: numb
   } as unknown as Client;
 }
 
-test("deleteBanMessages_noticeDeleteFails_withdrawFailureLogged", async () => {
+/** Avis en attente de retrait, tels que la table les garde. */
+async function pendingWithdrawals(): Promise<unknown[]> {
+  const bdd = await getBddInstance();
+  return bdd.raw("SELECT id_user, id_message, queued_at FROM BanNoticeWithdrawal ORDER BY id_message");
+}
+
+async function clearWithdrawals(): Promise<void> {
+  const bdd = await getBddInstance();
+  await bdd.raw("DELETE FROM BanNoticeWithdrawal");
+}
+
+const UNAVAILABLE = (): Error & { code?: number } => Object.assign(new Error("Service Unavailable"), { code: 0 });
+const RETRY_WINDOW_MS = BAN_NOTICE_WITHDRAWAL_RETRY_DAYS * DAY;
+
+test("deleteBanMessages_noticeDeleteFails_withdrawalQueued", async () => {
   process.env.INFO_SERV = "info-1";
+  await clearWithdrawals();
   const logs: string[] = [];
-  const client = noticeFailureClient(logs, Object.assign(new Error("Service Unavailable"), { code: 0 }));
+  const client = noticeFailureClient(logs, UNAVAILABLE());
 
   const count = await deleteBanMessages(client, BAN);
 
   assert.equal(count, 1);
-  assert.deepEqual(logs, ["Ban notice could not be withdrawn"]);
+  assert.deepEqual(logs, ["Ban notice withdrawal postponed to the nightly purge"]);
+  assert.equal((await pendingWithdrawals()).length, 1);
 });
 
 test("deleteBanMessages_noticeAlreadyGone_noWithdrawLog", async () => {
   process.env.INFO_SERV = "info-1";
+  await clearWithdrawals();
   const logs: string[] = [];
   const client = noticeFailureClient(logs, Object.assign(new Error("Unknown Message"), { code: 10008 }));
 
   await deleteBanMessages(client, BAN);
 
   assert.deepEqual(logs, []);
+  assert.deepEqual(await pendingWithdrawals(), []);
 });
 
-test("deleteBanMessages_bannedUserUnreachable_withdrawFailureLogged", async () => {
+test("deleteBanMessages_bannedUserUnreachable_withdrawalQueued", async () => {
   process.env.INFO_SERV = "info-1";
+  await clearWithdrawals();
   const logs: string[] = [];
   const client = noticeFailureClient(logs, null, BAN.id_user);
 
   await deleteBanMessages(client, BAN);
 
-  assert.deepEqual(logs, ["Ban notice could not be withdrawn"]);
+  assert.deepEqual(logs, ["Ban notice withdrawal postponed to the nightly purge"]);
+});
+
+test("withdrawBanNotice_deleteFails_queuedForNightlyPurge", async () => {
+  await clearWithdrawals();
+  const logs: string[] = [];
+
+  const outcome = await withdrawBanNotice(noticeFailureClient(logs, UNAVAILABLE()), BAN.id_user, "notice-q", NOW);
+
+  assert.equal(outcome, "queued");
+  assert.deepEqual(await pendingWithdrawals(), [{ id_user: BAN.id_user, id_message: "notice-q", queued_at: NOW }]);
+  assert.deepEqual(logs, ["Ban notice withdrawal postponed to the nightly purge"]);
+});
+
+test("retryBanNoticeWithdrawals_deleteNowSucceeds_rowRemoved", async () => {
+  await clearWithdrawals();
+  await withdrawBanNotice(noticeFailureClient([], UNAVAILABLE()), BAN.id_user, "notice-r", NOW);
+  const deleted: string[] = [];
+
+  const settled = await retryBanNoticeWithdrawals(banClient(deleted), NOW + DAY);
+
+  assert.equal(settled, 1);
+  assert.deepEqual(deleted, [`${BAN.id_user}:notice-r`]);
+  assert.deepEqual(await pendingWithdrawals(), []);
+});
+
+test("retryBanNoticeWithdrawals_stillFailingWithinRetryWindow_rowKept", async () => {
+  await clearWithdrawals();
+  await withdrawBanNotice(noticeFailureClient([], UNAVAILABLE()), BAN.id_user, "notice-k", NOW);
+
+  const settled = await retryBanNoticeWithdrawals(noticeFailureClient([], UNAVAILABLE()), NOW + DAY);
+
+  assert.equal(settled, 0);
+  assert.equal((await pendingWithdrawals()).length, 1);
+});
+
+test("retryBanNoticeWithdrawals_stillFailingAfterRetryWindow_rowDroppedAndLogged", async () => {
+  await clearWithdrawals();
+  await withdrawBanNotice(noticeFailureClient([], UNAVAILABLE()), BAN.id_user, "notice-x", NOW);
+  const logs: string[] = [];
+
+  const settled = await retryBanNoticeWithdrawals(noticeFailureClient(logs, UNAVAILABLE()), NOW + RETRY_WINDOW_MS);
+
+  assert.equal(settled, 1);
+  assert.deepEqual(await pendingWithdrawals(), []);
+  assert.deepEqual(logs, ["Ban notice withdrawal abandoned after 30 days"]);
 });

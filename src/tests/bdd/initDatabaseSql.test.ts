@@ -46,16 +46,16 @@ const sha256 = (value: unknown): string => createHash("sha256").update(JSON.stri
 test("instructions envoyées : mêmes textes, même ordre, mêmes paramètres", async (t) => {
   const { calls, errors } = await play(t);
   assert.deepEqual(errors, []);
-  // 33 `exec` (27 créations ou réglages, PRAGMA et ALTER de ChannelPartner,
+  // 34 `exec` (28 créations ou réglages, PRAGMA et ALTER de ChannelPartner,
   // 4 ALTER de Ban), 5 `get` (une colonne vérifiée chacun), puis un `all` et
   // un `run` par service et par rang semés, et le `run` qui remet au texte
   // bilingue les rappels d'adhésion à l'ancien texte par défaut.
   assert.equal(calls.filter(([m]) => m === "all").length, services.length + ranks.length);
   assert.equal(calls.filter(([m]) => m === "run").length, services.length + ranks.length + 1);
-  assert.equal(calls.length, 33 + 5 + 2 * (services.length + ranks.length) + 1);
-  // Empreintes du jeu d'instructions (EF-14 : colonnes d'avis de Ban, remise des rappels d'adhésion).
-  assert.equal(sha256(calls.slice(0, -1)), "d5670f4225b43dfd8420cdb182965c2b316070c60eb363240af5ae9612823198");
-  assert.equal(sha256(calls), "d50f6914cdf1a6ebb1d099ff102d1dc250204769c1d7cc973532d2a3faab7059");
+  assert.equal(calls.length, 34 + 5 + 2 * (services.length + ranks.length) + 1);
+  // Empreintes du jeu d'instructions (EF-14 : colonnes d'avis de Ban, remise des rappels d'adhésion ; la table des avis à retirer, créée en dernier, est hors du préfixe).
+  assert.equal(sha256(calls.slice(0, -1)), "d50f6914cdf1a6ebb1d099ff102d1dc250204769c1d7cc973532d2a3faab7059");
+  assert.equal(sha256(calls), "eac38ac2ffd5d7c31385bca57e586763941d8974fefe2221e12efe788bfe2b5d");
 });
 
 test("chaque étape en échec : son libellé, dans l'ordre, une fois", async (t) => {
@@ -67,7 +67,7 @@ test("chaque étape en échec : son libellé, dans l'ordre, une fois", async (t)
     "FeedEvent error: ", "DailySnapshot error: ", "Scrim error: ", "Recrute error: ", "UserLink error: ",
     "ServerModule oauth cleanup error: ", "ServerInvite error: ", "RefereeRole error: ", "SiteVisit error: ",
     "ActivityDaily error: ", "BotOwner error: ", "TournamentLink error: ",
-    "MatchVoiceChannel error: ",
+    "MatchVoiceChannel error: ", "BanNoticeWithdrawal error: ",
   ]);
   // Seule l'étape des services joint l'erreur entière à son message.
   assert.deepEqual(errors.map((parts) => parts.length), errors.map((parts) => (parts[0] === "Service&Co" ? 3 : 2)));
@@ -78,6 +78,6 @@ test("chaque étape en échec : son libellé, dans l'ordre, une fois", async (t)
   const expected = errors.map(() => "exec");
   expected.splice(12, 0, "run");
   assert.deepEqual(calls.map(([m]) => m), expected);
-  assert.equal(sha256(calls.slice(0, -1)), "4d1b266a930cc5d9b20d1a27db0a2bbe3fc54e12e3bf89b0e7864feb386a027c");
-  assert.equal(sha256(calls), "d63ac99e69ab95e7ae46e38d95fd0dbeead8c0c9aa6f638556cd702fd2bc5b9d");
+  assert.equal(sha256(calls.slice(0, -1)), "d63ac99e69ab95e7ae46e38d95fd0dbeead8c0c9aa6f638556cd702fd2bc5b9d");
+  assert.equal(sha256(calls), "353b7aadb9f96bbf0149437d65b5025190340a67a8e95cbe2233b45ceb2e4d00");
 });

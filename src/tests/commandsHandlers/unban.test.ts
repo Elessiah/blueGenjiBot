@@ -79,49 +79,28 @@ test("unban_afterCachedVerdict_verdictForgotten", async () => {
   assert.equal(await checkBan(client, TARGET), "NOT_BANNED");
 });
 
-test("unban_noticeStoredDuringUnban_latestNoticeDeleted", async () => {
-  // Un avis enregistré entre la lecture de `/unban` et l'effacement de la ligne
-  // est celui qu'il faut retirer, pas l'ancien.
+test("unban_noticeIdInRow_noticeDeleted", async () => {
+  // La ligne effacée est rendue par la même instruction : l'avis qu'elle
+  // désigne à cet instant est celui qui est retiré.
   const deletedDms: string[] = [];
   const client = fakeClient(deletedDms);
   const bdd = await getBddInstance();
   await bdd.set("Ban", ["id_user", "id_moderator", "id_reason"], [TARGET, "400000000000000001", "reason-2"]);
-  await bdd.raw("UPDATE Ban SET id_notice_user = ? WHERE id_user = ?", ["notice-old", TARGET]);
-  const originalGet = bdd.get;
-  bdd.get = (async (...args: Parameters<typeof originalGet>) => {
-    const rows = await originalGet.apply(bdd, args);
-    await bdd.raw("UPDATE Ban SET id_notice_user = ? WHERE id_user = ?", ["notice-new", TARGET]);
-    return rows;
-  }) as typeof originalGet;
-  try {
-    assert.equal(await unban(client, unbanInteraction(client, TARGET)), true);
-  } finally {
-    bdd.get = originalGet;
-  }
+  await bdd.raw("UPDATE Ban SET id_notice_user = ? WHERE id_user = ?", ["notice-new", TARGET]);
+
+  assert.equal(await unban(client, unbanInteraction(client, TARGET)), true);
 
   assert.deepEqual(deletedDms, [`${TARGET}:notice-new`]);
   assert.deepEqual(await bdd.raw("SELECT id_user FROM Ban WHERE id_user = ?", [TARGET]), []);
 });
 
-test("unban_alreadyRemovedConcurrently_unknownAndNoDeletion", async () => {
-  // Deux modérateurs lèvent la même exclusion : le second n'a plus rien à faire.
+test("unban_unknownTarget_unknownReplyAndNoDeletion", async () => {
+  // Déjà levée (par un autre modérateur) ou jamais prononcée : rien à faire.
   const deletedDms: string[] = [];
   const replies: string[] = [];
   const client = fakeClient(deletedDms);
-  const bdd = await getBddInstance();
-  await bdd.set("Ban", ["id_user", "id_moderator", "id_reason"], [TARGET, "400000000000000001", "reason-3"]);
-  await bdd.raw("UPDATE Ban SET id_notice_user = ? WHERE id_user = ?", ["notice-3", TARGET]);
-  const originalGet = bdd.get;
-  bdd.get = (async (...args: Parameters<typeof originalGet>) => {
-    const rows = await originalGet.apply(bdd, args);
-    await bdd.raw("DELETE FROM Ban WHERE id_user = ?", [TARGET]);
-    return rows;
-  }) as typeof originalGet;
-  try {
-    assert.equal(await unban(client, unbanInteraction(client, TARGET, replies)), true);
-  } finally {
-    bdd.get = originalGet;
-  }
+
+  assert.equal(await unban(client, unbanInteraction(client, "500000000000000099", replies)), true);
 
   assert.deepEqual(replies, ["Unknown ID ban !"]);
   assert.deepEqual(deletedDms, []);
