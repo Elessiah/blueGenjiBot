@@ -406,38 +406,47 @@ export async function retryBanNoticeWithdrawals(client, now = Date.now()) {
     // La purge passe une fois par nuit : une ligne part à la dernière avant
     // l'échéance. Un instant dans le futur (horloge reculée) ne la garde pas indéfiniment.
     const deadline = now - (BAN_NOTICE_WITHDRAWAL_RETRY_DAYS - 1) * day;
-    // Horloge reculée : une ligne datée du futur repart de maintenant, pour ses
-    // 30 jours d'essais — ni gardée indéfiniment, ni abandonnée sans essai.
-    await bdd.write("UPDATE BanNoticeWithdrawal SET queued_at = ? WHERE queued_at > ?", [now, now + day]);
-    const candidates = await bdd.raw("SELECT id_user, id_message FROM BanNoticeWithdrawal WHERE queued_at &lt;= ? ORDER BY queued_at LIMIT ?", [deadline, MAX_NOTICE_WITHDRAWALS_PER_RUN]);
-    const pending = await bdd.raw("SELECT id_user, id_message FROM BanNoticeWithdrawal WHERE queued_at > ? ORDER BY RANDOM() LIMIT ?", [deadline, MAX_NOTICE_WITHDRAWALS_PER_RUN - Math.min(MAX_EXPIRED_LAST_TRIES_PER_RUN, candidates.length)]);
-    const lastTries = candidates.slice(0, MAX_NOTICE_WITHDRAWALS_PER_RUN - pending.length);
     const run = { settled: 0, failure: null };
+    // Horloge reculée : une ligne datée du futur a un âge inconnu. Elle a son
+    // dernier essai cette nuit, en tête, puis part : jamais gardée au-delà des
+    // 30 jours annoncés. Au mieux : un échec n'arrête pas le reste de la nuit.
+    const reanchored = deadline - 1;
+    try {
+        await bdd.write("UPDATE BanNoticeWithdrawal SET queued_at = ? WHERE queued_at > ?", [reanchored, now + day]);
+    }
+    catch (error) {
+        run.failure ??= error;
+    }
+    const candidates = await bdd.raw("SELECT id_user, id_message FROM BanNoticeWithdrawal WHERE queued_at &lt;= ? OR queued_at > ? "
+        + "ORDER BY CASE WHEN queued_at = ? OR queued_at > ? THEN 0 ELSE 1 END, queued_at LIMIT ?", [deadline, now + day, reanchored, now + day, MAX_NOTICE_WITHDRAWALS_PER_RUN]);
+    const pending = await bdd.raw("SELECT id_user, id_message FROM BanNoticeWithdrawal WHERE queued_at > ? AND queued_at &lt;= ? ORDER BY RANDOM() LIMIT ?", [deadline, now + day, MAX_NOTICE_WITHDRAWALS_PER_RUN - Math.min(MAX_EXPIRED_LAST_TRIES_PER_RUN, candidates.length)]);
+    const lastTries = candidates.slice(0, MAX_NOTICE_WITHDRAWALS_PER_RUN - pending.length);
     // Derniers essais dont l'écriture a échoué : le bloc les emporte, selon leur issue.
-    const unsettled = { erased: 0, refused: 0, retry: 0 };
+    const unsettled = new Map();
+    const key = (row) => row.id_user + ":" + row.id_message;
     for (const row of lastTries) {
         const outcome = await tryWithdrawal(client, row, true, run);
-        if (outcome === "deleted" || outcome === "gone") {
-            unsettled.erased += 1;
-        }
-        else if (outcome !== null) {
-            unsettled[outcome] += 1;
+        if (outcome !== null) {
+            unsettled.set(key(row), outcome);
         }
     }
-    const anyUnsettled = unsettled.erased + unsettled.refused + unsettled.retry > 0;
     // Rien au-delà : la table n'a plus d'échues, inutile de la parcourir.
-    if (candidates.length === MAX_NOTICE_WITHDRAWALS_PER_RUN || candidates.length > lastTries.length || anyUnsettled) {
+    if (candidates.length === MAX_NOTICE_WITHDRAWALS_PER_RUN || candidates.length > lastTries.length || unsettled.size > 0) {
         try {
             // Les échues restées après leur dernier essai partent d'un bloc, oubliées d'abord.
+            const expired = "(w.queued_at &lt;= ? OR w.queued_at > ?)";
             await bdd.write("UPDATE Ban SET id_notice_user = NULL WHERE EXISTS (SELECT 1 FROM BanNoticeWithdrawal w "
-                + "WHERE w.id_user = Ban.id_user AND w.id_message = Ban.id_notice_user AND w.queued_at &lt;= ?)", [deadline]);
-            const dropped = await bdd.write("DELETE FROM BanNoticeWithdrawal WHERE queued_at &lt;= ?", [deadline]);
-            run.settled += dropped;
-            // Une alerte par issue pour le bloc ; un avis effacé n'en demande aucune.
-            if (unsettled.refused > 0) {
-                await sendLog(client, unsettled.refused + " ban notice withdrawals refused by Discord");
+                + "WHERE w.id_user = Ban.id_user AND w.id_message = Ban.id_notice_user AND " + expired + ")", [deadline, now + day]);
+            const dropped = await bdd.writeReturning("DELETE FROM BanNoticeWithdrawal AS w WHERE " + expired + " RETURNING id_user, id_message", [deadline, now + day]);
+            run.settled += dropped.length;
+            // Une alerte par issue, comptée sur les lignes réellement emportées ; un
+            // avis effacé n'en demande aucune.
+            const outcomes = dropped.map((row) => unsettled.get(key(row)) ?? "retry");
+            const refused = outcomes.filter((outcome) => outcome === "refused").length;
+            const abandoned = outcomes.filter((outcome) => outcome === "retry").length;
+            if (refused > 0) {
+                await sendLog(client, refused + " ban notice withdrawals refused by Discord");
             }
-            const abandoned = Math.max(0, dropped - unsettled.erased - unsettled.refused);
             if (abandoned > 0) {
                 await sendLog(client, abandoned + " ban notice withdrawals abandoned after " + BAN_NOTICE_WITHDRAWAL_RETRY_DAYS + " days");
             }
@@ -505,7 +514,7 @@ export async function deleteBanMessages(client, ban) {
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Wed Nov 04 2026 03:03:16 GMT+0100 (heure normale d’Europe centrale)
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Wed Nov 04 2026 03:08:43 GMT+0100 (heure normale d’Europe centrale)
 </footer>
 
 <script> prettyPrint(); </script>
