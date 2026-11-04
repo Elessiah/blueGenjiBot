@@ -406,10 +406,12 @@ test("retryBanNoticeWithdrawals_queuedInFuture_keptWithItsDate", async () => {
   // Horloge fautive : rien n'est réécrit, la ligne attend parmi les récentes.
   await clearWithdrawals();
   await withdrawBanNotice(noticeFailureClient([], UNAVAILABLE()), BAN.id_user, "notice-z", NOW + 2 * DAY);
+  const attempts: string[] = [];
 
-  const settled = await retryBanNoticeWithdrawals(noticeFailureClient([], UNAVAILABLE()), NOW);
+  const settled = await retryBanNoticeWithdrawals(countingClient(attempts), NOW);
 
   assert.equal(settled, 0);
+  assert.deepEqual(attempts, ["notice-z"]);
   assert.deepEqual(await pendingWithdrawals(), [{ id_user: BAN.id_user, id_message: "notice-z", queued_at: NOW + 2 * DAY }]);
   await clearWithdrawals();
 });
@@ -418,11 +420,14 @@ test("retryBanNoticeWithdrawals_unsettledRowRemovedBeforeBulk_noAlert", async ()
   // Dernier essai refusé, écriture en échec, ligne partie par ailleurs avant le bloc : aucune alerte comptée à tort.
   await clearWithdrawals();
   const bdd = await getBddInstance();
+  process.env.INFO_SERV = "info-1";
   await bdd.raw("INSERT INTO BanNoticeWithdrawal (id_user, id_message, queued_at) VALUES (?, ?, ?)", [BAN.id_user, "notice-q", NOW]);
   const original = bdd.write.bind(bdd);
+  let bulkReached = false;
   bdd.write = async (query: string, values?: unknown[]) => {
     if (query.startsWith("UPDATE Ban SET id_notice_user = NULL WHERE id_user")) { throw new Error("SQLITE_BUSY"); }
     if (query.startsWith("UPDATE Ban SET id_notice_user = NULL WHERE EXISTS")) {
+      bulkReached = true;
       await bdd.raw("DELETE FROM BanNoticeWithdrawal WHERE id_message = ?", ["notice-q"]);
     }
     return original(query, values);
@@ -434,7 +439,9 @@ test("retryBanNoticeWithdrawals_unsettledRowRemovedBeforeBulk_noAlert", async ()
     bdd.write = original;
   }
 
+  assert.equal(bulkReached, true);
   assert.deepEqual(logs, []);
+  assert.deepEqual(await pendingWithdrawals(), []);
 });
 
 test("retryBanNoticeWithdrawals_refusedForGood_rowDroppedAndLogged", async () => {
