@@ -1,6 +1,6 @@
 /**
- * Routes `/internal/voice/*` de l'API interne (MATCH-VOICE) : création, compte
- * et libération des salons vocaux d'équipe. Montées par `startInternalApi`
+ * Routes `/internal/voice/*` de l'API interne (MATCH-VOICE) : création et
+ * libération des salons vocaux d'équipe (aucune route de comptage). Montées par `startInternalApi`
  * derrière la même garde `x-internal-token` que les autres routes ; la logique
  * vit dans `voice/matchVoice.ts`.
  *

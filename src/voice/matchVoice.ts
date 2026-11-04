@@ -2,14 +2,14 @@
  * Salons vocaux d'équipe d'un match (MATCH-VOICE).
  *
  * Le site demande, un quart d'heure avant un match, un salon vocal par équipe
- * dans la catégorie `VOICE_CATEGORY_ID` ; il en lit l'occupation (un nombre,
- * jamais qui) pour autoriser le lancement, puis le rend une fois le score
- * confirmé. Le bot crée, compte et supprime ; il ne décide de rien.
+ * dans la catégorie `VOICE_CATEGORY_ID`, puis le rend une fois le score
+ * confirmé ; le lancement du match n'en dépend pas, et le site ne demande
+ * jamais qui s'y trouve, ni combien. Le bot crée et supprime ; il ne décide de rien.
  *
  * Règles tenues ici :
  * - **idempotence** : une même clé (`match:<id>:team:<id>`) rend toujours le
  *   même salon, recréé s'il a été supprimé à la main ;
- * - **seul un salon suivi** (table `MatchVoiceChannel`) peut être compté ou
+ * - **seul un salon suivi** (table `MatchVoiceChannel`) peut être rendu ou
  *   supprimé : un identifiant quelconque envoyé par le site n'y donne accès à
  *   rien ;
  * - **suppression** : à la libération si le salon est vide, sinon dès qu'il se
@@ -18,9 +18,9 @@
  *   depuis plus de 48 h et vide — un salon jamais libéré et occupé n'est
  *   jamais supprimé) ;
  * - **catégorie** : un salon suivi déplacé hors de la catégorie n'est plus
- *   compté, rendu ni supprimé : il est oublié ;
- * - **vie privée** : aucun membre, identifiant de membre ni pseudo n'est lu
- *   au-delà du compte, stocké ou journalisé.
+ *   rendu ni supprimé : il est oublié ;
+ * - **vie privée** : seul importe qu'un salon soit vide ou non ; aucun membre,
+ *   identifiant de membre ni pseudo n'est rendu au site, stocké ou journalisé.
  */
 
 import { ChannelType, type Client, type VoiceState } from "discord.js";
@@ -78,7 +78,6 @@ export type VoiceErrorCode =
   | "VOICE_MISSING_PERMISSIONS"
   | "VOICE_DISCORD_ERROR"
   | "VOICE_CHANNEL_NOT_TRACKED"
-  | "VOICE_CHANNEL_NOT_FOUND"
   | "VOICE_STORAGE_ERROR";
 
 /** Statut HTTP de chaque code. */
@@ -87,7 +86,6 @@ const STATUS_BY_CODE: Readonly<Record<VoiceErrorCode, number>> = {
   VOICE_MISSING_PERMISSIONS: 503,
   VOICE_DISCORD_ERROR: 502,
   VOICE_CHANNEL_NOT_TRACKED: 404,
-  VOICE_CHANNEL_NOT_FOUND: 404,
   VOICE_STORAGE_ERROR: 500,
 };
 
@@ -117,7 +115,7 @@ type VoiceHandle = { id: string; parentId?: string | null; members: { size: numb
 /**
  * Un salon est-il encore un salon vocal de match : rangé dans la catégorie ?
  * Un salon suivi que le staff a déplacé ailleurs (archive, staff) n'est plus
- * le nôtre : il n'est ni compté, ni rendu au site, ni supprimé — seulement oublié.
+ * le nôtre : il n'est ni rendu au site, ni supprimé — seulement oublié.
  * @param channel Salon lu.
  * @returns `true` s'il est dans la catégorie des salons vocaux de match.
  */

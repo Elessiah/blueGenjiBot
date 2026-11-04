@@ -875,6 +875,12 @@ export function startInternalApi(client: Client) {
   // Salons vocaux d'équipe des matchs (MATCH-VOICE) : `voice/voiceRoutes.ts`.
   registerVoiceRoutes(app, client);
 
+  // Route inconnue (dont `GET /internal/voice/channels/:id/count`, retirée) : un code,
+  // jamais la page HTML d'Express qui recopie le chemin demandé. Après toutes les routes.
+  app.use("/internal", (_req: Request, res: Response) => {
+    res.status(404).json({ error: "INTERNAL_ROUTE_NOT_FOUND" });
+  });
+
   const port = Number(process.env.INTERNAL_API_PORT || 4400);
   const host = process.env.INTERNAL_API_HOST || "127.0.0.1";
 
