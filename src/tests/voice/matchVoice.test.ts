@@ -27,6 +27,7 @@ import {
   shouldSweep,
   sweepVoiceChannels,
   voiceCategoryId,
+  voiceErrorDetail,
 } from "../../voice/matchVoice.js";
 import { addVoice, discordError, fakeVoiceClient, resetWorld, world } from "./fakeVoiceClient.js";
 
@@ -267,6 +268,18 @@ test("ensureTeamVoiceChannel_otherDiscordError_discordErrorWithoutAlert", async 
 
   await rejectsWith(ensureTeamVoiceChannel(client, KEY, "Les Genji", T0), "VOICE_DISCORD_ERROR");
   assert.deepEqual(world.logs, []);
+});
+
+test("voiceErrorDetail_discordError_returnsCodeOnly", () => {
+  assert.equal(voiceErrorDetail(discordError(50035, "Invalid Form Body name: Equipe Bleue")), "code 50035");
+});
+
+test("voiceErrorDetail_codeWithSpaces_returnsUnknownCode", () => {
+  assert.equal(voiceErrorDetail(Object.assign(new Error("x"), { code: "texte d'un joueur" })), "code inconnu");
+});
+
+test("voiceErrorDetail_noCode_returnsUnknownCode", () => {
+  assert.equal(voiceErrorDetail(new Error("UNIQUE constraint failed: Equipe Bleue")), "code inconnu");
 });
 
 // --- Libération ------------------------------------------------------------

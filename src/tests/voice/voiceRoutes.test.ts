@@ -115,6 +115,18 @@ test("createVoiceChannel_missingPermissions_returns503", async () => {
   assert.deepEqual(reply, { status: 503, body: { error: "VOICE_MISSING_PERMISSIONS" } });
 });
 
+test("createVoiceChannel_discordErrorQuotingName_logsCodeOnly", async () => {
+  world.createError = discordError(50035, "Invalid Form Body name: Equipe Bleue");
+
+  const reply = await create({ key: "match:1:team:2", name: "Equipe Bleue" });
+
+  assert.deepEqual(reply, { status: 502, body: { error: "VOICE_DISCORD_ERROR" } });
+  // Le message de Discord recopie le nom reçu : seul le code part au salon de logs.
+  assert.equal(world.logs.length, 1);
+  assert.match(world.logs[0], /code 50035/);
+  assert.doesNotMatch(world.logs[0], /Equipe/);
+});
+
 test("createVoiceChannel_categoryMissing_returns503", async () => {
   world.category = "missing";
   const reply = await create({ key: "match:1:team:2", name: "Les Genji" });

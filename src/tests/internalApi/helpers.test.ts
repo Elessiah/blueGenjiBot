@@ -201,3 +201,15 @@ test("internalErrorHandler_headersAlreadySent_endsWithoutBodyNorNext", () => {
   assert.equal(nextCalled, false);
   assert.deepEqual(lines, ["[internalApi] INTERNAL_ERROR (Error)"]);
 });
+
+test("internalErrorLogLine_freeTextName_fallsBackToError", () => {
+  const error = Object.assign(new Error("x"), { name: "Equipe Bleue a triché" });
+
+  assert.equal(internalErrorLogLine(error), "[internalApi] INTERNAL_ERROR (Error)");
+});
+
+test("internalErrorHandler_endThrowsAfterHeadersSent_swallowsIt", () => {
+  const res = { headersSent: true, end() { throw new Error("socket closed"); } } as unknown as Response;
+
+  assert.doesNotThrow(() => internalErrorHandler(() => undefined)(new Error("x"), {} as Request, res, () => undefined));
+});
