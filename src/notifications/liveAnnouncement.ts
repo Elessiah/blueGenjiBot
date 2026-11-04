@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { PermissionFlagsBits, type Client } from "discord.js";
-import { discordJsonCode } from "../safe/errorGuards.js";
+import { DISCORD_UNKNOWN_MESSAGE, discordJsonCode } from "../safe/errorGuards.js";
 
 /**
  * Annonce d'un live dans le salon #live du serveur BlueGenji, poussée par l'app
@@ -858,7 +858,7 @@ type SendableChannel = {
 };
 
 /** Message inconnu : supprimé depuis, ou d'un autre salon. */
-const UNKNOWN_MESSAGE = 10008;
+const UNKNOWN_MESSAGE = DISCORD_UNKNOWN_MESSAGE;
 
 /** Modification refusée : le message n'est pas du bot. */
 const CANNOT_EDIT_OTHERS = 50005;

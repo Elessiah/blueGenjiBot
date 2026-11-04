@@ -194,7 +194,15 @@ function classifyError(error: unknown): ErrorSeverity {
     return "fatal";
 }
 
+/** Code Discord d'un message inconnu : déjà effacé. */
+const DISCORD_UNKNOWN_MESSAGE = 10008;
+
+/** Code Discord d'un compte inconnu (supprimé). */
+const DISCORD_UNKNOWN_USER = 10013;
+
 export {
+    DISCORD_UNKNOWN_MESSAGE,
+    DISCORD_UNKNOWN_USER,
     discordJsonCode,
     classifyError,
     MAX_CAUSE_DEPTH,

@@ -36,20 +36,13 @@ async function unban(client: Client,
         await safeReply(interaction, "Parameter 'id_ban' was not found ! Please try again !");
         return false;
     }
-    // Lecture préalable gardée : sans base ouverte (restauration), elle lève
-    // l'erreur au lieu de répondre « ID inconnu » comme le ferait `raw`.
-    const user: Ban[] = await bdd.get("Ban", ["*"], {}, {query: "id_user = ?", values: [target]}) as Ban[];
-    if (user.length === 0) {
+    // La ligne effacée est rendue par la même instruction : un avis remis
+    // pendant la levée y figure déjà (sinon, il se voit sans ligne et s'efface lui-même).
+    // Sans base ouverte (restauration), l'instruction lève au lieu de répondre « ID inconnu ».
+    const removed = await bdd.writeReturning<Ban>("DELETE FROM Ban WHERE id_user = ? RETURNING *", [target]);
+    if (removed.length === 0) {
         await safeReply(interaction, "Unknown ID ban !");
     } else {
-        // La ligne effacée est rendue par la même instruction : un avis remis
-        // pendant la levée y figure déjà (sinon, il se voit sans ligne et s'efface lui-même).
-        const removed = await bdd.raw<Ban>("DELETE FROM Ban WHERE id_user = ? RETURNING *", [target]);
-        if (removed.length === 0) {
-            // Levée par un autre modérateur entre-temps : tout est déjà fait.
-            await safeReply(interaction, "Unknown ID ban !");
-            return true;
-        }
         // Le relais garde une minute le verdict « exclu » : la levée vaut sur-le-champ.
         forgetBanVerdict(target);
         // Réponse d'abord : Discord n'attend que 3 s, et les suppressions

@@ -3,6 +3,7 @@ import type {Client, Message, TextChannel, User} from "discord.js";
 import type {Bdd} from "../bdd/Bdd.js";
 import { getBddInstance} from "../bdd/Bdd.js";
 import {sendLog} from "../safe/sendLog.js";
+import {withdrawBanNotice} from "../privacy/staffLogRetention.js";
 import {banNoticeMessage} from "../notifications/dmLanguage.js";
 import {errorCode} from "../safe/errorGuards.js";
 
@@ -223,9 +224,10 @@ async function notifyBannedUser(client: Client, banInfo: BanInfo, now: number): 
     }
     const banReason = banNoticeMessage(banInfo.date, reasonMsg.content);
     // Un seul avis à la fois dans la conversation : l'ancien est effacé **avant**
-    // l'envoi. S'il ne peut pas l'être (Discord indisponible), rien ne part : son
-    // identifiant, seul moyen de l'effacer à la levée, n'est pas écrasé.
-    if (previousNotice && !(await deleteNotice(user, previousNotice))) {
+    // l'envoi. S'il ne peut pas l'être (Discord indisponible), la purge de nuit le
+    // réessaie ; si même son identifiant ne peut être gardé, rien ne part : il
+    // n'est pas écrasé, seul moyen de l'effacer à la levée.
+    if (previousNotice && (await withdrawBanNotice(client, banInfo.id_user, previousNotice, now)) === "lost") {
         await sendLog(client, "Ban notice skipped: the previous notice could not be deleted");
         return;
     }
@@ -246,48 +248,16 @@ async function notifyBannedUser(client: Client, banInfo: BanInfo, now: number): 
     } catch (error) {
         // Base occupée ou fermée : un avis dont l'identifiant n'est pas gardé
         // ne pourrait plus être effacé à la levée. Il est retiré tout de suite.
-        await withdrawNotice(client, user, sent.id);
+        await withdrawBanNotice(client, banInfo.id_user, sent.id, now);
         throw error;
     }
     if (stored === 0) {
         // Exclusion levée pendant l'envoi : l'avis (et son motif) ne doit pas rester.
         forgetBanVerdict(banInfo.id_user);
-        await withdrawNotice(client, user, sent.id);
+        await withdrawBanNotice(client, banInfo.id_user, sent.id, now);
         return;
     }
     banInfo.id_notice_user = sent.id;
-}
-
-/** Code Discord d'un message inconnu : déjà effacé, rien à garder. */
-const UNKNOWN_MESSAGE = 10008;
-
-/**
- * Efface un avis remis à l'exclu.
- * @param user Exclu.
- * @param messageId Identifiant de l'avis.
- * @returns `true` si l'avis n'existe plus (effacé, ou déjà absent).
- */
-async function deleteNotice(user: User, messageId: string): Promise<boolean> {
-    try {
-        const dm = user.dmChannel ?? await user.createDM();
-        await dm.messages.delete(messageId);
-        return true;
-    } catch (error) {
-        return errorCode(error) === UNKNOWN_MESSAGE;
-    }
-}
-
-/**
- * Retire un avis que la base ne garde pas. S'il reste (Discord indisponible),
- * le staff en est averti : rien ne permettra plus de le retrouver.
- * @param client Client Discord (salon de logs).
- * @param user Exclu.
- * @param messageId Identifiant de l'avis.
- */
-async function withdrawNotice(client: Client, user: User, messageId: string): Promise<void> {
-    if (!(await deleteNotice(user, messageId))) {
-        await sendLog(client, "Ban notice could not be withdrawn");
-    }
 }
 
 /**
@@ -375,7 +345,8 @@ function startBanNotice(client: Client, banInfo: BanInfo, now: number): void {
     noticesInFlight.add(idUser);
     const notice: Promise<unknown> = noticeQueue
         .then(() => notifyBannedUser(client, banInfo, now))
-        .catch((error: unknown) => sendLog(client, "Failed to notify banned user : " + (error as Error).message))
+        // Le code seul : le texte d'une erreur Discord peut citer un identifiant.
+        .catch((error: unknown) => sendLog(client, `Failed to notify banned user: code ${errorCode(error) ?? "inconnu"}`))
         .catch(() => undefined)
         .finally(() => noticesInFlight.delete(idUser));
     noticeQueue = notice;

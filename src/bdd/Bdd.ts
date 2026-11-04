@@ -12,6 +12,7 @@ import {ADHESION_EXPIRED_REMINDER_DM, LEGACY_ADHESION_EXPIRED_REMINDER_FR} from 
 import {
     ACTIVITY_DAILY_TABLE,
     ADHESION_INTERVAL_TABLE,
+    BAN_NOTICE_WITHDRAWAL_TABLE,
     BAN_TABLE,
     BOT_OWNER_TABLE,
     BUSY_TIMEOUT_PRAGMA,
@@ -322,6 +323,7 @@ class Bdd {
       ["BotOwner error: ", BOT_OWNER_TABLE],
       ["TournamentLink error: ", TOURNAMENT_LINK_TABLE],
       ["MatchVoiceChannel error: ", MATCH_VOICE_CHANNEL_TABLE],
+      ["BanNoticeWithdrawal error: ", BAN_NOTICE_WITHDRAWAL_TABLE],
     ];
   }
 
@@ -409,7 +411,7 @@ class Bdd {
         [column],
       );
       if (!exists) {
-        await this.Database?.exec(`ALTER TABLE Ban ADD COLUMN ${column} ${type}`);
+        await this.Database?.exec(`ALTER TABLE Ban ADD COLUMN ${assertSqlIdentifier(column)} ${assertSqlIdentifier(type)}`);
       }
     }
   }
@@ -1121,6 +1123,19 @@ class Bdd {
    */
   async raw<T = unknown>(query: string, values: unknown[] = []): Promise<T[]> {
     if (!this.Database) { return []; }
+    return this.Database.all(query, values) as Promise<T[]>;
+  }
+
+  /**
+   * Exécute une écriture `… RETURNING` et rend les lignes touchées.
+   * @param query Requête SQL avec placeholders `?`.
+   * @param values Valeurs à binder (défaut: []).
+   * @returns Lignes rendues par `RETURNING`.
+   * @throws Sans base ouverte (restauration en cours) : « aucune ligne » voudrait
+   *   dire « ligne disparue », ce qui n'est pas le cas.
+   */
+  async writeReturning<T = unknown>(query: string, values: unknown[] = []): Promise<T[]> {
+    if (!this.Database) { throw new Error("Database is not open"); }
     return this.Database.all(query, values) as Promise<T[]>;
   }
 

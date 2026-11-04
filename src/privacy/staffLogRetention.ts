@@ -22,7 +22,7 @@ import type { Client, DMChannel, Message, TextChannel } from "discord.js";
 import { getBddInstance } from "../bdd/Bdd.js";
 import type { Ban } from "../bdd/types.js";
 import { STAFF_LOG_RETENTION_DAYS } from "./retentionPeriods.js";
-import { errorCode } from "../safe/errorGuards.js";
+import { DISCORD_UNKNOWN_MESSAGE, DISCORD_UNKNOWN_USER, errorCode } from "../safe/errorGuards.js";
 import { sendLog } from "../safe/sendLog.js";
 
 /** Ce que la purge lit d'un message : de quoi décider, rien de son contenu. */
@@ -253,8 +253,89 @@ export async function purgeStaffLogs(client: Client, now: number = Date.now()): 
   return deleted;
 }
 
-/** Code Discord « message inconnu » : l'avis est déjà effacé. */
-const UNKNOWN_MESSAGE = 10008;
+/** Jours pendant lesquels un avis d'exclusion qui n'a pas pu être retiré est réessayé, chaque nuit. */
+export const BAN_NOTICE_WITHDRAWAL_RETRY_DAYS = 30;
+
+/**
+ * Efface un avis remis à l'exclu dans sa conversation privée.
+ * @param client Client Discord.
+ * @param idUser Exclu.
+ * @param messageId Identifiant de l'avis.
+ * @returns `true` si l'avis n'existe plus (effacé, déjà absent, ou compte disparu).
+ */
+export async function deleteBanNotice(client: Client, idUser: string, messageId: string): Promise<boolean> {
+  try {
+    const user = await client.users.fetch(idUser);
+    const dm = user.dmChannel ?? await user.createDM();
+    await dm.messages.delete(messageId);
+    return true;
+  } catch (error) {
+    const code = errorCode(error);
+    return code === DISCORD_UNKNOWN_MESSAGE || code === DISCORD_UNKNOWN_USER;
+  }
+}
+
+/** Issue d'un retrait d'avis : effacé, remis à la purge de nuit, ou perdu de vue. */
+export type NoticeWithdrawal = "gone" | "queued" | "lost";
+
+/**
+ * Retire un avis remis à l'exclu. S'il ne peut pas l'être tout de suite
+ * (Discord indisponible), son identifiant est gardé pour la purge de nuit,
+ * qui le réessaie pendant `BAN_NOTICE_WITHDRAWAL_RETRY_DAYS` jours — sinon,
+ * rien ne permettrait plus de le retrouver. Le staff en est averti, sans nom
+ * ni identifiant.
+ * @param client Client Discord.
+ * @param idUser Exclu.
+ * @param messageId Identifiant de l'avis.
+ * @param now Instant du retrait (ms).
+ * @returns L'issue du retrait.
+ */
+export async function withdrawBanNotice(client: Client, idUser: string, messageId: string, now: number = Date.now()): Promise<NoticeWithdrawal> {
+  if (await deleteBanNotice(client, idUser, messageId)) {
+    return "gone";
+  }
+  try {
+    const bdd = await getBddInstance();
+    await bdd.write(
+      "INSERT OR IGNORE INTO BanNoticeWithdrawal (id_user, id_message, queued_at) VALUES (?, ?, ?)",
+      [idUser, messageId, now],
+    );
+  } catch {
+    await sendLog(client, "Ban notice could not be withdrawn");
+    return "lost";
+  }
+  await sendLog(client, "Ban notice withdrawal postponed to the nightly purge");
+  return "queued";
+}
+
+/**
+ * Réessaie, chaque nuit, les avis d'exclusion qui n'ont pas pu être retirés.
+ * Un avis effacé (ou déjà absent) quitte la table ; un avis toujours là au
+ * bout de `BAN_NOTICE_WITHDRAWAL_RETRY_DAYS` jours aussi, signalé au staff.
+ * @param client Client Discord connecté.
+ * @param now Instant de référence (ms).
+ * @returns Le nombre d'avis retirés de la table (effacés ou abandonnés).
+ */
+export async function retryBanNoticeWithdrawals(client: Client, now: number = Date.now()): Promise<number> {
+  const bdd = await getBddInstance();
+  const pending = await bdd.raw<{ id_user: string; id_message: string; queued_at: number }>(
+    "SELECT id_user, id_message, queued_at FROM BanNoticeWithdrawal ORDER BY queued_at",
+  );
+  let settled = 0;
+  for (const row of pending) {
+    const gone = await deleteBanNotice(client, row.id_user, row.id_message);
+    const expired = now - Number(row.queued_at) >= BAN_NOTICE_WITHDRAWAL_RETRY_DAYS * 24 * 60 * 60 * 1000;
+    if (!gone && !expired) {
+      continue;
+    }
+    await bdd.write("DELETE FROM BanNoticeWithdrawal WHERE id_user = ? AND id_message = ?", [row.id_user, row.id_message]);
+    if (!gone) {
+      await sendLog(client, "Ban notice withdrawal abandoned after " + BAN_NOTICE_WITHDRAWAL_RETRY_DAYS + " days");
+    }
+    settled += 1;
+  }
+  return settled;
+}
 
 /**
  * Supprime les messages du journal qui décrivent une exclusion levée, et le
@@ -262,11 +343,11 @@ const UNKNOWN_MESSAGE = 10008;
  *
  * Au mieux : un message déjà effacé (ménage du staff, purge d'un an) ou un
  * salon injoignable n'empêche pas les autres de partir. Ce qui resterait est
- * repris par la purge de nuit, la ligne `Ban` ne le protégeant plus.
+ * repris par la purge de nuit, la ligne `Ban` ne le protégeant plus ; l'avis
+ * à l'exclu, qu'elle ne parcourt pas, par `withdrawBanNotice`.
  * @param client Client Discord.
- * @param ban Ligne `Ban` de l'exclusion levée (relue avant sa suppression).
- * @returns Le nombre de messages supprimés (l'échec de l'avis à l'exclu est aussi
- *   signalé dans le salon de logs).
+ * @param ban Ligne `Ban` de l'exclusion levée (rendue par sa suppression).
+ * @returns Le nombre de messages supprimés.
  */
 export async function deleteBanMessages(client: Client, ban: Ban): Promise<number> {
   const attempts: Promise<boolean>[] = [];
@@ -280,32 +361,17 @@ export async function deleteBanMessages(client: Client, ban: Ban): Promise<numbe
       attempts.push(...channelIds.map((id) => settle(text.messages.delete(id))));
     }
   }
-  // Messages privés à effacer : celui du propriétaire (le motif) et l'avis remis à
-  // l'exclu par `checkBan`. Chaque conversation n'est résolue que si un message y
-  // attend, toutes en même temps.
-  const dmDeletions: [string, string][] = [];
-  if (process.env.OWNER_ID && ban.id_reason_owner) { dmDeletions.push([process.env.OWNER_ID, ban.id_reason_owner]); }
-  if (ban.id_notice_user) { dmDeletions.push([ban.id_user, ban.id_notice_user]); }
-  const dms = await Promise.all(dmDeletions.map(([userId]) => client.users
-    .fetch(userId)
-    .then((user) => user.dmChannel ?? user.createDM())
-    .catch(() => null)));
-  const noticeIndex = ban.id_notice_user ? dmDeletions.length - 1 : -1;
-  // L'avis remis à l'exclu n'est pas repris par la purge de nuit (il vit dans sa
-  // conversation) : s'il reste, le staff en est averti, sans nom ni identifiant.
-  let noticeGone = noticeIndex < 0;
-  dmDeletions.forEach(([, messageId], index) => {
-    const dm = dms[index];
-    if (!dm) { return; }
-    const deletion = index === noticeIndex
-      ? dm.messages.delete(messageId).then(() => { noticeGone = true; }, (error: unknown) => {
-        noticeGone = errorCode(error) === UNKNOWN_MESSAGE;
-        throw error;
-      })
-      : dm.messages.delete(messageId);
-    attempts.push(settle(deletion));
-  });
-  const deleted = (await Promise.all(attempts)).filter(Boolean).length;
-  if (!noticeGone) { await sendLog(client, "Ban notice could not be withdrawn"); }
-  return deleted;
+  // Messages privés à effacer, en même temps : celui du propriétaire (le motif)
+  // et l'avis remis à l'exclu par `checkBan`.
+  if (process.env.OWNER_ID && ban.id_reason_owner) {
+    const messageId = ban.id_reason_owner;
+    attempts.push(settle(client.users
+      .fetch(process.env.OWNER_ID)
+      .then((user) => user.dmChannel ?? user.createDM())
+      .then((dm) => dm.messages.delete(messageId))));
+  }
+  if (ban.id_notice_user) {
+    attempts.push(withdrawBanNotice(client, ban.id_user, ban.id_notice_user).then((outcome) => outcome === "gone"));
+  }
+  return (await Promise.all(attempts)).filter(Boolean).length;
 }

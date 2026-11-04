@@ -357,8 +357,9 @@ client.on("channelDelete", async (channel) => {
 async function shutdown(): Promise<void> {
     console.log('Arrêt du bot...');
     // Un avis d'exclusion en cours d'envoi finit d'enregistrer son identifiant
-    // (sinon il ne pourrait plus être effacé à la levée) — 5 s au plus.
-    await Promise.race([settleBanNotices(), new Promise((resolve) => setTimeout(resolve, 5000).unref())]);
+    // (sinon il ne pourrait plus être effacé à la levée) — 1 s au plus : pm2
+    // tue le processus au bout de 1,6 s, et la base doit encore être fermée.
+    await Promise.race([settleBanNotices(), new Promise((resolve) => setTimeout(resolve, 1000).unref())]);
     try {
         await client.destroy();
     } catch (error) {

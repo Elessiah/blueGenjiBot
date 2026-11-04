@@ -38,7 +38,7 @@ import { sendAlert, sendLog } from "../safe/sendLog.js";
 
 import { purgeOldRollbacks } from "../backup/restoreDatabase.js";
 import { purgeOldFeedEvents } from "../feed/feedBus.js";
-import { purgeStaffLogs } from "./staffLogRetention.js";
+import { purgeStaffLogs, retryBanNoticeWithdrawals } from "./staffLogRetention.js";
 import { ACTIVITY_AUTHOR_RETENTION_DAYS, FEED_EVENT_RETENTION_DAYS } from "./retentionPeriods.js";
 
 /**
@@ -344,6 +344,12 @@ async function runDataRetentionOnce(client: Client): Promise<void> {
   } catch (error) {
     await reportError(client, "purgeStaffLogs", error);
   }
+  let banNotices: string = "échec";
+  try {
+    banNotices = String(await retryBanNoticeWithdrawals(client));
+  } catch (error) {
+    await reportError(client, "retryBanNoticeWithdrawals", error);
+  }
   // Ne lève jamais.
   const rollbacks = await purgeOldRollbacks();
   // Une ligne par passage dans les journaux du serveur (pm2) : une nuit à
@@ -351,6 +357,6 @@ async function runDataRetentionOnce(client: Client): Promise<void> {
   console.log(
     `[data-retention] purge des relais : ${relays}, textes libres ramenés aux choix : ${legacy}, auteurs anonymisés : ${anonymized ?? "échec"}, ` +
       `serveurs oubliés : ${forgotten}, salons retirés : ${channels}, évènements du fil purgés : ${feed}, ` +
-      `messages du journal du staff purgés : ${staffLogs}, copies de restauration purgées : ${rollbacks}`,
+      `messages du journal du staff purgés : ${staffLogs}, avis d'exclusion retirés : ${banNotices}, copies de restauration purgées : ${rollbacks}`,
   );
 }
