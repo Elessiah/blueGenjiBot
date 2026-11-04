@@ -455,8 +455,8 @@ async function tryWithdrawal(
 /**
  * Réessaie, chaque nuit, les avis d'exclusion qui n'ont pas pu être retirés.
  * Un avis effacé (ou déjà absent) quitte la table ; un avis refusé pour de
- * bon, ou toujours là à la dernière nuit avant `BAN_NOTICE_WITHDRAWAL_RETRY_DAYS`
- * jours, aussi, signalé au staff — et la ligne `Ban` encore en cours l'oublie,
+ * bon, ou toujours là à la dernière nuit qui précède d'au moins une
+ * demi-journée les `BAN_NOTICE_WITHDRAWAL_RETRY_DAYS` jours, aussi, signalé au staff — et la ligne `Ban` encore en cours l'oublie,
  * pour que l'avis du jour ne le remette pas en file (comme un avis effacé :
  * la ligne `Ban` ne pointe jamais un message parti). Une ligne qui échoue
  * n'arrête pas les suivantes. Au plus `MAX_NOTICE_WITHDRAWALS_PER_RUN` avis
