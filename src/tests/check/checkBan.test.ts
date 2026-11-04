@@ -864,8 +864,8 @@ test("checkBan_stoppedDuringWithdrawal_otherBanReservationKept", async () => {
   assert.equal((await banRow("stop-d")).notice_user_at, T0);
 });
 
-test("checkBan_stopReleaseFails_staffWarned", async () => {
-  // Base qui ferme pendant l'arrêt : la réservation reste, le staff le sait.
+test("checkBan_stopReleaseFails_reservationKeptAndLoggedLocally", async () => {
+  // Base qui ferme pendant l'arrêt : la réservation reste, dite au journal local (pas à Discord).
   const trace = newTrace();
   const base = fakeClient("none", trace) as unknown as { users: { fetch: (id: string) => Promise<Record<string, unknown>> } };
   const client = {
@@ -886,13 +886,18 @@ test("checkBan_stopReleaseFails_staffWarned", async () => {
     return original(query, values);
   };
 
+  const localErrors: string[] = [];
+  const originalError = console.error;
+  console.error = (...args: unknown[]) => { localErrors.push(args.map(String).join(" ")); };
   try {
     await checkBan(client, "stop-e", true, T0);
   } finally {
+    console.error = originalError;
     bdd.write = original;
     stopBanNotices(false);
   }
 
-  assert.ok(trace.logs.some((log) => log.includes("Ban notice reservation not released")), JSON.stringify(trace.logs));
+  assert.ok(localErrors.some((line) => line.includes("Ban notice reservation not released")), JSON.stringify(localErrors));
+  assert.ok(!trace.logs.some((log) => log.includes("reservation")));
   assert.equal((await banRow("stop-e")).notice_user_at, T0);
 });

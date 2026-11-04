@@ -535,7 +535,8 @@ test("withdrawBanNotice_refusedAndForgetFails_keptForNightlyRetry", async () => 
   }
 
   assert.equal(outcome, "refused");
-  assert.deepEqual(logs, ["Ban notice refusal not recorded", "Ban notice withdrawal refused by Discord; tried again tonight"]);
+  // Une seule alerte : la purge de nuit annoncera le refus s'il se répète.
+  assert.deepEqual(logs, ["Ban notice refusal not recorded"]);
   // Gardé en file : la purge de nuit refera l'oubli.
   assert.deepEqual(await pendingWithdrawals(), [{ id_user: BAN.id_user, id_message: "notice-l", queued_at: NOW }]);
   await clearWithdrawals();
@@ -686,5 +687,40 @@ test("retryBanNoticeWithdrawals_morePendingThanCap_cappedPerRun", async () => {
 
   assert.equal(settled, 0);
   assert.equal(attempts.length, MAX_NOTICE_WITHDRAWALS_PER_RUN);
+  await clearWithdrawals();
+});
+
+test("retryBanNoticeWithdrawals_lastTryWriteFails_refusalStillAnnouncedAndNotCountedUntried", async () => {
+  // Dernier essai refusé, oubli en échec : le refus est dit, le bloc ne le compte pas « sans essai ».
+  await clearWithdrawals();
+  const bdd = await getBddInstance();
+  await bdd.raw("INSERT INTO BanNoticeWithdrawal (id_user, id_message, queued_at) VALUES (?, ?, ?)", [BAN.id_user, "notice-t", NOW]);
+  const original = bdd.write.bind(bdd);
+  bdd.write = async (query: string, values?: unknown[]) => {
+    if (query.startsWith("UPDATE Ban SET id_notice_user = NULL WHERE id_user")) { throw new Error("SQLITE_BUSY"); }
+    return original(query, values);
+  };
+  const logs: string[] = [];
+  try {
+    await assert.rejects(retryBanNoticeWithdrawals(noticeFailureClient(logs, REFUSED(50001)), NOW + 29 * DAY), /SQLITE_BUSY/);
+  } finally {
+    bdd.write = original;
+  }
+
+  assert.deepEqual(logs, ["Ban notice withdrawal refused by Discord"]);
+  assert.deepEqual(await pendingWithdrawals(), []);
+});
+
+test("retryBanNoticeWithdrawals_expiredAndRecent_expiredTriedFirst", async () => {
+  // Une nuit interrompue après les échues ne laisse aucune ligne passer l'échéance.
+  await clearWithdrawals();
+  const bdd = await getBddInstance();
+  await bdd.raw("INSERT INTO BanNoticeWithdrawal (id_user, id_message, queued_at) VALUES (?, ?, ?)", [BAN.id_user, "recent", NOW + 20 * DAY]);
+  await bdd.raw("INSERT INTO BanNoticeWithdrawal (id_user, id_message, queued_at) VALUES (?, ?, ?)", [BAN.id_user, "expired", NOW]);
+  const attempts: string[] = [];
+
+  await retryBanNoticeWithdrawals(countingClient(attempts), NOW + 29 * DAY);
+
+  assert.deepEqual(attempts, ["expired", "recent"]);
   await clearWithdrawals();
 });
