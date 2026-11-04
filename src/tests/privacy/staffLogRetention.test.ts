@@ -416,10 +416,11 @@ test("retryBanNoticeWithdrawals_queuedInFuture_keptWithItsDate", async () => {
   await clearWithdrawals();
 });
 
-test("retryBanNoticeWithdrawals_unsettledRowRemovedBeforeBulk_noAlert", async () => {
+test("retryBanNoticeWithdrawals_unsettledRowRemovedBeforeBulk_onlyDroppedRowsAnnounced", async () => {
   // Dernier essai refusé, écriture en échec, ligne partie par ailleurs avant le bloc : aucune alerte comptée à tort.
   await clearWithdrawals();
   const bdd = await getBddInstance();
+  const previousInfoServ = process.env.INFO_SERV;
   process.env.INFO_SERV = "info-1";
   await bdd.raw("INSERT INTO BanNoticeWithdrawal (id_user, id_message, queued_at) VALUES (?, ?, ?)", [BAN.id_user, "notice-q", NOW]);
   const original = bdd.write.bind(bdd);
@@ -429,6 +430,8 @@ test("retryBanNoticeWithdrawals_unsettledRowRemovedBeforeBulk_noAlert", async ()
     if (query.startsWith("UPDATE Ban SET id_notice_user = NULL WHERE EXISTS")) {
       bulkReached = true;
       await bdd.raw("DELETE FROM BanNoticeWithdrawal WHERE id_message = ?", ["notice-q"]);
+      // Une autre échue, restée en file : c'est elle que le bloc doit emporter.
+      await bdd.raw("INSERT INTO BanNoticeWithdrawal (id_user, id_message, queued_at) VALUES (?, ?, ?)", [BAN.id_user, "notice-r", NOW]);
     }
     return original(query, values);
   };
@@ -437,10 +440,12 @@ test("retryBanNoticeWithdrawals_unsettledRowRemovedBeforeBulk_noAlert", async ()
     await assert.rejects(retryBanNoticeWithdrawals(noticeFailureClient(logs, REFUSED(50001)), NOW + 29 * DAY), /SQLITE_BUSY/);
   } finally {
     bdd.write = original;
+    process.env.INFO_SERV = previousInfoServ;
   }
 
   assert.equal(bulkReached, true);
-  assert.deepEqual(logs, []);
+  // Seule l'échue jamais essayée est annoncée : la ligne partie avant le bloc ne compte pas.
+  assert.deepEqual(logs, ["1 ban notice withdrawals abandoned after " + BAN_NOTICE_WITHDRAWAL_RETRY_DAYS + " days"]);
   assert.deepEqual(await pendingWithdrawals(), []);
 });
 
@@ -798,4 +803,31 @@ test("retryBanNoticeWithdrawals_lastTryDeletedWriteFails_notAnnouncedAsAbandoned
 
   assert.deepEqual(logs, []);
   assert.deepEqual(await pendingWithdrawals(), []);
+});
+
+test("retryBanNoticeWithdrawals_lateNightWithinMargin_lastTryThenDropped", async () => {
+  // Passage décalé : une ligne de 28 j 13 h a son dernier essai cette nuit, sans attendre 30 jours passés.
+  await clearWithdrawals();
+  const bdd = await getBddInstance();
+  await bdd.raw("INSERT INTO BanNoticeWithdrawal (id_user, id_message, queued_at) VALUES (?, ?, ?)", [BAN.id_user, "late", NOW]);
+  const attempts: string[] = [];
+
+  const settled = await retryBanNoticeWithdrawals(countingClient(attempts), NOW + 28 * DAY + 13 * 60 * 60 * 1000);
+
+  assert.deepEqual(attempts, ["late"]);
+  assert.equal(settled, 1);
+  assert.deepEqual(await pendingWithdrawals(), []);
+});
+
+test("retryBanNoticeWithdrawals_youngerThanMargin_keptForNextNight", async () => {
+  // 28 j 11 h : encore une nuit avant l'échéance, la ligne reste.
+  await clearWithdrawals();
+  const bdd = await getBddInstance();
+  await bdd.raw("INSERT INTO BanNoticeWithdrawal (id_user, id_message, queued_at) VALUES (?, ?, ?)", [BAN.id_user, "young", NOW]);
+
+  const settled = await retryBanNoticeWithdrawals(countingClient([]), NOW + 28 * DAY + 11 * 60 * 60 * 1000);
+
+  assert.equal(settled, 0);
+  assert.equal((await pendingWithdrawals()).length, 1);
+  await clearWithdrawals();
 });
