@@ -382,7 +382,8 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
 Un quart d'heure avant un match, le site demande un salon vocal par équipe,
 puis le rend une fois le score confirmé. Le lancement du match n'en dépend
 pas, et le site ne demande jamais qui se trouve dans un salon, ni combien
-(la route de comptage `GET …/count` est retirée). Les salons sont créés dans la catégorie `VOICE_CATEGORY_ID`
+(la route de comptage `GET …/count` est retirée : elle répond, comme toute
+route inconnue, `404 INTERNAL_ROUTE_NOT_FOUND`). Les salons sont créés dans la catégorie `VOICE_CATEGORY_ID`
 (défaut : catégorie des matchs du serveur BlueGenji), limités à **5 places**,
 permissions alignées sur la catégorie. Le bot ne supprime jamais
 un salon qu'il n'a pas créé : seuls les salons inscrits dans son suivi
@@ -421,7 +422,7 @@ un salon qu'il n'a pas créé : seuls les salons inscrits dans son suivi
   supprimé) ; un salon supprimé à la main cesse d'être suivi, comme un
   salon que le bot ne voit plus (permission retirée) depuis plus de 96 h.
 - Un salon suivi **déplacé hors de la catégorie** à la main n'est plus le
-  salon du match : il n'est plus
+  salon du match : il n'est ni
   rendu (une demande `POST` en crée un neuf dans la catégorie), ni supprimé —
   il est seulement oublié (une libération répond alors `deleted: true`).
 
@@ -443,7 +444,9 @@ Les codes en usage : `INTERNAL_FEED_ERROR`, `INTERNAL_STATUS_ERROR`,
 `INTERNAL_STATS_ERROR`, `INTERNAL_KPIS_ERROR`, `INTERNAL_SERVERS_ERROR`,
 `INTERNAL_ACTIVITY_ERROR`, `INTERNAL_MODULES_ERROR`,
 `INTERNAL_MODULE_TOGGLE_ERROR`, plus les codes propres aux routes d'écriture
-déjà décrits ci-dessus. `GET /internal/servers/:id/modules` et
+déjà décrits ci-dessus. Une route inconnue sous `/internal` (jeton valide)
+répond `404 INTERNAL_ROUTE_NOT_FOUND`, jamais la page HTML d'Express qui
+recopie le chemin. `GET /internal/servers/:id/modules` et
 `PUT /internal/servers/:id/modules/:moduleKey` répondent en outre
 `404 GUILD_NOT_JOINED` pour un serveur que le bot n'a pas rejoint : le
 réglage serait effacé au prochain rattrapage des serveurs quittés, on le refuse
