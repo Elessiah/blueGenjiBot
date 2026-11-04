@@ -402,38 +402,39 @@ test("retryBanNoticeWithdrawals_lastNightBeforeDeadline_rowDroppedAndBanForgetsN
   await bdd.raw("DELETE FROM Ban WHERE id_user = ?", [BAN.id_user]);
 });
 
-test("retryBanNoticeWithdrawals_queuedInFuture_reanchoredToNow", async () => {
-  // Horloge reculée : la ligne repart de maintenant, pour ses 30 jours d'essais.
+test("retryBanNoticeWithdrawals_queuedInFuture_keptWithItsDate", async () => {
+  // Horloge fautive : rien n'est réécrit, la ligne attend parmi les récentes.
   await clearWithdrawals();
   await withdrawBanNotice(noticeFailureClient([], UNAVAILABLE()), BAN.id_user, "notice-z", NOW + 2 * DAY);
 
   const settled = await retryBanNoticeWithdrawals(noticeFailureClient([], UNAVAILABLE()), NOW);
 
   assert.equal(settled, 0);
-  assert.deepEqual(await pendingWithdrawals(), [{ id_user: BAN.id_user, id_message: "notice-z", queued_at: NOW }]);
+  assert.deepEqual(await pendingWithdrawals(), [{ id_user: BAN.id_user, id_message: "notice-z", queued_at: NOW + 2 * DAY }]);
   await clearWithdrawals();
 });
 
-test("retryBanNoticeWithdrawals_reanchorFails_futureRowStillTriedAndKept", async () => {
-  // Écriture préalable en échec : la ligne datée du futur est essayée parmi les récentes, gardée pour la nuit suivante.
+test("retryBanNoticeWithdrawals_unsettledRowRemovedBeforeBulk_noAlert", async () => {
+  // Dernier essai refusé, écriture en échec, ligne partie par ailleurs avant le bloc : aucune alerte comptée à tort.
   await clearWithdrawals();
   const bdd = await getBddInstance();
-  await bdd.raw("INSERT INTO BanNoticeWithdrawal (id_user, id_message, queued_at) VALUES (?, ?, ?)", [BAN.id_user, "notice-p", NOW + 5 * DAY]);
+  await bdd.raw("INSERT INTO BanNoticeWithdrawal (id_user, id_message, queued_at) VALUES (?, ?, ?)", [BAN.id_user, "notice-q", NOW]);
   const original = bdd.write.bind(bdd);
   bdd.write = async (query: string, values?: unknown[]) => {
-    if (query.startsWith("UPDATE BanNoticeWithdrawal SET queued_at")) { throw new Error("SQLITE_BUSY"); }
+    if (query.startsWith("UPDATE Ban SET id_notice_user = NULL WHERE id_user")) { throw new Error("SQLITE_BUSY"); }
+    if (query.startsWith("UPDATE Ban SET id_notice_user = NULL WHERE EXISTS")) {
+      await bdd.raw("DELETE FROM BanNoticeWithdrawal WHERE id_message = ?", ["notice-q"]);
+    }
     return original(query, values);
   };
-  const attempts: string[] = [];
+  const logs: string[] = [];
   try {
-    await assert.rejects(retryBanNoticeWithdrawals(countingClient(attempts), NOW + DAY), /SQLITE_BUSY/);
+    await assert.rejects(retryBanNoticeWithdrawals(noticeFailureClient(logs, REFUSED(50001)), NOW + 29 * DAY), /SQLITE_BUSY/);
   } finally {
     bdd.write = original;
   }
 
-  assert.deepEqual(attempts, ["notice-p"]);
-  assert.deepEqual(await pendingWithdrawals(), [{ id_user: BAN.id_user, id_message: "notice-p", queued_at: NOW + 5 * DAY }]);
-  await clearWithdrawals();
+  assert.deepEqual(logs, []);
 });
 
 test("retryBanNoticeWithdrawals_refusedForGood_rowDroppedAndLogged", async () => {
@@ -596,8 +597,8 @@ test("retryBanNoticeWithdrawals_moreExpiredThanCap_spareBudgetUsedThenRestDroppe
   assert.deepEqual(await pendingWithdrawals(), []);
 });
 
-test("retryBanNoticeWithdrawals_futureRowInBacklog_reanchoredAndTried", async () => {
-  // Datée du futur (horloge reculée) au milieu d'un arriéré : elle repart de maintenant et reste essayée.
+test("retryBanNoticeWithdrawals_futureRowInBacklog_triedAndKeptWithItsDate", async () => {
+  // Datée du futur au milieu d'un arriéré : essayée parmi les récentes, ni réécrite ni abandonnée.
   await clearWithdrawals();
   const bdd = await getBddInstance();
   for (let i = 0; i < MAX_NOTICE_WITHDRAWALS_PER_RUN; i++) {
@@ -609,7 +610,7 @@ test("retryBanNoticeWithdrawals_futureRowInBacklog_reanchoredAndTried", async ()
   await retryBanNoticeWithdrawals(countingClient(attempts), NOW + 30 * DAY);
 
   assert.ok(attempts.includes("future"));
-  assert.deepEqual(await pendingWithdrawals(), [{ id_user: BAN.id_user, id_message: "future", queued_at: NOW + 30 * DAY }]);
+  assert.deepEqual(await pendingWithdrawals(), [{ id_user: BAN.id_user, id_message: "future", queued_at: NOW + 40 * DAY }]);
   await clearWithdrawals();
 });
 
