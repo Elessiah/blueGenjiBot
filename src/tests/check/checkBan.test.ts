@@ -694,3 +694,52 @@ test("forgetBanVerdict_capReachedDuringRead_verdictStillNotCached", async () => 
 
   assert.equal(await checkBan(client, "cap-race-1", true, T0 + 1000), "NOT_BANNED");
 });
+
+// --- Revue sécurité EF-14, cycle 4 : un avis non gardé qui ne s'efface pas est signalé ---
+
+test("checkBan_unbannedDuringSendAndDeleteFails_withdrawFailureLogged", async () => {
+  const trace = newTrace();
+  await seedBan("withdraw-1");
+  const base = failingDeleteClient(trace, Object.assign(new Error("Service Unavailable"), { code: 0 })) as unknown as { users: { fetch: (id: string) => Promise<Record<string, unknown>> } };
+  const client = {
+    ...base,
+    users: {
+      fetch: async (id: string) => {
+        const user = await base.users.fetch(id);
+        if (id === process.env.OWNER_ID) { return user; }
+        const send = user.send as (payload: unknown) => Promise<{ id: string }>;
+        // `/unban` passe pendant l'envoi : l'avis n'a plus de ligne où se ranger.
+        return { ...user, send: async (payload: unknown) => {
+          const bdd = await getBddInstance();
+          await bdd.raw("DELETE FROM Ban WHERE id_user = ?", ["withdraw-1"]);
+          return send(payload);
+        } };
+      },
+    },
+  } as unknown as Client;
+
+  await checkBan(client, "withdraw-1", true, T0);
+
+  assert.equal(trace.dms.length, 1);
+  assert.match(trace.logs.join("\n"), /Ban notice could not be withdrawn/);
+});
+
+test("checkBan_storeWriteThrowsAndDeleteFails_withdrawFailureLogged", async () => {
+  const trace = newTrace();
+  await seedBan("withdraw-2");
+  const bdd = await getBddInstance();
+  const originalWrite = bdd.write;
+  bdd.write = (async (...args: Parameters<typeof originalWrite>) => {
+    if (args[0].startsWith("UPDATE Ban SET id_notice_user")) { throw new Error("SQLITE_BUSY: database is locked"); }
+    return originalWrite.apply(bdd, args);
+  }) as typeof originalWrite;
+  try {
+    await checkBan(failingDeleteClient(trace, Object.assign(new Error("Service Unavailable"), { code: 0 })), "withdraw-2", true, T0);
+  } finally {
+    bdd.write = originalWrite;
+  }
+
+  assert.equal(trace.dms.length, 1);
+  assert.match(trace.logs.join("\n"), /Ban notice could not be withdrawn/);
+  assert.match(trace.logs.join("\n"), /Failed to notify banned user/);
+});

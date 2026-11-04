@@ -134,8 +134,9 @@ test("backupScript_fail_controlCharactersStrippedFromError", { skip: spawnSync("
   // d'historique illisible : l'échec disparaissait du rapport du lundi.
   const sanitize = BACKUP_SCRIPT.match(/^ {2}STATUS_ERROR="\$\(printf '%s' "\$1" \| [^\n]+$/m);
   assert.ok(sanitize);
-  const script = `set -- "$(printf 'a\\tb\\rc\\nd\\"e\\\\f\\001g')"\n${sanitize[0]}\nprintf '{"error":"%s"}' "$STATUS_ERROR"`;
+  // Citation ANSI-C : mêmes octets sous Git Bash et sous Ubuntu (printf y diffère).
+  const script = `set -- $'a\\tb\\rc\\nd"e\\\\h\\x0cf\\x01g'\n${sanitize[0]}\nprintf '{"error":"%s"}' "$STATUS_ERROR"`;
   const result = spawnSync("bash", ["-c", script], { encoding: "utf8", timeout: 30_000 });
   assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(JSON.parse(result.stdout), { error: "a b c deg" });
+  assert.deepEqual(JSON.parse(result.stdout), { error: "a b c dehfg" });
 });

@@ -236,3 +236,56 @@ test("deleteBanMessages_bannedUserUnreachable_otherMessagesStillDeleted", async 
   assert.equal(count, 1);
   assert.deepEqual(deleted, ["salon:reason-1"]);
 });
+
+// --- Revue sécurité EF-14, cycle 4 : un avis resté chez l'exclu est signalé ---
+
+/** Faux client dont l'effacement de l'avis lève `noticeError` ; relève les journaux du salon. */
+function noticeFailureClient(logs: string[], noticeError: (Error & { code?: number }) | null, unreachableUser: string | null = null): Client {
+  const conversation = (owner: string) => ({
+    send: async (payload: { content: string }) => { logs.push(payload.content); return { id: "log-1" }; },
+    messages: { delete: async (id: string) => {
+      if (owner === BAN.id_user && noticeError) { throw noticeError; }
+      return id;
+    } },
+  });
+  return {
+    channels: { fetch: async () => conversation("salon") },
+    users: {
+      fetch: async (id: string) => {
+        if (id === unreachableUser) { throw new Error("Unknown User"); }
+        return { id, send: async () => ({ id: "dm-1" }), createDM: async () => conversation(id) };
+      },
+    },
+  } as unknown as Client;
+}
+
+test("deleteBanMessages_noticeDeleteFails_withdrawFailureLogged", async () => {
+  process.env.INFO_SERV = "info-1";
+  const logs: string[] = [];
+  const client = noticeFailureClient(logs, Object.assign(new Error("Service Unavailable"), { code: 0 }));
+
+  const count = await deleteBanMessages(client, BAN);
+
+  assert.equal(count, 1);
+  assert.deepEqual(logs, ["Ban notice could not be withdrawn"]);
+});
+
+test("deleteBanMessages_noticeAlreadyGone_noWithdrawLog", async () => {
+  process.env.INFO_SERV = "info-1";
+  const logs: string[] = [];
+  const client = noticeFailureClient(logs, Object.assign(new Error("Unknown Message"), { code: 10008 }));
+
+  await deleteBanMessages(client, BAN);
+
+  assert.deepEqual(logs, []);
+});
+
+test("deleteBanMessages_bannedUserUnreachable_withdrawFailureLogged", async () => {
+  process.env.INFO_SERV = "info-1";
+  const logs: string[] = [];
+  const client = noticeFailureClient(logs, null, BAN.id_user);
+
+  await deleteBanMessages(client, BAN);
+
+  assert.deepEqual(logs, ["Ban notice could not be withdrawn"]);
+});
