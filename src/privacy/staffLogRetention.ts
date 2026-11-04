@@ -323,6 +323,58 @@ async function forgetBanNotice(idUser: string, messageId: string): Promise<void>
 export type NoticeWithdrawal = "gone" | "queued" | "refused" | "lost";
 
 /**
+ * Écrit l'issue d'un effacement : la ligne `Ban` oublie un avis effacé ou
+ * jamais effaçable, la file garde ce qui reste à réessayer. La base est
+ * ouverte dans chaque essai : indisponible (restauration), rien ne lève.
+ * @param client Client Discord (alertes au staff).
+ * @param idUser Exclu.
+ * @param messageId Identifiant de l'avis.
+ * @param deletion Issue de l'effacement.
+ * @param now Instant du retrait (ms).
+ * @returns `lost` si l'avis à réessayer n'a pu être gardé, `night` si la
+ * purge de nuit annoncera le refus, `done` sinon.
+ */
+async function recordWithdrawal(
+  client: Client, idUser: string, messageId: string, deletion: DirectMessageDeletion, now: number,
+): Promise<"lost" | "night" | "done"> {
+  const write = async (query: string, values: unknown[]): Promise<void> => {
+    await (await getBddInstance()).write(query, values);
+  };
+  let keepQueued = deletion === "retry";
+  if (!keepQueued) {
+    try {
+      await forgetBanNotice(idUser, messageId);
+    } catch {
+      if (deletion === "refused") {
+        // Gardé en file : la purge de nuit, refusée de nouveau, refera l'oubli.
+        await sendLog(client, "Ban notice refusal not recorded");
+        keepQueued = true;
+      }
+    }
+  }
+  if (!keepQueued) {
+    try {
+      await write("DELETE FROM BanNoticeWithdrawal WHERE id_user = ? AND id_message = ?", [idUser, messageId]);
+    } catch {
+      // Une ligne restée en file sera reprise cette nuit.
+      await sendLog(client, "Ban notice withdrawal not cleared from the queue");
+    }
+    return "done";
+  }
+  try {
+    await write("INSERT OR IGNORE INTO BanNoticeWithdrawal (id_user, id_message, queued_at) VALUES (?, ?, ?)", [idUser, messageId, now]);
+  } catch {
+    if (deletion === "retry") {
+      await sendLog(client, "Ban notice could not be withdrawn");
+      return "lost";
+    }
+    await sendLog(client, "Ban notice withdrawal not queued");
+    return "done";
+  }
+  return deletion === "refused" ? "night" : "done";
+}
+
+/**
  * Retire un avis remis à l'exclu. S'il ne peut pas l'être tout de suite
  * (Discord indisponible), son identifiant est gardé pour la purge de nuit,
  * qui le réessaie pendant `BAN_NOTICE_WITHDRAWAL_RETRY_DAYS` jours — sinon,
@@ -337,55 +389,16 @@ export type NoticeWithdrawal = "gone" | "queued" | "refused" | "lost";
  */
 export async function withdrawBanNotice(client: Client, idUser: string, messageId: string, now: number = Date.now()): Promise<NoticeWithdrawal> {
   const deletion = await deleteDirectMessage(client, idUser, messageId);
-  // La base est ouverte dans chaque essai : indisponible (restauration), le
-  // retrait rend son issue sans lever, comme ses appelants y comptent.
-  const write = async (query: string, values: unknown[]): Promise<void> => {
-    await (await getBddInstance()).write(query, values);
-  };
-  const queue = (): Promise<void> => write(
-    "INSERT OR IGNORE INTO BanNoticeWithdrawal (id_user, id_message, queued_at) VALUES (?, ?, ?)",
-    [idUser, messageId, now],
-  );
-  let keepQueued = deletion === "retry";
-  // Refus annoncé par la purge de nuit quand c'est elle qui refera l'oubli.
-  let refusalLeftToNight = false;
-  if (deletion !== "retry") {
-    // Effacé ou jamais effaçable : la ligne `Ban` ne le désigne plus.
-    try {
-      await forgetBanNotice(idUser, messageId);
-    } catch {
-      if (deletion === "refused") {
-        // Gardé en file : la purge de nuit, refusée de nouveau, refera l'oubli.
-        await sendLog(client, "Ban notice refusal not recorded");
-        keepQueued = true;
-        refusalLeftToNight = true;
-      }
-    }
-  }
-  if (keepQueued) {
-    try {
-      await queue();
-    } catch {
-      if (deletion === "retry") {
-        await sendLog(client, "Ban notice could not be withdrawn");
-        return "lost";
-      }
-      await sendLog(client, "Ban notice withdrawal not queued");
-      refusalLeftToNight = false;
-    }
-  } else {
-    try {
-      await write("DELETE FROM BanNoticeWithdrawal WHERE id_user = ? AND id_message = ?", [idUser, messageId]);
-    } catch {
-      // Une ligne restée en file sera reprise cette nuit.
-      await sendLog(client, "Ban notice withdrawal not cleared from the queue");
-    }
+  const recorded = await recordWithdrawal(client, idUser, messageId, deletion, now);
+  if (recorded === "lost") {
+    return "lost";
   }
   if (deletion === "deleted" || deletion === "gone") {
     return "gone";
   }
   if (deletion === "refused") {
-    if (!refusalLeftToNight) {
+    // Refus annoncé par la purge de nuit quand c'est elle qui refera l'oubli.
+    if (recorded !== "night") {
       await sendLog(client, "Ban notice withdrawal refused by Discord");
     }
     return "refused";
