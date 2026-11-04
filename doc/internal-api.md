@@ -379,11 +379,12 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
 
 ### Salons vocaux d'équipe des matchs (MATCH-VOICE)
 
-Un quart d'heure avant un match, le site demande un salon vocal par équipe ;
-il en lit l'occupation pour autoriser le lancement, puis le rend une fois le
-score confirmé. Les salons sont créés dans la catégorie `VOICE_CATEGORY_ID`
+Un quart d'heure avant un match, le site demande un salon vocal par équipe,
+puis le rend une fois le score confirmé. Le lancement du match n'en dépend
+pas, et le site ne demande jamais qui se trouve dans un salon, ni combien
+(la route de comptage `GET …/count` est retirée). Les salons sont créés dans la catégorie `VOICE_CATEGORY_ID`
 (défaut : catégorie des matchs du serveur BlueGenji), limités à **5 places**,
-permissions alignées sur la catégorie. Le bot ne compte ni ne supprime jamais
+permissions alignées sur la catégorie. Le bot ne supprime jamais
 un salon qu'il n'a pas créé : seuls les salons inscrits dans son suivi
 (table `MatchVoiceChannel`) sont concernés. Le rôle du bot doit avoir
 « Gérer les salons » sur la catégorie.
@@ -403,14 +404,6 @@ un salon qu'il n'a pas créé : seuls les salons inscrits dans son suivi
     alerte au staff, au plus une par heure), `502 VOICE_DISCORD_ERROR`,
     `500 VOICE_STORAGE_ERROR`.
 
-- `GET /internal/voice/channels/:channelId/count`
-  - Retourne `{ "members": 3 }` : le **nombre** de personnes dans le salon,
-    rien d'autre (aucun identifiant ni pseudo, rien de journalisé).
-  - Erreurs : `400 INVALID_CHANNEL_ID`, `404 VOICE_CHANNEL_NOT_TRACKED` (salon
-    non créé par le bot), `404 VOICE_CHANNEL_NOT_FOUND` (supprimé à la main :
-    il n'est plus suivi, une nouvelle demande `POST` le recrée),
-    `503 DISCORD_NOT_READY`, `502 VOICE_DISCORD_ERROR`.
-
 - `POST /internal/voice/channels/:channelId/release`
   - Libère le salon : supprimé tout de suite s'il est vide, sinon dès que le
     dernier occupant le quitte. Retourne `{ "released": true, "deleted": true | false }`.
@@ -428,7 +421,7 @@ un salon qu'il n'a pas créé : seuls les salons inscrits dans son suivi
   supprimé) ; un salon supprimé à la main cesse d'être suivi, comme un
   salon que le bot ne voit plus (permission retirée) depuis plus de 96 h.
 - Un salon suivi **déplacé hors de la catégorie** à la main n'est plus le
-  salon du match : il n'est plus compté (`404 VOICE_CHANNEL_NOT_FOUND`), ni
+  salon du match : il n'est plus
   rendu (une demande `POST` en crée un neuf dans la catégorie), ni supprimé —
   il est seulement oublié (une libération répond alors `deleted: true`).
 
