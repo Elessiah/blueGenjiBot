@@ -132,13 +132,36 @@ test("internalErrorCode_otherError_returnsInternalError", () => {
   assert.equal(internalErrorCode(null), "INTERNAL_ERROR");
 });
 
-test("internalErrorStatus_clientStatus_keepsIt", () => {
-  assert.equal(internalErrorStatus({ status: 400 }), 400);
-  assert.equal(internalErrorStatus({ status: 413 }), 413);
+test("internalErrorCode_unsupportedEncoding_returnsUnsupportedEncoding", () => {
+  assert.equal(internalErrorCode({ type: "encoding.unsupported" }), "UNSUPPORTED_ENCODING");
+  assert.equal(internalErrorCode({ type: "charset.unsupported" }), "UNSUPPORTED_ENCODING");
+});
+
+test("internalErrorCode_requestAborted_returnsRequestAborted", () => {
+  assert.equal(internalErrorCode({ type: "request.aborted" }), "REQUEST_ABORTED");
+});
+
+test("internalErrorCode_inheritedType_returnsInternalError", () => {
+  assert.equal(internalErrorCode({ type: "toString" }), "INTERNAL_ERROR");
+});
+
+test("internalErrorStatus_bodyParserRefusal_returnsItsStatus", () => {
+  assert.equal(internalErrorStatus({ type: "entity.parse.failed", status: 400 }), 400);
+  assert.equal(internalErrorStatus({ type: "entity.too.large", status: 413 }), 413);
+  assert.equal(internalErrorStatus({ type: "encoding.unsupported", status: 415 }), 415);
+  assert.equal(internalErrorStatus({ type: "charset.unsupported", status: 415 }), 415);
+  assert.equal(internalErrorStatus({ type: "request.aborted", status: 400 }), 400);
+});
+
+test("internalErrorStatus_foreignErrorWith4xxStatus_returns500", () => {
+  // Une erreur Discord (« Unknown Channel ») porte un `status` 404 : jamais repris.
+  assert.equal(internalErrorStatus({ status: 404, code: 10003 }), 500);
+  assert.equal(internalErrorCode({ status: 404, code: 10003 }), "INTERNAL_ERROR");
 });
 
 test("internalErrorStatus_serverOrMissingStatus_returns500", () => {
   assert.equal(internalErrorStatus({ status: 503 }), 500);
+  assert.equal(internalErrorStatus({ type: "entity.verify.failed", status: 403 }), 500);
   assert.equal(internalErrorStatus(new Error("x")), 500);
   assert.equal(internalErrorStatus({ status: "abc" }), 500);
 });

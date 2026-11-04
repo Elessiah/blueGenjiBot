@@ -165,6 +165,29 @@ test("createVoiceChannel_malformedJson_returns400InvalidJson", async () => {
   assert.deepEqual(world.creations, []);
 });
 
+test("createVoiceChannel_malformedJson_logsCodeOnly", async (t) => {
+  const logged = t.mock.method(console, "error", () => undefined);
+
+  await postMalformed(TOKEN);
+
+  // Le message d'un JSON illisible recopie le corps : seul le code part au journal.
+  assert.deepEqual(logged.mock.calls.map((c) => c.arguments), [["[internalApi] INVALID_JSON"]]);
+});
+
+test("unknownRouteOutsideInternal_malformedBodyNoToken_returns404Code", async () => {
+  const response = await fetch(`${baseUrl}/foo`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{bad",
+  });
+
+  // Hors de `/internal`, le corps n'est jamais lu.
+  assert.deepEqual(
+    { status: response.status, body: JSON.parse(await response.text()) },
+    { status: 404, body: { error: "INTERNAL_ROUTE_NOT_FOUND" } },
+  );
+});
+
 test("createVoiceChannel_malformedJsonNoToken_returns401", async () => {
   const reply = await postMalformed(null);
 
