@@ -447,8 +447,11 @@ Les codes en usage : `INTERNAL_FEED_ERROR`, `INTERNAL_STATUS_ERROR`,
 déjà décrits ci-dessus. Une route inconnue (sous `/internal`, jeton valide)
 répond `404 INTERNAL_ROUTE_NOT_FOUND`, jamais la page HTML d'Express qui
 recopie le chemin ; un corps JSON illisible `400 INVALID_JSON`, trop gros
-`413 PAYLOAD_TOO_LARGE`, toute autre erreur hors route `500 INTERNAL_ERROR`. Le
-jeton est vérifié avant la lecture du corps. `GET /internal/servers/:id/modules` et
+`413 PAYLOAD_TOO_LARGE`, d'encodage ou de jeu de caractères inconnu
+`415 UNSUPPORTED_ENCODING`, interrompu `400 REQUEST_ABORTED`, toute autre erreur
+hors route `500 INTERNAL_ERROR` (le statut porté par une erreur Discord n'est
+jamais repris ; son détail va au journal du processus, jamais dans la réponse). Le
+jeton est vérifié avant la lecture du corps, et le corps n'est lu que sous `/internal`. `GET /internal/servers/:id/modules` et
 `PUT /internal/servers/:id/modules/:moduleKey` répondent en outre
 `404 GUILD_NOT_JOINED` pour un serveur que le bot n'a pas rejoint : le
 réglage serait effacé au prochain rattrapage des serveurs quittés, on le refuse
