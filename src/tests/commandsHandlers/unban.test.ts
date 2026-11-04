@@ -26,14 +26,14 @@ import { closeBddInstance, getBddInstance } from "../../bdd/Bdd.js";
 const OWNER = process.env.OWNER_ID as string;
 const TARGET = "500000000000000001";
 
-/** Faux client : motif lisible au salon du staff, messages privés acceptés. */
-function fakeClient(): Client {
+/** Faux client : motif lisible au salon du staff, messages privés acceptés, effacements notés. */
+function fakeClient(deletedDms: string[] = []): Client {
   return {
     users: {
       fetch: async (id: string) => ({
         id,
         send: async () => ({ id: `dm-${id}` }),
-        createDM: async () => ({ messages: { delete: async () => undefined } }),
+        createDM: async () => ({ messages: { delete: async (messageId: string) => { deletedDms.push(`${id}:${messageId}`); } } }),
       }),
     },
     channels: {
@@ -77,4 +77,28 @@ test("unban_afterCachedVerdict_verdictForgotten", async () => {
   assert.equal(await unban(client, unbanInteraction(client, TARGET)), true);
 
   assert.equal(await checkBan(client, TARGET), "NOT_BANNED");
+});
+
+test("unban_noticeStoredDuringUnban_latestNoticeDeleted", async () => {
+  // Un avis enregistré entre la lecture de `/unban` et l'effacement de la ligne
+  // est celui qu'il faut retirer, pas l'ancien.
+  const deletedDms: string[] = [];
+  const client = fakeClient(deletedDms);
+  const bdd = await getBddInstance();
+  await bdd.set("Ban", ["id_user", "id_moderator", "id_reason"], [TARGET, "400000000000000001", "reason-2"]);
+  await bdd.raw("UPDATE Ban SET id_notice_user = ? WHERE id_user = ?", ["notice-old", TARGET]);
+  const originalGet = bdd.get;
+  bdd.get = (async (...args: Parameters<typeof originalGet>) => {
+    const rows = await originalGet.apply(bdd, args);
+    await bdd.raw("UPDATE Ban SET id_notice_user = ? WHERE id_user = ?", ["notice-new", TARGET]);
+    return rows;
+  }) as typeof originalGet;
+  try {
+    assert.equal(await unban(client, unbanInteraction(client, TARGET)), true);
+  } finally {
+    bdd.get = originalGet;
+  }
+
+  assert.deepEqual(deletedDms, [`${TARGET}:notice-new`]);
+  assert.deepEqual(await bdd.raw("SELECT id_user FROM Ban WHERE id_user = ?", [TARGET]), []);
 });

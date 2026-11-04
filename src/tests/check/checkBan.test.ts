@@ -456,3 +456,91 @@ test("checkBan_noticeClaimFails_cacheForgotten", async () => {
   assert.equal(trace.dms.length, 1);
   assert.equal(await checkBan(client, "claim-b", true, T0 + 1000), "NOT_BANNED");
 });
+
+// --- Revue sécurité EF-14 : avis jamais perdus de vue, cache fidèle à la base ---
+
+/** Faux client dont l'effacement des messages privés lève `error`. */
+function failingDeleteClient(trace: Trace, error: Error & { code?: number }): Client {
+  const base = fakeClient("none", trace) as unknown as { users: { fetch: (id: string) => Promise<Record<string, unknown>> } };
+  return {
+    ...base,
+    users: {
+      fetch: async (id: string) => {
+        const user = await base.users.fetch(id);
+        return { ...user, createDM: async () => ({ messages: { delete: async () => { throw error; } } }) };
+      },
+    },
+  } as unknown as Client;
+}
+
+test("checkBan_previousNoticeNotDeletable_noNewNoticeAndIdKept", async () => {
+  const trace = newTrace();
+  await seedBan("prev-1");
+  const bdd = await getBddInstance();
+  await bdd.raw("UPDATE Ban SET id_notice_user = ?, notice_user_at = ? WHERE id_user = ?", ["old-notice", T0 - BAN_NOTICE_INTERVAL_MS, "prev-1"]);
+
+  await checkBan(failingDeleteClient(trace, Object.assign(new Error("Service Unavailable"), { code: 0 })), "prev-1", true, T0);
+
+  assert.deepEqual(trace.dms, []);
+  assert.deepEqual(await banRow("prev-1"), { id_notice_user: "old-notice", notice_user_at: T0 });
+});
+
+test("checkBan_previousNoticeAlreadyGone_newNoticeSent", async () => {
+  const trace = newTrace();
+  await seedBan("prev-2");
+  const bdd = await getBddInstance();
+  await bdd.raw("UPDATE Ban SET id_notice_user = ?, notice_user_at = ? WHERE id_user = ?", ["old-notice", T0 - BAN_NOTICE_INTERVAL_MS, "prev-2"]);
+
+  await checkBan(failingDeleteClient(trace, Object.assign(new Error("Unknown Message"), { code: 10008 })), "prev-2", true, T0);
+
+  assert.equal(trace.dms.length, 1);
+  assert.deepEqual(await banRow("prev-2"), { id_notice_user: "msg-1", notice_user_at: T0 });
+});
+
+test("checkBan_forgottenDuringRead_verdictNotCached", async () => {
+  const client = fakeClient("none", newTrace());
+  await seedBan("race-1");
+  const bdd = await getBddInstance();
+  const originalGet = bdd.get;
+  // `/unban` passe pendant la lecture : la ligne lue est déjà levée.
+  bdd.get = (async (...args: Parameters<typeof originalGet>) => {
+    const rows = await originalGet.apply(bdd, args);
+    await bdd.raw("DELETE FROM Ban WHERE id_user = ?", ["race-1"]);
+    forgetBanVerdict("race-1");
+    return rows;
+  }) as typeof originalGet;
+  try {
+    assert.equal(await checkBan(client, "race-1", true, T0), "BANNED");
+  } finally {
+    bdd.get = originalGet;
+  }
+
+  assert.equal(await checkBan(client, "race-1", true, T0 + 1000), "NOT_BANNED");
+});
+
+test("checkBan_simultaneousReads_singleCachedRowKeptInSync", async () => {
+  const trace = newTrace();
+  const client = fakeClient("none", trace);
+  await seedBan("twin-1");
+  await Promise.all([
+    checkBanNow(client, "twin-1", true, T0),
+    checkBanNow(client, "twin-1", true, T0),
+  ]);
+  await settleBanNotices();
+  const bdd = await getBddInstance();
+  const originalWrite = bdd.write;
+  let writes = 0;
+  bdd.write = (async (...args: Parameters<typeof originalWrite>) => {
+    writes += 1;
+    return originalWrite.apply(bdd, args);
+  }) as typeof originalWrite;
+  try {
+    await checkBan(client, "twin-1", true, T0 + 1000);
+  } finally {
+    bdd.write = originalWrite;
+  }
+
+  // Le verdict gardé porte l'essai du jour : aucune réservation de plus.
+  assert.equal(writes, 0);
+  assert.equal(trace.dms.length, 1);
+});

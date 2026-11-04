@@ -128,3 +128,14 @@ test("la purge des archives n'est jamais lancée sur une configuration non lue",
   assert.ok(configCheck > 0 && configCheck < purge);
   assert.ok(lock > 0 && lock < purge);
 });
+
+test("backupScript_fail_controlCharactersStrippedFromError", { skip: spawnSync("bash", ["-c", "true"]).status !== 0 && "bash absent" }, () => {
+  // Une tabulation ou un retour chariot (sortie rclone) rendait la ligne
+  // d'historique illisible : l'échec disparaissait du rapport du lundi.
+  const sanitize = BACKUP_SCRIPT.match(/^ {2}STATUS_ERROR="\$\(printf '%s' "\$1" \| [^\n]+$/m);
+  assert.ok(sanitize);
+  const script = `set -- "$(printf 'a\\tb\\rc\\nd\\"e\\\\f\\001g')"\n${sanitize[0]}\nprintf '{"error":"%s"}' "$STATUS_ERROR"`;
+  const result = spawnSync("bash", ["-c", script], { encoding: "utf8", timeout: 30_000 });
+  assert.equal(result.status, 0, result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout), { error: "a b c deg" });
+});
