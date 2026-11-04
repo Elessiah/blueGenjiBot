@@ -94,9 +94,11 @@ JSON
 }
 
 fail() {
-  # Antislash et guillemet casseraient le JSON, et un JSON invalide ferait
-  # afficher au bot « aucune sauvegarde » au lieu de la vraie cause de l'échec.
-  STATUS_ERROR="$(printf '%s' "$1" | tr -d '\\"' | tr '\n' ' ')"
+  # Antislash, guillemet et caractères de contrôle (tabulation, retour chariot
+  # d'une sortie rclone) casseraient le JSON, et un JSON invalide ferait
+  # afficher au bot « aucune sauvegarde » au lieu de la vraie cause de l'échec
+  # — ou retirerait l'échec de l'historique relu par le rapport du lundi.
+  STATUS_ERROR="$(printf '%s' "$1" | tr '\n\r\t' '   ' | tr -d '\000-\037\\"')"
   write_status
   echo "[backup] ÉCHEC : $1" >&2
   exit 1

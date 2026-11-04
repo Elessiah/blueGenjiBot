@@ -5,6 +5,7 @@ import { getBddInstance} from "../bdd/Bdd.js";
 import {safeUser} from "../safe/safeUser.js";
 import {sendLog} from "../safe/sendLog.js";
 import {banNoticeMessage} from "../notifications/dmLanguage.js";
+import {errorCode} from "../safe/errorGuards.js";
 
 
 import type {BanInfo, BanVerdict} from "./types.js";
@@ -19,15 +20,18 @@ import type {BanInfo, BanVerdict} from "./types.js";
  */
 export const BAN_NOTICE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
-/** Avis en cours d'envoi en arrière-plan (suivis pour que les tests les attendent ; un arrêt du bot en plein envoi perd l'avis du jour, au mieux par nature). */
-const pendingNotices = new Set<Promise<unknown>>();
-
 /**
- * Attend la fin des avis d'exclusion partis en arrière-plan.
- * @returns Une promesse qui se résout quand ils sont tous terminés.
+ * Attend la fin des avis d'exclusion partis en arrière-plan (un arrêt du bot
+ * en plein envoi perd l'avis du jour, au mieux par nature).
+ * @returns Une promesse qui se résout quand la file est vide.
  */
 export async function settleBanNotices(): Promise<void> {
-    await Promise.allSettled([...pendingNotices]);
+    // Un avis mis en file pendant l'attente allonge la file : on attend jusqu'à sa fin.
+    let tail: Promise<unknown>;
+    do {
+        tail = noticeQueue;
+        await tail;
+    } while (tail !== noticeQueue);
 }
 
 /** Exclus dont un avis est en file ou en cours d'envoi : deux messages simultanés n'en font partir qu'un. */
@@ -64,10 +68,17 @@ const BAN_VERDICT_CACHE_MAX = 1000;
 const banVerdictCache = new Map<string, {banInfo: BanInfo; readAt: number}>();
 
 /**
+ * Nombre d'oublis faits jusqu'ici : une lecture commencée avant un oubli (une
+ * levée pendant la lecture) ne remet pas en cache le verdict qu'il vient d'effacer.
+ */
+let forgetGeneration = 0;
+
+/**
  * Oublie le verdict « exclu » gardé pour un compte (ou pour tous).
  * @param idUser Compte dont l'exclusion vient d'être levée ; tous si absent.
  */
 export function forgetBanVerdict(idUser?: string): void {
+    forgetGeneration += 1;
     if (idUser === undefined) {
         banVerdictCache.clear();
     } else {
@@ -96,11 +107,23 @@ function cachedBan(idUser: string, now: number): BanInfo | undefined {
 
 /**
  * Garde un verdict « exclu » lu en base.
+ *
+ * Une entrée encore valide est gardée telle quelle : c'est l'objet que l'avis
+ * en cours tient à jour, deux lectures simultanées n'en font pas deux copies.
  * @param banInfo Ligne `Ban` lue.
  * @param now Instant de la lecture (ms).
+ * @param generation Valeur de `forgetGeneration` au début de la lecture.
+ * @returns La ligne à utiliser : celle du cache si elle existe, sinon `banInfo`.
  */
-function rememberBan(banInfo: BanInfo, now: number): void {
-    banVerdictCache.delete(banInfo.id_user);
+function rememberBan(banInfo: BanInfo, now: number, generation: number): BanInfo {
+    if (generation !== forgetGeneration) {
+        // Un oubli (levée) est passé pendant la lecture : rien n'est gardé.
+        return banInfo;
+    }
+    const kept = cachedBan(banInfo.id_user, now);
+    if (kept) {
+        return kept;
+    }
     if (banVerdictCache.size >= BAN_VERDICT_CACHE_MAX) {
         // Ordre d'insertion : la première clé est la plus ancienne lecture.
         const oldest = banVerdictCache.keys().next().value;
@@ -109,6 +132,7 @@ function rememberBan(banInfo: BanInfo, now: number): void {
         }
     }
     banVerdictCache.set(banInfo.id_user, {banInfo, readAt: now});
+    return banInfo;
 }
 
 /**
@@ -163,24 +187,42 @@ async function notifyBannedUser(client: Client, banInfo: BanInfo, now: number): 
         return;
     }
     const banReason = banNoticeMessage(banInfo.date, reasonMsg.content);
+    // Un seul avis à la fois dans la conversation : l'ancien est effacé **avant**
+    // l'envoi. S'il ne peut pas l'être (Discord indisponible), rien ne part : son
+    // identifiant, seul moyen de l'effacer à la levée, n'est pas écrasé.
+    if (previousNotice && !(await deleteNotice(user, previousNotice))) {
+        return;
+    }
     const sent = await safeUser(client, user, undefined, [], banReason);
     if (!sent) {
         return;
     }
     const stored = await bdd.write("UPDATE Ban SET id_notice_user = ? WHERE id_user = ?", [sent.id, banInfo.id_user]);
     if (stored === 0) {
+        // Exclusion levée pendant l'envoi : l'avis (et son motif) ne doit pas rester.
         forgetBanVerdict(banInfo.id_user);
-    } else {
-        banInfo.id_notice_user = sent.id;
+        await deleteNotice(user, sent.id);
+        return;
     }
-    // Exclusion levée pendant l'envoi : l'avis (et son motif) ne doit pas rester.
-    // Sinon, un seul avis à la fois dans la conversation : l'ancien n'a plus d'objet.
-    const obsolete = stored === 0 ? sent.id : previousNotice;
-    if (obsolete) {
-        // La conversation est déjà en cache après l'envoi : pas d'appel de plus.
-        await Promise.resolve(user.dmChannel ?? user.createDM())
-            .then((dm) => dm.messages.delete(obsolete))
-            .catch(() => undefined);
+    banInfo.id_notice_user = sent.id;
+}
+
+/** Code Discord d'un message inconnu : déjà effacé, rien à garder. */
+const UNKNOWN_MESSAGE = 10008;
+
+/**
+ * Efface un avis remis à l'exclu.
+ * @param user Exclu.
+ * @param messageId Identifiant de l'avis.
+ * @returns `true` si l'avis n'existe plus (effacé, ou déjà absent).
+ */
+async function deleteNotice(user: User, messageId: string): Promise<boolean> {
+    try {
+        const dm = user.dmChannel ?? await user.createDM();
+        await dm.messages.delete(messageId);
+        return true;
+    } catch (error) {
+        return errorCode(error) === UNKNOWN_MESSAGE;
     }
 }
 
@@ -197,6 +239,7 @@ async function checkBan(client: Client,
                         alertUser: boolean = true,
                         now: number = Date.now()): Promise<BanVerdict> {
     let banInfo: BanInfo | undefined = alertUser ? cachedBan(id_author, now) : undefined;
+    const generation = forgetGeneration;
     if (banInfo) {
         startBanNotice(client, banInfo, now);
         return "BANNED";
@@ -220,8 +263,7 @@ async function checkBan(client: Client,
     if (!alertUser) {
         return "BANNED";
     }
-    rememberBan(banInfo, now);
-    startBanNotice(client, banInfo, now);
+    startBanNotice(client, rememberBan(banInfo, now, generation), now);
     return "BANNED";
 }
 
@@ -248,12 +290,8 @@ function startBanNotice(client: Client, banInfo: BanInfo, now: number): void {
         .then(() => notifyBannedUser(client, banInfo, now))
         .catch((error: unknown) => sendLog(client, "Failed to notify banned user : " + (error as Error).message))
         .catch(() => undefined)
-        .finally(() => {
-            noticesInFlight.delete(idUser);
-            pendingNotices.delete(notice);
-        });
+        .finally(() => noticesInFlight.delete(idUser));
     noticeQueue = notice;
-    pendingNotices.add(notice);
 }
 
 export {checkBan};
