@@ -29,8 +29,7 @@ import {
   relayStatus,
   sparklineFromBuckets,
   SPARKLINE_POINTS,
-  internalErrorCode,
-  internalErrorStatus,
+  internalErrorHandler,
   type RelayStatus,
 } from "./internalApi/helpers.js";
 import { parseSiteVisitStats, saveSiteVisitStats } from "./siteVisits/siteVisits.js";
@@ -880,21 +879,15 @@ export function startInternalApi(client: Client) {
 
   // Route inconnue (dont `GET /internal/voice/channels/:id/count`, retirée) : un code,
   // jamais la page HTML d'Express qui recopie le chemin demandé. Après toutes les routes.
-  app.use((_req: Request, res: Response) => {
+  // Sous `/internal` (jeton déjà vérifié) le code dit l'API ; ailleurs, rien ne la désigne.
+  app.use("/internal", (_req: Request, res: Response) => {
     res.status(404).json({ error: "INTERNAL_ROUTE_NOT_FOUND" });
   });
-  // Erreur levée avant une route (corps JSON illisible ou trop gros) : un code, jamais
-  // la page d'erreur d'Express (pile d'appel et chemins hors production).
-  app.use((error: unknown, _req: Request, res: Response, next: NextFunction) => {
-    // Réponse déjà partie (flux) : Express ferme la connexion.
-    if (res.headersSent) { next(error); return; }
-    const status = internalErrorStatus(error);
-    // Le détail va au journal du processus, jamais dans la réponse ; un refus de
-    // lecture n'y met que son code (le message d'un JSON illisible recopie le corps).
-    const detail = status === 500 ? ": " + describeError(error) : "";
-    console.error(`[internalApi] ${internalErrorCode(error)}${detail}`);
-    res.status(status).json({ error: internalErrorCode(error) });
+  app.use((_req: Request, res: Response) => {
+    res.status(404).json({ error: "NOT_FOUND" });
   });
+  // Erreur levée hors d'une route (corps illisible, trop gros…) : `internalApi/helpers.ts`.
+  app.use(internalErrorHandler());
 
   const port = Number(process.env.INTERNAL_API_PORT || 4400);
   const host = process.env.INTERNAL_API_HOST || "127.0.0.1";

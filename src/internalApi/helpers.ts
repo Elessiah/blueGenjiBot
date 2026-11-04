@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
+import type { ErrorRequestHandler } from "express";
 
 /** Adresses d'ecoute sur lesquelles seul un process de la machine peut se connecter. */
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
@@ -109,44 +110,68 @@ export function sparklineFromBuckets(rows: ReadonlyArray<{ bucket: number; count
   return sparkline;
 }
 
-/**
- * Code rendu pour une erreur levée hors d'une route (lecture du corps).
- *
- * @param error Erreur transmise par Express.
- * @returns `INVALID_JSON`, `PAYLOAD_TOO_LARGE`, `UNSUPPORTED_ENCODING`, `REQUEST_ABORTED` ou `INTERNAL_ERROR`.
- */
-export function internalErrorCode(error: unknown): string {
-  return bodyParserRefusal(error)?.code ?? "INTERNAL_ERROR";
-}
-
 /** Refus de la lecture du corps (`express.json()`), par `type` d'erreur. */
-const BODY_PARSER_REFUSALS: Readonly<Record<string, { code: string; status: number }>> = {
+const BODY_PARSER_REFUSALS: Readonly<Record<string, InternalErrorReply>> = {
   "entity.parse.failed": { code: "INVALID_JSON", status: 400 },
   "entity.too.large": { code: "PAYLOAD_TOO_LARGE", status: 413 },
   "encoding.unsupported": { code: "UNSUPPORTED_ENCODING", status: 415 },
   "charset.unsupported": { code: "UNSUPPORTED_ENCODING", status: 415 },
   "request.aborted": { code: "REQUEST_ABORTED", status: 400 },
+  "request.size.invalid": { code: "INVALID_CONTENT_LENGTH", status: 400 },
 };
 
+/** Réponse à une erreur levée hors d'une route. */
+export type InternalErrorReply = { code: string; status: number };
+
+/** Réponse à une erreur que rien n'identifie (dont `stream.*`, défaut du serveur). */
+const UNEXPECTED_ERROR: InternalErrorReply = { code: "INTERNAL_ERROR", status: 500 };
+
 /**
- * Refus de la lecture du corps porté par une erreur, ou `null` si elle ne vient
- * pas de `express.json()` (une erreur Discord porte aussi un `status`, jamais ce `type`).
+ * Code et statut d'une erreur levée hors d'une route : ceux du refus de lecture
+ * du corps, sinon `500 INTERNAL_ERROR` — le `status` d'une autre erreur (une
+ * erreur Discord en porte un) n'est jamais repris.
  *
  * @param error Erreur transmise par Express.
- * @returns Code et statut du refus, ou `null`.
+ * @returns Code et statut de la réponse.
  */
-export function bodyParserRefusal(error: unknown): { code: string; status: number } | null {
+export function internalErrorReply(error: unknown): InternalErrorReply {
   const type = (error as { type?: unknown } | null)?.type;
-  return typeof type === "string" && Object.hasOwn(BODY_PARSER_REFUSALS, type) ? BODY_PARSER_REFUSALS[type] : null;
+  return typeof type === "string" && Object.hasOwn(BODY_PARSER_REFUSALS, type) ? BODY_PARSER_REFUSALS[type] : UNEXPECTED_ERROR;
+}
+
+/** Code d'erreur assez court et sans espace pour être un identifiant (`SQLITE_BUSY`, 10003). */
+const SAFE_CODE = /^[\w.-]{1,40}$/;
+
+/**
+ * Ligne de journal d'une erreur levée hors d'une route : son code de réponse et,
+ * pour un défaut du serveur, le type de l'erreur et son code — jamais son
+ * message ni sa pile, qui peuvent recopier le corps, un nom ou du SQL.
+ *
+ * @param error Erreur transmise par Express.
+ * @returns Ligne à écrire au journal du processus.
+ */
+export function internalErrorLogLine(error: unknown): string {
+  const reply = internalErrorReply(error);
+  if (reply !== UNEXPECTED_ERROR) { return `[internalApi] ${reply.code}`; }
+  const kind = error instanceof Error ? error.name : typeof error;
+  const code = (error as { code?: unknown } | null)?.code;
+  const shown = (typeof code === "string" || typeof code === "number") && SAFE_CODE.test(String(code)) ? ` ${code}` : "";
+  return `[internalApi] ${reply.code} (${kind}${shown})`;
 }
 
 /**
- * Statut HTTP d'une erreur levée hors d'une route : celui du refus de lecture du
- * corps, sinon 500 (le `status` d'une autre erreur n'est jamais repris).
+ * Gestionnaire d'erreur Express de l'API interne : un code, jamais la page
+ * d'Express ; si la réponse est déjà partie (flux), elle est close sans repasser
+ * par le gestionnaire d'Express, qui écrirait la pile au journal.
  *
- * @param error Erreur transmise par Express.
- * @returns Statut HTTP.
+ * @param log Écrit une ligne au journal du processus.
+ * @returns Gestionnaire à monter après toutes les routes.
  */
-export function internalErrorStatus(error: unknown): number {
-  return bodyParserRefusal(error)?.status ?? 500;
+export function internalErrorHandler(log: (line: string) => void = (line) => console.error(line)): ErrorRequestHandler {
+  return (error, _req, res, _next) => {
+    log(internalErrorLogLine(error));
+    if (res.headersSent) { res.end(); return; }
+    const reply = internalErrorReply(error);
+    res.status(reply.status).json({ error: reply.code });
+  };
 }
