@@ -640,3 +640,57 @@ test("checkBan_noticeColumnsMissing_verdictWithoutNotice", async () => {
   await checkBan(client, "nocol-1", true, T0 + 1000);
   assert.equal(trace.dms.length, 1);
 });
+
+// --- Revue sécurité EF-14, cycle 3 ---
+
+test("checkBan_sendFails_noRetryAndCodeLogged", async () => {
+  const trace = newTrace();
+  let sends = 0;
+  const base = fakeClient("none", trace) as unknown as { users: { fetch: (id: string) => Promise<Record<string, unknown>> } };
+  // Le premier envoi échoue (réponse perdue, ou messages privés fermés), le suivant réussirait.
+  const client = {
+    ...base,
+    users: {
+      fetch: async (id: string) => {
+        const user = await base.users.fetch(id);
+        if (id === process.env.OWNER_ID) { return user; }
+        const send = user.send as (payload: unknown) => Promise<{ id: string }>;
+        return { ...user, send: async (payload: unknown) => {
+          sends += 1;
+          if (sends === 1) { throw Object.assign(new Error("Cannot send messages to this user"), { code: 50007 }); }
+          return send(payload);
+        } };
+      },
+    },
+  } as unknown as Client;
+  await seedBan("once-1");
+
+  await checkBan(client, "once-1", true, T0);
+
+  assert.equal(sends, 1);
+  assert.deepEqual(trace.dms, []);
+  assert.match(trace.logs.join("\n"), /Ban notice not delivered: code 50007/);
+  assert.deepEqual(await banRow("once-1"), { id_notice_user: null, notice_user_at: T0 });
+});
+
+test("forgetBanVerdict_capReachedDuringRead_verdictStillNotCached", async () => {
+  const client = fakeClient("none", newTrace());
+  await seedBan("cap-race-1");
+  const bdd = await getBddInstance();
+  const originalGet = bdd.get;
+  // `/unban` pendant la lecture, puis assez d'oublis pour atteindre la borne.
+  bdd.get = (async (...args: Parameters<typeof originalGet>) => {
+    const rows = await originalGet.apply(bdd, args);
+    forgetBanVerdict("cap-race-1");
+    for (let index = 0; index < 1000; index += 1) { forgetBanVerdict(`other-${index}`); }
+    return rows;
+  }) as typeof originalGet;
+  try {
+    await checkBan(client, "cap-race-1", true, T0);
+  } finally {
+    bdd.get = originalGet;
+  }
+  await bdd.raw("DELETE FROM Ban WHERE id_user = ?", ["cap-race-1"]);
+
+  assert.equal(await checkBan(client, "cap-race-1", true, T0 + 1000), "NOT_BANNED");
+});
