@@ -269,7 +269,7 @@ test("ensureTeamVoiceChannel_otherDiscordError_discordErrorWithoutAlert", async 
   assert.deepEqual(world.logs, []);
 });
 
-// --- Compte ----------------------------------------------------------------
+// --- Libération ------------------------------------------------------------
 
 test("releaseVoiceChannel_emptyChannel_deletedAtOnceAndUntracked", async () => {
   const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);

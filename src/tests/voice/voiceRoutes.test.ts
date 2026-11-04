@@ -127,15 +127,20 @@ test("createVoiceChannel_clientNotReady_returns503", async () => {
   assert.deepEqual(reply, { status: 503, body: { error: "DISCORD_NOT_READY" } });
 });
 
-test("countVoiceChannel_routeRemoved_returns404", async () => {
+test("countVoiceChannel_routeRemoved_returns404WithCode", async () => {
   // EF-43 : le site ne demande plus jamais combien de personnes sont dans un salon.
   const { body } = await create({ key: "match:1:team:2", name: "Les Genji" });
 
-  const response = await fetch(`${baseUrl}/internal/voice/channels/${String(body.channelId)}/count`, {
-    headers: { "x-internal-token": TOKEN },
-  });
+  const reply = await call(`/internal/voice/channels/${String(body.channelId)}/count`);
 
-  assert.equal(response.status, 404);
+  // Un code JSON, jamais la page HTML d'Express qui recopie le chemin.
+  assert.deepEqual(reply, { status: 404, body: { error: "INTERNAL_ROUTE_NOT_FOUND" } });
+});
+
+test("unknownInternalRoute_noToken_returns401", async () => {
+  const reply = await call("/internal/unknown", { token: null });
+
+  assert.deepEqual(reply, { status: 401, body: { error: "UNAUTHORIZED" } });
 });
 
 test("releaseVoiceChannel_invalidId_returns400", async () => {
