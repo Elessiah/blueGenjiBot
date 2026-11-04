@@ -1,8 +1,7 @@
-import type {Client, TextChannel, User} from "discord.js";
+import type {Client, Message, TextChannel, User} from "discord.js";
 
 import type {Bdd} from "../bdd/Bdd.js";
 import { getBddInstance} from "../bdd/Bdd.js";
-import {safeUser} from "../safe/safeUser.js";
 import {sendLog} from "../safe/sendLog.js";
 import {banNoticeMessage} from "../notifications/dmLanguage.js";
 import {errorCode} from "../safe/errorGuards.js";
@@ -110,6 +109,11 @@ export function forgetBanVerdict(idUser?: string): void {
         noticeColumnsMissing = false;
         banVerdictCache.clear();
     } else {
+        if (forgetGenerations.size >= BAN_VERDICT_CACHE_MAX && !forgetGenerations.has(idUser)) {
+            // Borne : tout oublier revient au même pour les lectures en cours (aucune ne garde son verdict).
+            forgetAllGeneration += 1;
+            forgetGenerations.clear();
+        }
         forgetGenerations.set(idUser, (forgetGenerations.get(idUser) ?? 0) + 1);
         banVerdictCache.delete(idUser);
     }
@@ -225,8 +229,14 @@ async function notifyBannedUser(client: Client, banInfo: BanInfo, now: number): 
         await sendLog(client, "Ban notice skipped: the previous notice could not be deleted");
         return;
     }
-    const sent = await safeUser(client, user, undefined, [], banReason);
-    if (!sent) {
+    // Un seul envoi, sans nouvel essai : un envoi accepté par Discord mais dont
+    // la réponse se perd laisserait, après un nouvel essai, un second avis dont
+    // l'identifiant ne serait gardé nulle part (donc jamais effacé à la levée).
+    let sent: Message;
+    try {
+        sent = await user.send({content: banReason});
+    } catch (error) {
+        await sendLog(client, `Ban notice not delivered: code ${errorCode(error) ?? "inconnu"}`);
         return;
     }
     let stored: number;
