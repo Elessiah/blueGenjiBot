@@ -390,7 +390,8 @@ un salon qu'il n'a pas créé : seuls les salons inscrits dans son suivi
 (table `MatchVoiceChannel`) sont concernés. Le rôle du bot doit avoir
 « Gérer les salons » sur la catégorie. Une erreur vocale ne part au salon de logs
 que par son code (`code 50035, statut 400`) et l'opération en cours, jamais par le
-message de Discord ou de SQLite, qui peut recopier le nom ou la clé reçus.
+message de Discord ou de SQLite, qui peut recopier le nom ou la clé reçus (une
+catégorie introuvable est nommée par son identifiant, qui est de la configuration).
 
 - `POST /internal/voice/channels`
   - Body: `{ "key": "match:12:team:34", "name": "Nom de l'équipe" }`
@@ -456,7 +457,8 @@ ne désigne pas l'API —, jamais la page HTML d'Express qui recopie le chemin ;
 `413 PAYLOAD_TOO_LARGE`, d'encodage ou de jeu de caractères inconnu
 `415 UNSUPPORTED_ENCODING`, interrompu `400 REQUEST_ABORTED`, de longueur contraire à
 son `Content-Length` `400 INVALID_CONTENT_LENGTH`, toute autre erreur hors route
-`500 INTERNAL_ERROR` (le statut porté par une erreur Discord n'est jamais repris).
+`500 INTERNAL_ERROR` (le statut porté par une erreur Discord n'est jamais repris ;
+un refus n'est reconnu que si son type et son statut sont ceux que pose body-parser).
 Une réponse déjà commencée (flux) voit sa connexion coupée : le lecteur voit une
 réponse tronquée, jamais une fin normale. Toute route qui lit un corps vit sous
 `/internal` (ailleurs, le corps n'est pas lu). Le
