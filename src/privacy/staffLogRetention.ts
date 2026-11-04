@@ -302,10 +302,10 @@ export async function deleteDirectMessage(client: Client, idUser: string, messag
   }
 }
 
-/** Avis repris au plus par purge de nuit : chacun coûte trois appels Discord, sur la file que partage le relais. */
+/** Avis repris au plus par purge de nuit : chacun coûte deux à quatre appels Discord, sur la file que partage le relais. */
 export const MAX_NOTICE_WITHDRAWALS_PER_RUN = 50;
 
-/** Part du plafond laissée au dernier essai des lignes échues : le reste revient aux plus récentes. */
+/** Part du plafond garantie aux lignes échues ; celle que les plus récentes laissent leur revient aussi. */
 export const MAX_EXPIRED_LAST_TRIES_PER_RUN = MAX_NOTICE_WITHDRAWALS_PER_RUN / 2;
 
 /**
@@ -349,6 +349,10 @@ async function recordWithdrawal(
         // Gardé en file : la purge de nuit, refusée de nouveau, refera l'oubli.
         await sendLog(client, "Ban notice refusal not recorded");
         keepQueued = true;
+      } else {
+        // Sans conséquence pour l'exclu (le message est parti) : un effacement
+        // sera de nouveau tenté sur cet identifiant, qui répondra « déjà parti ».
+        await sendLog(client, "Ban notice deletion not recorded");
       }
     }
   }
@@ -397,10 +401,9 @@ export async function withdrawBanNotice(client: Client, idUser: string, messageI
     return "gone";
   }
   if (deletion === "refused") {
-    // Refus annoncé par la purge de nuit quand c'est elle qui refera l'oubli.
-    if (recorded !== "night") {
-      await sendLog(client, "Ban notice withdrawal refused by Discord");
-    }
+    await sendLog(client, recorded === "night"
+      ? "Ban notice withdrawal refused by Discord; tried again tonight"
+      : "Ban notice withdrawal refused by Discord");
     return "refused";
   }
   await sendLog(client, "Ban notice withdrawal postponed to the nightly purge");
@@ -414,11 +417,12 @@ export async function withdrawBanNotice(client: Client, idUser: string, messageI
  * jours, aussi, signalé au staff — et la ligne `Ban` encore en cours l'oublie,
  * pour que l'avis du jour ne le remette pas en file (comme un avis effacé :
  * la ligne `Ban` ne pointe jamais un message parti). Une ligne qui échoue
- * n'arrête pas les suivantes. Au plus `MAX_NOTICE_WITHDRAWALS_PER_RUN` appels
- * par nuit : la moitié au plus pour un dernier essai des lignes échues (les
- * plus anciennes en tête), le reste pour les autres, tirées au hasard — des
- * avis durablement en échec ne bloquent pas les plus récents. Les échues
- * au-delà sont abandonnées sans appel : aucune ne passe l'échéance annoncée.
+ * n'arrête pas les suivantes. Au plus `MAX_NOTICE_WITHDRAWALS_PER_RUN` avis
+ * essayés par nuit : les plus récents, tirés au hasard, en ont la moitié au
+ * plus — des avis durablement en échec ne les bloquent pas —, les échues le
+ * reste, pour un dernier essai (les datées du futur, puis les plus anciennes,
+ * en tête). Les échues au-delà sont abandonnées d'un bloc, sans appel :
+ * aucune ne passe l'échéance annoncée.
  * @param client Client Discord connecté.
  * @param now Instant de référence (ms).
  * @returns Le nombre d'avis retirés de la table (effacés ou abandonnés).
@@ -431,23 +435,26 @@ export async function retryBanNoticeWithdrawals(client: Client, now: number = Da
   // l'échéance. Un instant dans le futur (horloge reculée) ne la garde pas indéfiniment.
   const deadline = now - (BAN_NOTICE_WITHDRAWAL_RETRY_DAYS - 1) * day;
   type Pending = { id_user: string; id_message: string };
-  const expired = await bdd.raw<Pending>(
-    "SELECT id_user, id_message FROM BanNoticeWithdrawal WHERE queued_at <= ? OR queued_at > ? ORDER BY queued_at",
-    [deadline, now + day],
-  );
-  const lastTries = expired.slice(0, MAX_EXPIRED_LAST_TRIES_PER_RUN);
-  const overflow = expired.slice(MAX_EXPIRED_LAST_TRIES_PER_RUN);
+  const expiredWhere = "(queued_at <= ? OR queued_at > ?)";
+  const expiredValues = [deadline, now + day];
+  const [{ expiredCount }] = await bdd.raw<{ expiredCount: number }>(
+    "SELECT COUNT(*) AS expiredCount FROM BanNoticeWithdrawal WHERE " + expiredWhere, expiredValues);
   const pending = await bdd.raw<Pending>(
     "SELECT id_user, id_message FROM BanNoticeWithdrawal WHERE queued_at > ? AND queued_at <= ? ORDER BY RANDOM() LIMIT ?",
-    [deadline, now + day, MAX_NOTICE_WITHDRAWALS_PER_RUN - lastTries.length],
+    [deadline, now + day, MAX_NOTICE_WITHDRAWALS_PER_RUN - Math.min(MAX_EXPIRED_LAST_TRIES_PER_RUN, expiredCount)],
+  );
+  // Une ligne datée du futur (horloge reculée) n'a peut-être jamais été essayée.
+  const lastTries = await bdd.raw<Pending>(
+    "SELECT id_user, id_message FROM BanNoticeWithdrawal WHERE " + expiredWhere
+      + " ORDER BY CASE WHEN queued_at > ? THEN 0 ELSE 1 END, queued_at LIMIT ?",
+    [...expiredValues, now + day, MAX_NOTICE_WITHDRAWALS_PER_RUN - pending.length],
   );
   let settled = 0;
   let failure: unknown = null;
   // L'oubli d'abord : si la ligne de file restait, la nuit suivante le refait.
   const drop = async (row: Pending): Promise<void> => {
     await forgetBanNotice(row.id_user, row.id_message);
-    await bdd.write("DELETE FROM BanNoticeWithdrawal WHERE id_user = ? AND id_message = ?", [row.id_user, row.id_message]);
-    settled += 1;
+    settled += await bdd.write("DELETE FROM BanNoticeWithdrawal WHERE id_user = ? AND id_message = ?", [row.id_user, row.id_message]);
   };
   const attempt = async (row: Pending, isExpired: boolean): Promise<void> => {
     const deletion = await deleteDirectMessage(client, row.id_user, row.id_message);
@@ -461,7 +468,7 @@ export async function retryBanNoticeWithdrawals(client: Client, now: number = Da
       await sendLog(client, "Ban notice withdrawal abandoned after " + BAN_NOTICE_WITHDRAWAL_RETRY_DAYS + " days");
     }
   };
-  for (const [rows, isExpired] of [[lastTries, true], [pending, false]] as const) {
+  for (const [rows, isExpired] of [[pending, false], [lastTries, true]] as const) {
     for (const row of rows) {
       try {
         await attempt(row, isExpired);
@@ -470,17 +477,17 @@ export async function retryBanNoticeWithdrawals(client: Client, now: number = Da
       }
     }
   }
-  let dropped = 0;
-  for (const row of overflow) {
-    try {
-      await drop(row);
-      dropped += 1;
-    } catch (error) {
-      failure ??= error;
+  // Les échues restées après leur dernier essai partent d'un bloc, oubliées d'abord.
+  try {
+    await bdd.write("UPDATE Ban SET id_notice_user = NULL WHERE EXISTS (SELECT 1 FROM BanNoticeWithdrawal w "
+      + "WHERE w.id_user = Ban.id_user AND w.id_message = Ban.id_notice_user AND (w.queued_at <= ? OR w.queued_at > ?))", expiredValues);
+    const dropped = await bdd.write("DELETE FROM BanNoticeWithdrawal WHERE " + expiredWhere, expiredValues);
+    settled += dropped;
+    if (dropped > 0) {
+      await sendLog(client, dropped + " ban notice withdrawals abandoned after " + BAN_NOTICE_WITHDRAWAL_RETRY_DAYS + " days without a last try");
     }
-  }
-  if (dropped > 0) {
-    await sendLog(client, dropped + " ban notice withdrawals abandoned after " + BAN_NOTICE_WITHDRAWAL_RETRY_DAYS + " days without a last try");
+  } catch (error) {
+    failure ??= error;
   }
   if (failure !== null) {
     throw failure;

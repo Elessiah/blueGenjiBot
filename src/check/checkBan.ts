@@ -257,7 +257,11 @@ async function notifyBannedUser(client: Client, banInfo: BanInfo, now: number): 
         // Arrêt pendant le retrait : la réservation est rendue, l'avis repartira
         // au premier message après le redémarrage plutôt que dans un jour.
         const released = await bdd.write("UPDATE Ban SET notice_user_at = NULL WHERE id_user = ? AND id_reason = ? AND notice_user_at = ?",
-            [banInfo.id_user, banInfo.id_reason, now]).catch(() => 0);
+            [banInfo.id_user, banInfo.id_reason, now]).catch(async (error: unknown) => {
+                // Réservation gardée : l'avis attendra un jour après le redémarrage.
+                await sendLog(client, `Ban notice reservation not released: code ${errorCode(error) ?? "inconnu"}`);
+                return 0;
+            });
         if (released > 0) {
             banInfo.notice_user_at = null;
         }
