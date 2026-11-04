@@ -402,15 +402,35 @@ test("retryBanNoticeWithdrawals_lastNightBeforeDeadline_rowDroppedAndBanForgetsN
   await bdd.raw("DELETE FROM Ban WHERE id_user = ?", [BAN.id_user]);
 });
 
-test("retryBanNoticeWithdrawals_queuedInFuture_reanchoredToNow", async () => {
-  // Horloge reculée : la ligne repart de maintenant — bornée, et jamais abandonnée sans essai.
+test("retryBanNoticeWithdrawals_queuedInFuture_lastTryTonightThenDropped", async () => {
+  // Horloge reculée : âge inconnu, la ligne a son dernier essai la nuit même puis part.
   await clearWithdrawals();
   await withdrawBanNotice(noticeFailureClient([], UNAVAILABLE()), BAN.id_user, "notice-z", NOW + 2 * DAY);
 
   const settled = await retryBanNoticeWithdrawals(noticeFailureClient([], UNAVAILABLE()), NOW);
 
-  assert.equal(settled, 0);
-  assert.deepEqual(await pendingWithdrawals(), [{ id_user: BAN.id_user, id_message: "notice-z", queued_at: NOW }]);
+  assert.equal(settled, 1);
+  assert.deepEqual(await pendingWithdrawals(), []);
+});
+
+test("retryBanNoticeWithdrawals_reanchorFails_restOfRunProceeds", async () => {
+  // Écriture préalable en échec : la nuit essaie quand même ses lignes, puis signale l'erreur.
+  await clearWithdrawals();
+  const bdd = await getBddInstance();
+  await bdd.raw("INSERT INTO BanNoticeWithdrawal (id_user, id_message, queued_at) VALUES (?, ?, ?)", [BAN.id_user, "notice-p", NOW]);
+  const original = bdd.write.bind(bdd);
+  bdd.write = async (query: string, values?: unknown[]) => {
+    if (query.startsWith("UPDATE BanNoticeWithdrawal SET queued_at")) { throw new Error("SQLITE_BUSY"); }
+    return original(query, values);
+  };
+  const attempts: string[] = [];
+  try {
+    await assert.rejects(retryBanNoticeWithdrawals(countingClient(attempts), NOW + DAY), /SQLITE_BUSY/);
+  } finally {
+    bdd.write = original;
+  }
+
+  assert.deepEqual(attempts, ["notice-p"]);
   await clearWithdrawals();
 });
 
@@ -574,8 +594,8 @@ test("retryBanNoticeWithdrawals_moreExpiredThanCap_spareBudgetUsedThenRestDroppe
   assert.deepEqual(await pendingWithdrawals(), []);
 });
 
-test("retryBanNoticeWithdrawals_futureRowInBacklog_reanchoredAndTried", async () => {
-  // Datée du futur (horloge reculée) au milieu d'un arriéré : elle repart de maintenant et reste essayée.
+test("retryBanNoticeWithdrawals_futureRowInBacklog_triedFirstThenDropped", async () => {
+  // Datée du futur (horloge reculée) au milieu d'un arriéré : son dernier essai passe en tête.
   await clearWithdrawals();
   const bdd = await getBddInstance();
   for (let i = 0; i < MAX_NOTICE_WITHDRAWALS_PER_RUN; i++) {
@@ -586,9 +606,8 @@ test("retryBanNoticeWithdrawals_futureRowInBacklog_reanchoredAndTried", async ()
 
   await retryBanNoticeWithdrawals(countingClient(attempts), NOW + 30 * DAY);
 
-  assert.ok(attempts.includes("future"));
-  assert.deepEqual(await pendingWithdrawals(), [{ id_user: BAN.id_user, id_message: "future", queued_at: NOW + 30 * DAY }]);
-  await clearWithdrawals();
+  assert.equal(attempts[0], "future");
+  assert.deepEqual(await pendingWithdrawals(), []);
 });
 
 test("withdrawBanNotice_goneAndForgetFails_staffWarned", async () => {
