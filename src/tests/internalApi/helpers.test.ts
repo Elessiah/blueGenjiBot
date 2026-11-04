@@ -8,6 +8,8 @@ import {
   relayStatus,
   sparklineFromBuckets,
   SPARKLINE_POINTS,
+  internalErrorCode,
+  internalErrorStatus,
 } from "../../internalApi/helpers.js";
 
 test("absDelta formate le signe correctement", () => {
@@ -115,4 +117,28 @@ test("sparklineFromBuckets range la tranche la plus récente en dernier et ignor
     ]),
     [1, 0, 0, 0, 0, 0, 7, 0, 0, 5],
   );
+});
+
+test("internalErrorCode_parseFailed_returnsInvalidJson", () => {
+  assert.equal(internalErrorCode({ type: "entity.parse.failed" }), "INVALID_JSON");
+});
+
+test("internalErrorCode_tooLarge_returnsPayloadTooLarge", () => {
+  assert.equal(internalErrorCode({ type: "entity.too.large" }), "PAYLOAD_TOO_LARGE");
+});
+
+test("internalErrorCode_otherError_returnsInternalError", () => {
+  assert.equal(internalErrorCode(new Error("x")), "INTERNAL_ERROR");
+  assert.equal(internalErrorCode(null), "INTERNAL_ERROR");
+});
+
+test("internalErrorStatus_clientStatus_keepsIt", () => {
+  assert.equal(internalErrorStatus({ status: 400 }), 400);
+  assert.equal(internalErrorStatus({ status: 413 }), 413);
+});
+
+test("internalErrorStatus_serverOrMissingStatus_returns500", () => {
+  assert.equal(internalErrorStatus({ status: 503 }), 500);
+  assert.equal(internalErrorStatus(new Error("x")), 500);
+  assert.equal(internalErrorStatus({ status: "abc" }), 500);
 });

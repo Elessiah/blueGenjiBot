@@ -137,6 +137,41 @@ test("countVoiceChannel_routeRemoved_returns404WithCode", async () => {
   assert.deepEqual(reply, { status: 404, body: { error: "INTERNAL_ROUTE_NOT_FOUND" } });
 });
 
+test("countVoiceChannel_postOnRemovedRoute_returns404Code", async () => {
+  const reply = await call(`/internal/voice/channels/${UNTRACKED}/count`, { method: "POST", body: {} });
+
+  assert.deepEqual(reply, { status: 404, body: { error: "INTERNAL_ROUTE_NOT_FOUND" } });
+});
+
+test("unknownRouteOutsideInternal_returns404Code", async () => {
+  const reply = await call("/foo", { token: null });
+
+  assert.deepEqual(reply, { status: 404, body: { error: "INTERNAL_ROUTE_NOT_FOUND" } });
+});
+
+/** Corps JSON illisible : envoyé tel quel, sans passer par `JSON.stringify`. */
+async function postMalformed(token: string | null): Promise<Reply> {
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  if (token !== null) { headers["x-internal-token"] = token; }
+  const response = await fetch(`${baseUrl}/internal/voice/channels`, { method: "POST", headers, body: "{bad" });
+  return { status: response.status, body: JSON.parse(await response.text()) };
+}
+
+test("createVoiceChannel_malformedJson_returns400InvalidJson", async () => {
+  const reply = await postMalformed(TOKEN);
+
+  // Un code, jamais la page d'erreur d'Express (pile d'appel, chemins).
+  assert.deepEqual(reply, { status: 400, body: { error: "INVALID_JSON" } });
+  assert.deepEqual(world.creations, []);
+});
+
+test("createVoiceChannel_malformedJsonNoToken_returns401", async () => {
+  const reply = await postMalformed(null);
+
+  // La garde passe avant la lecture du corps.
+  assert.deepEqual(reply, { status: 401, body: { error: "UNAUTHORIZED" } });
+});
+
 test("unknownInternalRoute_noToken_returns401", async () => {
   const reply = await call("/internal/unknown", { token: null });
 
