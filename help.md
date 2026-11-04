@@ -54,7 +54,7 @@ Everyone:
 - `/stats-site`: shows BlueGenji website traffic (total visits, and unique visitors over the last 25 months).
 - `/tournoi`: posts the BlueGenji tournament links in the channel: rules in French and in English, and the form to apply as a caster.
 
-Bans are **network-wide**: this is community moderation, decided by the admins of servers with 50+ members. `/ban-list` therefore shows the admin of any partner server the full list of network bans (banned player, moderator, reason, date), so they know who can no longer post through the bot and why. A banned player who tries to post receives a bilingual private notice (French then English) followed by the reason (shortened if it is very long), at most once a day; the bot keeps only the ID of that message and the time of its last attempt to send one, and deletes the notice when the ban is lifted.
+Bans are **network-wide**: this is community moderation, decided by the admins of servers with 50+ members. `/ban-list` therefore shows the admin of any partner server the full list of network bans (banned player, moderator, reason, date), so they know who can no longer post through the bot and why. A banned player who tries to post receives a bilingual private notice (French then English) followed by the reason (shortened if it is very long), at most once a day — a new notice replaces the previous one, which is deleted first (if it cannot be, no notice is sent that day); the bot keeps only the ID of that message and the time of its last attempt to send one, and deletes the notice when the ban is lifted.
 
 To link your Discord account to the BlueGenji website, sign in to the website with Discord, or use « Applications connectées » on your profile (the former `/link` command is gone).
 
