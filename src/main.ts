@@ -9,7 +9,7 @@ import {
 import cron from "node-cron";
 import { getBddInstance, closeBddInstance } from "./bdd/Bdd.js";
 import { deleteDPMsgs } from "./bdd/deleteDPMsgs.js";
-import { checkBan } from "./check/checkBan.js";
+import { checkBan, settleBanNotices } from "./check/checkBan.js";
 import { _resetChannel } from "./commandsHandlers/services/resetChannel.js";
 import { buildClientOptions } from "./config/clientOptions.js";
 import { commands } from "./config/commands.js";
@@ -356,6 +356,9 @@ client.on("channelDelete", async (channel) => {
  */
 async function shutdown(): Promise<void> {
     console.log('Arrêt du bot...');
+    // Un avis d'exclusion en cours d'envoi finit d'enregistrer son identifiant
+    // (sinon il ne pourrait plus être effacé à la levée) — 5 s au plus.
+    await Promise.race([settleBanNotices(), new Promise((resolve) => setTimeout(resolve, 5000).unref())]);
     try {
         await client.destroy();
     } catch (error) {

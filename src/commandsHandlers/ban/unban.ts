@@ -43,6 +43,11 @@ async function unban(client: Client,
         // La ligne effacée est rendue par la même instruction : un avis remis
         // pendant la levée y figure déjà (sinon, il se voit sans ligne et s'efface lui-même).
         const removed = await bdd.raw<Ban>("DELETE FROM Ban WHERE id_user = ? RETURNING *", [target]);
+        if (removed.length === 0) {
+            // Levée par un autre modérateur entre-temps : tout est déjà fait.
+            await safeReply(interaction, "Unknown ID ban !");
+            return true;
+        }
         // Le relais garde une minute le verdict « exclu » : la levée vaut sur-le-champ.
         forgetBanVerdict(target);
         // Réponse d'abord : Discord n'attend que 3 s, et les suppressions
@@ -51,7 +56,7 @@ async function unban(client: Client,
         // Le motif et l'avis de l'exclusion n'ont plus d'objet : effacés du
         // salon du staff et des messages privés du propriétaire. Au mieux — ce
         // qui resterait n'est plus protégé de la purge d'un an du journal.
-        for (const ban of removed.length > 0 ? removed : user) {
+        for (const ban of removed) {
             await deleteBanMessages(client, ban);
         }
     }

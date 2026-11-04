@@ -1129,10 +1129,12 @@ class Bdd {
    * pour réserver une ligne en une instruction (`UPDATE … WHERE` + `changes`).
    * @param query Requête SQL avec placeholders `?`.
    * @param values Valeurs à binder (défaut: []).
-   * @returns Lignes modifiées (0 sans base ouverte).
+   * @returns Lignes modifiées.
+   * @throws Sans base ouverte (restauration en cours) : « aucune ligne » voudrait
+   *   dire « ligne disparue », ce qui n'est pas le cas.
    */
   async write(query: string, values: unknown[] = []): Promise<number> {
-    if (!this.Database) { return 0; }
+    if (!this.Database) { throw new Error("Database is not open"); }
     const result = await this.Database.run(query, values);
     return result.changes ?? 0;
   }

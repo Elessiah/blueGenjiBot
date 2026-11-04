@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { forgetBanVerdict } from "../check/checkBan.js";
 import sqlite3 from "sqlite3";
 import { open } from "sqlite";
 
@@ -237,6 +238,8 @@ export async function restoreDatabase(
     // Rouvre immédiatement : le schéma est remis à niveau au passage, et une
     // base inutilisable est détectée ici plutôt qu'à la première commande.
     await getBddInstance();
+    // Les exclusions ont pu changer : le relais oublie les verdicts gardés.
+    forgetBanVerdict();
 
     const purged = await purgeOldRollbacks(dbPath, rollbackPath);
     const purgedLine = purged > 0 ? ` ${purged} copie(s) précédente(s) supprimée(s).` : "";
@@ -262,6 +265,7 @@ export async function restoreDatabase(
 
     // On rouvre dans tous les cas : le bot doit continuer de répondre.
     await getBddInstance().catch(() => {});
+    forgetBanVerdict();
 
     const state = recovered
       ? " La base précédente a été remise en place."
