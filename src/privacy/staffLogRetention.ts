@@ -22,6 +22,8 @@ import type { Client, DMChannel, Message, TextChannel } from "discord.js";
 import { getBddInstance } from "../bdd/Bdd.js";
 import type { Ban } from "../bdd/types.js";
 import { STAFF_LOG_RETENTION_DAYS } from "./retentionPeriods.js";
+import { errorCode } from "../safe/errorGuards.js";
+import { sendLog } from "../safe/sendLog.js";
 
 /** Ce que la purge lit d'un message : de quoi décider, rien de son contenu. */
 export interface LogMessageLike {
@@ -251,6 +253,9 @@ export async function purgeStaffLogs(client: Client, now: number = Date.now()): 
   return deleted;
 }
 
+/** Code Discord « message inconnu » : l'avis est déjà effacé. */
+const UNKNOWN_MESSAGE = 10008;
+
 /**
  * Supprime les messages du journal qui décrivent une exclusion levée, et le
  * dernier avis remis en message privé à l'exclu (`checkBan`).
@@ -260,7 +265,8 @@ export async function purgeStaffLogs(client: Client, now: number = Date.now()): 
  * repris par la purge de nuit, la ligne `Ban` ne le protégeant plus.
  * @param client Client Discord.
  * @param ban Ligne `Ban` de l'exclusion levée (relue avant sa suppression).
- * @returns Le nombre de messages supprimés.
+ * @returns Le nombre de messages supprimés (l'échec de l'avis à l'exclu est aussi
+ *   signalé dans le salon de logs).
  */
 export async function deleteBanMessages(client: Client, ban: Ban): Promise<number> {
   const attempts: Promise<boolean>[] = [];
@@ -284,9 +290,22 @@ export async function deleteBanMessages(client: Client, ban: Ban): Promise<numbe
     .fetch(userId)
     .then((user) => user.dmChannel ?? user.createDM())
     .catch(() => null)));
+  const noticeIndex = ban.id_notice_user ? dmDeletions.length - 1 : -1;
+  // L'avis remis à l'exclu n'est pas repris par la purge de nuit (il vit dans sa
+  // conversation) : s'il reste, le staff en est averti, sans nom ni identifiant.
+  let noticeGone = noticeIndex < 0;
   dmDeletions.forEach(([, messageId], index) => {
     const dm = dms[index];
-    if (dm) { attempts.push(settle(dm.messages.delete(messageId))); }
+    if (!dm) { return; }
+    const deletion = index === noticeIndex
+      ? dm.messages.delete(messageId).then(() => { noticeGone = true; }, (error: unknown) => {
+        noticeGone = errorCode(error) === UNKNOWN_MESSAGE;
+        throw error;
+      })
+      : dm.messages.delete(messageId);
+    attempts.push(settle(deletion));
   });
-  return (await Promise.all(attempts)).filter(Boolean).length;
+  const deleted = (await Promise.all(attempts)).filter(Boolean).length;
+  if (!noticeGone) { await sendLog(client, "Ban notice could not be withdrawn"); }
+  return deleted;
 }

@@ -246,13 +246,13 @@ async function notifyBannedUser(client: Client, banInfo: BanInfo, now: number): 
     } catch (error) {
         // Base occupée ou fermée : un avis dont l'identifiant n'est pas gardé
         // ne pourrait plus être effacé à la levée. Il est retiré tout de suite.
-        await deleteNotice(user, sent.id);
+        await withdrawNotice(client, user, sent.id);
         throw error;
     }
     if (stored === 0) {
         // Exclusion levée pendant l'envoi : l'avis (et son motif) ne doit pas rester.
         forgetBanVerdict(banInfo.id_user);
-        await deleteNotice(user, sent.id);
+        await withdrawNotice(client, user, sent.id);
         return;
     }
     banInfo.id_notice_user = sent.id;
@@ -274,6 +274,19 @@ async function deleteNotice(user: User, messageId: string): Promise<boolean> {
         return true;
     } catch (error) {
         return errorCode(error) === UNKNOWN_MESSAGE;
+    }
+}
+
+/**
+ * Retire un avis que la base ne garde pas. S'il reste (Discord indisponible),
+ * le staff en est averti : rien ne permettra plus de le retrouver.
+ * @param client Client Discord (salon de logs).
+ * @param user Exclu.
+ * @param messageId Identifiant de l'avis.
+ */
+async function withdrawNotice(client: Client, user: User, messageId: string): Promise<void> {
+    if (!(await deleteNotice(user, messageId))) {
+        await sendLog(client, "Ban notice could not be withdrawn");
     }
 }
 

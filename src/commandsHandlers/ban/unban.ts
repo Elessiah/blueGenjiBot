@@ -36,6 +36,8 @@ async function unban(client: Client,
         await safeReply(interaction, "Parameter 'id_ban' was not found ! Please try again !");
         return false;
     }
+    // Lecture préalable gardée : sans base ouverte (restauration), elle lève
+    // l'erreur au lieu de répondre « ID inconnu » comme le ferait `raw`.
     const user: Ban[] = await bdd.get("Ban", ["*"], {}, {query: "id_user = ?", values: [target]}) as Ban[];
     if (user.length === 0) {
         await safeReply(interaction, "Unknown ID ban !");
