@@ -38,18 +38,26 @@ async function unban(client: Client,
         await safeReply(interaction, "Parameter 'id_ban' was not found ! Please try again !");
         return false;
     }
+    // L'avis remis à l'exclu est mis en file **avant** la levée : la ligne
+    // `Ban` est le seul endroit qui garde son identifiant, et un arrêt du bot
+    // entre les deux le laisserait sinon introuvable. Effacé ci-dessous, il en
+    // sort. Au mieux : une table ou une colonne d'avis absente (étape du schéma
+    // en échec) n'empêche jamais la levée.
+    const queued = await bdd.write("INSERT OR IGNORE INTO BanNoticeWithdrawal (id_user, id_message, queued_at) "
+        + "SELECT id_user, id_notice_user, ? FROM Ban WHERE id_user = ? AND id_notice_user IS NOT NULL", [Date.now(), target])
+        .catch(() => 0);
     let removed: Ban[];
     try {
-        // L'avis remis à l'exclu est mis en file **avant** la levée : la ligne
-        // `Ban` est le seul endroit qui garde son identifiant, et un arrêt du bot
-        // entre les deux le laisserait sinon introuvable. Effacé ci-dessous, il en sort.
-        await bdd.write("INSERT OR IGNORE INTO BanNoticeWithdrawal (id_user, id_message, queued_at) "
-            + "SELECT id_user, id_notice_user, ? FROM Ban WHERE id_user = ? AND id_notice_user IS NOT NULL", [Date.now(), target]);
         // La ligne effacée est rendue par la même instruction : un avis remis
         // pendant la levée y figure déjà (sinon, il se voit sans ligne et s'efface lui-même).
         removed = await bdd.writeReturning<Ban>("DELETE FROM Ban WHERE id_user = ? RETURNING *", [target]);
     } catch (error) {
         // Base fermée (restauration) ou occupée : « ID inconnu » serait faux.
+        // L'exclusion reste : son avis ne doit pas être effacé cette nuit.
+        if (queued > 0) {
+            await bdd.write("DELETE FROM BanNoticeWithdrawal WHERE id_user = ? AND id_message = "
+                + "(SELECT id_notice_user FROM Ban WHERE id_user = ?)", [target, target]).catch(() => 0);
+        }
         await sendLog(client, `Failed to unban: code ${errorCode(error) ?? "inconnu"}`);
         await safeReply(interaction, "The database is unavailable. Please try again in a few minutes.");
         return true;

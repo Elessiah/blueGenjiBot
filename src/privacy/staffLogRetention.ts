@@ -260,8 +260,11 @@ export async function purgeStaffLogs(client: Client, now: number = Date.now()): 
   return deleted;
 }
 
-/** Issue de l'effacement d'un message privé : parti, à réessayer, ou refusé pour de bon. */
-export type DirectMessageDeletion = "gone" | "retry" | "refused";
+/**
+ * Issue de l'effacement d'un message privé : effacé à l'instant (`deleted`),
+ * déjà absent (`gone` : message ou compte disparu), à réessayer, ou refusé pour de bon.
+ */
+export type DirectMessageDeletion = "deleted" | "gone" | "retry" | "refused";
 
 const GONE_CODES = new Set([DISCORD_UNKNOWN_MESSAGE, DISCORD_UNKNOWN_USER]);
 const REFUSED_CODES = new Set([DISCORD_UNKNOWN_CHANNEL, DISCORD_MISSING_ACCESS, DISCORD_MISSING_PERMISSIONS]);
@@ -271,16 +274,24 @@ const REFUSED_CODES = new Set([DISCORD_UNKNOWN_CHANNEL, DISCORD_MISSING_ACCESS, 
  * @param client Client Discord.
  * @param idUser Destinataire du message.
  * @param messageId Identifiant du message.
- * @returns `gone` si le message n'existe plus (effacé, déjà absent, ou compte
- *   disparu), `refused` si Discord le refuse pour de bon (conversation
- *   inconnue, accès refusé), `retry` sinon (réseau, Discord indisponible).
+ * @returns `deleted` ou `gone` si le message n'existe plus, `refused` si
+ *   Discord le refuse pour de bon (conversation inconnue, accès refusé),
+ *   `retry` sinon (réseau, Discord indisponible).
  */
 export async function deleteDirectMessage(client: Client, idUser: string, messageId: string): Promise<DirectMessageDeletion> {
   try {
     const user = await client.users.fetch(idUser);
-    const dm = user.dmChannel ?? await user.createDM();
-    await dm.messages.delete(messageId);
-    return "gone";
+    try {
+      await (user.dmChannel ?? await user.createDM()).messages.delete(messageId);
+    } catch (error) {
+      // Conversation gardée en cache, que Discord ne connaît plus : rouverte une
+      // fois avant de conclure au refus.
+      if (!user.dmChannel || errorCode(error) !== DISCORD_UNKNOWN_CHANNEL) {
+        throw error;
+      }
+      await (await user.createDM(true)).messages.delete(messageId);
+    }
+    return "deleted";
   } catch (error) {
     const code = errorCode(error);
     if (typeof code === "number" && GONE_CODES.has(code)) {
@@ -288,6 +299,20 @@ export async function deleteDirectMessage(client: Client, idUser: string, messag
     }
     return typeof code === "number" && REFUSED_CODES.has(code) ? "refused" : "retry";
   }
+}
+
+/** Avis repris au plus par purge de nuit : chacun coûte trois appels Discord, sur la file que partage le relais. */
+export const MAX_NOTICE_WITHDRAWALS_PER_RUN = 50;
+
+/**
+ * La ligne `Ban` d'une exclusion en cours oublie un avis qui ne sera jamais
+ * effacé : l'avis du jour ne le remet pas en file, et le remplace.
+ * @param idUser Exclu.
+ * @param messageId Avis abandonné.
+ */
+async function forgetBanNotice(idUser: string, messageId: string): Promise<void> {
+  const bdd = await getBddInstance();
+  await bdd.write("UPDATE Ban SET id_notice_user = NULL WHERE id_user = ? AND id_notice_user = ?", [idUser, messageId]);
 }
 
 /** Issue d'un retrait d'avis : effacé, remis à la purge de nuit, refusé pour de bon, ou perdu de vue. */
@@ -316,6 +341,9 @@ export async function withdrawBanNotice(client: Client, idUser: string, messageI
         [idUser, messageId, now],
       );
     } else {
+      if (deletion === "refused") {
+        await forgetBanNotice(idUser, messageId);
+      }
       await bdd.write("DELETE FROM BanNoticeWithdrawal WHERE id_user = ? AND id_message = ?", [idUser, messageId]);
     }
   } catch {
@@ -324,8 +352,9 @@ export async function withdrawBanNotice(client: Client, idUser: string, messageI
       return "lost";
     }
     // Avis parti ou refusé : une ligne restée en file sera reprise cette nuit.
+    await sendLog(client, "Ban notice withdrawal not cleared from the queue");
   }
-  if (deletion === "gone") {
+  if (deletion === "deleted" || deletion === "gone") {
     return "gone";
   }
   if (deletion === "refused") {
@@ -342,7 +371,8 @@ export async function withdrawBanNotice(client: Client, idUser: string, messageI
  * bon, ou toujours là à la dernière nuit avant `BAN_NOTICE_WITHDRAWAL_RETRY_DAYS`
  * jours, aussi, signalé au staff — et la ligne `Ban` encore en cours l'oublie,
  * pour que l'avis du jour ne le remette pas en file. Une ligne qui échoue
- * n'arrête pas les suivantes.
+ * n'arrête pas les suivantes ; au plus `MAX_NOTICE_WITHDRAWALS_PER_RUN` par
+ * nuit, les plus anciennes d'abord.
  * @param client Client Discord connecté.
  * @param now Instant de référence (ms).
  * @returns Le nombre d'avis retirés de la table (effacés ou abandonnés).
@@ -351,7 +381,8 @@ export async function withdrawBanNotice(client: Client, idUser: string, messageI
 export async function retryBanNoticeWithdrawals(client: Client, now: number = Date.now()): Promise<number> {
   const bdd = await getBddInstance();
   const pending = await bdd.raw<{ id_user: string; id_message: string; queued_at: number }>(
-    "SELECT id_user, id_message, queued_at FROM BanNoticeWithdrawal ORDER BY queued_at",
+    "SELECT id_user, id_message, queued_at FROM BanNoticeWithdrawal ORDER BY queued_at LIMIT ?",
+    [MAX_NOTICE_WITHDRAWALS_PER_RUN],
   );
   const day = 24 * 60 * 60 * 1000;
   let settled = 0;
@@ -366,9 +397,13 @@ export async function retryBanNoticeWithdrawals(client: Client, now: number = Da
       if (deletion === "retry" && !expired) {
         continue;
       }
+      const abandoned = deletion === "retry" || deletion === "refused";
+      // L'oubli d'abord : si la ligne de file restait, la nuit suivante le refait.
+      if (abandoned) {
+        await forgetBanNotice(row.id_user, row.id_message);
+      }
       await bdd.write("DELETE FROM BanNoticeWithdrawal WHERE id_user = ? AND id_message = ?", [row.id_user, row.id_message]);
-      if (deletion !== "gone") {
-        await bdd.write("UPDATE Ban SET id_notice_user = NULL WHERE id_user = ? AND id_notice_user = ?", [row.id_user, row.id_message]);
+      if (abandoned) {
         await sendLog(client, deletion === "refused"
           ? "Ban notice withdrawal refused by Discord"
           : "Ban notice withdrawal abandoned after " + BAN_NOTICE_WITHDRAWAL_RETRY_DAYS + " days");
@@ -411,7 +446,8 @@ export async function deleteBanMessages(client: Client, ban: Ban): Promise<numbe
   // Messages privés à effacer, en même temps : celui du propriétaire (le motif)
   // et l'avis remis à l'exclu par `checkBan`.
   if (process.env.OWNER_ID && ban.id_reason_owner) {
-    attempts.push(deleteDirectMessage(client, process.env.OWNER_ID, ban.id_reason_owner).then((outcome) => outcome === "gone"));
+    // Seul un effacement réel compte : un `OWNER_ID` erroné ne passe pas pour un succès.
+    attempts.push(deleteDirectMessage(client, process.env.OWNER_ID, ban.id_reason_owner).then((outcome) => outcome === "deleted"));
   }
   if (ban.id_notice_user) {
     attempts.push(withdrawBanNotice(client, ban.id_user, ban.id_notice_user).then((outcome) => outcome === "gone"));

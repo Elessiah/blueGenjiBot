@@ -1136,7 +1136,7 @@ class Bdd {
    */
   async writeReturning<T = unknown>(query: string, values: unknown[] = []): Promise<T[]> {
     if (!this.Database) { throw new Error("Database is not open"); }
-    return this.raw<T>(query, values);
+    return this.Database.all(query, values) as Promise<T[]>;
   }
 
   /**

@@ -39,6 +39,7 @@ import { sendAlert, sendLog } from "../safe/sendLog.js";
 import { purgeOldRollbacks } from "../backup/restoreDatabase.js";
 import { purgeOldFeedEvents } from "../feed/feedBus.js";
 import { purgeStaffLogs, retryBanNoticeWithdrawals } from "./staffLogRetention.js";
+import { forgetBanVerdict } from "../check/checkBan.js";
 import { ACTIVITY_AUTHOR_RETENTION_DAYS, FEED_EVENT_RETENTION_DAYS } from "./retentionPeriods.js";
 
 /**
@@ -349,6 +350,10 @@ async function runDataRetentionOnce(client: Client): Promise<void> {
     banNotices = String(await retryBanNoticeWithdrawals(client));
   } catch (error) {
     await reportError(client, "retryBanNoticeWithdrawals", error);
+  } finally {
+    // Un avis abandonné ne doit pas survivre une minute dans le verdict gardé
+    // du relais : l'avis du jour le remettrait en file.
+    forgetBanVerdict();
   }
   // Ne lève jamais.
   const rollbacks = await purgeOldRollbacks();

@@ -207,6 +207,10 @@ function rememberBan(banInfo: BanInfo, now: number, mark: string): BanInfo {
  * @param now Instant de l'essai (ms).
  */
 async function notifyBannedUser(client: Client, banInfo: BanInfo, now: number): Promise<void> {
+    // Arrêt survenu pendant l'attente en file : rien ne part, la base va fermer.
+    if (noticesStopped) {
+        return;
+    }
     const bdd: Bdd = await getBddInstance();
     // Réservée sur **cette** exclusion (`id_reason`) : un avis en file sous une
     // exclusion levée puis reprononcée ne prend pas la place de celui de la nouvelle.
@@ -240,8 +244,18 @@ async function notifyBannedUser(client: Client, banInfo: BanInfo, now: number): 
     // réessaie ; refusé pour de bon, il ne sera jamais effacé. Si même son
     // identifiant ne peut être gardé, rien ne part : il n'est pas écrasé, seul
     // moyen de l'effacer à la levée.
-    if (previousNotice && (await withdrawBanNotice(client, banInfo.id_user, previousNotice, now)) === "lost") {
-        await sendLog(client, "Ban notice skipped: the previous notice could not be deleted");
+    if (previousNotice) {
+        const withdrawal = await withdrawBanNotice(client, banInfo.id_user, previousNotice, now);
+        if (withdrawal === "lost") {
+            await sendLog(client, "Ban notice skipped: the previous notice could not be deleted");
+            return;
+        }
+        if (withdrawal === "refused") {
+            // Oublié en base par le retrait : le verdict gardé suit.
+            banInfo.id_notice_user = null;
+        }
+    }
+    if (noticesStopped) {
         return;
     }
     // Un seul envoi, sans nouvel essai : un envoi accepté par Discord mais dont
