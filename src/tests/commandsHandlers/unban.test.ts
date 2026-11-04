@@ -105,3 +105,65 @@ test("unban_unknownTarget_unknownReplyAndNoDeletion", async () => {
   assert.deepEqual(replies, ["Unknown ID ban !"]);
   assert.deepEqual(deletedDms, []);
 });
+
+// --- Revue sécurité EF-14, cycle 6 : l'avis est mis en file avant la levée ---
+
+/** Faux client dont l'effacement des messages privés échoue (Discord indisponible). */
+function dmDeleteFailingClient(): Client {
+  return {
+    users: {
+      fetch: async (id: string) => ({
+        id,
+        send: async () => ({ id: "log-dm" }),
+        createDM: async () => ({ messages: { delete: async () => { throw Object.assign(new Error("Service Unavailable"), { code: 0 }); } } }),
+      }),
+    },
+    channels: { fetch: async () => ({ send: async () => ({ id: "log-1" }), messages: { delete: async () => undefined } }) },
+  } as unknown as Client;
+}
+
+async function banWithNotice(target: string, notice: string): Promise<void> {
+  const bdd = await getBddInstance();
+  await bdd.set("Ban", ["id_user", "id_moderator", "id_reason"], [target, "400000000000000001", "reason-3"]);
+  await bdd.raw("UPDATE Ban SET id_notice_user = ? WHERE id_user = ?", [notice, target]);
+}
+
+test("unban_noticeDeleteFails_noticeKeptInQueue", async () => {
+  const target = "500000000000000011";
+  await banWithNotice(target, "notice-q");
+  const client = dmDeleteFailingClient();
+
+  assert.equal(await unban(client, unbanInteraction(client, target)), true);
+
+  const bdd = await getBddInstance();
+  assert.deepEqual(await bdd.raw("SELECT id_message FROM BanNoticeWithdrawal WHERE id_user = ?", [target]), [{ id_message: "notice-q" }]);
+});
+
+test("unban_noticeDeleted_queueEmpty", async () => {
+  const target = "500000000000000012";
+  await banWithNotice(target, "notice-ok");
+  const client = fakeClient([]);
+
+  assert.equal(await unban(client, unbanInteraction(client, target)), true);
+
+  const bdd = await getBddInstance();
+  assert.deepEqual(await bdd.raw("SELECT id_message FROM BanNoticeWithdrawal WHERE id_user = ?", [target]), []);
+});
+
+test("unban_databaseUnavailable_unavailableReplyAndBanKept", async () => {
+  const target = "500000000000000013";
+  await banWithNotice(target, "notice-db");
+  const bdd = await getBddInstance();
+  const original = bdd.writeReturning.bind(bdd);
+  bdd.writeReturning = async () => { throw new Error("Database is not open"); };
+  const replies: string[] = [];
+  const client = fakeClient([]);
+  try {
+    assert.equal(await unban(client, unbanInteraction(client, target, replies)), true);
+  } finally {
+    bdd.writeReturning = original;
+  }
+
+  assert.deepEqual(replies, ["The database is unavailable. Please try again in a few minutes."]);
+  assert.equal((await bdd.raw("SELECT id_user FROM Ban WHERE id_user = ?", [target])).length, 1);
+});

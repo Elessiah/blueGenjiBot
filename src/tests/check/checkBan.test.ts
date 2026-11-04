@@ -20,6 +20,7 @@ import {
   checkBan as checkBanNow,
   forgetBanVerdict,
   settleBanNotices,
+  stopBanNotices,
 } from "../../check/checkBan.js";
 import type { Client } from "discord.js";
 
@@ -748,4 +749,19 @@ test("checkBan_storeWriteThrowsAndDeleteFails_withdrawalQueuedAndCodeLogged", as
   // Le code seul, jamais le texte de l'erreur (il peut citer un identifiant).
   assert.match(trace.logs.join("\n"), /Failed to notify banned user: code inconnu/);
   assert.doesNotMatch(trace.logs.join("\n"), /SQLITE_BUSY/);
+});
+
+test("checkBan_noticesStopped_noNoticeSent", async () => {
+  // Arrêt du bot : un avis parti pendant l'attente serait coupé à la fermeture de la base.
+  const trace = newTrace();
+  await seedBan("stop-1");
+  stopBanNotices();
+  try {
+    assert.equal(await checkBan(fakeClient("none", trace), "stop-1", true, T0), "BANNED");
+  } finally {
+    stopBanNotices(false);
+  }
+
+  assert.deepEqual(trace.dms, []);
+  assert.deepEqual(await banRow("stop-1"), { id_notice_user: null, notice_user_at: null });
 });

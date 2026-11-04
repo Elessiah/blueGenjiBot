@@ -10,8 +10,8 @@ process.env.BDD_PATH = TMP_DB;
 
 import type { Client } from "discord.js";
 import { closeBddInstance, getBddInstance } from "../../bdd/Bdd.js";
+import { BAN_NOTICE_WITHDRAWAL_RETRY_DAYS } from "../../privacy/retentionPeriods.js";
 import {
-  BAN_NOTICE_WITHDRAWAL_RETRY_DAYS,
   retryBanNoticeWithdrawals,
   withdrawBanNotice,
   banMessageIds,
@@ -355,4 +355,70 @@ test("retryBanNoticeWithdrawals_stillFailingAfterRetryWindow_rowDroppedAndLogged
   assert.equal(settled, 1);
   assert.deepEqual(await pendingWithdrawals(), []);
   assert.deepEqual(logs, ["Ban notice withdrawal abandoned after 30 days"]);
+});
+
+// --- Revue sécurité EF-14, cycle 6 : refus définitifs, échéance, oubli de l'avis ---
+
+const REFUSED = (code: number): Error & { code?: number } => Object.assign(new Error("Refused"), { code });
+
+test("withdrawBanNotice_discordRefusesForGood_refusedAndNotQueued", async () => {
+  await clearWithdrawals();
+  const logs: string[] = [];
+
+  const outcome = await withdrawBanNotice(noticeFailureClient(logs, REFUSED(50001)), BAN.id_user, "notice-f", NOW);
+
+  assert.equal(outcome, "refused");
+  assert.deepEqual(await pendingWithdrawals(), []);
+  assert.deepEqual(logs, ["Ban notice withdrawal refused by Discord"]);
+});
+
+test("withdrawBanNotice_queuedNoticeNowGone_rowRemoved", async () => {
+  await clearWithdrawals();
+  await withdrawBanNotice(noticeFailureClient([], UNAVAILABLE()), BAN.id_user, "notice-g", NOW);
+
+  const outcome = await withdrawBanNotice(banClient([]), BAN.id_user, "notice-g", NOW + 1);
+
+  assert.equal(outcome, "gone");
+  assert.deepEqual(await pendingWithdrawals(), []);
+});
+
+test("retryBanNoticeWithdrawals_lastNightBeforeDeadline_rowDroppedAndBanForgetsNotice", async () => {
+  // La purge passe une fois par nuit : à 29 jours, la suivante dépasserait les 30 annoncés.
+  await clearWithdrawals();
+  const bdd = await getBddInstance();
+  await bdd.raw("DELETE FROM Ban WHERE id_user = ?", [BAN.id_user]);
+  await bdd.set("Ban", ["id_user", "id_moderator", "id_reason"], [BAN.id_user, BAN.id_moderator, BAN.id_reason]);
+  await bdd.raw("UPDATE Ban SET id_notice_user = ? WHERE id_user = ?", ["notice-d", BAN.id_user]);
+  await withdrawBanNotice(noticeFailureClient([], UNAVAILABLE()), BAN.id_user, "notice-d", NOW);
+
+  const settled = await retryBanNoticeWithdrawals(noticeFailureClient([], UNAVAILABLE()), NOW + 29 * DAY);
+
+  assert.equal(settled, 1);
+  assert.deepEqual(await pendingWithdrawals(), []);
+  // Sans quoi l'avis du jour le remettrait en file, pour 30 jours de plus.
+  assert.deepEqual(await bdd.raw("SELECT id_notice_user FROM Ban WHERE id_user = ?", [BAN.id_user]), [{ id_notice_user: null }]);
+  await bdd.raw("DELETE FROM Ban WHERE id_user = ?", [BAN.id_user]);
+});
+
+test("retryBanNoticeWithdrawals_queuedInFuture_rowDropped", async () => {
+  // Horloge reculée : la ligne ne doit pas échapper à l'échéance.
+  await clearWithdrawals();
+  await withdrawBanNotice(noticeFailureClient([], UNAVAILABLE()), BAN.id_user, "notice-z", NOW + 2 * DAY);
+
+  const settled = await retryBanNoticeWithdrawals(noticeFailureClient([], UNAVAILABLE()), NOW);
+
+  assert.equal(settled, 1);
+  assert.deepEqual(await pendingWithdrawals(), []);
+});
+
+test("retryBanNoticeWithdrawals_refusedForGood_rowDroppedAndLogged", async () => {
+  await clearWithdrawals();
+  await withdrawBanNotice(noticeFailureClient([], UNAVAILABLE()), BAN.id_user, "notice-c", NOW);
+  const logs: string[] = [];
+
+  const settled = await retryBanNoticeWithdrawals(noticeFailureClient(logs, REFUSED(10003)), NOW + DAY);
+
+  assert.equal(settled, 1);
+  assert.deepEqual(await pendingWithdrawals(), []);
+  assert.deepEqual(logs, ["Ban notice withdrawal refused by Discord"]);
 });
