@@ -42,10 +42,10 @@ async function unban(client: Client,
     // `Ban` est le seul endroit qui garde son identifiant, et un arrêt du bot
     // entre les deux le laisserait sinon introuvable. Effacé ci-dessous, il en
     // sort. Au mieux : une table ou une colonne d'avis absente (étape du schéma
-    // en échec) n'empêche jamais la levée.
-    const queued = await bdd.write("INSERT OR IGNORE INTO BanNoticeWithdrawal (id_user, id_message, queued_at) "
+    // en échec) n'empêche jamais la levée — le staff en est averti.
+    await bdd.write("INSERT OR IGNORE INTO BanNoticeWithdrawal (id_user, id_message, queued_at) "
         + "SELECT id_user, id_notice_user, ? FROM Ban WHERE id_user = ? AND id_notice_user IS NOT NULL", [Date.now(), target])
-        .catch(() => 0);
+        .catch((error: unknown) => sendLog(client, `Ban notice not queued before unban: code ${errorCode(error) ?? "inconnu"}`));
     let removed: Ban[];
     try {
         // La ligne effacée est rendue par la même instruction : un avis remis
@@ -53,11 +53,10 @@ async function unban(client: Client,
         removed = await bdd.writeReturning<Ban>("DELETE FROM Ban WHERE id_user = ? RETURNING *", [target]);
     } catch (error) {
         // Base fermée (restauration) ou occupée : « ID inconnu » serait faux.
-        // L'exclusion reste : son avis ne doit pas être effacé cette nuit.
-        if (queued > 0) {
-            await bdd.write("DELETE FROM BanNoticeWithdrawal WHERE id_user = ? AND id_message = "
-                + "(SELECT id_notice_user FROM Ban WHERE id_user = ?)", [target, target]).catch(() => 0);
-        }
+        // L'avis mis en file reste : la purge de nuit l'effacera, ce qui ne fait
+        // que retirer un rappel à l'exclu (l'avis du jour suivant le remplace) —
+        // le retirer de la file, au contraire, pouvait perdre un avis qu'un
+        // retrait concurrent y croyait gardé.
         await sendLog(client, `Failed to unban: code ${errorCode(error) ?? "inconnu"}`);
         await safeReply(interaction, "The database is unavailable. Please try again in a few minutes.");
         return true;

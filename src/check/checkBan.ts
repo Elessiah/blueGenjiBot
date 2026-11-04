@@ -214,19 +214,21 @@ async function notifyBannedUser(client: Client, banInfo: BanInfo, now: number): 
     const bdd: Bdd = await getBddInstance();
     // Réservée sur **cette** exclusion (`id_reason`) : un avis en file sous une
     // exclusion levée puis reprononcée ne prend pas la place de celui de la nouvelle.
-    const claimed = await bdd.write(
-        "UPDATE Ban SET notice_user_at = ? WHERE id_user = ? AND id_reason = ? AND (notice_user_at IS NULL OR notice_user_at <= ? OR notice_user_at > ?)",
+    // L'avis précédent est rendu par la réservation même : jamais celui, peut-être
+    // périmé, du verdict gardé (la purge de nuit a pu l'abandonner depuis).
+    const claimed = await bdd.writeReturning<{ id_notice_user: string | null }>(
+        "UPDATE Ban SET notice_user_at = ? WHERE id_user = ? AND id_reason = ? AND (notice_user_at IS NULL OR notice_user_at <= ? OR notice_user_at > ?) RETURNING id_notice_user",
         [now, banInfo.id_user, banInfo.id_reason, now - BAN_NOTICE_INTERVAL_MS, now + FUTURE_NOTICE_TOLERANCE_MS]);
-    if (claimed === 0) {
+    if (claimed.length === 0) {
         // Ligne disparue (levée) ou avis déjà réservé ailleurs : le verdict gardé n'est plus sûr.
         forgetBanVerdict(banInfo.id_user);
         return;
     }
     // Le verdict gardé suit la base : les messages suivants voient l'essai du jour.
     banInfo.notice_user_at = now;
-    // L'avis précédent est celui que `checkBan` vient de lire : la réservation
-    // réussie prouve qu'aucun autre n'est parti depuis (il aurait renouvelé `notice_user_at`).
-    const previousNotice = banInfo.id_notice_user ?? null;
+    // La réservation réussie prouve qu'aucun autre avis n'est parti depuis (il
+    // aurait renouvelé `notice_user_at`).
+    const previousNotice = claimed[0].id_notice_user ?? null;
     const user: User = await client.users.fetch(banInfo.id_user);
     const logChannel: TextChannel = await client.channels.fetch(process.env.INFO_SERV!) as TextChannel;
     if (!logChannel) {
@@ -250,12 +252,12 @@ async function notifyBannedUser(client: Client, banInfo: BanInfo, now: number): 
             await sendLog(client, "Ban notice skipped: the previous notice could not be deleted");
             return;
         }
-        if (withdrawal === "refused") {
-            // Oublié en base par le retrait : le verdict gardé suit.
-            banInfo.id_notice_user = null;
-        }
     }
     if (noticesStopped) {
+        // Arrêt pendant le retrait : la réservation est rendue, l'avis repartira
+        // au premier message après le redémarrage plutôt que dans un jour.
+        await bdd.write("UPDATE Ban SET notice_user_at = NULL WHERE id_user = ? AND notice_user_at = ?", [banInfo.id_user, now])
+            .catch(() => 0);
         return;
     }
     // Un seul envoi, sans nouvel essai : un envoi accepté par Discord mais dont
