@@ -466,8 +466,9 @@ async function tryWithdrawal(
  * d'abord, puis celles au-delà sont abandonnées d'un bloc, sans appel, avant
  * les récentes : une nuit interrompue ne laisse aucune ligne passer l'échéance
  * annoncée. Les jours se comptent sur l'horloge du serveur, depuis la date
- * notée : rien n'est réécrit (une horloge fautive ne raccourcit ni ne vide la
- * file ; une ligne datée du futur est essayée parmi les récentes).
+ * notée, jamais réécrite : une horloge en avance fait échoir les lignes plus
+ * tôt, une horloge en retard les garde d'autant ; une ligne datée du futur est
+ * essayée parmi les récentes.
  * @param client Client Discord connecté.
  * @param now Instant de référence (ms).
  * @returns Le nombre d'avis retirés de la table (effacés ou abandonnés).
