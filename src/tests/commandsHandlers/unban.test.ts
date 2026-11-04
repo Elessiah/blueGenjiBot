@@ -167,3 +167,25 @@ test("unban_databaseUnavailable_unavailableReplyAndBanKept", async () => {
   assert.deepEqual(replies, ["The database is unavailable. Please try again in a few minutes."]);
   assert.equal((await bdd.raw("SELECT id_user FROM Ban WHERE id_user = ?", [target])).length, 1);
 });
+
+test("unban_queueInsertFails_banStillLifted", async () => {
+  // Table des avis absente (étape du schéma en échec) : la levée passe quand même.
+  const target = "500000000000000014";
+  await banWithNotice(target, "notice-i");
+  const bdd = await getBddInstance();
+  const original = bdd.write.bind(bdd);
+  bdd.write = async (query: string, values?: unknown[]) => {
+    if (query.startsWith("INSERT OR IGNORE INTO BanNoticeWithdrawal")) { throw new Error("no such table: BanNoticeWithdrawal"); }
+    return original(query, values);
+  };
+  const replies: string[] = [];
+  const client = fakeClient([]);
+  try {
+    assert.equal(await unban(client, unbanInteraction(client, target, replies)), true);
+  } finally {
+    bdd.write = original;
+  }
+
+  assert.deepEqual(replies, ["User successfully unbanned."]);
+  assert.deepEqual(await bdd.raw("SELECT id_user FROM Ban WHERE id_user = ?", [target]), []);
+});

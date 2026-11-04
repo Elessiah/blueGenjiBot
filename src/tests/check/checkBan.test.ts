@@ -765,3 +765,26 @@ test("checkBan_noticesStopped_noNoticeSent", async () => {
   assert.deepEqual(trace.dms, []);
   assert.deepEqual(await banRow("stop-1"), { id_notice_user: null, notice_user_at: null });
 });
+
+test("checkBan_stoppedWhileQueued_noNoticeSent", async () => {
+  // Arrêt pendant l'attente en file : l'avis suivant ne part pas.
+  const trace = newTrace();
+  const { gate, release } = newGate();
+  const client = gatedClient(trace, "queued-1", gate);
+  await seedBan("queued-1");
+  await seedBan("queued-2");
+  await checkBanNow(client, "queued-1", true, T0);
+  await checkBanNow(client, "queued-2", true, T0);
+
+  stopBanNotices();
+  try {
+    release();
+    await settleBanNotices();
+  } finally {
+    stopBanNotices(false);
+  }
+
+  // L'avis en cours ne part pas non plus : l'arrêt est vu juste avant l'envoi.
+  assert.deepEqual(trace.dms, []);
+  assert.deepEqual(await banRow("queued-2"), { id_notice_user: null, notice_user_at: null });
+});

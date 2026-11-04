@@ -12,6 +12,7 @@ import type { Client } from "discord.js";
 import { closeBddInstance, getBddInstance } from "../../bdd/Bdd.js";
 import { BAN_NOTICE_WITHDRAWAL_RETRY_DAYS } from "../../privacy/retentionPeriods.js";
 import {
+  deleteDirectMessage,
   retryBanNoticeWithdrawals,
   withdrawBanNotice,
   banMessageIds,
@@ -421,4 +422,63 @@ test("retryBanNoticeWithdrawals_refusedForGood_rowDroppedAndLogged", async () =>
   assert.equal(settled, 1);
   assert.deepEqual(await pendingWithdrawals(), []);
   assert.deepEqual(logs, ["Ban notice withdrawal refused by Discord"]);
+});
+
+// --- Revue sécurité EF-14, cycle 7 ---
+
+test("deleteDirectMessage_staleCachedChannel_reopenedAndDeleted", async () => {
+  // Conversation gardée en cache que Discord ne connaît plus : rouverte une fois.
+  const deleted: string[] = [];
+  const client = {
+    users: {
+      fetch: async () => ({
+        dmChannel: { messages: { delete: async () => { throw REFUSED(10003); } } },
+        createDM: async () => ({ messages: { delete: async (id: string) => { deleted.push(id); } } }),
+      }),
+    },
+  } as unknown as Client;
+
+  const outcome = await deleteDirectMessage(client, BAN.id_user, "notice-s");
+
+  assert.equal(outcome, "deleted");
+  assert.deepEqual(deleted, ["notice-s"]);
+});
+
+test("deleteDirectMessage_messageAlreadyGone_gone", async () => {
+  const outcome = await deleteDirectMessage(noticeFailureClient([], REFUSED(10008)), BAN.id_user, "notice-a");
+
+  assert.equal(outcome, "gone");
+});
+
+test("withdrawBanNotice_refused_banForgetsNotice", async () => {
+  // Jamais effaçable : la ligne `Ban` l'oublie, l'avis du jour ne le reprend pas.
+  await clearWithdrawals();
+  const bdd = await getBddInstance();
+  await bdd.raw("DELETE FROM Ban WHERE id_user = ?", [BAN.id_user]);
+  await bdd.set("Ban", ["id_user", "id_moderator", "id_reason"], [BAN.id_user, BAN.id_moderator, BAN.id_reason]);
+  await bdd.raw("UPDATE Ban SET id_notice_user = ? WHERE id_user = ?", ["notice-n", BAN.id_user]);
+
+  const outcome = await withdrawBanNotice(noticeFailureClient([], REFUSED(50013)), BAN.id_user, "notice-n", NOW);
+
+  assert.equal(outcome, "refused");
+  assert.deepEqual(await bdd.raw("SELECT id_notice_user FROM Ban WHERE id_user = ?", [BAN.id_user]), [{ id_notice_user: null }]);
+  await bdd.raw("DELETE FROM Ban WHERE id_user = ?", [BAN.id_user]);
+});
+
+test("deleteBanMessages_ownerMessageAlreadyGone_notCounted", async () => {
+  // Un `OWNER_ID` erroné ou un message déjà effacé ne passent pas pour un effacement.
+  const previousOwner = process.env.OWNER_ID;
+  process.env.OWNER_ID = BAN.id_user;
+  try {
+    const count = await deleteBanMessages(noticeFailureClient([], REFUSED(10008)), {
+      ...BAN,
+      id_reason: "",
+      id_reason_owner: "owner-msg",
+      id_notice_user: null,
+    });
+
+    assert.equal(count, 0);
+  } finally {
+    process.env.OWNER_ID = previousOwner;
+  }
 });
