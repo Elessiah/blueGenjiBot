@@ -1,5 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { ErrorRequestHandler } from "express";
+import { safeErrorCode, safeErrorKind } from "../safe/errorGuards.js";
 
 /** Adresses d'ecoute sur lesquelles seul un process de la machine peut se connecter. */
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
@@ -135,12 +136,14 @@ const UNEXPECTED_ERROR: InternalErrorReply = { code: "INTERNAL_ERROR", status: 5
  * @returns Code et statut de la réponse.
  */
 export function internalErrorReply(error: unknown): InternalErrorReply {
-  const type = (error as { type?: unknown } | null)?.type;
-  return typeof type === "string" && Object.hasOwn(BODY_PARSER_REFUSALS, type) ? BODY_PARSER_REFUSALS[type] : UNEXPECTED_ERROR;
+  try {
+    const type = (error as { type?: unknown } | null)?.type;
+    return typeof type === "string" && Object.hasOwn(BODY_PARSER_REFUSALS, type) ? BODY_PARSER_REFUSALS[type] : UNEXPECTED_ERROR;
+  } catch {
+    // Accesseur qui lève (Proxy révoqué) : jamais une exception dans le gestionnaire.
+    return UNEXPECTED_ERROR;
+  }
 }
-
-/** Code d'erreur assez court et sans espace pour être un identifiant (`SQLITE_BUSY`, 10003). */
-const SAFE_CODE = /^[\w.-]{1,40}$/;
 
 /**
  * Ligne de journal d'une erreur levée hors d'une route : son code de réponse et,
@@ -153,17 +156,15 @@ const SAFE_CODE = /^[\w.-]{1,40}$/;
 export function internalErrorLogLine(error: unknown): string {
   const reply = internalErrorReply(error);
   if (reply !== UNEXPECTED_ERROR) { return `[internalApi] ${reply.code}`; }
-  // `name` se règle à l'exécution : soumis au même filtre que le code.
-  let kind: string = typeof error;
-  if (error instanceof Error) { kind = SAFE_CODE.test(String(error.name)) ? error.name : "Error"; }
-  const code = (error as { code?: unknown } | null)?.code;
-  const shown = (typeof code === "string" || typeof code === "number") && SAFE_CODE.test(String(code)) ? ` ${code}` : "";
-  return `[internalApi] ${reply.code} (${kind}${shown})`;
+  // Type et code filtrés (`safe/errorGuards.ts`), lus sans jamais lever.
+  const code = safeErrorCode(error);
+  const shown = code === null ? "" : " " + String(code);
+  return `[internalApi] ${reply.code} (${safeErrorKind(error)}${shown})`;
 }
 
 /**
  * Gestionnaire d'erreur Express de l'API interne : un code, jamais la page
- * d'Express ; si la réponse est déjà partie (flux), elle est close sans repasser
+ * d'Express ; si la réponse est déjà partie (flux), sa connexion est coupée sans repasser
  * par le gestionnaire d'Express, qui écrirait la pile au journal.
  *
  * @param log Écrit une ligne au journal du processus.
@@ -173,8 +174,9 @@ export function internalErrorHandler(log: (line: string) => void = (line) => con
   return (error, _req, res, _next) => {
     log(internalErrorLogLine(error));
     if (res.headersSent) {
-      // Socket déjà rompu : rien à rendre, et rien ne doit repartir vers Express.
-      try { res.end(); } catch { /* connexion déjà close */ }
+      // Réponse commencée (flux) : la connexion est coupée, pour que le lecteur voie
+      // une réponse tronquée et non une fin normale ; rien ne repart vers Express.
+      try { res.destroy(); } catch { /* connexion déjà close */ }
       return;
     }
     const reply = internalErrorReply(error);

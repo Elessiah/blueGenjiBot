@@ -198,7 +198,8 @@ export function startInternalApi(client: Client) {
   // Pas d'en-tête `X-Powered-By` : la version du framework n'a pas à être annoncée.
   app.disable("x-powered-by");
   // Garde avant la lecture du corps, et corps lu sous `/internal` seulement : un corps
-  // envoyé sans jeton, ou hors de l'API, n'est jamais analysé.
+  // envoyé sans jeton, ou hors de l'API, n'est jamais analysé. Toute route qui lit
+  // `req.body` doit donc vivre sous `/internal` (ailleurs, `req.body` reste vide).
   app.use("/internal", authorize, express.json());
 
   app.get("/internal/feed/stream", async (req: Request, res: Response) => {

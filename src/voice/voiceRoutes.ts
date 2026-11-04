@@ -33,7 +33,8 @@ async function replyVoiceError(client: Client, res: Response, route: string, err
   if (error instanceof VoiceChannelError) {
     res.status(error.status).json({ error: error.code });
     if (error.status >= 500) {
-      await sendLog(client, `${route} : ${error.code} (${error.message})`);
+      // Message fait du contexte et du code de la cause (constructeur) : jamais un texte reçu.
+      await sendLog(client, `${route} : ${voiceErrorDetail(error)}`);
     }
     return;
   }

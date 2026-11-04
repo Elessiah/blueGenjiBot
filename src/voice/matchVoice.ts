@@ -25,7 +25,7 @@
 
 import { ChannelType, type Client, type VoiceState } from "discord.js";
 import { getBddInstance } from "../bdd/Bdd.js";
-import { discordJsonCode, errorCode } from "../safe/errorGuards.js";
+import { discordJsonCode, safeErrorCode, safeErrorStatus } from "../safe/errorGuards.js";
 import { sendAlert, sendLog } from "../safe/sendLog.js";
 
 /** Catégorie des salons vocaux de match sur le serveur BlueGenji, quand `VOICE_CATEGORY_ID` n'est pas posé. */
@@ -89,17 +89,29 @@ const STATUS_BY_CODE: Readonly<Record<VoiceErrorCode, number>> = {
   VOICE_STORAGE_ERROR: 500,
 };
 
+/** Opération en cours d'un échec, seul texte libre du journal d'un `VoiceChannelError`. */
+export type VoiceErrorContext =
+  | "lecture du salon"
+  | "suppression du salon"
+  | "lecture de la catégorie"
+  | "création du salon"
+  | "catégorie introuvable"
+  | "stockage";
+
 /** Échec d'une opération sur un salon vocal, porteur du code rendu au site. */
 export class VoiceChannelError extends Error {
   readonly code: VoiceErrorCode;
   readonly status: number;
 
   /**
+   * Le message, seul journalisé, est fait du contexte (texte du bot) et du code de
+   * la cause (`voiceErrorDetail`) : jamais d'un texte reçu.
    * @param code Code rendu au site.
-   * @param detail Détail technique, pour le journal seulement.
+   * @param context Opération en cours.
+   * @param cause Erreur d'origine, réduite à son code.
    */
-  constructor(code: VoiceErrorCode, detail: string = code) {
-    super(detail);
+  constructor(code: VoiceErrorCode, context?: VoiceErrorContext, cause?: unknown) {
+    super(cause === undefined ? context ?? code : `${context ?? code} : ${voiceErrorDetail(cause)}`);
     this.name = "VoiceChannelError";
     this.code = code;
     this.status = STATUS_BY_CODE[code];
@@ -196,18 +208,20 @@ export function sanitizeVoiceChannelName(raw: unknown): string | null {
   return cut === "" ? FALLBACK_VOICE_NAME : cut;
 }
 
-/** Code d'erreur assez court et sans espace pour être un identifiant (`SQLITE_BUSY`, 50035). */
-const SAFE_ERROR_CODE = /^[\w.-]{1,40}$/;
-
 /**
  * Désigne une erreur pour le journal par son seul code : le message d'une erreur
  * Discord ou SQLite peut recopier une valeur reçue (nom d'équipe, clé).
  * @param error Erreur capturée.
- * @returns `code <code>`, ou `code inconnu`.
+ * Un `VoiceChannelError` est rendu par son code et son message (déjà sûr) ; une
+ * autre erreur par son code et son statut HTTP s'il y en a un (429, 5xx de Discord).
+ * @returns `code <code>[, statut <n>]`, `code inconnu`, ou `<CODE> (<message>)`.
  */
 export function voiceErrorDetail(error: unknown): string {
-  const code = discordJsonCode(error) ?? errorCode(error);
-  return code !== null && SAFE_ERROR_CODE.test(String(code)) ? `code ${code}` : "code inconnu";
+  if (error instanceof VoiceChannelError) { return `${error.code} (${error.message})`; }
+  const code = safeErrorCode(error);
+  const status = safeErrorStatus(error);
+  const shownStatus = status === null ? "" : ", statut " + String(status);
+  return `code ${code ?? "inconnu"}${shownStatus}`;
 }
 
 /**
@@ -219,10 +233,9 @@ export function voiceErrorDetail(error: unknown): string {
  * @param action Action en cours, pour le journal.
  * @returns L'erreur à lever.
  */
-async function toVoiceError(client: Client, error: unknown, action: string): Promise<VoiceChannelError> {
+async function toVoiceError(client: Client, error: unknown, action: VoiceErrorContext): Promise<VoiceChannelError> {
   if (error instanceof VoiceChannelError) { return error; }
   const code = discordJsonCode(error);
-  const detail = `${action} : ${voiceErrorDetail(error)}`;
   if (code === MISSING_PERMISSIONS || code === MISSING_ACCESS) {
     const now = Date.now();
     if (now - lastPermissionAlertAt >= PERMISSION_ALERT_COOLDOWN_MS) {
@@ -233,9 +246,9 @@ async function toVoiceError(client: Client, error: unknown, action: string): Pro
           `sur la catégorie ${voiceCategoryId()} (action requise sur Discord ; signalé au plus une fois par heure).`,
       );
     }
-    return new VoiceChannelError("VOICE_MISSING_PERMISSIONS", detail);
+    return new VoiceChannelError("VOICE_MISSING_PERMISSIONS", action, error);
   }
-  return new VoiceChannelError("VOICE_DISCORD_ERROR", detail);
+  return new VoiceChannelError("VOICE_DISCORD_ERROR", action, error);
 }
 
 /**
@@ -268,7 +281,7 @@ async function db<T>(query: string, values: unknown[] = []): Promise<T[]> {
   try {
     return await (await getBddInstance()).raw<T>(query, values);
   } catch (error) {
-    throw new VoiceChannelError("VOICE_STORAGE_ERROR", voiceErrorDetail(error));
+    throw new VoiceChannelError("VOICE_STORAGE_ERROR", "stockage", error);
   }
 }
 
@@ -358,12 +371,12 @@ async function createInCategory(client: Client, key: string, name: string, now: 
     category = await client.channels.fetch(categoryId);
   } catch (error) {
     if (discordJsonCode(error) === UNKNOWN_CHANNEL) {
-      throw new VoiceChannelError("VOICE_CATEGORY_UNAVAILABLE", `catégorie ${categoryId} introuvable`);
+      throw new VoiceChannelError("VOICE_CATEGORY_UNAVAILABLE", "catégorie introuvable");
     }
     throw await toVoiceError(client, error, "lecture de la catégorie");
   }
   if (!category || category.type !== ChannelType.GuildCategory) {
-    throw new VoiceChannelError("VOICE_CATEGORY_UNAVAILABLE", `catégorie ${categoryId} introuvable`);
+    throw new VoiceChannelError("VOICE_CATEGORY_UNAVAILABLE", "catégorie introuvable");
   }
 
   let channelId: string;
@@ -500,7 +513,7 @@ export async function handleVoiceStateUpdate(client: Client, oldState: Pick<Voic
       await deleteTracked(client, channel);
     });
   } catch (error) {
-    await sendLog(client, `Salon vocal de match ${channelId} : suppression reportée au balayage (${(error as Error).message}).`);
+    await sendLog(client, `Salon vocal de match ${channelId} : suppression reportée au balayage (${voiceErrorDetail(error)}).`);
   }
 }
 
@@ -521,7 +534,7 @@ export async function handleVoiceChannelDeleted(
   try {
     await untrack(channelId);
   } catch (error) {
-    await sendLog(client, `channelDelete : retrait du suivi vocal ${channelId} échoué (${(error as Error).message}).`);
+    await sendLog(client, `channelDelete : retrait du suivi vocal ${channelId} échoué (${voiceErrorDetail(error)}).`);
   }
 }
 
@@ -596,7 +609,7 @@ export async function sweepVoiceChannels(client: Client, now: number = Date.now(
   try {
     rows = await db<TrackedRow>("SELECT channel_id, voice_key, created_at, released_at FROM MatchVoiceChannel");
   } catch (error) {
-    await sendLog(client, `Balayage des salons vocaux de match impossible : ${(error as Error).message}`);
+    await sendLog(client, `Balayage des salons vocaux de match impossible : ${voiceErrorDetail(error)}`);
     return report;
   }
   for (const snapshot of rows) {
