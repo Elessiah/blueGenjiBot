@@ -417,7 +417,7 @@ test("retryBanNoticeWithdrawals_queuedInFuture_keptWithItsDate", async () => {
 });
 
 test("retryBanNoticeWithdrawals_unsettledRowRemovedBeforeBulk_onlyDroppedRowsAnnounced", async () => {
-  // Dernier essai refusé, écriture en échec, ligne partie par ailleurs avant le bloc : aucune alerte comptée à tort.
+  // Dernier essai refusé, écriture en échec, ligne partie par ailleurs avant le bloc : seule l'échue réellement emportée est annoncée.
   await clearWithdrawals();
   const bdd = await getBddInstance();
   const previousInfoServ = process.env.INFO_SERV;
@@ -440,7 +440,7 @@ test("retryBanNoticeWithdrawals_unsettledRowRemovedBeforeBulk_onlyDroppedRowsAnn
     await assert.rejects(retryBanNoticeWithdrawals(noticeFailureClient(logs, REFUSED(50001)), NOW + 29 * DAY), /SQLITE_BUSY/);
   } finally {
     bdd.write = original;
-    process.env.INFO_SERV = previousInfoServ;
+    if (previousInfoServ === undefined) { delete process.env.INFO_SERV; } else { process.env.INFO_SERV = previousInfoServ; }
   }
 
   assert.equal(bulkReached, true);
