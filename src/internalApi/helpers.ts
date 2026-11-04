@@ -137,8 +137,12 @@ const UNEXPECTED_ERROR: InternalErrorReply = { code: "INTERNAL_ERROR", status: 5
  */
 export function internalErrorReply(error: unknown): InternalErrorReply {
   try {
-    const type = (error as { type?: unknown } | null)?.type;
-    return typeof type === "string" && Object.hasOwn(BODY_PARSER_REFUSALS, type) ? BODY_PARSER_REFUSALS[type] : UNEXPECTED_ERROR;
+    const { type, status } = (error ?? {}) as { type?: unknown; status?: unknown };
+    if (typeof type !== "string" || !Object.hasOwn(BODY_PARSER_REFUSALS, type)) return UNEXPECTED_ERROR;
+    // Le statut que body-parser pose avec son `type` : une autre erreur qui reprendrait
+    // ce `type` reste une erreur du serveur.
+    const refusal = BODY_PARSER_REFUSALS[type];
+    return status === refusal.status ? refusal : UNEXPECTED_ERROR;
   } catch {
     // Accesseur qui lève (Proxy révoqué) : jamais une exception dans le gestionnaire.
     return UNEXPECTED_ERROR;

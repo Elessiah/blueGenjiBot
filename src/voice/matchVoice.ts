@@ -95,7 +95,7 @@ export type VoiceErrorContext =
   | "suppression du salon"
   | "lecture de la catégorie"
   | "création du salon"
-  | "catégorie introuvable"
+  | `catégorie ${string} introuvable`
   | "stockage";
 
 /** Échec d'une opération sur un salon vocal, porteur du code rendu au site. */
@@ -371,12 +371,12 @@ async function createInCategory(client: Client, key: string, name: string, now: 
     category = await client.channels.fetch(categoryId);
   } catch (error) {
     if (discordJsonCode(error) === UNKNOWN_CHANNEL) {
-      throw new VoiceChannelError("VOICE_CATEGORY_UNAVAILABLE", "catégorie introuvable");
+      throw new VoiceChannelError("VOICE_CATEGORY_UNAVAILABLE", `catégorie ${categoryId} introuvable`);
     }
     throw await toVoiceError(client, error, "lecture de la catégorie");
   }
   if (!category || category.type !== ChannelType.GuildCategory) {
-    throw new VoiceChannelError("VOICE_CATEGORY_UNAVAILABLE", "catégorie introuvable");
+    throw new VoiceChannelError("VOICE_CATEGORY_UNAVAILABLE", `catégorie ${categoryId} introuvable`);
   }
 
   let channelId: string;

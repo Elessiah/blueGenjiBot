@@ -226,7 +226,9 @@ function safeErrorCode(error: unknown): string | number | null {
 function safeErrorKind(error: unknown): string {
     try {
         if (!isNativeError(error)) return typeof error;
-        return SAFE_ERROR_CODE.test(String(error.name)) ? error.name : "Error";
+        // discord.js suffixe le code au nom (`DiscordAPIError[50035]`) : le code se journalise à part.
+        const name = String(error.name).replace(/\[\d{1,10}\]$/, "");
+        return SAFE_ERROR_CODE.test(name) ? name : "Error";
     } catch {
         return "Error";
     }
