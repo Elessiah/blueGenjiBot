@@ -278,6 +278,24 @@ test("voiceErrorDetail_codeWithSpaces_returnsUnknownCode", () => {
   assert.equal(voiceErrorDetail(Object.assign(new Error("x"), { code: "texte d'un joueur" })), "code inconnu");
 });
 
+test("voiceErrorDetail_errorWithStatus_appendsStatus", () => {
+  // Limite de débit de Discord : le statut distingue un 429 d'une panne.
+  const error = Object.assign(new Error("You are being rate limited"), { status: 429 });
+
+  assert.equal(voiceErrorDetail(error), "code inconnu, statut 429");
+});
+
+test("voiceErrorDetail_voiceChannelError_returnsCodeAndContext", () => {
+  assert.equal(voiceErrorDetail(new VoiceChannelError("VOICE_CATEGORY_UNAVAILABLE", "catégorie introuvable")),
+    "VOICE_CATEGORY_UNAVAILABLE (catégorie introuvable)");
+});
+
+test("VoiceChannelError_causeWithMessage_messageHasContextAndCodeOnly", () => {
+  const error = new VoiceChannelError("VOICE_DISCORD_ERROR", "création du salon", discordError(50035, "Invalid Form Body name: Equipe Bleue"));
+
+  assert.equal(error.message, "création du salon : code 50035");
+});
+
 test("voiceErrorDetail_noCode_returnsUnknownCode", () => {
   assert.equal(voiceErrorDetail(new Error("UNIQUE constraint failed: Equipe Bleue")), "code inconnu");
 });

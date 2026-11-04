@@ -170,12 +170,12 @@ test("internalErrorLogLine_nonError_returnsItsType", () => {
 
 /** Réponse Express factice : retient ce qui lui est écrit. */
 function fakeResponse(headersSent: boolean) {
-  const written = { status: 0, json: undefined as unknown, ended: false };
+  const written = { status: 0, json: undefined as unknown, destroyed: false };
   const res = {
     headersSent,
     status(code: number) { written.status = code; return res; },
     json(body: unknown) { written.json = body; return res; },
-    end() { written.ended = true; return res; },
+    destroy() { written.destroyed = true; return res; },
   };
   return { res: res as unknown as Response, written };
 }
@@ -186,18 +186,19 @@ test("internalErrorHandler_unexpectedError_replies500AndLogs", () => {
 
   internalErrorHandler((line) => lines.push(line))(new Error("secret"), {} as Request, res, () => undefined);
 
-  assert.deepEqual(written, { status: 500, json: { error: "INTERNAL_ERROR" }, ended: false });
+  assert.deepEqual(written, { status: 500, json: { error: "INTERNAL_ERROR" }, destroyed: false });
   assert.deepEqual(lines, ["[internalApi] INTERNAL_ERROR (Error)"]);
 });
 
-test("internalErrorHandler_headersAlreadySent_endsWithoutBodyNorNext", () => {
+test("internalErrorHandler_headersAlreadySent_destroysSocketWithoutBodyNorNext", () => {
   const lines: string[] = [];
   const { res, written } = fakeResponse(true);
   let nextCalled = false;
 
   internalErrorHandler((line) => lines.push(line))(new Error("x"), {} as Request, res, () => { nextCalled = true; });
 
-  assert.deepEqual(written, { status: 0, json: undefined, ended: true });
+  // Connexion coupée : le lecteur voit une réponse tronquée, jamais une fin normale.
+  assert.deepEqual(written, { status: 0, json: undefined, destroyed: true });
   assert.equal(nextCalled, false);
   assert.deepEqual(lines, ["[internalApi] INTERNAL_ERROR (Error)"]);
 });
@@ -208,8 +209,14 @@ test("internalErrorLogLine_freeTextName_fallsBackToError", () => {
   assert.equal(internalErrorLogLine(error), "[internalApi] INTERNAL_ERROR (Error)");
 });
 
-test("internalErrorHandler_endThrowsAfterHeadersSent_swallowsIt", () => {
-  const res = { headersSent: true, end() { throw new Error("socket closed"); } } as unknown as Response;
+test("internalErrorHandler_destroyThrowsAfterHeadersSent_swallowsIt", () => {
+  const res = { headersSent: true, destroy() { throw new Error("socket closed"); } } as unknown as Response;
 
   assert.doesNotThrow(() => internalErrorHandler(() => undefined)(new Error("x"), {} as Request, res, () => undefined));
+});
+
+test("internalErrorReply_throwingTypeGetter_returns500", () => {
+  const error = { get type(): string { throw new Error("revoked"); } };
+
+  assert.deepEqual(internalErrorReply(error), { code: "INTERNAL_ERROR", status: 500 });
 });
