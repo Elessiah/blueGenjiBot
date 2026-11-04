@@ -4,6 +4,7 @@ import {Bdd, getBddInstance} from "../../bdd/Bdd.js";
 import type {ChatInputCommandInteraction, Client, Guild} from "discord.js";
 import {Ban} from "../../bdd/types.js";
 import {deleteBanMessages} from "../../privacy/staffLogRetention.js";
+import {forgetBanVerdict} from "../../check/checkBan.js";
 
 /**
  * Retire un utilisateur de la liste de bannissement.
@@ -40,6 +41,8 @@ async function unban(client: Client,
         await safeReply(interaction, "Unknown ID ban !");
     } else {
         await bdd.rm("Ban", {}, {query: "id_user = ?", values: [target]});
+        // Le relais garde une minute le verdict « exclu » : la levée vaut sur-le-champ.
+        forgetBanVerdict(target);
         // Réponse d'abord : Discord n'attend que 3 s, et les suppressions
         // ci-dessous font plusieurs appels.
         await safeReply(interaction, "User successfully unbanned.");

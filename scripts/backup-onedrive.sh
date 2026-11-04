@@ -78,10 +78,18 @@ write_status() {
 }
 JSON
   # Au mieux : un historique qui ne s'écrit pas ne fait pas échouer la sauvegarde.
+  # L'ajout et l'élagage forment un tout sous verrou : deux exécutions qui se
+  # chevauchent (lancement manuel pendant le cron) ne perdent aucune ligne
+  # d'échec. Sans `flock` (machine incomplète), l'écriture reste tentée.
   {
-    printf '{"date":"%s","ok":%s,"error":"%s"}\n' "$now" "$STATUS_OK" "$STATUS_ERROR" >> "$STATUS_HISTORY_FILE" \
-      && tail -n "$STATUS_HISTORY_LINES" "$STATUS_HISTORY_FILE" > "$STATUS_HISTORY_FILE.tmp.$$" \
-      && mv "$STATUS_HISTORY_FILE.tmp.$$" "$STATUS_HISTORY_FILE"
+    (
+      if command -v flock >/dev/null 2>&1; then
+        flock -w 30 8 || exit 1
+      fi
+      printf '{"date":"%s","ok":%s,"error":"%s"}\n' "$now" "$STATUS_OK" "$STATUS_ERROR" >> "$STATUS_HISTORY_FILE" \
+        && tail -n "$STATUS_HISTORY_LINES" "$STATUS_HISTORY_FILE" > "$STATUS_HISTORY_FILE.tmp.$$" \
+        && mv "$STATUS_HISTORY_FILE.tmp.$$" "$STATUS_HISTORY_FILE"
+    ) 8>"$STATUS_HISTORY_FILE.lock"
   } || echo "[backup] historique des statuts non écrit." >&2
 }
 
