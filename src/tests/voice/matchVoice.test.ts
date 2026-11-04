@@ -246,6 +246,15 @@ test("ensureTeamVoiceChannel_categoryUnknown_categoryUnavailable", async () => {
   assert.deepEqual(await tracked(), []);
 });
 
+test("ensureTeamVoiceChannel_categoryUnknown_messageNamesCategoryId", async () => {
+  // L'identifiant de la catégorie est de la configuration : il dit laquelle manque.
+  world.category = "missing";
+  await assert.rejects(ensureTeamVoiceChannel(client, KEY, "Les Genji", T0), {
+    name: "VoiceChannelError",
+    message: `catégorie ${CATEGORY} introuvable`,
+  });
+});
+
 test("ensureTeamVoiceChannel_categoryIsNotACategory_categoryUnavailable", async () => {
   world.category = "text";
   await rejectsWith(ensureTeamVoiceChannel(client, KEY, "Les Genji", T0), "VOICE_CATEGORY_UNAVAILABLE");
@@ -286,8 +295,8 @@ test("voiceErrorDetail_errorWithStatus_appendsStatus", () => {
 });
 
 test("voiceErrorDetail_voiceChannelError_returnsCodeAndContext", () => {
-  assert.equal(voiceErrorDetail(new VoiceChannelError("VOICE_CATEGORY_UNAVAILABLE", "catégorie introuvable")),
-    "VOICE_CATEGORY_UNAVAILABLE (catégorie introuvable)");
+  assert.equal(voiceErrorDetail(new VoiceChannelError("VOICE_CATEGORY_UNAVAILABLE", "catégorie 1 introuvable")),
+    "VOICE_CATEGORY_UNAVAILABLE (catégorie 1 introuvable)");
 });
 
 test("VoiceChannelError_causeWithMessage_messageHasContextAndCodeOnly", () => {

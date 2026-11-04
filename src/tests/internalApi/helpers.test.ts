@@ -141,13 +141,19 @@ test("internalErrorReply_unknownOrInheritedType_returns500", () => {
   assert.deepEqual(internalErrorReply({ type: "entity.verify.failed", status: 403 }), { code: "INTERNAL_ERROR", status: 500 });
 });
 
+test("internalErrorReply_bodyParserTypeWithWrongStatus_returns500", () => {
+  // Même `type` que body-parser sans son statut : une erreur du serveur, jamais un refus.
+  assert.deepEqual(internalErrorReply({ type: "entity.parse.failed", status: 500 }), { code: "INTERNAL_ERROR", status: 500 });
+  assert.deepEqual(internalErrorReply({ type: "request.aborted" }), { code: "INTERNAL_ERROR", status: 500 });
+});
+
 test("internalErrorReply_nullOrPlainError_returns500", () => {
   assert.deepEqual(internalErrorReply(null), { code: "INTERNAL_ERROR", status: 500 });
   assert.deepEqual(internalErrorReply(new Error("x")), { code: "INTERNAL_ERROR", status: 500 });
 });
 
 test("internalErrorLogLine_bodyParserRefusal_returnsCodeOnly", () => {
-  const error = Object.assign(new SyntaxError('"{Equipe Bleue" is not valid JSON'), { type: "entity.parse.failed" });
+  const error = Object.assign(new SyntaxError('"{Equipe Bleue" is not valid JSON'), { type: "entity.parse.failed", status: 400 });
 
   assert.equal(internalErrorLogLine(error), "[internalApi] INVALID_JSON");
 });

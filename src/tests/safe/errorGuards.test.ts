@@ -193,6 +193,11 @@ test("safeErrorKind_freeTextName_returnsError", () => {
   assert.equal(safeErrorKind(new TypeError("x")), "TypeError");
 });
 
+test("safeErrorKind_discordApiErrorWithCodeSuffix_returnsBareName", () => {
+  // discord.js nomme ses erreurs `DiscordAPIError[50035]` : le code se journalise à part.
+  assert.equal(safeErrorKind(Object.assign(new Error("x"), { name: "DiscordAPIError[50035]" })), "DiscordAPIError");
+});
+
 test("safeErrorKind_throwingNameGetter_returnsError", () => {
   const error = new Error("x");
   Object.defineProperty(error, "name", { get(): string { throw new Error("revoked"); } });
