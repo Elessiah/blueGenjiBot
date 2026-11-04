@@ -483,6 +483,7 @@ test("checkBan_previousNoticeNotDeletable_noNewNoticeAndIdKept", async () => {
 
   assert.deepEqual(trace.dms, []);
   assert.deepEqual(await banRow("prev-1"), { id_notice_user: "old-notice", notice_user_at: T0 });
+  assert.match(trace.logs.join("\n"), /Ban notice skipped: the previous notice could not be deleted/);
 });
 
 test("checkBan_previousNoticeAlreadyGone_newNoticeSent", async () => {
@@ -542,5 +543,100 @@ test("checkBan_simultaneousReads_singleCachedRowKeptInSync", async () => {
 
   // Le verdict gardé porte l'essai du jour : aucune réservation de plus.
   assert.equal(writes, 0);
+  assert.equal(trace.dms.length, 1);
+});
+
+// --- Revue sécurité EF-14, cycle 2 ---
+
+test("checkBan_rebannedWithNewReason_queuedOldNoticeNotStored", async () => {
+  const trace = newTrace();
+  const { gate, release } = newGate();
+  const client = gatedClient(trace, "reban-gate", gate);
+  await seedBan("reban-gate");
+  await seedBan("reban-1");
+  await checkBanNow(client, "reban-gate", true, T0);
+  await checkBanNow(client, "reban-1", true, T0);
+  // `/unban` puis `/ban` pendant l'attente : nouvelle exclusion, nouveau motif.
+  const bdd = await getBddInstance();
+  await bdd.raw("UPDATE Ban SET id_reason = ? WHERE id_user = ?", ["reason-new", "reban-1"]);
+
+  release();
+  await settleBanNotices();
+
+  assert.equal(trace.dms.length, 1);
+  assert.deepEqual(await banRow("reban-1"), { id_notice_user: null, notice_user_at: null });
+});
+
+test("checkBan_noticeTimeSlightlyInFuture_treatedAsRecent", async () => {
+  const trace = newTrace();
+  await seedBan("soon-1");
+  const bdd = await getBddInstance();
+  // Un message plus récent, traité plus vite, a déjà réservé l'avis.
+  await bdd.raw("UPDATE Ban SET notice_user_at = ? WHERE id_user = ?", [T0 + 30 * 60 * 1000, "soon-1"]);
+
+  await checkBan(fakeClient("none", trace), "soon-1", true, T0);
+
+  assert.deepEqual(trace.dms, []);
+});
+
+test("checkBan_storeWriteThrows_sentNoticeDeleted", async () => {
+  const trace = newTrace();
+  await seedBan("store-1");
+  const bdd = await getBddInstance();
+  const originalWrite = bdd.write;
+  bdd.write = (async (...args: Parameters<typeof originalWrite>) => {
+    if (args[0].startsWith("UPDATE Ban SET id_notice_user")) { throw new Error("SQLITE_BUSY: database is locked"); }
+    return originalWrite.apply(bdd, args);
+  }) as typeof originalWrite;
+  try {
+    await checkBan(fakeClient("none", trace), "store-1", true, T0);
+  } finally {
+    bdd.write = originalWrite;
+  }
+
+  assert.equal(trace.dms.length, 1);
+  assert.deepEqual(trace.deleted, ["store-1:msg-1"]);
+  assert.match(trace.logs.join("\n"), /Failed to notify banned user/);
+});
+
+test("checkBan_otherUserForgotten_verdictStillCached", async () => {
+  const client = fakeClient("none", newTrace());
+  await seedBan("keep-1");
+  const bdd = await getBddInstance();
+  const originalGet = bdd.get;
+  bdd.get = (async (...args: Parameters<typeof originalGet>) => {
+    const rows = await originalGet.apply(bdd, args);
+    forgetBanVerdict("someone-else");
+    return rows;
+  }) as typeof originalGet;
+  try {
+    await checkBan(client, "keep-1", true, T0);
+  } finally {
+    bdd.get = originalGet;
+  }
+  await bdd.raw("DELETE FROM Ban WHERE id_user = ?", ["keep-1"]);
+
+  assert.equal(await checkBan(client, "keep-1", true, T0 + 1000), "BANNED");
+});
+
+test("checkBan_noticeColumnsMissing_verdictWithoutNotice", async () => {
+  const trace = newTrace();
+  const client = fakeClient("none", trace);
+  await seedBan("nocol-1");
+  const bdd = await getBddInstance();
+  // Ajout des colonnes de l'avis échoué au démarrage.
+  await bdd.raw("ALTER TABLE Ban DROP COLUMN id_notice_user", []);
+  await bdd.raw("ALTER TABLE Ban DROP COLUMN notice_user_at", []);
+  try {
+    assert.equal(await checkBan(client, "nocol-1", true, T0), "BANNED");
+    assert.deepEqual(trace.dms, []);
+    assert.deepEqual(trace.logs, []);
+  } finally {
+    await bdd.raw("ALTER TABLE Ban ADD COLUMN id_notice_user TEXT", []);
+    await bdd.raw("ALTER TABLE Ban ADD COLUMN notice_user_at INTEGER", []);
+  }
+  // Colonnes revenues (restauration, qui oublie tous les verdicts) : l'avis repart.
+  forgetBanVerdict();
+  await checkBan(client, "nocol-1", true, T0 + 1000);
   assert.equal(trace.dms.length, 1);
 });

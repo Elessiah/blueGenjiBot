@@ -49,10 +49,10 @@ function fakeClient(deletedDms: string[] = []): Client {
 }
 
 /** Interaction `/unban id_ban:<target>` du propriétaire, sur un serveur BlueGenji. */
-function unbanInteraction(client: Client, target: string): ChatInputCommandInteraction {
+function unbanInteraction(client: Client, target: string, replies: string[] = []): ChatInputCommandInteraction {
   return {
     client,
-    reply: async () => undefined,
+    reply: async ({ content }: { content: string }) => { replies.push(content); },
     editReply: async () => undefined,
     guild: { id: process.env.SERV_GENJI, memberCount: 10, members: { cache: new Map() } },
     user: { id: OWNER },
@@ -101,4 +101,28 @@ test("unban_noticeStoredDuringUnban_latestNoticeDeleted", async () => {
 
   assert.deepEqual(deletedDms, [`${TARGET}:notice-new`]);
   assert.deepEqual(await bdd.raw("SELECT id_user FROM Ban WHERE id_user = ?", [TARGET]), []);
+});
+
+test("unban_alreadyRemovedConcurrently_unknownAndNoDeletion", async () => {
+  // Deux modérateurs lèvent la même exclusion : le second n'a plus rien à faire.
+  const deletedDms: string[] = [];
+  const replies: string[] = [];
+  const client = fakeClient(deletedDms);
+  const bdd = await getBddInstance();
+  await bdd.set("Ban", ["id_user", "id_moderator", "id_reason"], [TARGET, "400000000000000001", "reason-3"]);
+  await bdd.raw("UPDATE Ban SET id_notice_user = ? WHERE id_user = ?", ["notice-3", TARGET]);
+  const originalGet = bdd.get;
+  bdd.get = (async (...args: Parameters<typeof originalGet>) => {
+    const rows = await originalGet.apply(bdd, args);
+    await bdd.raw("DELETE FROM Ban WHERE id_user = ?", [TARGET]);
+    return rows;
+  }) as typeof originalGet;
+  try {
+    assert.equal(await unban(client, unbanInteraction(client, TARGET, replies)), true);
+  } finally {
+    bdd.get = originalGet;
+  }
+
+  assert.deepEqual(replies, ["Unknown ID ban !"]);
+  assert.deepEqual(deletedDms, []);
 });

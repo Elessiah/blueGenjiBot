@@ -8,7 +8,7 @@ import fs from "node:fs";
 const TMP_DB = path.join(os.tmpdir(), `bgenji-raw-${randomUUID()}.sqlite`);
 process.env.BDD_PATH = TMP_DB;
 
-import { getBddInstance, closeBddInstance } from "../../bdd/Bdd.js";
+import { Bdd, getBddInstance, closeBddInstance } from "../../bdd/Bdd.js";
 
 test("bdd.raw execute une requete parametree et retourne les lignes typees", async () => {
   const bdd = await getBddInstance();
@@ -49,6 +49,12 @@ test("bddWrite_noMatchingRow_returnsZero", async () => {
   const bdd = await getBddInstance();
   const changed = await bdd.write("UPDATE OGMsg SET id_author = ? WHERE id_author = ?", ["x", "personne"]);
   assert.equal(changed, 0);
+});
+
+test("bddWrite_noDatabaseOpen_throws", async () => {
+  // « Aucune ligne » voudrait dire « ligne disparue » : une base fermée lève.
+  const closed = new Bdd(TMP_DB);
+  await assert.rejects(closed.write("UPDATE OGMsg SET id_author = ?", ["x"]), /Database is not open/);
 });
 
 test.after(async () => {
