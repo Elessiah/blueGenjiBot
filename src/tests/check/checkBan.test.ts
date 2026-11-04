@@ -244,26 +244,45 @@ test("checkBan_dmRefused_attemptStillThrottled", async () => {
   assert.equal(trace.logs.length, logsAfterFirst);
 });
 
-test("checkBan_unbannedDuringSend_freshNoticeDeleted", async () => {
-  const trace = newTrace();
-  await seedBan("banni-12");
-  const base = fakeClient("none", trace) as unknown as { users: { fetch: (id: string) => Promise<Record<string, unknown>> } };
-  const client = {
+/** Client dont l'envoi de l'avis voit passer `/unban` : la ligne `Ban` disparait avant l'enregistrement. */
+function unbanDuringSendClient(source: unknown, userId: string): Client {
+  const base = source as { users: { fetch: (id: string) => Promise<Record<string, unknown>> } };
+  return {
     ...base,
     users: {
       fetch: async (id: string) => {
         const user = await base.users.fetch(id);
         if (id === process.env.OWNER_ID) { return user; }
         const send = user.send as (payload: unknown) => Promise<{ id: string }>;
-        // `/unban` passe pendant l'envoi : la ligne disparait avant l'enregistrement.
         return { ...user, send: async (payload: unknown) => {
           const bdd = await getBddInstance();
-          await bdd.raw("DELETE FROM Ban WHERE id_user = ?", ["banni-12"]);
+          await bdd.raw("DELETE FROM Ban WHERE id_user = ?", [userId]);
           return send(payload);
         } };
       },
     },
   } as unknown as Client;
+}
+
+/** Client dont l'effacement de l'ancien avis arrête les avis (arrêt du bot en plein retrait). */
+function stopDuringDeleteClient(trace: ReturnType<typeof newTrace>): Client {
+  const base = fakeClient("none", trace) as unknown as { users: { fetch: (id: string) => Promise<Record<string, unknown>> } };
+  return {
+    ...base,
+    users: {
+      fetch: async (id: string) => ({
+        ...await base.users.fetch(id),
+        createDM: async () => ({ messages: { delete: async () => { stopBanNotices(); } } }),
+      }),
+    },
+  } as unknown as Client;
+}
+
+test("checkBan_unbannedDuringSend_freshNoticeDeleted", async () => {
+  const trace = newTrace();
+  await seedBan("banni-12");
+  // `/unban` passe pendant l'envoi : la ligne disparait avant l'enregistrement.
+  const client = unbanDuringSendClient(fakeClient("none", trace), "banni-12");
   await checkBan(client, "banni-12", true, T0);
   assert.equal(trace.dms.length, 1);
   assert.deepEqual(trace.deleted, ["banni-12:msg-1"]);
@@ -703,23 +722,8 @@ test("forgetBanVerdict_capReachedDuringRead_verdictStillNotCached", async () => 
 test("checkBan_unbannedDuringSendAndDeleteFails_withdrawalQueued", async () => {
   const trace = newTrace();
   await seedBan("withdraw-1");
-  const base = failingDeleteClient(trace, Object.assign(new Error("Service Unavailable"), { code: 0 })) as unknown as { users: { fetch: (id: string) => Promise<Record<string, unknown>> } };
-  const client = {
-    ...base,
-    users: {
-      fetch: async (id: string) => {
-        const user = await base.users.fetch(id);
-        if (id === process.env.OWNER_ID) { return user; }
-        const send = user.send as (payload: unknown) => Promise<{ id: string }>;
-        // `/unban` passe pendant l'envoi : l'avis n'a plus de ligne où se ranger.
-        return { ...user, send: async (payload: unknown) => {
-          const bdd = await getBddInstance();
-          await bdd.raw("DELETE FROM Ban WHERE id_user = ?", ["withdraw-1"]);
-          return send(payload);
-        } };
-      },
-    },
-  } as unknown as Client;
+  // `/unban` passe pendant l'envoi : l'avis n'a plus de ligne où se ranger.
+  const client = unbanDuringSendClient(failingDeleteClient(trace, Object.assign(new Error("Service Unavailable"), { code: 0 })), "withdraw-1");
 
   await checkBan(client, "withdraw-1", true, T0);
 
@@ -810,16 +814,7 @@ test("checkBan_noticeForgottenAfterVerdictCached_noWithdrawalAttempted", async (
 test("checkBan_stoppedDuringWithdrawal_claimReleased", async () => {
   // Arrêt pendant le retrait de l'ancien avis : la réservation est rendue.
   const trace = newTrace();
-  const base = fakeClient("none", trace) as unknown as { users: { fetch: (id: string) => Promise<Record<string, unknown>> } };
-  const client = {
-    ...base,
-    users: {
-      fetch: async (id: string) => ({
-        ...await base.users.fetch(id),
-        createDM: async () => ({ messages: { delete: async () => { stopBanNotices(); } } }),
-      }),
-    },
-  } as unknown as Client;
+  const client = stopDuringDeleteClient(trace);
   await seedBan("stop-c");
   const bdd = await getBddInstance();
   await bdd.raw("UPDATE Ban SET id_notice_user = ?, notice_user_at = ? WHERE id_user = ?", ["old-notice", T0 - BAN_NOTICE_INTERVAL_MS, "stop-c"]);
@@ -867,16 +862,7 @@ test("checkBan_stoppedDuringWithdrawal_otherBanReservationKept", async () => {
 test("checkBan_stopReleaseFails_reservationKeptAndLoggedLocally", async () => {
   // Base qui ferme pendant l'arrêt : la réservation reste, dite au journal local (pas à Discord).
   const trace = newTrace();
-  const base = fakeClient("none", trace) as unknown as { users: { fetch: (id: string) => Promise<Record<string, unknown>> } };
-  const client = {
-    ...base,
-    users: {
-      fetch: async (id: string) => ({
-        ...await base.users.fetch(id),
-        createDM: async () => ({ messages: { delete: async () => { stopBanNotices(); } } }),
-      }),
-    },
-  } as unknown as Client;
+  const client = stopDuringDeleteClient(trace);
   await seedBan("stop-e");
   const bdd = await getBddInstance();
   await bdd.raw("UPDATE Ban SET id_notice_user = ?, notice_user_at = ? WHERE id_user = ?", ["old-notice", T0 - BAN_NOTICE_INTERVAL_MS, "stop-e"]);

@@ -727,11 +727,14 @@ test("retryBanNoticeWithdrawals_morePendingThanCap_cappedPerRun", async () => {
   await clearWithdrawals();
 });
 
-test("retryBanNoticeWithdrawals_lastTryRefusedWriteFails_refusalAnnouncedByBulkDrop", async () => {
-  // Dernier essai refusé, oubli en échec : le bloc l'emporte et dit bien « refusé », une seule fois.
+/**
+ * Une ligne en file depuis `NOW`, essayée à `now` alors que l'oubli sur la
+ * ligne `Ban` échoue (`SQLITE_BUSY`, relancé en fin de nuit) : rend les alertes.
+ */
+async function retryWithFailingForget(messageId: string, noticeError: (Error & { code?: number }) | null, now: number): Promise<string[]> {
   await clearWithdrawals();
   const bdd = await getBddInstance();
-  await bdd.raw("INSERT INTO BanNoticeWithdrawal (id_user, id_message, queued_at) VALUES (?, ?, ?)", [BAN.id_user, "notice-t", NOW]);
+  await bdd.raw("INSERT INTO BanNoticeWithdrawal (id_user, id_message, queued_at) VALUES (?, ?, ?)", [BAN.id_user, messageId, NOW]);
   const original = bdd.write.bind(bdd);
   bdd.write = async (query: string, values?: unknown[]) => {
     if (query.startsWith("UPDATE Ban SET id_notice_user = NULL WHERE id_user")) { throw new Error("SQLITE_BUSY"); }
@@ -739,10 +742,16 @@ test("retryBanNoticeWithdrawals_lastTryRefusedWriteFails_refusalAnnouncedByBulkD
   };
   const logs: string[] = [];
   try {
-    await assert.rejects(retryBanNoticeWithdrawals(noticeFailureClient(logs, REFUSED(50001)), NOW + 29 * DAY), /SQLITE_BUSY/);
+    await assert.rejects(retryBanNoticeWithdrawals(noticeFailureClient(logs, noticeError), now), /SQLITE_BUSY/);
   } finally {
     bdd.write = original;
   }
+  return logs;
+}
+
+test("retryBanNoticeWithdrawals_lastTryRefusedWriteFails_refusalAnnouncedByBulkDrop", async () => {
+  // Dernier essai refusé, oubli en échec : le bloc l'emporte et dit bien « refusé », une seule fois.
+  const logs = await retryWithFailingForget("notice-t", REFUSED(50001), NOW + 29 * DAY);
 
   assert.deepEqual(logs, ["1 ban notice withdrawals refused by Discord"]);
   assert.deepEqual(await pendingWithdrawals(), []);
@@ -750,20 +759,7 @@ test("retryBanNoticeWithdrawals_lastTryRefusedWriteFails_refusalAnnouncedByBulkD
 
 test("retryBanNoticeWithdrawals_recentRefusedWriteFails_notAnnouncedAndKept", async () => {
   // Écriture en échec : rien n'est annoncé, la ligne reste pour la nuit suivante.
-  await clearWithdrawals();
-  const bdd = await getBddInstance();
-  await bdd.raw("INSERT INTO BanNoticeWithdrawal (id_user, id_message, queued_at) VALUES (?, ?, ?)", [BAN.id_user, "notice-u", NOW]);
-  const original = bdd.write.bind(bdd);
-  bdd.write = async (query: string, values?: unknown[]) => {
-    if (query.startsWith("UPDATE Ban SET id_notice_user = NULL WHERE id_user")) { throw new Error("SQLITE_BUSY"); }
-    return original(query, values);
-  };
-  const logs: string[] = [];
-  try {
-    await assert.rejects(retryBanNoticeWithdrawals(noticeFailureClient(logs, REFUSED(50001)), NOW + DAY), /SQLITE_BUSY/);
-  } finally {
-    bdd.write = original;
-  }
+  const logs = await retryWithFailingForget("notice-u", REFUSED(50001), NOW + DAY);
 
   assert.deepEqual(logs, []);
   assert.equal((await pendingWithdrawals()).length, 1);
@@ -786,20 +782,7 @@ test("retryBanNoticeWithdrawals_expiredAndRecent_expiredTriedFirst", async () =>
 
 test("retryBanNoticeWithdrawals_lastTryDeletedWriteFails_notAnnouncedAsAbandoned", async () => {
   // Dernier essai réussi, écriture en échec : l'avis est effacé, le bloc ne l'annonce pas abandonné.
-  await clearWithdrawals();
-  const bdd = await getBddInstance();
-  await bdd.raw("INSERT INTO BanNoticeWithdrawal (id_user, id_message, queued_at) VALUES (?, ?, ?)", [BAN.id_user, "notice-y", NOW]);
-  const original = bdd.write.bind(bdd);
-  bdd.write = async (query: string, values?: unknown[]) => {
-    if (query.startsWith("UPDATE Ban SET id_notice_user = NULL WHERE id_user")) { throw new Error("SQLITE_BUSY"); }
-    return original(query, values);
-  };
-  const logs: string[] = [];
-  try {
-    await assert.rejects(retryBanNoticeWithdrawals(noticeFailureClient(logs, null), NOW + 29 * DAY), /SQLITE_BUSY/);
-  } finally {
-    bdd.write = original;
-  }
+  const logs = await retryWithFailingForget("notice-y", null, NOW + 29 * DAY);
 
   assert.deepEqual(logs, []);
   assert.deepEqual(await pendingWithdrawals(), []);
