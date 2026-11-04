@@ -388,7 +388,9 @@ route inconnue, `404 INTERNAL_ROUTE_NOT_FOUND`). Les salons sont créés dans la
 permissions alignées sur la catégorie. Le bot ne supprime jamais
 un salon qu'il n'a pas créé : seuls les salons inscrits dans son suivi
 (table `MatchVoiceChannel`) sont concernés. Le rôle du bot doit avoir
-« Gérer les salons » sur la catégorie.
+« Gérer les salons » sur la catégorie. Une erreur vocale ne part au salon de logs
+que par son code (`code 50035, statut 400`) et l'opération en cours, jamais par le
+message de Discord ou de SQLite, qui peut recopier le nom ou la clé reçus.
 
 - `POST /internal/voice/channels`
   - Body: `{ "key": "match:12:team:34", "name": "Nom de l'équipe" }`
@@ -455,7 +457,9 @@ ne désigne pas l'API —, jamais la page HTML d'Express qui recopie le chemin ;
 `415 UNSUPPORTED_ENCODING`, interrompu `400 REQUEST_ABORTED`, de longueur contraire à
 son `Content-Length` `400 INVALID_CONTENT_LENGTH`, toute autre erreur hors route
 `500 INTERNAL_ERROR` (le statut porté par une erreur Discord n'est jamais repris).
-Une réponse déjà commencée (flux) est simplement close. Le
+Une réponse déjà commencée (flux) voit sa connexion coupée : le lecteur voit une
+réponse tronquée, jamais une fin normale. Toute route qui lit un corps vit sous
+`/internal` (ailleurs, le corps n'est pas lu). Le
 jeton est vérifié avant la lecture du corps, et le corps n'est lu que sous `/internal`. `GET /internal/servers/:id/modules` et
 `PUT /internal/servers/:id/modules/:moduleKey` répondent en outre
 `404 GUILD_NOT_JOINED` pour un serveur que le bot n'a pas rejoint : le
