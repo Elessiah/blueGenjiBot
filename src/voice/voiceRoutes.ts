@@ -12,6 +12,7 @@ import type { Express, Request, Response } from "express";
 import type { Client } from "discord.js";
 import { sendLog } from "../safe/sendLog.js";
 import {
+  voiceErrorDetail,
   VoiceChannelError,
   ensureTeamVoiceChannel,
   parseChannelId,
@@ -37,7 +38,8 @@ async function replyVoiceError(client: Client, res: Response, route: string, err
     return;
   }
   res.status(500).json({ error: "VOICE_INTERNAL_ERROR" });
-  await sendLog(client, `${route} error: ${(error as Error)?.message ?? String(error)}`);
+  // Le code seul : le message peut recopier une valeur reçue (nom, clé).
+  await sendLog(client, `${route} : VOICE_INTERNAL_ERROR (${voiceErrorDetail(error)})`);
 }
 
 /**

@@ -25,7 +25,7 @@
 
 import { ChannelType, type Client, type VoiceState } from "discord.js";
 import { getBddInstance } from "../bdd/Bdd.js";
-import { discordJsonCode } from "../safe/errorGuards.js";
+import { discordJsonCode, errorCode } from "../safe/errorGuards.js";
 import { sendAlert, sendLog } from "../safe/sendLog.js";
 
 /** Catégorie des salons vocaux de match sur le serveur BlueGenji, quand `VOICE_CATEGORY_ID` n'est pas posé. */
@@ -196,6 +196,20 @@ export function sanitizeVoiceChannelName(raw: unknown): string | null {
   return cut === "" ? FALLBACK_VOICE_NAME : cut;
 }
 
+/** Code d'erreur assez court et sans espace pour être un identifiant (`SQLITE_BUSY`, 50035). */
+const SAFE_ERROR_CODE = /^[\w.-]{1,40}$/;
+
+/**
+ * Désigne une erreur pour le journal par son seul code : le message d'une erreur
+ * Discord ou SQLite peut recopier une valeur reçue (nom d'équipe, clé).
+ * @param error Erreur capturée.
+ * @returns `code <code>`, ou `code inconnu`.
+ */
+export function voiceErrorDetail(error: unknown): string {
+  const code = discordJsonCode(error) ?? errorCode(error);
+  return code !== null && SAFE_ERROR_CODE.test(String(code)) ? `code ${code}` : "code inconnu";
+}
+
 /**
  * Traduit une erreur Discord en code rendu au site. Une permission manquante
  * déclenche une alerte au staff (au plus une par heure) : il faut accorder
@@ -208,7 +222,7 @@ export function sanitizeVoiceChannelName(raw: unknown): string | null {
 async function toVoiceError(client: Client, error: unknown, action: string): Promise<VoiceChannelError> {
   if (error instanceof VoiceChannelError) { return error; }
   const code = discordJsonCode(error);
-  const detail = `${action} : ${(error as Error)?.message ?? String(error)}`;
+  const detail = `${action} : ${voiceErrorDetail(error)}`;
   if (code === MISSING_PERMISSIONS || code === MISSING_ACCESS) {
     const now = Date.now();
     if (now - lastPermissionAlertAt >= PERMISSION_ALERT_COOLDOWN_MS) {
@@ -254,7 +268,7 @@ async function db<T>(query: string, values: unknown[] = []): Promise<T[]> {
   try {
     return await (await getBddInstance()).raw<T>(query, values);
   } catch (error) {
-    throw new VoiceChannelError("VOICE_STORAGE_ERROR", (error as Error).message);
+    throw new VoiceChannelError("VOICE_STORAGE_ERROR", voiceErrorDetail(error));
   }
 }
 

@@ -153,7 +153,9 @@ const SAFE_CODE = /^[\w.-]{1,40}$/;
 export function internalErrorLogLine(error: unknown): string {
   const reply = internalErrorReply(error);
   if (reply !== UNEXPECTED_ERROR) { return `[internalApi] ${reply.code}`; }
-  const kind = error instanceof Error ? error.name : typeof error;
+  // `name` se règle à l'exécution : soumis au même filtre que le code.
+  let kind: string = typeof error;
+  if (error instanceof Error) { kind = SAFE_CODE.test(String(error.name)) ? error.name : "Error"; }
   const code = (error as { code?: unknown } | null)?.code;
   const shown = (typeof code === "string" || typeof code === "number") && SAFE_CODE.test(String(code)) ? ` ${code}` : "";
   return `[internalApi] ${reply.code} (${kind}${shown})`;
@@ -170,7 +172,11 @@ export function internalErrorLogLine(error: unknown): string {
 export function internalErrorHandler(log: (line: string) => void = (line) => console.error(line)): ErrorRequestHandler {
   return (error, _req, res, _next) => {
     log(internalErrorLogLine(error));
-    if (res.headersSent) { res.end(); return; }
+    if (res.headersSent) {
+      // Socket déjà rompu : rien à rendre, et rien ne doit repartir vers Express.
+      try { res.end(); } catch { /* connexion déjà close */ }
+      return;
+    }
     const reply = internalErrorReply(error);
     res.status(reply.status).json({ error: reply.code });
   };
