@@ -14,7 +14,7 @@ process.env.INFO_SERV = "admin-channel-1";
 
 import { getBddInstance, resetBddInstance } from "../../bdd/Bdd.js";
 import { manageDistribution } from "../../messages/manageDistribution.js";
-import { settleBanNotices } from "../../check/checkBan.js";
+import { forgetBanVerdict, settleBanNotices } from "../../check/checkBan.js";
 import type { Client, Message } from "discord.js";
 
 /**
@@ -100,6 +100,8 @@ async function resetTables(): Promise<void> {
   for (const table of ["ChannelPartner", "ChannelPartnerService", "ChannelPartnerRank", "MessageService", "DPMsg", "OGMsg", "ServerModule", "Ban", "FeedEvent"]) {
     await bdd.raw(`DELETE FROM ${table}`, []);
   }
+  // La ligne `Ban` effacée hors `/unban` : le verdict gardé par le relais aussi.
+  forgetBanVerdict();
 }
 
 async function written(messageId: string) {

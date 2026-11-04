@@ -13,7 +13,14 @@ process.env.OWNER_ID = "owner-1";
 process.env.INFO_SERV = "admin-channel-1";
 
 import { getBddInstance, closeBddInstance } from "../../bdd/Bdd.js";
-import { BAN_NOTICE_INTERVAL_MS, checkBan as checkBanNow, settleBanNotices } from "../../check/checkBan.js";
+import {
+  BAN_NOTICE_INTERVAL_MS,
+  BAN_VERDICT_CACHE_MS,
+  MAX_QUEUED_BAN_NOTICES,
+  checkBan as checkBanNow,
+  forgetBanVerdict,
+  settleBanNotices,
+} from "../../check/checkBan.js";
 import type { Client } from "discord.js";
 
 /** `checkBan`, puis l'attente de l'avis parti en arrière-plan. */
@@ -259,6 +266,8 @@ test("checkBan_unbannedDuringSend_freshNoticeDeleted", async () => {
   await checkBan(client, "banni-12", true, T0);
   assert.equal(trace.dms.length, 1);
   assert.deepEqual(trace.deleted, ["banni-12:msg-1"]);
+  // Le verdict gardé pour le relais est oublié avec la ligne.
+  assert.equal(await checkBan(client, "banni-12", true, T0 + 1000), "NOT_BANNED");
 });
 
 test("checkBan_recentNoticeInDatabase_noNotice", async () => {
@@ -313,4 +322,137 @@ test("checkBan_noticeInstantInFuture_treatedAsStale", async () => {
   await checkBan(fakeClient("none", trace), "banni-15", true, T0);
   assert.equal(trace.dms.length, 1);
   assert.deepEqual(await banRow("banni-15"), { id_notice_user: "msg-1", notice_user_at: T0 });
+});
+
+// --- File des avis et verdict gardé pour le relais (EF-14, revue sécurité) ---
+
+/** Faux client dont l'avis de `gatedId` attend `gate` avant de lire le compte. */
+function gatedClient(trace: Trace, gatedId: string, gate: Promise<void>): Client {
+  const base = fakeClient("none", trace) as unknown as { users: { fetch: (id: string) => Promise<unknown> } };
+  return {
+    ...base,
+    users: {
+      fetch: async (id: string) => {
+        if (id === gatedId) { await gate; }
+        return base.users.fetch(id);
+      },
+    },
+  } as unknown as Client;
+}
+
+/** Ouvre une barrière : la promesse et sa levée. */
+function newGate(): { gate: Promise<void>; release: () => void } {
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  return { gate, release };
+}
+
+test("checkBan_manyBannedUsers_noticesSentOneAtATime", async () => {
+  const trace = newTrace();
+  let active = 0;
+  let maxActive = 0;
+  const base = fakeClient("none", trace) as unknown as { users: { fetch: (id: string) => Promise<Record<string, unknown>> } };
+  // Un avis est « en cours » de la lecture du compte jusqu'à l'envoi du message privé.
+  const client = {
+    ...base,
+    users: {
+      fetch: async (id: string) => {
+        const user = await base.users.fetch(id);
+        if (id === process.env.OWNER_ID) { return user; }
+        active += 1;
+        maxActive = Math.max(maxActive, active);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        const send = user.send as (payload: unknown) => Promise<{ id: string }>;
+        return { ...user, send: async (payload: unknown) => { active -= 1; return send(payload); } };
+      },
+    },
+  } as unknown as Client;
+  await seedBan("seq-1");
+  await seedBan("seq-2");
+  await seedBan("seq-3");
+  await Promise.all([
+    checkBanNow(client, "seq-1", true, T0),
+    checkBanNow(client, "seq-2", true, T0),
+    checkBanNow(client, "seq-3", true, T0),
+  ]);
+  await settleBanNotices();
+  assert.equal(trace.dms.length, 3);
+  assert.equal(maxActive, 1);
+});
+
+test("checkBan_queueFull_extraNoticeNotClaimed", async () => {
+  const trace = newTrace();
+  const { gate, release } = newGate();
+  const client = gatedClient(trace, "cap-0", gate);
+  for (let index = 0; index < MAX_QUEUED_BAN_NOTICES; index += 1) {
+    await seedBan(`cap-${index}`);
+    await checkBanNow(client, `cap-${index}`, true, T0);
+  }
+  await seedBan("cap-extra");
+
+  const verdict = await checkBanNow(client, "cap-extra", true, T0);
+
+  assert.equal(verdict, "BANNED");
+  assert.deepEqual(await banRow("cap-extra"), { id_notice_user: null, notice_user_at: null });
+  release();
+  await settleBanNotices();
+  assert.equal(trace.dms.length, MAX_QUEUED_BAN_NOTICES);
+  // File dégagée : l'avis non réservé part au message suivant.
+  await checkBan(client, "cap-extra", true, T0 + 1000);
+  assert.equal(trace.dms.length, MAX_QUEUED_BAN_NOTICES + 1);
+  assert.deepEqual(await banRow("cap-extra"), { id_notice_user: `msg-${MAX_QUEUED_BAN_NOTICES + 1}`, notice_user_at: T0 + 1000 });
+});
+
+/** Exclu déjà vu par le relais à `T0`, puis ligne effacée directement en base (hors `/unban`). */
+async function cachedThenRemoved(idUser: string): Promise<Client> {
+  const client = fakeClient("none", newTrace());
+  await seedBan(idUser);
+  await checkBan(client, idUser, true, T0);
+  const bdd = await getBddInstance();
+  await bdd.raw("DELETE FROM Ban WHERE id_user = ?", [idUser]);
+  return client;
+}
+
+test("checkBan_cachedVerdict_noDatabaseRead", async () => {
+  const client = await cachedThenRemoved("cache-1");
+  assert.equal(await checkBan(client, "cache-1", true, T0 + BAN_VERDICT_CACHE_MS - 1), "BANNED");
+});
+
+test("checkBan_cacheExpired_rereadsDatabase", async () => {
+  const client = await cachedThenRemoved("cache-2");
+  assert.equal(await checkBan(client, "cache-2", true, T0 + BAN_VERDICT_CACHE_MS), "NOT_BANNED");
+});
+
+test("checkBan_clockMovedBack_cacheIgnored", async () => {
+  const client = await cachedThenRemoved("cache-3");
+  assert.equal(await checkBan(client, "cache-3", true, T0 - 1), "NOT_BANNED");
+});
+
+test("checkBan_alertUserFalse_neverCached", async () => {
+  // `/ban` et les interactions relisent toujours la base.
+  const client = await cachedThenRemoved("cache-4");
+  assert.equal(await checkBan(client, "cache-4", false, T0 + 1000), "NOT_BANNED");
+});
+
+test("forgetBanVerdict_afterUnban_nextCheckNotBanned", async () => {
+  const client = await cachedThenRemoved("cache-5");
+  forgetBanVerdict("cache-5");
+  assert.equal(await checkBan(client, "cache-5", true, T0 + 1000), "NOT_BANNED");
+});
+
+test("checkBan_noticeClaimFails_cacheForgotten", async () => {
+  const trace = newTrace();
+  const { gate, release } = newGate();
+  const client = gatedClient(trace, "claim-a", gate);
+  await seedBan("claim-a");
+  await seedBan("claim-b");
+  await checkBanNow(client, "claim-a", true, T0);
+  // En file derrière « claim-a » : sa ligne disparaît avant sa réservation.
+  await checkBanNow(client, "claim-b", true, T0);
+  const bdd = await getBddInstance();
+  await bdd.raw("DELETE FROM Ban WHERE id_user = ?", ["claim-b"]);
+  release();
+  await settleBanNotices();
+  assert.equal(trace.dms.length, 1);
+  assert.equal(await checkBan(client, "claim-b", true, T0 + 1000), "NOT_BANNED");
 });
