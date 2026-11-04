@@ -444,9 +444,11 @@ Les codes en usage : `INTERNAL_FEED_ERROR`, `INTERNAL_STATUS_ERROR`,
 `INTERNAL_STATS_ERROR`, `INTERNAL_KPIS_ERROR`, `INTERNAL_SERVERS_ERROR`,
 `INTERNAL_ACTIVITY_ERROR`, `INTERNAL_MODULES_ERROR`,
 `INTERNAL_MODULE_TOGGLE_ERROR`, plus les codes propres aux routes d'écriture
-déjà décrits ci-dessus. Une route inconnue sous `/internal` (jeton valide)
+déjà décrits ci-dessus. Une route inconnue (sous `/internal`, jeton valide)
 répond `404 INTERNAL_ROUTE_NOT_FOUND`, jamais la page HTML d'Express qui
-recopie le chemin. `GET /internal/servers/:id/modules` et
+recopie le chemin ; un corps JSON illisible `400 INVALID_JSON`, trop gros
+`413 PAYLOAD_TOO_LARGE`, toute autre erreur hors route `500 INTERNAL_ERROR`. Le
+jeton est vérifié avant la lecture du corps. `GET /internal/servers/:id/modules` et
 `PUT /internal/servers/:id/modules/:moduleKey` répondent en outre
 `404 GUILD_NOT_JOINED` pour un serveur que le bot n'a pas rejoint : le
 réglage serait effacé au prochain rattrapage des serveurs quittés, on le refuse
