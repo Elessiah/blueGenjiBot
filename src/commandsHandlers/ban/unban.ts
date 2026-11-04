@@ -5,6 +5,8 @@ import type {ChatInputCommandInteraction, Client, Guild} from "discord.js";
 import {Ban} from "../../bdd/types.js";
 import {deleteBanMessages} from "../../privacy/staffLogRetention.js";
 import {forgetBanVerdict} from "../../check/checkBan.js";
+import {sendLog} from "../../safe/sendLog.js";
+import {errorCode} from "../../safe/errorGuards.js";
 
 /**
  * Retire un utilisateur de la liste de bannissement.
@@ -36,10 +38,22 @@ async function unban(client: Client,
         await safeReply(interaction, "Parameter 'id_ban' was not found ! Please try again !");
         return false;
     }
-    // La ligne effacée est rendue par la même instruction : un avis remis
-    // pendant la levée y figure déjà (sinon, il se voit sans ligne et s'efface lui-même).
-    // Sans base ouverte (restauration), l'instruction lève au lieu de répondre « ID inconnu ».
-    const removed = await bdd.writeReturning<Ban>("DELETE FROM Ban WHERE id_user = ? RETURNING *", [target]);
+    let removed: Ban[];
+    try {
+        // L'avis remis à l'exclu est mis en file **avant** la levée : la ligne
+        // `Ban` est le seul endroit qui garde son identifiant, et un arrêt du bot
+        // entre les deux le laisserait sinon introuvable. Effacé ci-dessous, il en sort.
+        await bdd.write("INSERT OR IGNORE INTO BanNoticeWithdrawal (id_user, id_message, queued_at) "
+            + "SELECT id_user, id_notice_user, ? FROM Ban WHERE id_user = ? AND id_notice_user IS NOT NULL", [Date.now(), target]);
+        // La ligne effacée est rendue par la même instruction : un avis remis
+        // pendant la levée y figure déjà (sinon, il se voit sans ligne et s'efface lui-même).
+        removed = await bdd.writeReturning<Ban>("DELETE FROM Ban WHERE id_user = ? RETURNING *", [target]);
+    } catch (error) {
+        // Base fermée (restauration) ou occupée : « ID inconnu » serait faux.
+        await sendLog(client, `Failed to unban: code ${errorCode(error) ?? "inconnu"}`);
+        await safeReply(interaction, "The database is unavailable. Please try again in a few minutes.");
+        return true;
+    }
     if (removed.length === 0) {
         await safeReply(interaction, "Unknown ID ban !");
     } else {

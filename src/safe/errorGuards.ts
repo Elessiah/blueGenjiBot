@@ -200,9 +200,19 @@ const DISCORD_UNKNOWN_MESSAGE = 10008;
 /** Code Discord d'un compte inconnu (supprimé). */
 const DISCORD_UNKNOWN_USER = 10013;
 
+/** Code Discord d'un salon inconnu : la conversation n'existe plus. */
+const DISCORD_UNKNOWN_CHANNEL = 10003;
+
+/** Codes Discord d'un accès refusé : une nouvelle tentative n'y changera rien. */
+const DISCORD_MISSING_ACCESS = 50001;
+const DISCORD_MISSING_PERMISSIONS = 50013;
+
 export {
     DISCORD_UNKNOWN_MESSAGE,
     DISCORD_UNKNOWN_USER,
+    DISCORD_UNKNOWN_CHANNEL,
+    DISCORD_MISSING_ACCESS,
+    DISCORD_MISSING_PERMISSIONS,
     discordJsonCode,
     classifyError,
     MAX_CAUSE_DEPTH,

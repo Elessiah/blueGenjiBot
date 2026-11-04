@@ -34,6 +34,18 @@ export async function settleBanNotices(): Promise<void> {
     } while (tail !== noticeQueue);
 }
 
+/** Arrêt en cours : plus aucun avis ne part (il serait coupé par la fermeture de la base). */
+let noticesStopped = false;
+
+/**
+ * Cesse de mettre des avis en file, avant l'arrêt du bot : seuls ceux déjà
+ * partis sont attendus ({@link settleBanNotices}).
+ * @param stopped `false` pour les reprendre (tests).
+ */
+export function stopBanNotices(stopped: boolean = true): void {
+    noticesStopped = stopped;
+}
+
 /** Exclus dont un avis est en file ou en cours d'envoi : deux messages simultanés n'en font partir qu'un. */
 const noticesInFlight = new Set<string>();
 
@@ -225,8 +237,9 @@ async function notifyBannedUser(client: Client, banInfo: BanInfo, now: number): 
     const banReason = banNoticeMessage(banInfo.date, reasonMsg.content);
     // Un seul avis à la fois dans la conversation : l'ancien est effacé **avant**
     // l'envoi. S'il ne peut pas l'être (Discord indisponible), la purge de nuit le
-    // réessaie ; si même son identifiant ne peut être gardé, rien ne part : il
-    // n'est pas écrasé, seul moyen de l'effacer à la levée.
+    // réessaie ; refusé pour de bon, il ne sera jamais effacé. Si même son
+    // identifiant ne peut être gardé, rien ne part : il n'est pas écrasé, seul
+    // moyen de l'effacer à la levée.
     if (previousNotice && (await withdrawBanNotice(client, banInfo.id_user, previousNotice, now)) === "lost") {
         await sendLog(client, "Ban notice skipped: the previous notice could not be deleted");
         return;
@@ -328,7 +341,7 @@ async function checkBan(client: Client,
  * @param now Instant de la vérification (ms).
  */
 function startBanNotice(client: Client, banInfo: BanInfo, now: number): void {
-    if (noticeColumnsMissing) {
+    if (noticeColumnsMissing || noticesStopped) {
         return;
     }
     // Le verdict est déjà rendu : prévenir est un service, pas une condition, et
