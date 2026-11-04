@@ -465,8 +465,9 @@ async function tryWithdrawal(
  * reste, pour un dernier essai (les plus anciennes en tête). Les échues passent
  * d'abord, puis celles au-delà sont abandonnées d'un bloc, sans appel, avant
  * les récentes : une nuit interrompue ne laisse aucune ligne passer l'échéance
- * annoncée. Seule exception, une panne d'horloge : une ligne datée du futur
- * repart de la nuit où elle est vue, pour ses 30 jours d'essais.
+ * annoncée. Les jours se comptent sur l'horloge du serveur, depuis la date
+ * notée : rien n'est réécrit (une horloge fautive ne raccourcit ni ne vide la
+ * file ; une ligne datée du futur est essayée parmi les récentes).
  * @param client Client Discord connecté.
  * @param now Instant de référence (ms).
  * @returns Le nombre d'avis retirés de la table (effacés ou abandonnés).
@@ -478,14 +479,6 @@ export async function retryBanNoticeWithdrawals(client: Client, now: number = Da
   // La purge passe une fois par nuit : une ligne part à la dernière avant l'échéance.
   const deadline = now - (BAN_NOTICE_WITHDRAWAL_RETRY_DAYS - 1) * day;
   const run = { settled: 0, failure: null as unknown };
-  // Horloge reculée : une ligne datée du futur repart de maintenant, pour ses
-  // 30 jours d'essais — ni gardée indéfiniment, ni abandonnée sans essai. En
-  // échec, elle reste parmi les récentes et repart la nuit suivante.
-  try {
-    await bdd.write("UPDATE BanNoticeWithdrawal SET queued_at = ? WHERE queued_at > ?", [now, now + day]);
-  } catch (error) {
-    run.failure ??= error;
-  }
   const candidates = await bdd.raw<PendingWithdrawal>(
     "SELECT id_user, id_message FROM BanNoticeWithdrawal WHERE queued_at <= ? ORDER BY queued_at LIMIT ?",
     [deadline, MAX_NOTICE_WITHDRAWALS_PER_RUN],
