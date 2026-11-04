@@ -12,6 +12,7 @@ import type { Client } from "discord.js";
 import { closeBddInstance, getBddInstance } from "../../bdd/Bdd.js";
 import { BAN_NOTICE_WITHDRAWAL_RETRY_DAYS } from "../../privacy/retentionPeriods.js";
 import {
+  MAX_NOTICE_WITHDRAWALS_PER_RUN,
   deleteDirectMessage,
   retryBanNoticeWithdrawals,
   withdrawBanNotice,
@@ -481,4 +482,86 @@ test("deleteBanMessages_ownerMessageAlreadyGone_notCounted", async () => {
   } finally {
     process.env.OWNER_ID = previousOwner;
   }
+});
+
+// --- Revue sécurité EF-14, cycle 8 ---
+
+/** Faux client qui compte les effacements tentés auprès de Discord, tous en échec passager. */
+function countingClient(attempts: string[]): Client {
+  return {
+    channels: { fetch: async () => ({ send: async () => ({ id: "log-1" }) }) },
+    users: {
+      fetch: async (id: string) => ({
+        id,
+        send: async () => ({ id: "dm-1" }),
+        createDM: async () => ({ messages: { delete: async (messageId: string) => { attempts.push(messageId); throw UNAVAILABLE(); } } }),
+      }),
+    },
+  } as unknown as Client;
+}
+
+test("deleteDirectMessage_freshChannelUnknown_refusedWithoutReopen", async () => {
+  // Conversation ouverte à l'instant : un « canal inconnu » n'est pas réessayé.
+  let opened = 0;
+  const client = {
+    users: {
+      fetch: async () => ({
+        dmChannel: null,
+        createDM: async () => { opened += 1; return { messages: { delete: async () => { throw REFUSED(10003); } } }; },
+      }),
+    },
+  } as unknown as Client;
+
+  const outcome = await deleteDirectMessage(client, BAN.id_user, "notice-r");
+
+  assert.equal(outcome, "refused");
+  assert.equal(opened, 1);
+});
+
+test("withdrawBanNotice_refusedAndForgetFails_refusalNotRecordedLogged", async () => {
+  await clearWithdrawals();
+  const bdd = await getBddInstance();
+  const original = bdd.write.bind(bdd);
+  bdd.write = async (query: string, values?: unknown[]) => {
+    if (query.startsWith("UPDATE Ban SET id_notice_user = NULL")) { throw new Error("database is locked"); }
+    return original(query, values);
+  };
+  const logs: string[] = [];
+  let outcome;
+  try {
+    outcome = await withdrawBanNotice(noticeFailureClient(logs, REFUSED(50013)), BAN.id_user, "notice-l", NOW);
+  } finally {
+    bdd.write = original;
+  }
+
+  assert.equal(outcome, "refused");
+  assert.deepEqual(logs, ["Ban notice refusal not recorded", "Ban notice withdrawal refused by Discord"]);
+});
+
+test("retryBanNoticeWithdrawals_expiredRow_abandonedWithoutDiscordCall", async () => {
+  await clearWithdrawals();
+  const bdd = await getBddInstance();
+  await bdd.raw("INSERT INTO BanNoticeWithdrawal (id_user, id_message, queued_at) VALUES (?, ?, ?)", [BAN.id_user, "notice-e", NOW]);
+  const attempts: string[] = [];
+
+  const settled = await retryBanNoticeWithdrawals(countingClient(attempts), NOW + 29 * DAY);
+
+  assert.equal(settled, 1);
+  assert.deepEqual(attempts, []);
+  assert.deepEqual(await pendingWithdrawals(), []);
+});
+
+test("retryBanNoticeWithdrawals_morePendingThanCap_cappedPerRun", async () => {
+  await clearWithdrawals();
+  const bdd = await getBddInstance();
+  for (let i = 0; i < MAX_NOTICE_WITHDRAWALS_PER_RUN + 5; i++) {
+    await bdd.raw("INSERT INTO BanNoticeWithdrawal (id_user, id_message, queued_at) VALUES (?, ?, ?)", [BAN.id_user, `notice-${i}`, NOW]);
+  }
+  const attempts: string[] = [];
+
+  const settled = await retryBanNoticeWithdrawals(countingClient(attempts), NOW + DAY);
+
+  assert.equal(settled, 0);
+  assert.equal(attempts.length, MAX_NOTICE_WITHDRAWALS_PER_RUN);
+  await clearWithdrawals();
 });

@@ -788,3 +788,48 @@ test("checkBan_stoppedWhileQueued_noNoticeSent", async () => {
   assert.deepEqual(trace.dms, []);
   assert.deepEqual(await banRow("queued-2"), { id_notice_user: null, notice_user_at: null });
 });
+
+// --- Revue sécurité EF-14, cycle 8 ---
+
+test("checkBan_noticeForgottenAfterVerdictCached_noWithdrawalAttempted", async () => {
+  // La purge de nuit a oublié l'avis après la mise en cache du verdict : rien à effacer.
+  const trace = newTrace();
+  const client = fakeClient("none", trace);
+  await seedBan("stale-1");
+  const bdd = await getBddInstance();
+  await bdd.raw("UPDATE Ban SET id_notice_user = ?, notice_user_at = ? WHERE id_user = ?", ["old-notice", T0 - BAN_NOTICE_INTERVAL_MS + 500, "stale-1"]);
+  await checkBan(client, "stale-1", true, T0);
+  await bdd.raw("UPDATE Ban SET id_notice_user = NULL, notice_user_at = ? WHERE id_user = ?", [T0 - BAN_NOTICE_INTERVAL_MS, "stale-1"]);
+
+  await checkBan(client, "stale-1", true, T0 + 1000);
+
+  assert.deepEqual(trace.deleted, []);
+  assert.equal(trace.dms.length, 1);
+});
+
+test("checkBan_stoppedDuringWithdrawal_claimReleased", async () => {
+  // Arrêt pendant le retrait de l'ancien avis : la réservation est rendue.
+  const trace = newTrace();
+  const base = fakeClient("none", trace) as unknown as { users: { fetch: (id: string) => Promise<Record<string, unknown>> } };
+  const client = {
+    ...base,
+    users: {
+      fetch: async (id: string) => ({
+        ...await base.users.fetch(id),
+        createDM: async () => ({ messages: { delete: async () => { stopBanNotices(); } } }),
+      }),
+    },
+  } as unknown as Client;
+  await seedBan("stop-c");
+  const bdd = await getBddInstance();
+  await bdd.raw("UPDATE Ban SET id_notice_user = ?, notice_user_at = ? WHERE id_user = ?", ["old-notice", T0 - BAN_NOTICE_INTERVAL_MS, "stop-c"]);
+
+  try {
+    await checkBan(client, "stop-c", true, T0);
+  } finally {
+    stopBanNotices(false);
+  }
+
+  assert.deepEqual(trace.dms, []);
+  assert.equal((await banRow("stop-c")).notice_user_at, null);
+});

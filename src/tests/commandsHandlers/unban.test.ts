@@ -189,3 +189,37 @@ test("unban_queueInsertFails_banStillLifted", async () => {
   assert.deepEqual(replies, ["User successfully unbanned."]);
   assert.deepEqual(await bdd.raw("SELECT id_user FROM Ban WHERE id_user = ?", [target]), []);
 });
+
+test("unban_queueInsertFails_staffWarned", async () => {
+  // Avis non mis en file avant la levée : le staff le sait.
+  const target = "500000000000000015";
+  await banWithNotice(target, "notice-w");
+  const bdd = await getBddInstance();
+  const original = bdd.write.bind(bdd);
+  bdd.write = async (query: string, values?: unknown[]) => {
+    if (query.startsWith("INSERT OR IGNORE INTO BanNoticeWithdrawal")) { throw new Error("no such table: BanNoticeWithdrawal"); }
+    return original(query, values);
+  };
+  const logs: string[] = [];
+  const base = fakeClient([]);
+  const client = {
+    ...base,
+    channels: {
+      fetch: async () => ({
+        send: async (payload: unknown) => {
+          logs.push(typeof payload === "string" ? payload : String((payload as { content?: unknown }).content));
+          return { id: "admin-msg" };
+        },
+        messages: { fetch: async () => ({ content: "Spam" }), delete: async () => undefined },
+      }),
+    },
+  } as unknown as Client;
+  try {
+    assert.equal(await unban(client, unbanInteraction(client, target)), true);
+  } finally {
+    bdd.write = original;
+  }
+
+  assert.ok(logs.some((log) => log.includes("Ban notice not queued before unban: code inconnu")), JSON.stringify(logs));
+  assert.deepEqual(await bdd.raw("SELECT id_user FROM Ban WHERE id_user = ?", [target]), []);
+});
