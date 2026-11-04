@@ -477,8 +477,10 @@ async function tryWithdrawal(
 export async function retryBanNoticeWithdrawals(client: Client, now: number = Date.now()): Promise<number> {
   const bdd = await getBddInstance();
   const day = 24 * 60 * 60 * 1000;
-  // La purge passe une fois par nuit : une ligne part à la dernière avant l'échéance.
-  const deadline = now - (BAN_NOTICE_WITHDRAWAL_RETRY_DAYS - 1) * day;
+  // La purge passe une fois par nuit : une ligne part à la dernière avant
+  // l'échéance. Une demi-journée de marge : l'heure de passage glisse avec le
+  // travail fait avant elle (purge du journal), sans faire passer les 30 jours.
+  const deadline = now - (BAN_NOTICE_WITHDRAWAL_RETRY_DAYS - 1) * day + day / 2;
   const run = { settled: 0, failure: null as unknown };
   const candidates = await bdd.raw<PendingWithdrawal>(
     "SELECT id_user, id_message FROM BanNoticeWithdrawal WHERE queued_at <= ? ORDER BY queued_at LIMIT ?",
