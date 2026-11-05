@@ -260,12 +260,12 @@ test("releaseVoiceChannel_occupiedChannel_returnsDeletedFalse", async () => {
   assert.deepEqual(reply, { status: 200, body: { released: true, deleted: false } });
 });
 
-test("releaseVoiceChannel_untrackedChannel_returns404AndNothingDeleted", async () => {
+test("releaseVoiceChannel_untrackedChannel_returns200DeletedTrueAndNothingDeleted", async () => {
   addVoice(UNTRACKED, 0, DEFAULT_VOICE_CATEGORY_ID);
 
   const reply = await call(`/internal/voice/channels/${UNTRACKED}/release`, { method: "POST" });
 
-  assert.deepEqual(reply, { status: 404, body: { error: "VOICE_CHANNEL_NOT_TRACKED" } });
+  assert.deepEqual(reply, { status: 200, body: { released: true, deleted: true } });
   assert.deepEqual(world.deletions, []);
 });
 

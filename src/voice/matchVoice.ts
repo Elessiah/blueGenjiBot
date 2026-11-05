@@ -77,7 +77,6 @@ export type VoiceErrorCode =
   | "VOICE_CATEGORY_UNAVAILABLE"
   | "VOICE_MISSING_PERMISSIONS"
   | "VOICE_DISCORD_ERROR"
-  | "VOICE_CHANNEL_NOT_TRACKED"
   | "VOICE_STORAGE_ERROR";
 
 /** Statut HTTP de chaque code. */
@@ -85,7 +84,6 @@ const STATUS_BY_CODE: Readonly<Record<VoiceErrorCode, number>> = {
   VOICE_CATEGORY_UNAVAILABLE: 503,
   VOICE_MISSING_PERMISSIONS: 503,
   VOICE_DISCORD_ERROR: 502,
-  VOICE_CHANNEL_NOT_TRACKED: 404,
   VOICE_STORAGE_ERROR: 500,
 };
 
@@ -452,6 +450,11 @@ export async function ensureTeamVoiceChannel(
 /**
  * Libère un salon suivi (`POST …/release`) : supprimé tout de suite s'il est
  * vide, sinon dès que le dernier occupant le quitte.
+ *
+ * Un salon que le bot ne suit plus (déjà supprimé, par lui ou à la main, puis
+ * oublié) est **déjà libéré** : la demande réussit (`deleted: true`) sans
+ * toucher Discord — le bot ne supprime jamais un salon qu'il ne suit pas — et
+ * le site ferme sa ligne comme pour toute libération.
  * @param client Client Discord.
  * @param channelId Identifiant validé.
  * @param now Instant courant (ms), pour les tests.
@@ -464,7 +467,7 @@ export async function releaseVoiceChannel(
 ): Promise<{ deleted: boolean }> {
   return withChannelLock(channelId, async (row) => {
     if (!row) {
-      throw new VoiceChannelError("VOICE_CHANNEL_NOT_TRACKED");
+      return { deleted: true };
     }
     await db(
       "UPDATE MatchVoiceChannel SET released_at = COALESCE(released_at, ?) WHERE channel_id = ?",

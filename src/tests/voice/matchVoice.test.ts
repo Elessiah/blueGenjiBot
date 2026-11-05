@@ -338,11 +338,22 @@ test("releaseVoiceChannel_releasedTwice_firstReleaseTimeKept", async () => {
   assert.equal(Number((await tracked())[0].released_at), T0 + HOUR);
 });
 
-test("releaseVoiceChannel_untrackedChannel_notTrackedAndNeverDeleted", async () => {
+test("releaseVoiceChannel_untrackedChannel_deletedTrueAndNeverDeleted", async () => {
   addVoice("400000000000000002", 0, CATEGORY);
 
-  await rejectsWith(releaseVoiceChannel(client, "400000000000000002", T0), "VOICE_CHANNEL_NOT_TRACKED");
+  assert.deepEqual(await releaseVoiceChannel(client, "400000000000000002", T0), { deleted: true });
   assert.ok(world.voices.has("400000000000000002"));
+  assert.deepEqual(world.deletions, []);
+});
+
+test("releaseVoiceChannel_releasedTwiceAfterDeletion_secondCallSucceeds", async () => {
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  await releaseVoiceChannel(client, channelId, T0);
+
+  const replay = await releaseVoiceChannel(client, channelId, T0 + HOUR);
+
+  assert.deepEqual(replay, { deleted: true });
+  assert.deepEqual(world.deletions, [channelId]);
 });
 
 test("releaseVoiceChannel_channelAlreadyGone_deletedAndUntracked", async () => {
