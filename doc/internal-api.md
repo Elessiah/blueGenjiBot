@@ -396,12 +396,9 @@ catégorie introuvable est nommée par son identifiant, qui est de la configurat
 - `POST /internal/voice/channels`
   - Body: `{ "key": "match:12:team:34", "name": "Nom de l'équipe" }`
   - `key` : clé d'idempotence, `[A-Za-z0-9:_-]`, 100 caractères au plus. Même
-    clé, même salon : `201 { "channelId", "guildId" }` à la création,
-    `200 { "channelId", "guildId" }` ensuite (`guildId` : serveur du salon, d'où
-    le site tire le lien `https://discord.com/channels/<guildId>/<channelId>`
-    montré aux joueurs de l'équipe ; absent s'il n'a pu être lu). Un salon
-    supprimé à la main est recréé (nouvel identifiant) ; un salon libéré mais
-    encore présent est repris et n'est plus libéré.
+    clé, même salon : `201 { "channelId" }` à la création, `200 { "channelId" }`
+    ensuite. Un salon supprimé à la main est recréé (nouvel identifiant) ; un
+    salon libéré mais encore présent est repris et n'est plus libéré.
   - `name` : nom d'équipe (200 caractères au plus) ; caractères de contrôle,
     `@`, `<`, `>`, `*`, `_`, `~`, `|`, `\`, `#` et l'accent grave retirés, coupé à 100 caractères ;
     s'il ne reste rien, « Salon d'équipe ».

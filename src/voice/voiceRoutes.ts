@@ -74,8 +74,8 @@ export function registerVoiceRoutes(app: Express, client: Client): void {
     }
     if (refuseNotReady(client, res)) { return; }
     try {
-      const { channelId, guildId, created } = await ensureTeamVoiceChannel(client, key, name);
-      res.status(created ? 201 : 200).json(guildId === null ? { channelId } : { channelId, guildId });
+      const { channelId, created } = await ensureTeamVoiceChannel(client, key, name);
+      res.status(created ? 201 : 200).json({ channelId });
     } catch (error) {
       await replyVoiceError(client, res, "POST /internal/voice/channels", error);
     }

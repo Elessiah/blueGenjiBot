@@ -120,14 +120,7 @@ export class VoiceChannelError extends Error {
 type TrackedRow = { channel_id: string; voice_key: string; created_at: number; released_at: number | null };
 
 /** Ce que le bot lit d'un salon vocal suivi : son effectif et sa suppression. */
-type VoiceHandle = {
-  id: string;
-  /** Serveur du salon : le site en tire le lien `discord.com/channels/<serveur>/<salon>`. */
-  guildId?: string;
-  parentId?: string | null;
-  members: { size: number };
-  delete(reason?: string): Promise<unknown>;
-};
+type VoiceHandle = { id: string; parentId?: string | null; members: { size: number }; delete(reason?: string): Promise<unknown> };
 
 /**
  * Un salon est-il encore un salon vocal de match : rangé dans la catégorie ?
@@ -369,7 +362,7 @@ async function withChannelLock<T>(channelId: string, task: (row: TrackedRow | nu
  * @param now Instant de création.
  * @returns L'identifiant du salon créé.
  */
-async function createInCategory(client: Client, key: string, name: string, now: number): Promise<{ channelId: string; guildId: string }> {
+async function createInCategory(client: Client, key: string, name: string, now: number): Promise<string> {
   const categoryId = voiceCategoryId();
   let category;
   try {
@@ -410,7 +403,7 @@ async function createInCategory(client: Client, key: string, name: string, now: 
     await orphan?.delete(DELETE_REASON).catch(() => undefined);
     throw error;
   }
-  return { channelId, guildId: category.guild.id };
+  return channelId;
 }
 
 /**
@@ -424,15 +417,14 @@ async function createInCategory(client: Client, key: string, name: string, now: 
  * @param key Clé d'idempotence validée.
  * @param name Nom d'équipe nettoyé.
  * @param now Instant courant (ms), pour les tests.
- * @returns L'identifiant du salon, celui de son serveur (`null` s'il n'a pu
- * être lu) et s'il vient d'être créé.
+ * @returns L'identifiant du salon et s'il vient d'être créé.
  */
 export async function ensureTeamVoiceChannel(
   client: Client,
   key: string,
   name: string,
   now: number = Date.now(),
-): Promise<{ channelId: string; guildId: string | null; created: boolean }> {
+): Promise<{ channelId: string; created: boolean }> {
   return withKeyLock(key, async () => {
     const rows = await db<TrackedRow>(
       "SELECT channel_id, voice_key, created_at, released_at FROM MatchVoiceChannel WHERE voice_key = ?",
@@ -447,11 +439,11 @@ export async function ensureTeamVoiceChannel(
           await db("UPDATE MatchVoiceChannel SET released_at = NULL, created_at = ? WHERE channel_id = ?", [now, existing.channel_id]);
           releasedIds.delete(existing.channel_id);
         }
-        return { channelId: existing.channel_id, guildId: channel.guildId ?? null, created: false };
+        return { channelId: existing.channel_id, created: false };
       }
       await untrack(existing.channel_id);
     }
-    return { ...(await createInCategory(client, key, name, now)), created: true };
+    return { channelId: await createInCategory(client, key, name, now), created: true };
   });
 }
 

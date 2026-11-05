@@ -11,7 +11,7 @@ import type { Server } from "node:http";
 import { startInternalApi } from "../../internalApi.js";
 import { getBddInstance, resetBddInstance } from "../../bdd/Bdd.js";
 import { DEFAULT_VOICE_CATEGORY_ID, resetVoiceState } from "../../voice/matchVoice.js";
-import { FAKE_GUILD_ID, addVoice, discordError, fakeVoiceClient, resetWorld, world } from "./fakeVoiceClient.js";
+import { addVoice, discordError, fakeVoiceClient, resetWorld, world } from "./fakeVoiceClient.js";
 
 /**
  * Contrat site ↔ bot des routes `/internal/voice/*` : vraies requêtes HTTP
@@ -93,22 +93,12 @@ test("createVoiceChannel_missingName_returns400", async () => {
   assert.deepEqual(reply, { status: 400, body: { error: "INVALID_VOICE_CHANNEL_NAME" } });
 });
 
-test("createVoiceChannel_firstCall_returns201WithChannelIdAndGuildId", async () => {
+test("createVoiceChannel_firstCall_returns201WithChannelId", async () => {
   const reply = await create({ key: "match:1:team:2", name: "**Les Genji**" });
 
   assert.equal(reply.status, 201);
-  assert.deepEqual(Object.keys(reply.body), ["channelId", "guildId"]);
-  assert.equal(reply.body.guildId, FAKE_GUILD_ID);
+  assert.deepEqual(Object.keys(reply.body), ["channelId"]);
   assert.equal(world.creations[0].name, "Les Genji");
-});
-
-test("createVoiceChannel_existingChannelWithoutGuildId_returns200WithoutGuildId", async () => {
-  const first = await create({ key: "match:1:team:2", name: "Les Genji" });
-  delete world.voices.get(String(first.body.channelId))!.guildId;
-
-  const second = await create({ key: "match:1:team:2", name: "Les Genji" });
-
-  assert.deepEqual(second, { status: 200, body: { channelId: first.body.channelId } });
 });
 
 test("createVoiceChannel_sameKeyAgain_returns200WithSameChannel", async () => {

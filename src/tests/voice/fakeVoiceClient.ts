@@ -9,17 +9,12 @@ import { ChannelType, type Client } from "discord.js";
 /** Salon vocal simulé. */
 export type FakeVoice = {
   id: string;
-  /** Absent : salon dont le serveur n'a pu être lu. */
-  guildId?: string;
   type: ChannelType;
   parentId: string;
   name: string;
   members: { size: number };
   delete: (reason?: string) => Promise<unknown>;
 };
-
-/** Serveur simulé, celui de la catégorie et de ses salons. */
-export const FAKE_GUILD_ID = "500000000000000001";
 
 /** Erreur Discord codée, comme une `DiscordAPIError`. */
 export function discordError(code: number, message = `Discord ${code}`): Error {
@@ -82,7 +77,6 @@ export function resetWorld(): void {
 export function addVoice(id: string, members: number, parentId: string): FakeVoice {
   const voice: FakeVoice = {
     id,
-    guildId: FAKE_GUILD_ID,
     type: ChannelType.GuildVoice,
     parentId,
     name: "salon",
@@ -106,7 +100,6 @@ export function addVoice(id: string, members: number, parentId: string): FakeVoi
  */
 export function fakeVoiceClient(categoryId: string, logChannelId: string): Client {
   const guild = {
-    id: FAKE_GUILD_ID,
     channels: {
       create: async (options: Record<string, unknown>) => {
         world.creations.push(options);
