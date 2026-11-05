@@ -7,7 +7,11 @@ Le bot expose maintenant une API interne (Express) pour l'application Next.js.
 - `INTERNAL_API_HOST` (défaut: `127.0.0.1`)
 - `INTERNAL_API_PORT` (défaut: `4400`)
 - `INTERNAL_API_TOKEN` (optionnel mais recommandé)
-- `VOICE_CATEGORY_ID` (défaut: `676735851119640577`) — catégorie des salons de match
+- `VOICE_CATEGORY_IDS` (défaut: `676735851119640577`) — catégories des salons de
+  match, séparées par des virgules ; la première qui a de la place est servie.
+  Discord plafonne une catégorie à **50 salons**, soit 25 matchs simultanés : en
+  lister plusieurs lève ce plafond. `VOICE_CATEGORY_ID` (au singulier) est encore
+  lu en repli.
 
 Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
 

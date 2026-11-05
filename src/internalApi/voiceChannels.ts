@@ -11,8 +11,19 @@ import { getBddInstance } from "@/bdd/Bdd.js";
  * Aucun pseudo n'arrive jamais ici : le site n'envoie que le nom d'une équipe.
  */
 
-/** Catégorie Discord qui accueille les salons de match. */
-const VOICE_CATEGORY_ID = process.env.VOICE_CATEGORY_ID ?? "676735851119640577";
+/**
+ * Catégories Discord qui accueillent les salons de match, dans l'ordre : la
+ * première qui a de la place est servie. Discord plafonne une catégorie à 50
+ * salons, soit 25 matchs à deux salons — en lister plusieurs
+ * (`VOICE_CATEGORY_IDS`, séparées par des virgules) lève ce plafond.
+ */
+const VOICE_CATEGORY_IDS = (process.env.VOICE_CATEGORY_IDS ?? process.env.VOICE_CATEGORY_ID ?? "676735851119640577")
+  .split(",")
+  .map((id) => id.trim())
+  .filter((id) => id.length > 0);
+
+/** Salons qu'une catégorie Discord peut contenir. */
+const CATEGORY_CHANNEL_LIMIT = 50;
 
 /** Places par salon, comme l'annonce le site. */
 const VOICE_CHANNEL_CAPACITY = 5;
@@ -173,6 +184,26 @@ function discordFailure(error: unknown): VoiceResult<never> {
   return fail("VOICE_DISCORD_ERROR");
 }
 
+/**
+ * Première catégorie configurée qui a de la place, `null` si toutes sont
+ * pleines, absentes ou illisibles. Le décompte se lit dans le cache des salons
+ * de la guilde : aucun appel à Discord.
+ */
+async function pickCategory(client: Client): Promise<CategoryChannel | null> {
+  for (const id of VOICE_CATEGORY_IDS) {
+    const channel = await client.channels.fetch(id).catch(() => null);
+    if (!channel || channel.type !== ChannelType.GuildCategory) { continue; }
+    const category = channel as CategoryChannel;
+    if (category.children.cache.size < CATEGORY_CHANNEL_LIMIT) { return category; }
+  }
+  return null;
+}
+
+/** Le salon appartient-il à l'une des catégories des matchs ? */
+function isMatchCategory(parentId: string | null): boolean {
+  return parentId !== null && VOICE_CATEGORY_IDS.includes(parentId);
+}
+
 /** Demandes en vol, par clé : deux appels simultanés ne créent qu'un salon. */
 const inFlight = new Map<string, Promise<VoiceResult<string>>>();
 
@@ -221,12 +252,12 @@ async function createOrFind(client: Client, key: string, name: string): Promise<
     await dropRow(known.channel_id).catch(() => undefined);
   }
 
-  const category = await client.channels.fetch(VOICE_CATEGORY_ID).catch(() => null);
-  if (!category || category.type !== ChannelType.GuildCategory) { return fail("VOICE_CATEGORY_UNAVAILABLE"); }
+  const category = await pickCategory(client);
+  if (!category) { return fail("VOICE_CATEGORY_UNAVAILABLE"); }
 
   let created: VoiceChannel;
   try {
-    created = await (category as CategoryChannel).guild.channels.create({
+    created = await category.guild.channels.create({
       name,
       type: ChannelType.GuildVoice,
       parent: category.id,
@@ -385,7 +416,9 @@ export async function sweepVoiceChannels(client: Client): Promise<void> {
  * vocal après le match : rendre la place aussitôt évite de la retenir 24 h.
  */
 export async function releaseEmptiedChannel(channelId: string, guildChannel: VoiceChannel): Promise<void> {
-  if (isOccupied(guildChannel)) { return; }
+  // Le bot reçoit l'événement pour tout le vocal de tous ses serveurs : deux
+  // filtres en mémoire avant de toucher la base.
+  if (!isMatchCategory(guildChannel.parentId) || isOccupied(guildChannel)) { return; }
   let known: Row | null;
   try {
     await ensureTable();
@@ -399,6 +432,11 @@ export async function releaseEmptiedChannel(channelId: string, guildChannel: Voi
     await guildChannel.delete("salon de match rendu, vidé");
     await dropRow(channelId).catch(() => undefined);
   } catch (error) {
+    // Déjà parti (le balayage l'a pris de vitesse) : la ligne se clôt quand même.
+    if (error instanceof DiscordAPIError && error.code === DISCORD_UNKNOWN_CHANNEL) {
+      await dropRow(channelId).catch(() => undefined);
+      return;
+    }
     console.error("[voice] salon vidé, suppression refusée :", (error as Error).message);
   }
 }

@@ -149,7 +149,9 @@ client.on("messageDelete", async (message) => {
   await deleteDPMsgs(client, message.id);
 });
 
-client.on("voiceStateUpdate", async (oldState) => {
+client.on("voiceStateUpdate", async (oldState, newState) => {
+  // Seul un départ compte : un micro coupé ou un partage d'écran ne vide rien.
+  if (oldState.channelId === newState.channelId) { return; }
   const left = oldState.channel;
   if (left?.type === ChannelType.GuildVoice) {
     await releaseEmptiedChannel(left.id, left);
