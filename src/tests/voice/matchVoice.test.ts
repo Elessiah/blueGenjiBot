@@ -29,7 +29,7 @@ import {
   voiceCategoryId,
   voiceErrorDetail,
 } from "../../voice/matchVoice.js";
-import { addVoice, discordError, fakeVoiceClient, resetWorld, world } from "./fakeVoiceClient.js";
+import { FAKE_GUILD_ID, addVoice, discordError, fakeVoiceClient, resetWorld, world } from "./fakeVoiceClient.js";
 
 /**
  * Salons vocaux d'équipe (MATCH-VOICE) : création idempotente, compte,
@@ -196,11 +196,26 @@ test("ensureTeamVoiceChannel_newKey_createsLimitedVoiceInCategoryAndTracksIt", a
   assert.deepEqual(await tracked(), [{ channel_id: result.channelId, voice_key: KEY, released_at: null }]);
 });
 
+test("ensureTeamVoiceChannel_newKey_returnsCategoryGuildId", async () => {
+  const result = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+
+  assert.equal(result.guildId, FAKE_GUILD_ID);
+});
+
+test("ensureTeamVoiceChannel_reusedChannelWithoutGuildId_returnsNullGuildId", async () => {
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  delete world.voices.get(channelId)!.guildId;
+
+  const again = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+
+  assert.deepEqual(again, { channelId, guildId: null, created: false });
+});
+
 test("ensureTeamVoiceChannel_sameKeyTwice_sameChannelWithoutSecondCreation", async () => {
   const first = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
   const second = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
 
-  assert.deepEqual(second, { channelId: first.channelId, created: false });
+  assert.deepEqual(second, { channelId: first.channelId, guildId: FAKE_GUILD_ID, created: false });
   assert.equal(world.creations.length, 1);
 });
 
@@ -235,7 +250,7 @@ test("ensureTeamVoiceChannel_releasedButStillThere_reclaimedAndNoLongerReleased"
   voice.members.size = 0;
   await handleVoiceStateUpdate(client, leftFrom(voice, channelId));
 
-  assert.deepEqual(again, { channelId, created: false });
+  assert.deepEqual(again, { channelId, guildId: FAKE_GUILD_ID, created: false });
   assert.equal((await tracked())[0].released_at, null);
   assert.deepEqual(world.deletions, []);
 });
@@ -338,11 +353,22 @@ test("releaseVoiceChannel_releasedTwice_firstReleaseTimeKept", async () => {
   assert.equal(Number((await tracked())[0].released_at), T0 + HOUR);
 });
 
-test("releaseVoiceChannel_untrackedChannel_notTrackedAndNeverDeleted", async () => {
+test("releaseVoiceChannel_untrackedChannel_deletedTrueAndNeverDeleted", async () => {
   addVoice("400000000000000002", 0, CATEGORY);
 
-  await rejectsWith(releaseVoiceChannel(client, "400000000000000002", T0), "VOICE_CHANNEL_NOT_TRACKED");
+  assert.deepEqual(await releaseVoiceChannel(client, "400000000000000002", T0), { deleted: true });
   assert.ok(world.voices.has("400000000000000002"));
+  assert.deepEqual(world.deletions, []);
+});
+
+test("releaseVoiceChannel_releasedTwiceAfterDeletion_secondCallSucceeds", async () => {
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  await releaseVoiceChannel(client, channelId, T0);
+
+  const replay = await releaseVoiceChannel(client, channelId, T0 + HOUR);
+
+  assert.deepEqual(replay, { deleted: true });
+  assert.deepEqual(world.deletions, [channelId]);
 });
 
 test("releaseVoiceChannel_channelAlreadyGone_deletedAndUntracked", async () => {

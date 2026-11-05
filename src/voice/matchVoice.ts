@@ -77,7 +77,6 @@ export type VoiceErrorCode =
   | "VOICE_CATEGORY_UNAVAILABLE"
   | "VOICE_MISSING_PERMISSIONS"
   | "VOICE_DISCORD_ERROR"
-  | "VOICE_CHANNEL_NOT_TRACKED"
   | "VOICE_STORAGE_ERROR";
 
 /** Statut HTTP de chaque code. */
@@ -85,7 +84,6 @@ const STATUS_BY_CODE: Readonly<Record<VoiceErrorCode, number>> = {
   VOICE_CATEGORY_UNAVAILABLE: 503,
   VOICE_MISSING_PERMISSIONS: 503,
   VOICE_DISCORD_ERROR: 502,
-  VOICE_CHANNEL_NOT_TRACKED: 404,
   VOICE_STORAGE_ERROR: 500,
 };
 
@@ -122,7 +120,14 @@ export class VoiceChannelError extends Error {
 type TrackedRow = { channel_id: string; voice_key: string; created_at: number; released_at: number | null };
 
 /** Ce que le bot lit d'un salon vocal suivi : son effectif et sa suppression. */
-type VoiceHandle = { id: string; parentId?: string | null; members: { size: number }; delete(reason?: string): Promise<unknown> };
+type VoiceHandle = {
+  id: string;
+  /** Serveur du salon : le site en tire le lien `discord.com/channels/<serveur>/<salon>`. */
+  guildId?: string;
+  parentId?: string | null;
+  members: { size: number };
+  delete(reason?: string): Promise<unknown>;
+};
 
 /**
  * Un salon est-il encore un salon vocal de match : rangé dans la catégorie ?
@@ -364,7 +369,7 @@ async function withChannelLock<T>(channelId: string, task: (row: TrackedRow | nu
  * @param now Instant de création.
  * @returns L'identifiant du salon créé.
  */
-async function createInCategory(client: Client, key: string, name: string, now: number): Promise<string> {
+async function createInCategory(client: Client, key: string, name: string, now: number): Promise<{ channelId: string; guildId: string }> {
   const categoryId = voiceCategoryId();
   let category;
   try {
@@ -405,7 +410,7 @@ async function createInCategory(client: Client, key: string, name: string, now: 
     await orphan?.delete(DELETE_REASON).catch(() => undefined);
     throw error;
   }
-  return channelId;
+  return { channelId, guildId: category.guild.id };
 }
 
 /**
@@ -419,14 +424,15 @@ async function createInCategory(client: Client, key: string, name: string, now: 
  * @param key Clé d'idempotence validée.
  * @param name Nom d'équipe nettoyé.
  * @param now Instant courant (ms), pour les tests.
- * @returns L'identifiant du salon et s'il vient d'être créé.
+ * @returns L'identifiant du salon, celui de son serveur (`null` s'il n'a pu
+ * être lu) et s'il vient d'être créé.
  */
 export async function ensureTeamVoiceChannel(
   client: Client,
   key: string,
   name: string,
   now: number = Date.now(),
-): Promise<{ channelId: string; created: boolean }> {
+): Promise<{ channelId: string; guildId: string | null; created: boolean }> {
   return withKeyLock(key, async () => {
     const rows = await db<TrackedRow>(
       "SELECT channel_id, voice_key, created_at, released_at FROM MatchVoiceChannel WHERE voice_key = ?",
@@ -441,17 +447,22 @@ export async function ensureTeamVoiceChannel(
           await db("UPDATE MatchVoiceChannel SET released_at = NULL, created_at = ? WHERE channel_id = ?", [now, existing.channel_id]);
           releasedIds.delete(existing.channel_id);
         }
-        return { channelId: existing.channel_id, created: false };
+        return { channelId: existing.channel_id, guildId: channel.guildId ?? null, created: false };
       }
       await untrack(existing.channel_id);
     }
-    return { channelId: await createInCategory(client, key, name, now), created: true };
+    return { ...(await createInCategory(client, key, name, now)), created: true };
   });
 }
 
 /**
  * Libère un salon suivi (`POST …/release`) : supprimé tout de suite s'il est
  * vide, sinon dès que le dernier occupant le quitte.
+ *
+ * Un salon que le bot ne suit plus (déjà supprimé, par lui ou à la main, puis
+ * oublié) est **déjà libéré** : la demande réussit (`deleted: true`) sans
+ * toucher Discord — le bot ne supprime jamais un salon qu'il ne suit pas — et
+ * le site ferme sa ligne comme pour toute libération.
  * @param client Client Discord.
  * @param channelId Identifiant validé.
  * @param now Instant courant (ms), pour les tests.
@@ -464,7 +475,7 @@ export async function releaseVoiceChannel(
 ): Promise<{ deleted: boolean }> {
   return withChannelLock(channelId, async (row) => {
     if (!row) {
-      throw new VoiceChannelError("VOICE_CHANNEL_NOT_TRACKED");
+      return { deleted: true };
     }
     await db(
       "UPDATE MatchVoiceChannel SET released_at = COALESCE(released_at, ?) WHERE channel_id = ?",
