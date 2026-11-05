@@ -17,14 +17,24 @@ const VOICE_CATEGORY_ID = process.env.VOICE_CATEGORY_ID ?? "676735851119640577";
 /** Places par salon, comme l'annonce le site. */
 const VOICE_CHANNEL_CAPACITY = 5;
 
-/** Un salon rendu encore occupé est supprimé au plus tard à cette échéance. */
-const RELEASED_FORCE_HOURS = 24;
+/** Un salon rendu encore occupé est supprimé au plus tard à cette échéance (site : `VOICE_BOT_RELEASED_MAX_HOURS`). */
+const RELEASED_MAX_AGE_HOURS = 24;
 
-/** Un salon jamais rendu resté vide est supprimé à cette échéance. */
-const UNRELEASED_MAX_HOURS = 48;
+/** Un salon jamais rendu resté vide est supprimé à cette échéance (site : `VOICE_BOT_UNRELEASED_MAX_HOURS`). */
+const UNRELEASED_MAX_AGE_HOURS = 48;
 
-/** Période du balayage des salons à supprimer. */
-const SWEEP_INTERVAL_MS = 5 * 60 * 1000;
+/**
+ * Passé ce délai, une ligne qu'on n'arrive pas à solder (suppression refusée
+ * sans fin) est abandonnée : mieux vaut cesser d'appeler Discord chaque passe
+ * que réessayer pour toujours (site : `VOICE_BOT_ABANDONED_MAX_HOURS`).
+ */
+const ABANDONED_MAX_AGE_HOURS = 96;
+
+/** Période du balayage des salons à supprimer (site : `VOICE_BOT_SWEEP_MINUTES`). */
+const SWEEP_INTERVAL_MS = 30 * 60 * 1000;
+
+/** Lignes examinées par passe : le reste attend la suivante, rien n'est affamé (les plus anciennes d'abord). */
+const SWEEP_BATCH = 200;
 
 /** Longueur maximale d'un nom de salon côté Discord. */
 const NAME_MAX_LENGTH = 100;
@@ -35,10 +45,16 @@ const SNOWFLAKE = /^\d{5,32}$/;
 /** Clé du site : `match:<matchId>:team:<teamId>`. */
 const VOICE_KEY = /^[A-Za-z0-9:_-]{1,120}$/;
 
+/** « Unknown Channel » : le seul refus de Discord qui prouve un salon disparu. */
+const DISCORD_UNKNOWN_CHANNEL = 10003;
+
 /** Issue d'une demande : une valeur, ou un code que le site sait lire. */
 export type VoiceResult<T> = { ok: true; value: T } | { ok: false; code: string; status: number };
 
 type Row = { channel_id: string; voice_key: string; guild_id: string; created_at: string; released_at: string | null };
+
+/** Un salon vu par Discord : trouvé, bel et bien disparu, ou injoignable — trois cas, jamais deux. */
+type Lookup = { kind: "found"; channel: VoiceChannel } | { kind: "gone" } | { kind: "error" };
 
 function fail(code: string, status = 500): VoiceResult<never> {
   return { ok: false, code, status };
@@ -81,9 +97,20 @@ async function ensureTable(): Promise<void> {
   );
 }
 
+/**
+ * Ligne d'une clé, **rendue ou non** : une clé rendue dont le salon vit encore
+ * doit être retrouvée, sinon la demande suivante créerait un second salon et
+ * perdrait le premier (`MATCH_VOICE.md` : « jamais un salon sans ligne »).
+ */
 async function rowByKey(key: string): Promise<Row | null> {
   const bdd = await getBddInstance();
-  const rows = await bdd.raw<Row>("SELECT * FROM VoiceChannel WHERE voice_key = ? AND released_at IS NULL", [key]);
+  const rows = await bdd.raw<Row>("SELECT * FROM VoiceChannel WHERE voice_key = ?", [key]);
+  return rows[0] ?? null;
+}
+
+async function rowByChannel(channelId: string): Promise<Row | null> {
+  const bdd = await getBddInstance();
+  const rows = await bdd.raw<Row>("SELECT * FROM VoiceChannel WHERE channel_id = ?", [channelId]);
   return rows[0] ?? null;
 }
 
@@ -93,33 +120,56 @@ async function dropRow(channelId: string): Promise<void> {
 }
 
 /**
- * Retrouve un salon sur Discord. `null` : il n'existe plus (supprimé à la main),
- * et la ligne qui le suivait ne vaut plus rien.
+ * Retrouve un salon sur Discord. Seul « Unknown Channel » vaut « disparu » :
+ * une coupure, un 5xx ou un rate-limit laissent un salon bien vivant, et le
+ * prendre pour disparu le ferait recréer (deux salons, le premier sans ligne).
  */
-async function fetchVoice(client: Client, channelId: string): Promise<VoiceChannel | null> {
+async function fetchVoice(client: Client, channelId: string): Promise<Lookup> {
   try {
     const channel = await client.channels.fetch(channelId);
-    return channel?.type === ChannelType.GuildVoice ? (channel as VoiceChannel) : null;
-  } catch {
-    return null;
+    if (!channel) { return { kind: "gone" }; }
+    return channel.type === ChannelType.GuildVoice ? { kind: "found", channel: channel as VoiceChannel } : { kind: "gone" };
+  } catch (error) {
+    if (error instanceof DiscordAPIError && error.code === DISCORD_UNKNOWN_CHANNEL) { return { kind: "gone" }; }
+    console.error("[voice] salon illisible :", (error as Error).message);
+    return { kind: "error" };
   }
 }
 
-/** Code d'un refus de Discord : la permission et le nom se distinguent du reste. */
+/**
+ * Code d'un refus de Discord. La permission, le nom et la catégorie pleine se
+ * distinguent du reste : les trois valent pour tous les salons, et le site
+ * arrête sa passe au lieu de redemander chaque salon toutes les minutes.
+ */
 function discordFailure(error: unknown): VoiceResult<never> {
   if (error instanceof DiscordAPIError) {
     if (error.code === 50013 || error.code === 50001) { return fail("VOICE_MISSING_PERMISSIONS"); }
     if (error.code === 50035) { return fail("INVALID_VOICE_CHANNEL_NAME", 400); }
+    // 30xxx : « Maximum number of … reached » (50 salons par catégorie, 500 par serveur).
+    if (typeof error.code === "number" && error.code >= 30000 && error.code < 31000) {
+      return fail("VOICE_CATEGORY_UNAVAILABLE");
+    }
   }
   return fail("VOICE_DISCORD_ERROR");
 }
+
+/** Demandes en vol, par clé : deux appels simultanés ne créent qu'un salon. */
+const inFlight = new Map<string, Promise<VoiceResult<string>>>();
 
 /**
  * Crée le salon vocal d'une équipe, ou rend celui qui suit déjà cette clé. Le
  * salon supprimé à la main entre-temps est recréé ; le site peut donc rappeler
  * la même clé sans fin sans multiplier les salons.
  */
-export async function ensureVoiceChannel(client: Client, key: string, name: string): Promise<VoiceResult<string>> {
+export function ensureVoiceChannel(client: Client, key: string, name: string): Promise<VoiceResult<string>> {
+  const pending = inFlight.get(key);
+  if (pending) { return pending; }
+  const run = createOrFind(client, key, name).finally(() => { inFlight.delete(key); });
+  inFlight.set(key, run);
+  return run;
+}
+
+async function createOrFind(client: Client, key: string, name: string): Promise<VoiceResult<string>> {
   if (!client.isReady()) { return fail("DISCORD_NOT_READY", 503); }
 
   let known: Row | null;
@@ -132,8 +182,22 @@ export async function ensureVoiceChannel(client: Client, key: string, name: stri
   }
 
   if (known) {
-    const existing = await fetchVoice(client, known.channel_id);
-    if (existing) { return { ok: true, value: existing.id }; }
+    const lookup = await fetchVoice(client, known.channel_id);
+    // Injoignable : on ne recrée rien, le salon existe peut-être encore.
+    if (lookup.kind === "error") { return fail("VOICE_DISCORD_ERROR"); }
+    if (lookup.kind === "found") {
+      // Ligne rendue dont le salon vit : elle se rouvre, le salon est réutilisé.
+      if (known.released_at !== null) {
+        try {
+          const bdd = await getBddInstance();
+          await bdd.raw("UPDATE VoiceChannel SET released_at = NULL, created_at = datetime('now') WHERE channel_id = ?", [known.channel_id]);
+        } catch (error) {
+          console.error("[voice] réouverture non écrite :", (error as Error).message);
+          return fail("VOICE_STORAGE_ERROR");
+        }
+      }
+      return { ok: true, value: lookup.channel.id };
+    }
     await dropRow(known.channel_id).catch(() => undefined);
   }
 
@@ -162,6 +226,9 @@ export async function ensureVoiceChannel(client: Client, key: string, name: stri
        ON CONFLICT(voice_key) DO UPDATE SET channel_id = excluded.channel_id, created_at = datetime('now'), released_at = NULL`,
       [created.id, key, created.guild.id]
     );
+    // `raw` ne rend ni `changes` ni erreur quand la base est absente : on relit.
+    const written = await rowByChannel(created.id);
+    if (!written) { throw new Error("ligne du salon absente après écriture"); }
   } catch (error) {
     // Salon sans suivi = salon jamais supprimé : on le retire tout de suite.
     console.error("[voice] suivi non écrit, salon retiré :", (error as Error).message);
@@ -175,7 +242,8 @@ export async function ensureVoiceChannel(client: Client, key: string, name: stri
 /**
  * Rend un salon au bot : supprimé s'il est vide, sinon dès qu'il se vide (au
  * plus tard 24 h après). Un salon déjà parti ou jamais suivi répond succès —
- * le site n'a rien à redemander.
+ * le site n'a rien à redemander. **Seul un salon que le bot suit est
+ * supprimé** : un identifiant périmé ne doit pas emporter un salon du serveur.
  */
 export async function releaseVoiceChannel(
   client: Client,
@@ -183,25 +251,33 @@ export async function releaseVoiceChannel(
 ): Promise<VoiceResult<{ released: true; deleted: boolean }>> {
   if (!client.isReady()) { return fail("DISCORD_NOT_READY", 503); }
 
+  let known: Row | null;
   try {
     await ensureTable();
-    const bdd = await getBddInstance();
-    await bdd.raw("UPDATE VoiceChannel SET released_at = datetime('now') WHERE channel_id = ? AND released_at IS NULL", [channelId]);
+    known = await rowByChannel(channelId);
+    if (known) {
+      const bdd = await getBddInstance();
+      await bdd.raw("UPDATE VoiceChannel SET released_at = datetime('now') WHERE channel_id = ? AND released_at IS NULL", [channelId]);
+    }
   } catch (error) {
     console.error("[voice] rendu non écrit :", (error as Error).message);
     return fail("VOICE_STORAGE_ERROR");
   }
 
-  const channel = await fetchVoice(client, channelId);
-  if (!channel) {
+  // Jamais suivi : rien à supprimer, et le site peut clore sa ligne.
+  if (!known) { return { ok: true, value: { released: true, deleted: true } }; }
+
+  const lookup = await fetchVoice(client, channelId);
+  if (lookup.kind === "error") { return fail("VOICE_DISCORD_ERROR"); }
+  if (lookup.kind === "gone") {
     await dropRow(channelId).catch(() => undefined);
     return { ok: true, value: { released: true, deleted: true } };
   }
 
-  if (channel.members.size > 0) { return { ok: true, value: { released: true, deleted: false } }; }
+  if (lookup.channel.members.size > 0) { return { ok: true, value: { released: true, deleted: false } }; }
 
   try {
-    await channel.delete("salon de match rendu");
+    await lookup.channel.delete("salon de match rendu");
   } catch (error) {
     console.error("[voice] suppression refusée par Discord :", (error as Error).message);
     return discordFailure(error);
@@ -210,49 +286,78 @@ export async function releaseVoiceChannel(
   return { ok: true, value: { released: true, deleted: true } };
 }
 
+/** Une seule passe à la fois : deux passes sur les mêmes lignes doubleraient les appels. */
+let sweeping = false;
+
 /**
  * Balayage : supprime les salons rendus devenus vides (et ceux rendus depuis
- * plus de 24 h, occupés ou non), ceux jamais rendus et vides depuis 48 h, et
- * oublie les lignes dont le salon a disparu.
+ * plus de 24 h, occupés ou non), ceux jamais rendus et vides depuis 48 h,
+ * oublie les lignes dont le salon a disparu, et abandonne au bout de 96 h une
+ * ligne qu'il n'arrive pas à solder.
  */
 export async function sweepVoiceChannels(client: Client): Promise<void> {
-  if (!client.isReady()) { return; }
-  let rows: Row[];
+  if (!client.isReady() || sweeping) { return; }
+  sweeping = true;
   try {
-    await ensureTable();
-    const bdd = await getBddInstance();
-    rows = await bdd.raw<Row>(
-      `SELECT * FROM VoiceChannel
-        WHERE released_at IS NOT NULL
-           OR created_at <= datetime('now', ?)`,
-      [`-${UNRELEASED_MAX_HOURS} hour`]
-    );
-  } catch (error) {
-    console.error("[voice] balayage : suivi illisible :", (error as Error).message);
-    return;
-  }
-
-  for (const row of rows) {
-    const channel = await fetchVoice(client, row.channel_id);
-    if (!channel) {
-      await dropRow(row.channel_id).catch(() => undefined);
-      continue;
-    }
-    const releasedAt = row.released_at ? Date.parse(`${row.released_at.replace(" ", "T")}Z`) : null;
-    const forced = releasedAt !== null && Number.isFinite(releasedAt)
-      && Date.now() - releasedAt >= RELEASED_FORCE_HOURS * 3600_000;
-    if (channel.members.size > 0 && !forced) { continue; }
+    let rows: Row[];
     try {
-      await channel.delete("salon de match vide");
-      await dropRow(row.channel_id).catch(() => undefined);
+      await ensureTable();
+      const bdd = await getBddInstance();
+      rows = await bdd.raw<Row>(
+        `SELECT channel_id, voice_key, guild_id, created_at, released_at FROM VoiceChannel
+          WHERE released_at IS NOT NULL
+             OR created_at <= datetime('now', ?)
+          ORDER BY created_at
+          LIMIT ${SWEEP_BATCH}`,
+        [`-${UNRELEASED_MAX_AGE_HOURS} hour`]
+      );
     } catch (error) {
-      console.error("[voice] balayage : suppression refusée :", (error as Error).message);
+      console.error("[voice] balayage : suivi illisible :", (error as Error).message);
+      return;
     }
+
+    for (const row of rows) {
+      const ageMs = Date.now() - sqliteTime(row.created_at);
+      if (Number.isFinite(ageMs) && ageMs >= ABANDONED_MAX_AGE_HOURS * 3600_000) {
+        console.warn(`[voice] ligne abandonnée après ${ABANDONED_MAX_AGE_HOURS} h : salon ${row.channel_id}`);
+        await dropRow(row.channel_id).catch(() => undefined);
+        continue;
+      }
+
+      const lookup = await fetchVoice(client, row.channel_id);
+      if (lookup.kind === "error") { continue; }
+      if (lookup.kind === "gone") {
+        await dropRow(row.channel_id).catch(() => undefined);
+        continue;
+      }
+
+      const releasedMs = row.released_at === null ? null : Date.now() - sqliteTime(row.released_at);
+      const forced = releasedMs !== null && Number.isFinite(releasedMs) && releasedMs >= RELEASED_MAX_AGE_HOURS * 3600_000;
+      if (lookup.channel.members.size > 0 && !forced) { continue; }
+      try {
+        await lookup.channel.delete("salon de match vide");
+        await dropRow(row.channel_id).catch(() => undefined);
+      } catch (error) {
+        console.error("[voice] balayage : suppression refusée :", (error as Error).message);
+      }
+    }
+  } finally {
+    sweeping = false;
   }
 }
 
-/** Démarre le balayage périodique ; l'intervalle ne retient pas le processus. */
+/** Heure SQLite (`datetime('now')`, UTC, sans fuseau) en millisecondes. */
+function sqliteTime(value: string): number {
+  return Date.parse(`${value.replace(" ", "T")}Z`);
+}
+
+/**
+ * Démarre le balayage périodique, après une première passe au démarrage (un
+ * redémarrage ne doit pas laisser un salon vide attendre la demi-heure).
+ * L'intervalle ne retient pas le processus.
+ */
 export function startVoiceSweep(client: Client): NodeJS.Timeout {
+  void sweepVoiceChannels(client);
   const timer = setInterval(() => { void sweepVoiceChannels(client); }, SWEEP_INTERVAL_MS);
   timer.unref?.();
   return timer;

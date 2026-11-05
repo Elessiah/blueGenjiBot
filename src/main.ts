@@ -31,6 +31,10 @@ const client = new Client({
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
+    // Sans cet intent, `channel.members` d'un salon vocal est toujours vide :
+    // le bot supprimerait un salon de match encore occupé (voir
+    // `internalApi/voiceChannels.ts`). Intent non privilégié.
+    GatewayIntentBits.GuildVoiceStates,
   ],
 });
 

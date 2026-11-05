@@ -44,11 +44,18 @@ jamais envoyé : seul un nom d'équipe.
 
 - `POST /internal/voice/channels/:id/release`
   - Réponse: `{ "released": true, "deleted": true|false }` — supprimé s'il est
-    vide, sinon dès qu'il se vide (balayage toutes les 5 min, au plus tard 24 h
-    après le rendu). Un salon déjà parti ou jamais suivi répond succès.
+    vide, sinon dès qu'il se vide (balayage toutes les 30 min, au plus tard 24 h
+    après le rendu). Un salon déjà parti ou jamais suivi répond succès **sans
+    rien supprimer** : seul un salon que le bot suit est détruit.
   - Refus: `400 INVALID_CHANNEL_ID`, puis les mêmes codes que la création.
 
-Un salon jamais rendu resté vide est supprimé au bout de 48 h. Le suivi tient
+Un salon jamais rendu resté vide est supprimé au bout de 48 h, et une ligne
+qu'on n'arrive pas à solder est abandonnée au bout de 96 h. Une catégorie pleine
+(50 salons) répond `VOICE_CATEGORY_UNAVAILABLE`, qui arrête la passe du site au
+lieu de faire redemander chaque salon toutes les minutes. Le bot a besoin de
+l'intent `GuildVoiceStates`, sans lequel un salon occupé passerait pour vide.
+
+Le suivi tient
 dans la table SQLite `VoiceChannel` (identifiant du salon, clé du site, heures) :
 ni membres, ni effectif.
 
