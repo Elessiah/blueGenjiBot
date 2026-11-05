@@ -34,7 +34,7 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
 
 Le site ouvre un salon vocal de 5 places par équipe 15 min avant un match
 (`docs/features/MATCH_VOICE.md` du site) et le rend quand le match est fini. Le
-bot doit avoir **Gérer les salons** sur `VOICE_CATEGORY_ID`. Aucun pseudo n'est
+bot doit avoir **Gérer les salons** sur chaque catégorie de `VOICE_CATEGORY_IDS`. Aucun pseudo n'est
 jamais envoyé : seul un nom d'équipe.
 
 - `POST /internal/voice/channels`
@@ -54,8 +54,8 @@ jamais envoyé : seul un nom d'équipe.
   - Refus: `400 INVALID_CHANNEL_ID`, puis les mêmes codes que la création.
 
 Un salon jamais rendu resté vide est supprimé au bout de 48 h, et une ligne
-qu'on n'arrive pas à solder est abandonnée au bout de 96 h. Une catégorie pleine
-(50 salons) répond `VOICE_CATEGORY_UNAVAILABLE`, qui arrête la passe du site au
+qu'on n'arrive pas à solder est abandonnée au bout de 96 h. Toutes les catégories pleines
+(50 salons chacune) répondent `VOICE_CATEGORY_UNAVAILABLE`, qui arrête la passe du site au
 lieu de faire redemander chaque salon toutes les minutes. Le bot a besoin de
 l'intent `GuildVoiceStates`, sans lequel un salon occupé passerait pour vide.
 
