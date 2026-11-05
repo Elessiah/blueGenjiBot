@@ -3,7 +3,9 @@ import {
   Attachment,
   ChatInputCommandInteraction,
   Client,
+  ChannelType,
   GatewayIntentBits,
+  Options,
   Message,
   TextChannel,
 } from "discord.js";
@@ -22,6 +24,7 @@ import { sendLog } from "./safe/sendLog.js";
 import { safeReply } from "./safe/safeReply.js";
 import { updateCommands } from "./utils/updateCommands.js";
 import { startInternalApi } from "@/internalApi.js";
+import { releaseEmptiedChannel } from "@/internalApi/voiceChannels.js";
 import { recordDailySnapshot } from "@/snapshots/dailySnapshot.js";
 import { sendDatabaseBackup } from "@/backup/weeklyBackup.js";
 
@@ -36,6 +39,14 @@ const client = new Client({
     // `internalApi/voiceChannels.ts`). Intent non privilégié.
     GatewayIntentBits.GuildVoiceStates,
   ],
+  // discord.js n'enlève jamais un état vocal quand le membre quitte le vocal,
+  // et ses balayages par défaut ne touchent que les fils : sans ceci, le cache
+  // des états croît avec chaque utilisateur passé en vocal sur n'importe quel
+  // serveur, sans fin. On jette ceux qui ne sont plus dans un salon.
+  sweepers: {
+    ...Options.DefaultSweeperSettings,
+    voiceStates: { interval: 600, filter: () => (state) => state.channelId === null },
+  },
 });
 
 let internalApiServer: ReturnType<typeof startInternalApi> | null = null;
@@ -136,6 +147,13 @@ client.on("messageUpdate", async (oldMessage, newMessage) => {
 
 client.on("messageDelete", async (message) => {
   await deleteDPMsgs(client, message.id);
+});
+
+client.on("voiceStateUpdate", async (oldState) => {
+  const left = oldState.channel;
+  if (left?.type === ChannelType.GuildVoice) {
+    await releaseEmptiedChannel(left.id, left);
+  }
 });
 
 client.on("clientReady", async () => {

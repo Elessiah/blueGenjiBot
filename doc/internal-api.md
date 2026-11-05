@@ -61,3 +61,10 @@ ni membres, ni effectif.
 
 Toute autre route sous `/internal` répond `404 INTERNAL_ROUTE_NOT_FOUND` en JSON,
 pour que le site distingue un écart de version d'une panne.
+
+### Cycle de vie d'un salon
+
+- Rendu et vide : supprimé aussitôt.
+- Rendu et occupé : supprimé dès qu'il se vide (événement voiceStateUpdate), au plus tard 24 h après le rendu.
+- Jamais rendu et vide : supprimé au bout de 48 h.
+- Ligne insoluble : une dernière tentative forcée à 96 h, puis la ligne est abandonnée (journalisée).

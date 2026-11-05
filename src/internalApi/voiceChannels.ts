@@ -83,7 +83,18 @@ export function readChannelId(raw: unknown): string | null {
   return typeof raw === "string" && SNOWFLAKE.test(raw) ? raw : null;
 }
 
-async function ensureTable(): Promise<void> {
+/** La table ne se déclare qu'une fois par processus, pas à chaque requête du site. */
+let tableReady: Promise<void> | null = null;
+
+function ensureTable(): Promise<void> {
+  tableReady ??= createTable().catch((error: unknown) => {
+    tableReady = null;
+    throw error;
+  });
+  return tableReady;
+}
+
+async function createTable(): Promise<void> {
   const bdd = await getBddInstance();
   await bdd.raw(
     `CREATE TABLE IF NOT EXISTS VoiceChannel
@@ -134,6 +145,15 @@ async function fetchVoice(client: Client, channelId: string): Promise<Lookup> {
     console.error("[voice] salon illisible :", (error as Error).message);
     return { kind: "error" };
   }
+}
+
+/**
+ * Un salon est-il occupé ? Lu sur les états vocaux de la guilde plutôt que par
+ * `channel.members`, qui croise le cache des membres : un état dont le membre
+ * n'est pas en cache y manque, et un salon occupé passerait pour vide.
+ */
+function isOccupied(channel: VoiceChannel): boolean {
+  return channel.guild.voiceStates.cache.some((state) => state.channelId === channel.id);
 }
 
 /**
@@ -274,7 +294,7 @@ export async function releaseVoiceChannel(
     return { ok: true, value: { released: true, deleted: true } };
   }
 
-  if (lookup.channel.members.size > 0) { return { ok: true, value: { released: true, deleted: false } }; }
+  if (isOccupied(lookup.channel)) { return { ok: true, value: { released: true, deleted: false } }; }
 
   try {
     await lookup.channel.delete("salon de match rendu");
@@ -318,31 +338,68 @@ export async function sweepVoiceChannels(client: Client): Promise<void> {
 
     for (const row of rows) {
       const ageMs = Date.now() - sqliteTime(row.created_at);
-      if (Number.isFinite(ageMs) && ageMs >= ABANDONED_MAX_AGE_HOURS * 3600_000) {
-        console.warn(`[voice] ligne abandonnée après ${ABANDONED_MAX_AGE_HOURS} h : salon ${row.channel_id}`);
-        await dropRow(row.channel_id).catch(() => undefined);
-        continue;
-      }
+      const abandoned = Number.isFinite(ageMs) && ageMs >= ABANDONED_MAX_AGE_HOURS * 3600_000;
 
       const lookup = await fetchVoice(client, row.channel_id);
-      if (lookup.kind === "error") { continue; }
+      if (lookup.kind === "error") {
+        // Injoignable depuis 96 h : on cesse de le relire à chaque passe.
+        if (abandoned) {
+          console.warn(`[voice] ligne abandonnée après ${ABANDONED_MAX_AGE_HOURS} h (salon illisible) : ${row.channel_id}`);
+          await dropRow(row.channel_id).catch(() => undefined);
+        }
+        continue;
+      }
       if (lookup.kind === "gone") {
         await dropRow(row.channel_id).catch(() => undefined);
         continue;
       }
 
       const releasedMs = row.released_at === null ? null : Date.now() - sqliteTime(row.released_at);
-      const forced = releasedMs !== null && Number.isFinite(releasedMs) && releasedMs >= RELEASED_MAX_AGE_HOURS * 3600_000;
-      if (lookup.channel.members.size > 0 && !forced) { continue; }
+      const forced = abandoned
+        || (releasedMs !== null && Number.isFinite(releasedMs) && releasedMs >= RELEASED_MAX_AGE_HOURS * 3600_000);
+      if (isOccupied(lookup.channel) && !forced) { continue; }
       try {
-        await lookup.channel.delete("salon de match vide");
+        await lookup.channel.delete(abandoned ? "salon de match abandonné" : "salon de match vide");
         await dropRow(row.channel_id).catch(() => undefined);
       } catch (error) {
         console.error("[voice] balayage : suppression refusée :", (error as Error).message);
+        // Une ligne qu'on n'arrive pas à solder passé 96 h cesse d'être
+        // redemandée : une tentative forcée a eu lieu juste au-dessus, et
+        // réessayer chaque passe jusqu'à la fin des temps coûte plus que le
+        // salon qui reste. L'abandon est journalisé, jamais silencieux.
+        if (abandoned) {
+          console.warn(`[voice] ligne abandonnée après ${ABANDONED_MAX_AGE_HOURS} h : salon ${row.channel_id}`);
+          await dropRow(row.channel_id).catch(() => undefined);
+        }
       }
     }
   } finally {
     sweeping = false;
+  }
+}
+
+/**
+ * Un joueur vient de quitter un salon : si ce salon est rendu et désormais
+ * vide, il part tout de suite, sans attendre la demi-heure du balayage. Une
+ * catégorie Discord ne tient que 50 salons, et les joueurs restent souvent en
+ * vocal après le match : rendre la place aussitôt évite de la retenir 24 h.
+ */
+export async function releaseEmptiedChannel(channelId: string, guildChannel: VoiceChannel): Promise<void> {
+  if (isOccupied(guildChannel)) { return; }
+  let known: Row | null;
+  try {
+    await ensureTable();
+    known = await rowByChannel(channelId);
+  } catch (error) {
+    console.error("[voice] salon vidé, suivi illisible :", (error as Error).message);
+    return;
+  }
+  if (!known || known.released_at === null) { return; }
+  try {
+    await guildChannel.delete("salon de match rendu, vidé");
+    await dropRow(channelId).catch(() => undefined);
+  } catch (error) {
+    console.error("[voice] salon vidé, suppression refusée :", (error as Error).message);
   }
 }
 
