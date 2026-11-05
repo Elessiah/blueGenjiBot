@@ -10,6 +10,14 @@ import { recordEvent, getBacklog, subscribe } from "@/feed/feedBus.js";
 import { getSnapshotsBetween } from "@/snapshots/dailySnapshot.js";
 import { listModules, isValidModule, setModuleEnabled, MODULE_KEYS, type ModuleKey } from "@/modules/moduleGuard.js";
 import { pctDelta, absDelta, deterministicColor } from "@/internalApi/helpers.js";
+import {
+  ensureVoiceChannel,
+  releaseVoiceChannel,
+  startVoiceSweep,
+  sanitizeChannelName,
+  readVoiceKey,
+  readChannelId,
+} from "@/internalApi/voiceChannels.js";
 
 function authorize(req: Request, res: Response, next: NextFunction): void {
   const expectedToken = process.env.INTERNAL_API_TOKEN;
@@ -546,6 +554,58 @@ export function startInternalApi(client: Client) {
     } catch (error) {
       res.status(500).json({ error: (error as Error).message || "INTERNAL_MODULE_TOGGLE_ERROR" });
     }
+  });
+
+  // ── Salons vocaux d'équipe (site : docs/features/MATCH_VOICE.md) ──────────
+  app.post("/internal/voice/channels", async (req: Request, res: Response) => {
+    const key = readVoiceKey(req.body?.key);
+    const name = sanitizeChannelName(req.body?.name);
+    if (!key) {
+      res.status(400).json({ error: "INVALID_PAYLOAD" });
+      return;
+    }
+    if (!name) {
+      res.status(400).json({ error: "INVALID_VOICE_CHANNEL_NAME" });
+      return;
+    }
+    try {
+      const outcome = await ensureVoiceChannel(client, key, name);
+      if (!outcome.ok) {
+        res.status(outcome.status).json({ error: outcome.code });
+        return;
+      }
+      res.json({ channelId: outcome.value });
+    } catch (error) {
+      console.error("[voice] création en échec :", (error as Error).message);
+      res.status(500).json({ error: "VOICE_INTERNAL_ERROR" });
+    }
+  });
+
+  app.post("/internal/voice/channels/:id/release", async (req: Request, res: Response) => {
+    const channelId = readChannelId(String(req.params.id || ""));
+    if (!channelId) {
+      res.status(400).json({ error: "INVALID_CHANNEL_ID" });
+      return;
+    }
+    try {
+      const outcome = await releaseVoiceChannel(client, channelId);
+      if (!outcome.ok) {
+        res.status(outcome.status).json({ error: outcome.code });
+        return;
+      }
+      res.json(outcome.value);
+    } catch (error) {
+      console.error("[voice] rendu en échec :", (error as Error).message);
+      res.status(500).json({ error: "VOICE_INTERNAL_ERROR" });
+    }
+  });
+
+  startVoiceSweep(client);
+
+  // Une route interne absente répond un code, pas la page HTML d'Express : le
+  // site distingue ainsi un écart de version d'une panne du canal.
+  app.use("/internal", (_req: Request, res: Response) => {
+    res.status(404).json({ error: "INTERNAL_ROUTE_NOT_FOUND" });
   });
 
   const port = Number(process.env.INTERNAL_API_PORT || 4400);

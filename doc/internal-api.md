@@ -7,6 +7,7 @@ Le bot expose maintenant une API interne (Express) pour l'application Next.js.
 - `INTERNAL_API_HOST` (défaut: `127.0.0.1`)
 - `INTERNAL_API_PORT` (défaut: `4400`)
 - `INTERNAL_API_TOKEN` (optionnel mais recommandé)
+- `VOICE_CATEGORY_ID` (défaut: `676735851119640577`) — catégorie des salons de match
 
 Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
 
@@ -24,3 +25,32 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
 - `POST /internal/log`
   - Body: `{ "message": "..." }`
   - Relaye un log vers `sendLog()`.
+
+### Salons vocaux d'équipe
+
+Le site ouvre un salon vocal de 5 places par équipe 15 min avant un match
+(`docs/features/MATCH_VOICE.md` du site) et le rend quand le match est fini. Le
+bot doit avoir **Gérer les salons** sur `VOICE_CATEGORY_ID`. Aucun pseudo n'est
+jamais envoyé : seul un nom d'équipe.
+
+- `POST /internal/voice/channels`
+  - Body: `{ "key": "match:12:team:34", "name": "Les Bleus" }`
+  - Réponse: `{ "channelId": "123..." }` — même `key` = même salon ; un salon
+    supprimé à la main est recréé.
+  - Refus: `400 INVALID_PAYLOAD` (clé illisible), `400 INVALID_VOICE_CHANNEL_NAME`,
+    `503 DISCORD_NOT_READY`, `500 VOICE_CATEGORY_UNAVAILABLE`,
+    `500 VOICE_MISSING_PERMISSIONS`, `500 VOICE_DISCORD_ERROR`,
+    `500 VOICE_STORAGE_ERROR`, `500 VOICE_INTERNAL_ERROR`.
+
+- `POST /internal/voice/channels/:id/release`
+  - Réponse: `{ "released": true, "deleted": true|false }` — supprimé s'il est
+    vide, sinon dès qu'il se vide (balayage toutes les 5 min, au plus tard 24 h
+    après le rendu). Un salon déjà parti ou jamais suivi répond succès.
+  - Refus: `400 INVALID_CHANNEL_ID`, puis les mêmes codes que la création.
+
+Un salon jamais rendu resté vide est supprimé au bout de 48 h. Le suivi tient
+dans la table SQLite `VoiceChannel` (identifiant du salon, clé du site, heures) :
+ni membres, ni effectif.
+
+Toute autre route sous `/internal` répond `404 INTERNAL_ROUTE_NOT_FOUND` en JSON,
+pour que le site distingue un écart de version d'une panne.
