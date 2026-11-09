@@ -172,7 +172,9 @@ let lastPermissionAlertAt = Number.NEGATIVE_INFINITY;
  * Refus valant pour tous les salons (limite de débit ou panne de Discord, permission,
  * catégorie) : chaque passe du site les reçoit de nouveau, ils ne vont au salon de logs
  * qu'une fois par code et par `BOT_WIDE_LOG_COOLDOWN_MS` — sans quoi le journal ajouterait
- * des appels à Discord pendant sa propre limite de débit.
+ * des appels à Discord pendant sa propre limite de débit. Un refus propre au salon y va une
+ * fois par code **et par détail** (code de Discord) dans le même délai : un refus qui touche
+ * chaque salon (limite de salons du serveur) n'inonde pas le salon de logs.
  */
 const BOT_WIDE_VOICE_CODES: ReadonlySet<VoiceErrorCode> = new Set<VoiceErrorCode>([
   "VOICE_DISCORD_UNAVAILABLE",
@@ -180,24 +182,33 @@ const BOT_WIDE_VOICE_CODES: ReadonlySet<VoiceErrorCode> = new Set<VoiceErrorCode
   "VOICE_CATEGORY_UNAVAILABLE",
 ]);
 
-/** Délai entre deux journaux Discord d'un même refus valant pour tous les salons. */
+/** Délai entre deux journaux Discord d'un même refus. */
 export const BOT_WIDE_LOG_COOLDOWN_MS = 10 * 60 * 1000;
 
-/** Dernier journal Discord de chaque refus valant pour tous les salons. */
-const botWideLoggedAt = new Map<VoiceErrorCode, number>();
+/** Refus distincts retenus au plus : le plus ancien est oublié au-delà (mémoire bornée). */
+const LOGGED_REFUSALS_MAX = 100;
+
+/** Dernier journal Discord de chaque refus (code, ou code et détail pour un refus propre au salon). */
+const botWideLoggedAt = new Map<string, number>();
 
 /**
- * Le refus doit-il partir au salon de logs ? Toujours pour un refus propre au salon ; une
- * fois par `BOT_WIDE_LOG_COOLDOWN_MS` et par code pour un refus valant pour tous les salons.
+ * Le refus doit-il partir au salon de logs ? Une fois par `BOT_WIDE_LOG_COOLDOWN_MS` : par code
+ * pour un refus valant pour tous les salons, par code et détail pour un refus propre au salon.
  * @param code Code du refus.
  * @param now Instant courant (ms), pour les tests.
+ * @param detail Détail sûr du refus (`voiceErrorDetail`) : deux refus différents partent tous deux.
  * @returns `true` s'il faut journaliser sur Discord.
  */
-export function shouldLogVoiceError(code: VoiceErrorCode, now: number = Date.now()): boolean {
-  if (!BOT_WIDE_VOICE_CODES.has(code)) { return true; }
-  const last = botWideLoggedAt.get(code);
+export function shouldLogVoiceError(code: VoiceErrorCode, now: number = Date.now(), detail: string = ""): boolean {
+  const key = BOT_WIDE_VOICE_CODES.has(code) ? code : `${code}|${detail}`;
+  const last = botWideLoggedAt.get(key);
   if (last !== undefined && now - last < BOT_WIDE_LOG_COOLDOWN_MS) { return false; }
-  botWideLoggedAt.set(code, now);
+  botWideLoggedAt.delete(key);
+  if (botWideLoggedAt.size >= LOGGED_REFUSALS_MAX) {
+    const oldest = botWideLoggedAt.keys().next();
+    if (!oldest.done) { botWideLoggedAt.delete(oldest.value); }
+  }
+  botWideLoggedAt.set(key, now);
   return true;
 }
 
@@ -300,6 +311,20 @@ function causeCode(error: unknown): string | number | null {
 }
 
 /**
+ * Coupure réseau passagère vers Discord ? Lire la chaîne `cause` peut lever (accesseur,
+ * Proxy révoqué) : illisible vaut « non », jamais une exception sur un chemin d'erreur.
+ * @param error Erreur capturée.
+ * @returns `true` pour une coupure DNS/TCP transitoire.
+ */
+function transientNetwork(error: unknown): boolean {
+  try {
+    return isTransientNetworkError(error);
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Désigne une erreur pour le journal par son type et son code : le message d'une
  * erreur Discord ou SQLite peut recopier une valeur reçue (nom d'équipe, clé).
  * Un `VoiceChannelError` est rendu par son code et son message (déjà sûr ; le code
@@ -317,7 +342,7 @@ export function voiceErrorDetail(error: unknown): string {
   const code = causeCode(error);
   const status = safeErrorStatus(error);
   const shownStatus = status === null ? "" : ", statut " + String(status);
-  const network = isTransientNetworkError(error) ? ", réseau" : "";
+  const network = transientNetwork(error) ? ", réseau" : "";
   return `${safeErrorKind(error)}, code ${code ?? "inconnu"}${shownStatus}${network}`;
 }
 
@@ -345,10 +370,13 @@ async function toVoiceError(client: Client, error: unknown, action: VoiceErrorCo
     }
     return new VoiceChannelError("VOICE_MISSING_PERMISSIONS", action, error);
   }
-  // Limite de débit ou panne de Discord (sans code JSON) : tous les salons suivants
-  // échoueraient de même, le site arrête sa passe au lieu d'appeler pour chacun.
+  // Limite de débit, panne de Discord (sans code JSON), coupure réseau ou délai dépassé (sans
+  // statut) : tous les salons suivants échoueraient de même, le site arrête sa passe au lieu
+  // d'appeler pour chacun.
   const status = safeErrorStatus(error);
-  if (code === null && status !== null && (status === 429 || status >= 500)) {
+  const overloaded = status !== null && (status === 429 || status >= 500);
+  const unreachable = status === null && (transientNetwork(error) || safeErrorKind(error) === "AbortError");
+  if (code === null && (overloaded || unreachable)) {
     return new VoiceChannelError("VOICE_DISCORD_UNAVAILABLE", action, error);
   }
   return new VoiceChannelError("VOICE_DISCORD_ERROR", action, error);
@@ -557,13 +585,16 @@ export async function ensureTeamVoiceChannel(
  * vide, sinon dès que le dernier occupant le quitte.
  *
  * Un salon que le bot ne suit plus (déjà supprimé, par lui ou à la main, puis
- * oublié) est **déjà libéré** : la demande réussit (`deleted: true`) sans
- * toucher Discord — le bot ne supprime jamais un salon qu'il ne suit pas — et
- * le site ferme sa ligne comme pour toute libération.
+ * oublié) est **déjà libéré** : la demande réussit sans toucher Discord — le bot
+ * ne supprime jamais un salon qu'il ne suit pas — et le site ferme sa ligne
+ * comme pour toute libération.
+ *
+ * `deleted` reste interne au bot : la route ne répond que `{ released: true }`,
+ * jamais si le salon était vide (le site n'apprend rien de son occupation).
  * @param client Client Discord.
  * @param channelId Identifiant validé.
  * @param now Instant courant (ms), pour les tests.
- * @returns `deleted` : le salon n'existe plus.
+ * @returns `deleted` (usage interne, jamais rendu au site) : le salon n'existe plus.
  */
 export async function releaseVoiceChannel(
   client: Client,

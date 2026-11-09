@@ -140,10 +140,22 @@ test("createVoiceChannel_discordRateLimitedTwice_loggedOnceOnDiscord", async (t)
   assert.deepEqual(warned.mock.calls.map((c) => c.arguments), [["[voice] POST /internal/voice/channels : VOICE_DISCORD_UNAVAILABLE"]]);
 });
 
-test("createVoiceChannel_channelSpecificErrorTwice_loggedTwiceOnDiscord", async () => {
-  world.createError = discordError(50035, "Invalid Form Body");
+test("createVoiceChannel_sameChannelErrorTwice_loggedOnceOnDiscord", async (t) => {
+  // Même refus pour chaque salon (limite de salons du serveur) : une ligne au salon de logs, le reste à pm2.
+  const warned = t.mock.method(console, "warn", () => undefined);
+  world.createError = discordError(30013, "Maximum number of guild channels reached");
 
   await create({ key: "match:1:team:2", name: "Les Genji" });
+  await create({ key: "match:1:team:3", name: "Les Genji" });
+
+  assert.equal(world.logs.length, 1);
+  assert.deepEqual(warned.mock.calls.map((c) => c.arguments), [["[voice] POST /internal/voice/channels : VOICE_DISCORD_ERROR"]]);
+});
+
+test("createVoiceChannel_differentChannelErrors_eachLoggedOnDiscord", async () => {
+  world.createError = discordError(30013, "Maximum number of guild channels reached");
+  await create({ key: "match:1:team:2", name: "Les Genji" });
+  world.createError = discordError(50035, "Invalid Form Body");
   await create({ key: "match:1:team:3", name: "Les Genji" });
 
   assert.equal(world.logs.length, 2);

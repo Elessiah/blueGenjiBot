@@ -37,9 +37,11 @@ async function replyVoiceError(client: Client, res: Response, route: string, err
     res.status(error.status).json({ error: error.code });
     if (error.status >= 500) {
       // Message fait du contexte et du code de la cause (constructeur) : jamais un texte reçu.
-      // Un refus valant pour tous les salons ne part qu'une fois par délai ; les suivants vont à pm2.
-      if (shouldLogVoiceError(error.code)) {
-        await sendLog(client, `${route} : ${voiceErrorDetail(error)}`);
+      // Un même refus ne part qu'une fois par délai (par code, et par détail s'il est propre au
+      // salon) ; les suivants vont à pm2.
+      const detail = voiceErrorDetail(error);
+      if (shouldLogVoiceError(error.code, Date.now(), detail)) {
+        await sendLog(client, `${route} : ${detail}`);
       } else {
         console.warn(`[voice] ${route} : ${error.code}`);
       }

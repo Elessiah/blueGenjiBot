@@ -393,7 +393,9 @@ que par son code (`code 50035, statut 400`) et l'opération en cours, jamais par
 message de Discord ou de SQLite, qui peut recopier le nom ou la clé reçus (une
 catégorie introuvable est nommée par son identifiant, qui est de la configuration). Un refus valant pour
 tous les salons (`VOICE_DISCORD_UNAVAILABLE`, `VOICE_MISSING_PERMISSIONS`,
-`VOICE_CATEGORY_UNAVAILABLE`) n'y part qu'une fois par code et par 10 minutes ; les
+`VOICE_CATEGORY_UNAVAILABLE`) n'y part qu'une fois par code et par 10 minutes, un refus
+propre au salon une fois par code **et** par code de Discord dans le même délai (un refus
+qui touche chaque salon, comme la limite de salons du serveur, n'inonde pas le salon) ; les
 suivants ne vont qu'à pm2 (`[voice] <route> : <code>`), pour ne pas ajouter d'appels à
 Discord pendant sa limite de débit.
 
@@ -413,8 +415,8 @@ Discord pendant sa limite de débit.
     `503 DISCORD_NOT_READY`, `503 VOICE_CATEGORY_UNAVAILABLE` (catégorie
     introuvable), `503 VOICE_MISSING_PERMISSIONS` (permission refusée : une
     alerte au staff, au plus une par heure), `503 VOICE_DISCORD_UNAVAILABLE`
-    (limite de débit ou panne de Discord, sans code JSON : vaut pour tous les
-    salons, le site arrête sa passe), `502 VOICE_DISCORD_ERROR` (autre refus de
+    (limite de débit ou panne de Discord sans code JSON, coupure réseau ou délai
+    dépassé : vaut pour tous les salons, le site arrête sa passe), `502 VOICE_DISCORD_ERROR` (autre refus de
     Discord, propre à ce salon), `500 VOICE_STORAGE_ERROR`.
 
 - `POST /internal/voice/channels/:channelId/release`

@@ -333,6 +333,34 @@ test("ensureTeamVoiceChannel_discordRateLimited_discordUnavailable503", async ()
     error instanceof VoiceChannelError && error.code === "VOICE_DISCORD_UNAVAILABLE" && error.status === 503);
 });
 
+test("ensureTeamVoiceChannel_networkFailureWithoutStatus_discordUnavailable", async () => {
+  // Discord injoignable : tous les salons échoueraient de même, le site arrête sa passe.
+  world.createError = Object.assign(new TypeError("fetch failed"), { cause: Object.assign(new Error("reset"), { code: "ECONNRESET" }) });
+
+  await rejectsWith(ensureTeamVoiceChannel(client, KEY, "Les Genji", T0), "VOICE_DISCORD_UNAVAILABLE");
+});
+
+test("ensureTeamVoiceChannel_restTimeoutAbort_discordUnavailable", async () => {
+  const abort = new Error("This operation was aborted");
+  abort.name = "AbortError";
+  world.createError = abort;
+
+  await rejectsWith(ensureTeamVoiceChannel(client, KEY, "Les Genji", T0), "VOICE_DISCORD_UNAVAILABLE");
+});
+
+test("ensureTeamVoiceChannel_unreadableCauseGetter_codedDiscordError", async () => {
+  // Une chaîne `cause` illisible ne fait jamais lever le chemin d'erreur : le refus reste codé.
+  const error = new Error("boom");
+  Object.defineProperty(error, "cause", {
+    get() {
+      throw new Error("revoked");
+    },
+  });
+  world.createError = error;
+
+  await rejectsWith(ensureTeamVoiceChannel(client, KEY, "Les Genji", T0), "VOICE_DISCORD_ERROR");
+});
+
 test("ensureTeamVoiceChannel_discordServerError_discordUnavailable", async () => {
   world.createError = Object.assign(new Error("Internal Server Error"), { status: 502 });
 
@@ -354,9 +382,29 @@ test("shouldLogVoiceError_otherBotWideCode_trackedSeparately", () => {
   assert.equal(shouldLogVoiceError("VOICE_CATEGORY_UNAVAILABLE", T0), true);
 });
 
-test("shouldLogVoiceError_channelSpecificCode_alwaysTrue", () => {
-  assert.equal(shouldLogVoiceError("VOICE_DISCORD_ERROR", T0), true);
-  assert.equal(shouldLogVoiceError("VOICE_DISCORD_ERROR", T0 + 1), true);
+test("shouldLogVoiceError_sameChannelRefusalWithinCooldown_false", () => {
+  // Un refus qui touche chaque salon (limite de salons du serveur) n'inonde pas le salon de logs.
+  assert.equal(shouldLogVoiceError("VOICE_DISCORD_ERROR", T0, "DiscordAPIError, code 30013"), true);
+  assert.equal(shouldLogVoiceError("VOICE_DISCORD_ERROR", T0 + 1, "DiscordAPIError, code 30013"), false);
+});
+
+test("shouldLogVoiceError_otherChannelRefusalDetail_true", () => {
+  assert.equal(shouldLogVoiceError("VOICE_DISCORD_ERROR", T0, "DiscordAPIError, code 30013"), true);
+  assert.equal(shouldLogVoiceError("VOICE_DISCORD_ERROR", T0 + 1, "DiscordAPIError, code 50035"), true);
+});
+
+test("shouldLogVoiceError_sameChannelRefusalAfterCooldown_true", () => {
+  assert.equal(shouldLogVoiceError("VOICE_DISCORD_ERROR", T0, "DiscordAPIError, code 30013"), true);
+  assert.equal(shouldLogVoiceError("VOICE_DISCORD_ERROR", T0 + BOT_WIDE_LOG_COOLDOWN_MS, "DiscordAPIError, code 30013"), true);
+});
+
+test("shouldLogVoiceError_moreThanHundredDistinctRefusals_oldestForgotten", () => {
+  for (let index = 0; index <= 100; index++) {
+    shouldLogVoiceError("VOICE_DISCORD_ERROR", T0, `code ${index}`);
+  }
+  // Mémoire bornée : le plus ancien refus est oublié, journalisé de nouveau.
+  assert.equal(shouldLogVoiceError("VOICE_DISCORD_ERROR", T0 + 1, "code 0"), true);
+  assert.equal(shouldLogVoiceError("VOICE_DISCORD_ERROR", T0 + 1, "code 100"), false);
 });
 
 test("voiceErrorDetail_errorWithStatus_appendsStatus", () => {
