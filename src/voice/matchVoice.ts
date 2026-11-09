@@ -25,7 +25,14 @@
 
 import { ChannelType, type Client, type VoiceState } from "discord.js";
 import { getBddInstance } from "../bdd/Bdd.js";
-import { discordJsonCode, safeErrorCode, safeErrorStatus } from "../safe/errorGuards.js";
+import {
+  MAX_CAUSE_DEPTH,
+  discordJsonCode,
+  isTransientNetworkError,
+  safeErrorCode,
+  safeErrorKind,
+  safeErrorStatus,
+} from "../safe/errorGuards.js";
 import { sendAlert, sendLog } from "../safe/sendLog.js";
 
 /** Catégorie des salons vocaux de match sur le serveur BlueGenji, quand `VOICE_CATEGORY_ID` n'est pas posé. */
@@ -40,8 +47,18 @@ export const MAX_VOICE_NAME_LENGTH = 100;
 /** Longueur maximale du nom reçu, avant nettoyage : au-delà, la demande est refusée. */
 const MAX_RAW_NAME_LENGTH = 200;
 
-/** Nom retenu quand le nom d'équipe ne garde aucun caractère affichable. */
+/**
+ * Nom de repli : retenu quand le nom d'équipe ne garde aucun caractère affichable,
+ * et envoyé tel quel par le site quand le bot a refusé le nom de l'équipe. Jamais
+ * donné tel quel à un salon : `voiceChannelName` le rend bilingue et propre à l'équipe.
+ */
 export const FALLBACK_VOICE_NAME = "Salon d'équipe";
+
+/** Repli affiché, bilingue : les deux équipes d'un match s'y distinguent par leur numéro. */
+export const FALLBACK_VOICE_LABEL = "Salon d'équipe / Team channel";
+
+/** Numéro d'équipe d'une clé du site (`match:<id>:team:<id>`). */
+const KEY_TEAM_PATTERN = /:team:(\d{1,20})$/;
 
 /** Un salon libéré mais occupé est supprimé quand même après ce délai. */
 export const RELEASED_MAX_AGE_MS = 24 * 60 * 60 * 1000;
@@ -77,6 +94,7 @@ export type VoiceErrorCode =
   | "VOICE_CATEGORY_UNAVAILABLE"
   | "VOICE_MISSING_PERMISSIONS"
   | "VOICE_DISCORD_ERROR"
+  | "VOICE_DISCORD_UNAVAILABLE"
   | "VOICE_STORAGE_ERROR";
 
 /** Statut HTTP de chaque code. */
@@ -84,6 +102,8 @@ const STATUS_BY_CODE: Readonly<Record<VoiceErrorCode, number>> = {
   VOICE_CATEGORY_UNAVAILABLE: 503,
   VOICE_MISSING_PERMISSIONS: 503,
   VOICE_DISCORD_ERROR: 502,
+  // Limite de débit ou panne de Discord : vaut pour tous les salons, le site arrête sa passe.
+  VOICE_DISCORD_UNAVAILABLE: 503,
   VOICE_STORAGE_ERROR: 500,
 };
 
@@ -93,7 +113,7 @@ export type VoiceErrorContext =
   | "suppression du salon"
   | "lecture de la catégorie"
   | "création du salon"
-  | `catégorie ${string} introuvable`
+  | "catégorie introuvable"
   | "stockage";
 
 /** Échec d'une opération sur un salon vocal, porteur du code rendu au site. */
@@ -102,14 +122,18 @@ export class VoiceChannelError extends Error {
   readonly status: number;
 
   /**
-   * Le message, seul journalisé, est fait du contexte (texte du bot) et du code de
-   * la cause (`voiceErrorDetail`) : jamais d'un texte reçu.
+   * Le message, seul journalisé, est fait du contexte (texte du bot), de l'identifiant
+   * Discord en cause (configuration) et du code de la cause (`voiceErrorDetail`) :
+   * jamais d'un texte reçu.
    * @param code Code rendu au site.
    * @param context Opération en cours.
    * @param cause Erreur d'origine, réduite à son code.
+   * @param subjectId Identifiant Discord en cause (catégorie introuvable) ; ignoré s'il n'en a pas la forme.
    */
-  constructor(code: VoiceErrorCode, context?: VoiceErrorContext, cause?: unknown) {
-    super(cause === undefined ? context ?? code : `${context ?? code} : ${voiceErrorDetail(cause)}`);
+  constructor(code: VoiceErrorCode, context?: VoiceErrorContext, cause?: unknown, subjectId?: string) {
+    const subject = subjectId !== undefined && SNOWFLAKE_PATTERN.test(subjectId) ? ` (${subjectId})` : "";
+    const head = context === undefined ? code : `${context}${subject}`;
+    super(cause === undefined ? head : `${head} : ${voiceErrorDetail(cause)}`);
     this.name = "VoiceChannelError";
     this.code = code;
     this.status = STATUS_BY_CODE[code];
@@ -207,19 +231,60 @@ export function sanitizeVoiceChannelName(raw: unknown): string | null {
 }
 
 /**
- * Désigne une erreur pour le journal par son seul code : le message d'une erreur
- * Discord ou SQLite peut recopier une valeur reçue (nom d'équipe, clé).
+ * Nom donné au salon : le nom nettoyé, sauf le repli (`FALLBACK_VOICE_NAME`), rendu
+ * bilingue et suivi du numéro d'équipe de la clé — les deux équipes d'un match
+ * n'ont jamais le même salon de repli. Un numéro d'équipe n'est pas un pseudo.
+ * @param key Clé d'idempotence validée.
+ * @param name Nom nettoyé (`sanitizeVoiceChannelName`).
+ * @returns Le nom du salon.
+ */
+export function voiceChannelName(key: string, name: string): string {
+  if (name !== FALLBACK_VOICE_NAME) { return name; }
+  const team = KEY_TEAM_PATTERN.exec(key)?.[1];
+  return team === undefined ? FALLBACK_VOICE_LABEL : `${FALLBACK_VOICE_LABEL} ${team}`;
+}
+
+/**
+ * Premier code sûr de la chaîne `cause` (profondeur bornée) : une panne réseau
+ * (`TypeError: fetch failed`) porte le sien (`ECONNRESET`) dans sa cause.
  * @param error Erreur capturée.
- * Un `VoiceChannelError` est rendu par son code et son message (déjà sûr) ; une
- * autre erreur par son code et son statut HTTP s'il y en a un (429, 5xx de Discord).
- * @returns `code <code>[, statut <n>]`, `code inconnu`, ou `<CODE> (<message>)`.
+ * @returns Le code, ou `null`.
+ */
+function causeCode(error: unknown): string | number | null {
+  let current: unknown = error;
+  for (let depth = 0; depth <= MAX_CAUSE_DEPTH && typeof current === "object" && current !== null; depth++) {
+    const code = safeErrorCode(current);
+    if (code !== null) { return code; }
+    try {
+      const next: unknown = (current as { cause?: unknown }).cause;
+      current = next === current ? null : next;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+/**
+ * Désigne une erreur pour le journal par son type et son code : le message d'une
+ * erreur Discord ou SQLite peut recopier une valeur reçue (nom d'équipe, clé).
+ * Un `VoiceChannelError` est rendu par son code et son message (déjà sûr ; le code
+ * n'est pas répété quand le message l'égale) ; une autre erreur par son type
+ * (`TypeError`, `AbortError`, `DiscordAPIError`…), son code (suivi dans `cause`),
+ * son statut HTTP s'il y en a un (429, 5xx de Discord), et « réseau » pour une
+ * coupure passagère — jamais confondue avec un refus de Discord.
+ * @param error Erreur capturée.
+ * @returns `<type>, code <code>[, statut <n>][, réseau]`, ou `<CODE>[ (<message>)]`.
  */
 export function voiceErrorDetail(error: unknown): string {
-  if (error instanceof VoiceChannelError) { return `${error.code} (${error.message})`; }
-  const code = safeErrorCode(error);
+  if (error instanceof VoiceChannelError) {
+    return error.message === error.code ? error.code : `${error.code} (${error.message})`;
+  }
+  const code = causeCode(error);
   const status = safeErrorStatus(error);
   const shownStatus = status === null ? "" : ", statut " + String(status);
-  return `code ${code ?? "inconnu"}${shownStatus}`;
+  const network = isTransientNetworkError(error) ? ", réseau" : "";
+  return `${safeErrorKind(error)}, code ${code ?? "inconnu"}${shownStatus}${network}`;
 }
 
 /**
@@ -245,6 +310,12 @@ async function toVoiceError(client: Client, error: unknown, action: VoiceErrorCo
       );
     }
     return new VoiceChannelError("VOICE_MISSING_PERMISSIONS", action, error);
+  }
+  // Limite de débit ou panne de Discord (sans code JSON) : tous les salons suivants
+  // échoueraient de même, le site arrête sa passe au lieu d'appeler pour chacun.
+  const status = safeErrorStatus(error);
+  if (code === null && status !== null && (status === 429 || status >= 500)) {
+    return new VoiceChannelError("VOICE_DISCORD_UNAVAILABLE", action, error);
   }
   return new VoiceChannelError("VOICE_DISCORD_ERROR", action, error);
 }
@@ -369,12 +440,12 @@ async function createInCategory(client: Client, key: string, name: string, now: 
     category = await client.channels.fetch(categoryId);
   } catch (error) {
     if (discordJsonCode(error) === UNKNOWN_CHANNEL) {
-      throw new VoiceChannelError("VOICE_CATEGORY_UNAVAILABLE", `catégorie ${categoryId} introuvable`);
+      throw new VoiceChannelError("VOICE_CATEGORY_UNAVAILABLE", "catégorie introuvable", undefined, categoryId);
     }
     throw await toVoiceError(client, error, "lecture de la catégorie");
   }
   if (!category || category.type !== ChannelType.GuildCategory) {
-    throw new VoiceChannelError("VOICE_CATEGORY_UNAVAILABLE", `catégorie ${categoryId} introuvable`);
+    throw new VoiceChannelError("VOICE_CATEGORY_UNAVAILABLE", "catégorie introuvable", undefined, categoryId);
   }
 
   let channelId: string;
@@ -485,6 +556,24 @@ export async function releaseVoiceChannel(
     }
     return { deleted: false };
   });
+}
+
+/**
+ * Libère le salon d'une clé (`POST /internal/voice/keys/release`) : le site
+ * n'en connaît pas l'identifiant quand sa demande de création a expiré (délai,
+ * réponse illisible) alors que le bot a pu créer le salon. Une création en cours
+ * pour cette clé est attendue ; une clé sans salon suivi est déjà libérée.
+ * @param client Client Discord.
+ * @param key Clé d'idempotence validée.
+ * @param now Instant courant (ms), pour les tests.
+ */
+export async function releaseVoiceChannelByKey(client: Client, key: string, now: number = Date.now()): Promise<void> {
+  const rows = await withKeyLock(key, () =>
+    db<TrackedRow>("SELECT channel_id, voice_key, created_at, released_at FROM MatchVoiceChannel WHERE voice_key = ?", [key]),
+  );
+  const row = rows[0];
+  if (!row) { return; }
+  await releaseVoiceChannel(client, row.channel_id, now);
 }
 
 /**

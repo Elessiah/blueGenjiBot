@@ -4,8 +4,9 @@ import { voiceCategoryId } from "../voice/matchVoice.js";
 /**
  * Garde-t-on en mémoire l'état vocal d'un membre ? Seulement sur le serveur
  * qui porte la catégorie des salons vocaux de match : l'intention
- * `GuildVoiceStates` ne sert qu'à compter ces salons, et la présence vocale
- * des membres des serveurs partenaires n'est ni lue ni gardée.
+ * `GuildVoiceStates` ne sert qu'à savoir si un de ces salons est vide, pour le
+ * supprimer (rien n'est compté ni rendu au site), et la présence vocale des
+ * membres des serveurs partenaires n'est ni lue ni gardée.
  * @param state État vocal reçu de Discord.
  * @returns `true` pour le serveur BlueGenji de la catégorie.
  */
@@ -40,8 +41,8 @@ export function buildClientOptions(): ClientOptions {
       GatewayIntentBits.GuildMembers,
       GatewayIntentBits.GuildMessages,
       GatewayIntentBits.MessageContent,
-      // Occupation des salons vocaux de match (`voice/matchVoice.ts`) : sans
-      // elle, l'effectif d'un salon reste vide et `voiceStateUpdate` muet.
+      // Salons vocaux de match vides (`voice/matchVoice.ts`) : sans elle, le bot
+      // ne sait pas qu'un salon rendu s'est vidé et `voiceStateUpdate` reste muet.
       GatewayIntentBits.GuildVoiceStates,
     ],
     allowedMentions: { parse: [], repliedUser: false },

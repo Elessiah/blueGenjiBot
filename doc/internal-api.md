@@ -401,26 +401,42 @@ catégorie introuvable est nommée par son identifiant, qui est de la configurat
     salon libéré mais encore présent est repris et n'est plus libéré.
   - `name` : nom d'équipe (200 caractères au plus) ; caractères de contrôle,
     `@`, `<`, `>`, `*`, `_`, `~`, `|`, `\`, `#` et l'accent grave retirés, coupé à 100 caractères ;
-    s'il ne reste rien, « Salon d'équipe ».
+    s'il ne reste rien — ou si le site envoie ce repli, « Salon d'équipe », après
+    un refus du nom —, le salon s'appelle « Salon d'équipe / Team channel <n> »,
+    `<n>` étant le numéro d'équipe de la clé : les deux équipes d'un match ne
+    partagent jamais le même nom de repli.
   - Erreurs : `400 INVALID_VOICE_KEY`, `400 INVALID_VOICE_CHANNEL_NAME`,
     `503 DISCORD_NOT_READY`, `503 VOICE_CATEGORY_UNAVAILABLE` (catégorie
     introuvable), `503 VOICE_MISSING_PERMISSIONS` (permission refusée : une
-    alerte au staff, au plus une par heure), `502 VOICE_DISCORD_ERROR`,
-    `500 VOICE_STORAGE_ERROR`.
+    alerte au staff, au plus une par heure), `503 VOICE_DISCORD_UNAVAILABLE`
+    (limite de débit ou panne de Discord, sans code JSON : vaut pour tous les
+    salons, le site arrête sa passe), `502 VOICE_DISCORD_ERROR` (autre refus de
+    Discord, propre à ce salon), `500 VOICE_STORAGE_ERROR`.
 
 - `POST /internal/voice/channels/:channelId/release`
   - Libère le salon : supprimé tout de suite s'il est vide, sinon dès que le
-    dernier occupant le quitte. Retourne `{ "released": true, "deleted": true | false }`.
+    dernier occupant le quitte. Retourne `{ "released": true }` — rien de plus :
+    le site n'apprend pas si le salon était vide (avant 2026-11-10, la réponse
+    portait aussi `deleted`, que le site ne lisait pas).
   - Erreurs : `400 INVALID_CHANNEL_ID`, `503 DISCORD_NOT_READY`,
-    `503 VOICE_MISSING_PERMISSIONS`, `502 VOICE_DISCORD_ERROR`,
-    `500 VOICE_STORAGE_ERROR`.
+    `503 VOICE_MISSING_PERMISSIONS`, `503 VOICE_DISCORD_UNAVAILABLE`,
+    `502 VOICE_DISCORD_ERROR`, `500 VOICE_STORAGE_ERROR`.
   - Un salon **déjà parti** est déjà libéré : un salon supprimé (par le bot ou
     à la main) puis oublié du suivi, ou une libération rejouée (réponse perdue,
-    nouvel essai), répond `200 { "released": true, "deleted": true }` — jamais
+    nouvel essai), répond `200 { "released": true }` — jamais
     un refus, et **sans rien supprimer** sur Discord (le bot ne touche pas un
     salon qu'il ne suit pas). Le site ferme alors sa ligne normalement. (Avant
     2026-11-06 : `404 VOICE_CHANNEL_NOT_TRACKED`, que le site lit toujours
     comme « déjà supprimé ».)
+
+- `POST /internal/voice/keys/release`
+  - Body: `{ "key": "match:12:team:34" }`. Libère le salon d'une **clé** : le
+    site s'en sert pour une ligne sans identifiant de salon (création expirée,
+    réponse illisible), alors que le bot a pu créer le salon. Une création en
+    cours pour la clé est attendue ; puis comme la route précédente. Une clé
+    sans salon suivi est déjà libérée : `200 { "released": true }`, rien n'est
+    supprimé.
+  - Erreurs : `400 INVALID_VOICE_KEY`, puis celles de la route précédente.
 
 - **Balayage** au démarrage du bot puis toutes les 30 minutes : suppression
   des salons libérés et vides, des salons libérés depuis plus de 24 h même
@@ -431,15 +447,19 @@ catégorie introuvable est nommée par son identifiant, qui est de la configurat
 - Un salon suivi **déplacé hors de la catégorie** à la main n'est plus le
   salon du match : il n'est ni
   rendu (une demande `POST` en crée un neuf dans la catégorie), ni supprimé —
-  il est seulement oublié (une libération répond alors `deleted: true`).
+  il est seulement oublié (une libération répond alors `{ "released": true }`).
 
 ## Réponses d'erreur
 
 Une erreur ne renvoie **jamais** le message de l'exception, seulement un code
 stable en majuscules : `{ "error": "INTERNAL_STATS_ERROR" }`. Pour une erreur
-attrapée dans une route, le détail — pile d'appel, chemin de fichier, fragment de
-SQL — part au canal de logs Discord par `sendLog()`, qui est l'endroit où
-l'exploitant le lit de toute façon. Une erreur levée hors d'une route (lecture du
+attrapée dans une route, le détail part au canal de logs Discord par `sendLog()`,
+qui est l'endroit où l'exploitant le lit de toute façon. Les routes **vocales**
+(`/internal/voice/*`) n'y envoient que des codes : l'opération en cours, le type
+de l'erreur, son code (suivi dans `cause`), son statut HTTP et « réseau » pour une
+coupure passagère (`voiceErrorDetail`) — jamais un message, une pile ni un
+fragment de SQL, qui pourraient recopier le nom d'équipe ou la clé reçus. Les
+autres routes envoient encore le détail (pile, chemin, fragment de SQL). Une erreur levée hors d'une route (lecture du
 corps, exception non attrapée) ne va qu'au journal du processus (pm2), réduite à
 son code de réponse et, pour un `500`, au type de l'erreur et à son code
 (`SQLITE_BUSY`…) : jamais son message ni sa pile.

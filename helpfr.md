@@ -8,6 +8,7 @@ Si vous postez dans un salon assigné avec le bon préfixe, votre message est re
 Le bot ne rend pas les mêmes services selon le jeu :
 - **Marvel Rivals** : diffusion des annonces entre serveurs partenaires (tous les services ci-dessous) **et** gestion des tournois BlueGenji.
 - **Overwatch** : gestion des tournois BlueGenji **uniquement** (horaires et rappels de match, réglages du salon de jeu d'un match, avis « Match retiré », avis du retrait d'un cast, alertes d'arbitrage, journal du tournoi). Aucune annonce Overwatch n'est diffusée entre serveurs.
+- **Salons vocaux d'équipe** : quand un tournoi les active, le bot ouvre un salon vocal par équipe (5 places) 15 minutes avant un match programmé, dans la catégorie des matchs BlueGenji, et le supprime une fois le match terminé et le salon vide.
 
 ## Services (préfixes)
 Tous les services ci-dessous, annonces de tournoi comprises, sont réservés

@@ -10,6 +10,7 @@ import { getBddInstance, resetBddInstance } from "../../bdd/Bdd.js";
 import {
   ABANDONED_MAX_AGE_MS,
   DEFAULT_VOICE_CATEGORY_ID,
+  FALLBACK_VOICE_LABEL,
   FALLBACK_VOICE_NAME,
   RELEASED_MAX_AGE_MS,
   UNRELEASED_MAX_AGE_MS,
@@ -22,11 +23,13 @@ import {
   parseChannelId,
   parseVoiceKey,
   releaseVoiceChannel,
+  releaseVoiceChannelByKey,
   resetVoiceState,
   sanitizeVoiceChannelName,
   shouldSweep,
   sweepVoiceChannels,
   voiceCategoryId,
+  voiceChannelName,
   voiceErrorDetail,
 } from "../../voice/matchVoice.js";
 import { addVoice, discordError, fakeVoiceClient, resetWorld, world } from "./fakeVoiceClient.js";
@@ -251,7 +254,7 @@ test("ensureTeamVoiceChannel_categoryUnknown_messageNamesCategoryId", async () =
   world.category = "missing";
   await assert.rejects(ensureTeamVoiceChannel(client, KEY, "Les Genji", T0), {
     name: "VoiceChannelError",
-    message: `catégorie ${CATEGORY} introuvable`,
+    message: `catégorie introuvable (${CATEGORY})`,
   });
 });
 
@@ -279,34 +282,98 @@ test("ensureTeamVoiceChannel_otherDiscordError_discordErrorWithoutAlert", async 
   assert.deepEqual(world.logs, []);
 });
 
-test("voiceErrorDetail_discordError_returnsCodeOnly", () => {
-  assert.equal(voiceErrorDetail(discordError(50035, "Invalid Form Body name: Equipe Bleue")), "code 50035");
+test("voiceErrorDetail_discordError_returnsKindAndCodeOnly", () => {
+  assert.equal(voiceErrorDetail(discordError(50035, "Invalid Form Body name: Equipe Bleue")), "Error, code 50035");
 });
 
 test("voiceErrorDetail_codeWithSpaces_returnsUnknownCode", () => {
-  assert.equal(voiceErrorDetail(Object.assign(new Error("x"), { code: "texte d'un joueur" })), "code inconnu");
+  assert.equal(voiceErrorDetail(Object.assign(new Error("x"), { code: "texte d'un joueur" })), "Error, code inconnu");
+});
+
+test("voiceErrorDetail_fetchFailedWithCauseCode_returnsCauseCodeAndNetwork", () => {
+  const error = new TypeError("fetch failed", { cause: Object.assign(new Error("socket hang up"), { code: "ECONNRESET" }) });
+
+  assert.equal(voiceErrorDetail(error), "TypeError, code ECONNRESET, réseau");
+});
+
+test("voiceErrorDetail_abortError_namesAbortErrorNotDiscordRefusal", () => {
+  const error = new DOMException("This operation was aborted", "AbortError");
+
+  assert.equal(voiceErrorDetail(error), "AbortError, code 20");
+});
+
+test("voiceErrorDetail_voiceChannelErrorWithoutContext_returnsCodeOnce", () => {
+  assert.equal(voiceErrorDetail(new VoiceChannelError("VOICE_STORAGE_ERROR")), "VOICE_STORAGE_ERROR");
+});
+
+test("VoiceChannelError_subjectIdNotSnowflake_subjectIgnored", () => {
+  const error = new VoiceChannelError("VOICE_CATEGORY_UNAVAILABLE", "catégorie introuvable", undefined, "Equipe Bleue");
+
+  assert.equal(error.message, "catégorie introuvable");
+});
+
+test("voiceChannelName_regularName_returnsNameUnchanged", () => {
+  assert.equal(voiceChannelName(KEY, "Les Genji"), "Les Genji");
+});
+
+test("voiceChannelName_fallbackName_returnsBilingualLabelWithTeamNumber", () => {
+  assert.equal(voiceChannelName(KEY, FALLBACK_VOICE_NAME), "Salon d'équipe / Team channel 34");
+});
+
+test("voiceChannelName_fallbackKeyWithoutTeam_returnsBilingualLabelOnly", () => {
+  assert.equal(voiceChannelName("tournoi-7", FALLBACK_VOICE_NAME), FALLBACK_VOICE_LABEL);
+});
+
+test("ensureTeamVoiceChannel_discordRateLimited_discordUnavailable503", async () => {
+  world.createError = Object.assign(new Error("You are being rate limited"), { status: 429 });
+
+  await assert.rejects(ensureTeamVoiceChannel(client, KEY, "Les Genji", T0), (error: unknown) =>
+    error instanceof VoiceChannelError && error.code === "VOICE_DISCORD_UNAVAILABLE" && error.status === 503);
+});
+
+test("ensureTeamVoiceChannel_discordServerError_discordUnavailable", async () => {
+  world.createError = Object.assign(new Error("Internal Server Error"), { status: 502 });
+
+  await rejectsWith(ensureTeamVoiceChannel(client, KEY, "Les Genji", T0), "VOICE_DISCORD_UNAVAILABLE");
 });
 
 test("voiceErrorDetail_errorWithStatus_appendsStatus", () => {
   // Limite de débit de Discord : le statut distingue un 429 d'une panne.
   const error = Object.assign(new Error("You are being rate limited"), { status: 429 });
 
-  assert.equal(voiceErrorDetail(error), "code inconnu, statut 429");
+  assert.equal(voiceErrorDetail(error), "Error, code inconnu, statut 429");
 });
 
 test("voiceErrorDetail_voiceChannelError_returnsCodeAndContext", () => {
-  assert.equal(voiceErrorDetail(new VoiceChannelError("VOICE_CATEGORY_UNAVAILABLE", "catégorie 1 introuvable")),
-    "VOICE_CATEGORY_UNAVAILABLE (catégorie 1 introuvable)");
+  assert.equal(voiceErrorDetail(new VoiceChannelError("VOICE_CATEGORY_UNAVAILABLE", "catégorie introuvable", undefined, CATEGORY)),
+    `VOICE_CATEGORY_UNAVAILABLE (catégorie introuvable (${CATEGORY}))`);
 });
 
 test("VoiceChannelError_causeWithMessage_messageHasContextAndCodeOnly", () => {
   const error = new VoiceChannelError("VOICE_DISCORD_ERROR", "création du salon", discordError(50035, "Invalid Form Body name: Equipe Bleue"));
 
-  assert.equal(error.message, "création du salon : code 50035");
+  assert.equal(error.message, "création du salon : Error, code 50035");
 });
 
 test("voiceErrorDetail_noCode_returnsUnknownCode", () => {
-  assert.equal(voiceErrorDetail(new Error("UNIQUE constraint failed: Equipe Bleue")), "code inconnu");
+  assert.equal(voiceErrorDetail(new Error("UNIQUE constraint failed: Equipe Bleue")), "Error, code inconnu");
+});
+
+test("releaseVoiceChannelByKey_trackedKey_emptyChannelDeletedAndUntracked", async () => {
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+
+  await releaseVoiceChannelByKey(client, KEY, T0);
+
+  assert.deepEqual(world.deletions, [channelId]);
+  assert.deepEqual(await tracked(), []);
+});
+
+test("releaseVoiceChannelByKey_unknownKey_resolvesWithoutDeleting", async () => {
+  addVoice("400000000000000003", 0, CATEGORY);
+
+  await releaseVoiceChannelByKey(client, KEY, T0);
+
+  assert.deepEqual(world.deletions, []);
 });
 
 // --- Libération ------------------------------------------------------------

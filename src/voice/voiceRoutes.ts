@@ -1,6 +1,6 @@
 /**
  * Routes `/internal/voice/*` de l'API interne (MATCH-VOICE) : création et
- * libération des salons vocaux d'équipe (aucune route de comptage). Montées par `startInternalApi`
+ * libération des salons vocaux d'équipe, par identifiant ou par clé (aucune route de comptage). Montées par `startInternalApi`
  * derrière la même garde `x-internal-token` que les autres routes ; la logique
  * vit dans `voice/matchVoice.ts`.
  *
@@ -18,7 +18,9 @@ import {
   parseChannelId,
   parseVoiceKey,
   releaseVoiceChannel,
+  releaseVoiceChannelByKey,
   sanitizeVoiceChannelName,
+  voiceChannelName,
 } from "./matchVoice.js";
 
 /**
@@ -74,7 +76,7 @@ export function registerVoiceRoutes(app: Express, client: Client): void {
     }
     if (refuseNotReady(client, res)) { return; }
     try {
-      const { channelId, created } = await ensureTeamVoiceChannel(client, key, name);
+      const { channelId, created } = await ensureTeamVoiceChannel(client, key, voiceChannelName(key, name));
       res.status(created ? 201 : 200).json({ channelId });
     } catch (error) {
       await replyVoiceError(client, res, "POST /internal/voice/channels", error);
@@ -89,10 +91,26 @@ export function registerVoiceRoutes(app: Express, client: Client): void {
     }
     if (refuseNotReady(client, res)) { return; }
     try {
-      const { deleted } = await releaseVoiceChannel(client, channelId);
-      res.json({ released: true, deleted });
+      // « Rendu », rien de plus : le site n'a pas à savoir si le salon était vide.
+      await releaseVoiceChannel(client, channelId);
+      res.json({ released: true });
     } catch (error) {
       await replyVoiceError(client, res, "POST /internal/voice/channels/:id/release", error);
+    }
+  });
+
+  app.post("/internal/voice/keys/release", async (req: Request, res: Response) => {
+    const key = parseVoiceKey(req.body?.key);
+    if (!key) {
+      res.status(400).json({ error: "INVALID_VOICE_KEY" });
+      return;
+    }
+    if (refuseNotReady(client, res)) { return; }
+    try {
+      await releaseVoiceChannelByKey(client, key);
+      res.json({ released: true });
+    } catch (error) {
+      await replyVoiceError(client, res, "POST /internal/voice/keys/release", error);
     }
   });
 }

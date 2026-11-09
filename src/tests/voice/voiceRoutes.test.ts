@@ -247,7 +247,7 @@ test("releaseVoiceChannel_emptyChannel_returnsDeletedTrue", async () => {
 
   const reply = await call(`/internal/voice/channels/${String(body.channelId)}/release`, { method: "POST" });
 
-  assert.deepEqual(reply, { status: 200, body: { released: true, deleted: true } });
+  assert.deepEqual(reply, { status: 200, body: { released: true } });
   assert.deepEqual(world.deletions, [body.channelId]);
 });
 
@@ -257,7 +257,8 @@ test("releaseVoiceChannel_occupiedChannel_returnsDeletedFalse", async () => {
 
   const reply = await call(`/internal/voice/channels/${String(body.channelId)}/release`, { method: "POST" });
 
-  assert.deepEqual(reply, { status: 200, body: { released: true, deleted: false } });
+  assert.deepEqual(reply, { status: 200, body: { released: true } });
+  assert.deepEqual(world.deletions, []);
 });
 
 test("releaseVoiceChannel_untrackedChannel_returns200DeletedTrueAndNothingDeleted", async () => {
@@ -265,7 +266,42 @@ test("releaseVoiceChannel_untrackedChannel_returns200DeletedTrueAndNothingDelete
 
   const reply = await call(`/internal/voice/channels/${UNTRACKED}/release`, { method: "POST" });
 
-  assert.deepEqual(reply, { status: 200, body: { released: true, deleted: true } });
+  assert.deepEqual(reply, { status: 200, body: { released: true } });
   assert.deepEqual(world.deletions, []);
+});
+
+test("releaseVoiceKey_trackedKey_returns200AndDeletesEmptyChannel", async () => {
+  const { body } = await create({ key: "match:1:team:2", name: "Les Genji" });
+
+  const reply = await call("/internal/voice/keys/release", { body: { key: "match:1:team:2" } });
+
+  assert.deepEqual(reply, { status: 200, body: { released: true } });
+  assert.deepEqual(world.deletions, [body.channelId]);
+});
+
+test("releaseVoiceKey_untrackedKey_returns200AndNothingDeleted", async () => {
+  const reply = await call("/internal/voice/keys/release", { body: { key: "match:9:team:9" } });
+
+  assert.deepEqual(reply, { status: 200, body: { released: true } });
+  assert.deepEqual(world.deletions, []);
+});
+
+test("releaseVoiceKey_invalidKey_returns400", async () => {
+  const reply = await call("/internal/voice/keys/release", { body: { key: "clé invalide" } });
+
+  assert.deepEqual(reply, { status: 400, body: { error: "INVALID_VOICE_KEY" } });
+});
+
+test("releaseVoiceKey_noToken_returns401", async () => {
+  const reply = await call("/internal/voice/keys/release", { body: { key: "match:1:team:2" }, token: null });
+
+  assert.equal(reply.status, 401);
+});
+
+test("createVoiceChannel_nameWithoutDisplayableChar_bilingualFallbackWithTeamNumber", async () => {
+  const reply = await create({ key: "match:1:team:2", name: "@@**" });
+
+  assert.equal(reply.status, 201);
+  assert.equal(world.creations[0]?.name, "Salon d'équipe / Team channel 2");
 });
 

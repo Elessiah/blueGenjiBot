@@ -8,6 +8,7 @@ If you post in an assigned channel with the right prefix, your message is forwar
 The bot does not offer the same services for each game:
 - **Marvel Rivals**: announcements dispatched across partner servers (every service below) **and** BlueGenji tournament management.
 - **Overwatch**: BlueGenji tournament management **only** (match times and reminders, lobby settings of a match, « Match retiré » (match withdrawn) notices, notice that a cast was withdrawn, referee alerts, tournament log). No Overwatch announcement is dispatched across servers.
+- **Team voice channels**: when a tournament enables them, the bot opens one voice channel per team (5 slots) 15 minutes before a scheduled match, in the BlueGenji match category, and deletes it once the match is over and the channel is empty.
 
 ## Services (prefixes)
 Every service below, tournament announcements included, is for
