@@ -20378,7 +20378,7 @@ traite comme du spam.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line257">line 257</a>
+        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line261">line 261</a>
     </li></ul></dd>
     
 
@@ -24854,7 +24854,7 @@ combien d'occurrences ont été étouffées.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line458">line 458</a>
+        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line462">line 462</a>
     </li></ul></dd>
     
 
@@ -25104,7 +25104,7 @@ sous `@everyone` aurait l'air d'une panne.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line373">line 373</a>
+        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line377">line 377</a>
     </li></ul></dd>
     
 
@@ -26868,7 +26868,7 @@ suivant.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line405">line 405</a>
+        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line409">line 409</a>
     </li></ul></dd>
     
 
@@ -30036,7 +30036,7 @@ encore là est repris (option rallumée) : il n'est plus libéré.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line512">line 512</a>
+        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line516">line 516</a>
     </li></ul></dd>
     
 
@@ -33051,7 +33051,7 @@ Nettoie les cibles invalides et supprime l'intervalle si aucune cible valable ne
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line349">line 349</a>
+        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line353">line 353</a>
     </li></ul></dd>
     
 
@@ -39222,7 +39222,7 @@ catégorie avant sa suppression est oublié au balayage suivant. Ne lève jamais
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line642">line 642</a>
+        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line646">line 646</a>
     </li></ul></dd>
     
 
@@ -39374,7 +39374,7 @@ pour les autres mouvements vocaux. Ne lève jamais.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line600">line 600</a>
+        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line604">line 604</a>
     </li></ul></dd>
     
 
@@ -46400,7 +46400,7 @@ de signalement).
     
 
     
-    <h4 class="name" id="logVoiceFailure"><span class="type-signature"></span>logVoiceFailure<span class="signature">(client, error, message)</span><span class="type-signature"></span></h4>
+    <h4 class="name" id="logVoiceFailure"><span class="type-signature"></span>logVoiceFailure<span class="signature">(client, error, message, scope, quietMessage)</span><span class="type-signature"></span></h4>
     
 
     
@@ -46497,6 +46497,42 @@ par code de l'erreur — `VOICE_INTERNAL_ERROR` hors `VoiceChannelError`), sinon
         </tr>
 
     
+
+        <tr>
+            
+                <td class="name"><code>scope</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Origine de l'échec (`shouldLogVoiceError`).</td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>quietMessage</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Ligne pm2 quand le salon de logs l'a déjà reçu (par défaut `message`).</td>
+        </tr>
+
+    
     </tbody>
 </table>
 
@@ -46534,7 +46570,7 @@ par code de l'erreur — `VOICE_INTERNAL_ERROR` hors `VoiceChannelError`), sinon
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line167">line 167</a>
+        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line171">line 171</a>
     </li></ul></dd>
     
 
@@ -51589,7 +51625,7 @@ et à 03:00. Une heure choisie dans ce creux-là n'aurait pas cette garantie :
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line205">line 205</a>
+        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line209">line 209</a>
     </li></ul></dd>
     
 
@@ -53410,7 +53446,7 @@ liens de la liste blanche, le premier égal à `streamUrl`.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line197">line 197</a>
+        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line201">line 201</a>
     </li></ul></dd>
     
 
@@ -58882,7 +58918,7 @@ quand le site n'en a pas envoyé (les messages privés reprennent le journal).
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="voice_voiceRoutes.js.html">voice/voiceRoutes.js</a>, <a href="voice_voiceRoutes.js.html#line48">line 48</a>
+        <a href="voice_voiceRoutes.js.html">voice/voiceRoutes.js</a>, <a href="voice_voiceRoutes.js.html#line41">line 41</a>
     </li></ul></dd>
     
 
@@ -59420,7 +59456,7 @@ trompeur. Une seule règle pour les deux routes.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="voice_voiceRoutes.js.html">voice/voiceRoutes.js</a>, <a href="voice_voiceRoutes.js.html#line60">line 60</a>
+        <a href="voice_voiceRoutes.js.html">voice/voiceRoutes.js</a>, <a href="voice_voiceRoutes.js.html#line53">line 53</a>
     </li></ul></dd>
     
 
@@ -59896,7 +59932,7 @@ réentrant) : marque la libération, supprime le salon s'il est vide ou disparu.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line558">line 558</a>
+        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line562">line 562</a>
     </li></ul></dd>
     
 
@@ -60083,7 +60119,7 @@ jamais si le salon était vide (le site n'apprend rien de son occupation).
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line547">line 547</a>
+        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line551">line 551</a>
     </li></ul></dd>
     
 
@@ -60264,7 +60300,7 @@ pour cette clé est attendue ; une clé sans salon suivi est déjà libérée.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line581">line 581</a>
+        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line585">line 585</a>
     </li></ul></dd>
     
 
@@ -61791,7 +61827,7 @@ sinon `500 VOICE_INTERNAL_ERROR`. Le détail va au journal (`@silent`).
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="voice_voiceRoutes.js.html">voice/voiceRoutes.js</a>, <a href="voice_voiceRoutes.js.html#line20">line 20</a>
+        <a href="voice_voiceRoutes.js.html">voice/voiceRoutes.js</a>, <a href="voice_voiceRoutes.js.html#line19">line 19</a>
     </li></ul></dd>
     
 
@@ -63398,7 +63434,7 @@ Les liens redeviennent alors auto-générés depuis le salon d'origine.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line177">line 177</a>
+        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line181">line 181</a>
     </li></ul></dd>
     
 
@@ -68652,7 +68688,7 @@ code, pour ne pas couper un emoji en deux).
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line222">line 222</a>
+        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line226">line 226</a>
     </li></ul></dd>
     
 
@@ -74682,7 +74718,7 @@ première fois, puis au plus une fois par <a href="global.html#LIVE_LOG_COOLDOWN
     
 
     
-    <h4 class="name" id="shouldLogVoiceError"><span class="type-signature"></span>shouldLogVoiceError<span class="signature">(code, now, detail)</span><span class="type-signature"></span></h4>
+    <h4 class="name" id="shouldLogVoiceError"><span class="type-signature"></span>shouldLogVoiceError<span class="signature">(code, now, detail, scope)</span><span class="type-signature"></span></h4>
     
 
     
@@ -74778,6 +74814,25 @@ pour un refus valant pour tous les salons, par code et détail pour un refus pro
         </tr>
 
     
+
+        <tr>
+            
+                <td class="name"><code>scope</code></td>
+            
+
+            <td class="type">
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">Origine (`route` : appel du site ; `event` : suppression ou retrait du suivi sur un
+  événement Discord) — un refus d'une route ne tait pas l'échec d'un événement, qui nomme un salon.</td>
+        </tr>
+
+    
     </tbody>
 </table>
 
@@ -74815,7 +74870,7 @@ pour un refus valant pour tous les salons, par code et détail pour un refus pro
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line143">line 143</a>
+        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line145">line 145</a>
     </li></ul></dd>
     
 
@@ -74993,7 +75048,7 @@ pour un refus valant pour tous les salons, par code et détail pour un refus pro
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line661">line 661</a>
+        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line665">line 665</a>
     </li></ul></dd>
     
 
@@ -77317,7 +77372,7 @@ levée dans un gestionnaire d'événement, tuerait le bot.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line675">line 675</a>
+        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line679">line 679</a>
     </li></ul></dd>
     
 
@@ -77483,7 +77538,7 @@ eu quelque chose à faire.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line719">line 719</a>
+        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line723">line 723</a>
     </li></ul></dd>
     
 
@@ -77801,7 +77856,7 @@ déclenche une alerte au staff (au plus une par heure) : il faut accorder
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line318">line 318</a>
+        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line322">line 322</a>
     </li></ul></dd>
     
 
@@ -78089,7 +78144,7 @@ déclenche une alerte au staff (au plus une par heure) : il faut accorder
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line386">line 386</a>
+        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line390">line 390</a>
     </li></ul></dd>
     
 
@@ -78232,7 +78287,7 @@ Proxy révoqué) : illisible vaut « non », jamais une exception sur un chemin 
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line280">line 280</a>
+        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line284">line 284</a>
     </li></ul></dd>
     
 
@@ -79206,7 +79261,7 @@ REST voué au 404.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line394">line 394</a>
+        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line398">line 398</a>
     </li></ul></dd>
     
 
@@ -79592,7 +79647,7 @@ BlueGenji. Une valeur qui n'est pas un identifiant Discord est ignorée.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line188">line 188</a>
+        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line192">line 192</a>
     </li></ul></dd>
     
 
@@ -79754,7 +79809,7 @@ n'ont jamais le même salon de repli. Un numéro d'équipe n'est pas un pseudo.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line244">line 244</a>
+        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line248">line 248</a>
     </li></ul></dd>
     
 
@@ -79902,7 +79957,7 @@ coupure passagère — jamais confondue avec un refus de Discord.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line299">line 299</a>
+        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line303">line 303</a>
     </li></ul></dd>
     
 
@@ -80064,7 +80119,7 @@ libération, un départ et le balayage ne se croisent jamais sur un même salon.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line443">line 443</a>
+        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line447">line 447</a>
     </li></ul></dd>
     
 
@@ -80323,7 +80378,7 @@ envoie pas) : public, liens, message à modifier.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line422">line 422</a>
+        <a href="voice_matchVoice.js.html">voice/matchVoice.js</a>, <a href="voice_matchVoice.js.html#line426">line 426</a>
     </li></ul></dd>
     
 
@@ -80686,7 +80741,7 @@ d'un report ou d'un refus, sans nom ni identifiant.
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Tue Nov 10 2026 00:10:16 GMT+0100 (heure normale d’Europe centrale)
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.5</a> on Tue Nov 10 2026 00:20:40 GMT+0100 (heure normale d’Europe centrale)
 </footer>
 
 <script> prettyPrint(); </script>
