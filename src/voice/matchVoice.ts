@@ -536,26 +536,33 @@ export async function releaseVoiceChannel(
   channelId: string,
   now: number = Date.now(),
 ): Promise<{ deleted: boolean }> {
-  return withChannelLock(channelId, async (row) => {
-    if (!row) {
-      return { deleted: true };
-    }
-    await db(
-      "UPDATE MatchVoiceChannel SET released_at = COALESCE(released_at, ?) WHERE channel_id = ?",
-      [now, channelId],
-    );
-    releasedIds.add(channelId);
-    const channel = await fetchVoice(client, channelId);
-    if (!channel) {
-      await untrack(channelId);
-      return { deleted: true };
-    }
-    if (channel.members.size === 0) {
-      await deleteTracked(client, channel);
-      return { deleted: true };
-    }
-    return { deleted: false };
-  });
+  return withChannelLock(channelId, async (row) => (row ? releaseTrackedLocked(client, channelId, now) : { deleted: true }));
+}
+
+/**
+ * Libère un salon suivi, verrou de sa clé déjà tenu par l'appelant (`withKeyLock` n'est pas
+ * réentrant) : marque la libération, supprime le salon s'il est vide ou disparu.
+ * @param client Client Discord.
+ * @param channelId Identifiant d'un salon suivi, lu sous le verrou.
+ * @param now Instant courant (ms).
+ * @returns `deleted` : le salon n'existe plus.
+ */
+async function releaseTrackedLocked(client: Client, channelId: string, now: number): Promise<{ deleted: boolean }> {
+  await db(
+    "UPDATE MatchVoiceChannel SET released_at = COALESCE(released_at, ?) WHERE channel_id = ?",
+    [now, channelId],
+  );
+  releasedIds.add(channelId);
+  const channel = await fetchVoice(client, channelId);
+  if (!channel) {
+    await untrack(channelId);
+    return { deleted: true };
+  }
+  if (channel.members.size === 0) {
+    await deleteTracked(client, channel);
+    return { deleted: true };
+  }
+  return { deleted: false };
 }
 
 /**
@@ -568,12 +575,17 @@ export async function releaseVoiceChannel(
  * @param now Instant courant (ms), pour les tests.
  */
 export async function releaseVoiceChannelByKey(client: Client, key: string, now: number = Date.now()): Promise<void> {
-  const rows = await withKeyLock(key, () =>
-    db<TrackedRow>("SELECT channel_id, voice_key, created_at, released_at FROM MatchVoiceChannel WHERE voice_key = ?", [key]),
-  );
-  const row = rows[0];
-  if (!row) { return; }
-  await releaseVoiceChannel(client, row.channel_id, now);
+  // Lecture et libération sous un seul verrou : une reprise de la clé (salon recréé) ne peut
+  // pas se glisser entre les deux et laisser le salon neuf non libéré.
+  await withKeyLock(key, async () => {
+    const rows = await db<TrackedRow>(
+      "SELECT channel_id, voice_key, created_at, released_at FROM MatchVoiceChannel WHERE voice_key = ?",
+      [key],
+    );
+    const row = rows[0];
+    if (!row) { return; }
+    await releaseTrackedLocked(client, row.channel_id, now);
+  });
 }
 
 /**

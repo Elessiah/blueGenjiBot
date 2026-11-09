@@ -368,6 +368,22 @@ test("releaseVoiceChannelByKey_trackedKey_emptyChannelDeletedAndUntracked", asyn
   assert.deepEqual(await tracked(), []);
 });
 
+test("releaseVoiceChannelByKey_concurrentEnsure_waitsForReleaseThenCreatesNewChannel", async () => {
+  // Lecture et libération sous un seul verrou : une reprise de la clé ne se glisse pas entre
+  // les deux (elle rendrait au site un salon supprimé juste après).
+  const { channelId: first } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+
+  const released = releaseVoiceChannelByKey(client, KEY, T0);
+  const ensured = ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  await released;
+  const second = await ensured;
+
+  assert.deepEqual(world.deletions, [first]);
+  assert.equal(second.created, true);
+  assert.notEqual(second.channelId, first);
+  assert.deepEqual(await tracked(), [{ channel_id: second.channelId, voice_key: KEY, released_at: null }]);
+});
+
 test("releaseVoiceChannelByKey_unknownKey_resolvesWithoutDeleting", async () => {
   addVoice("400000000000000003", 0, CATEGORY);
 
