@@ -391,7 +391,11 @@ un salon qu'il n'a pas créé : seuls les salons inscrits dans son suivi
 « Gérer les salons » sur la catégorie. Une erreur vocale ne part au salon de logs
 que par son code (`code 50035, statut 400`) et l'opération en cours, jamais par le
 message de Discord ou de SQLite, qui peut recopier le nom ou la clé reçus (une
-catégorie introuvable est nommée par son identifiant, qui est de la configuration).
+catégorie introuvable est nommée par son identifiant, qui est de la configuration). Un refus valant pour
+tous les salons (`VOICE_DISCORD_UNAVAILABLE`, `VOICE_MISSING_PERMISSIONS`,
+`VOICE_CATEGORY_UNAVAILABLE`) n'y part qu'une fois par code et par 10 minutes ; les
+suivants ne vont qu'à pm2 (`[voice] <route> : <code>`), pour ne pas ajouter d'appels à
+Discord pendant sa limite de débit.
 
 - `POST /internal/voice/channels`
   - Body: `{ "key": "match:12:team:34", "name": "Nom de l'équipe" }`
@@ -433,7 +437,9 @@ catégorie introuvable est nommée par son identifiant, qui est de la configurat
   - Body: `{ "key": "match:12:team:34" }`. Libère le salon d'une **clé** : le
     site s'en sert pour une ligne sans identifiant de salon (création expirée,
     réponse illisible), alors que le bot a pu créer le salon. Une création en
-    cours pour la clé est attendue ; puis comme la route précédente. Une clé
+    cours pour la clé est attendue ; la lecture de la clé et la libération se
+    font sous un même verrou (une recréation ne s'y glisse pas) ; puis comme la
+    route précédente. Une clé
     sans salon suivi est déjà libérée : `200 { "released": true }`, rien n'est
     supprimé.
   - Erreurs : `400 INVALID_VOICE_KEY`, puis celles de la route précédente.

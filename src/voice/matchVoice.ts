@@ -168,9 +168,43 @@ const pendingByKey = new Map<string, Promise<unknown>>();
 
 let lastPermissionAlertAt = Number.NEGATIVE_INFINITY;
 
+/**
+ * Refus valant pour tous les salons (limite de débit ou panne de Discord, permission,
+ * catégorie) : chaque passe du site les reçoit de nouveau, ils ne vont au salon de logs
+ * qu'une fois par code et par `BOT_WIDE_LOG_COOLDOWN_MS` — sans quoi le journal ajouterait
+ * des appels à Discord pendant sa propre limite de débit.
+ */
+const BOT_WIDE_VOICE_CODES: ReadonlySet<VoiceErrorCode> = new Set<VoiceErrorCode>([
+  "VOICE_DISCORD_UNAVAILABLE",
+  "VOICE_MISSING_PERMISSIONS",
+  "VOICE_CATEGORY_UNAVAILABLE",
+]);
+
+/** Délai entre deux journaux Discord d'un même refus valant pour tous les salons. */
+export const BOT_WIDE_LOG_COOLDOWN_MS = 10 * 60 * 1000;
+
+/** Dernier journal Discord de chaque refus valant pour tous les salons. */
+const botWideLoggedAt = new Map<VoiceErrorCode, number>();
+
+/**
+ * Le refus doit-il partir au salon de logs ? Toujours pour un refus propre au salon ; une
+ * fois par `BOT_WIDE_LOG_COOLDOWN_MS` et par code pour un refus valant pour tous les salons.
+ * @param code Code du refus.
+ * @param now Instant courant (ms), pour les tests.
+ * @returns `true` s'il faut journaliser sur Discord.
+ */
+export function shouldLogVoiceError(code: VoiceErrorCode, now: number = Date.now()): boolean {
+  if (!BOT_WIDE_VOICE_CODES.has(code)) { return true; }
+  const last = botWideLoggedAt.get(code);
+  if (last !== undefined && now - last < BOT_WIDE_LOG_COOLDOWN_MS) { return false; }
+  botWideLoggedAt.set(code, now);
+  return true;
+}
+
 /** Remet à zéro l'état du module (alerte limitée, cache des libérés) ; pour les tests. */
 export function resetVoiceState(): void {
   lastPermissionAlertAt = Number.NEGATIVE_INFINITY;
+  botWideLoggedAt.clear();
   releasedIds.clear();
   pendingByKey.clear();
 }

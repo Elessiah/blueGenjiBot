@@ -127,6 +127,28 @@ test("createVoiceChannel_discordErrorQuotingName_logsCodeOnly", async () => {
   assert.doesNotMatch(world.logs[0], /Equipe/);
 });
 
+test("createVoiceChannel_discordRateLimitedTwice_loggedOnceOnDiscord", async (t) => {
+  // Limite de débit de Discord : chaque passe du site la reçoit, le salon de logs une seule fois.
+  const warned = t.mock.method(console, "warn", () => undefined);
+  world.createError = Object.assign(new Error("You are being rate limited"), { status: 429 });
+
+  const first = await create({ key: "match:1:team:2", name: "Les Genji" });
+  const second = await create({ key: "match:1:team:3", name: "Les Genji" });
+
+  assert.deepEqual([first.status, second.status], [503, 503]);
+  assert.equal(world.logs.length, 1);
+  assert.deepEqual(warned.mock.calls.map((c) => c.arguments), [["[voice] POST /internal/voice/channels : VOICE_DISCORD_UNAVAILABLE"]]);
+});
+
+test("createVoiceChannel_channelSpecificErrorTwice_loggedTwiceOnDiscord", async () => {
+  world.createError = discordError(50035, "Invalid Form Body");
+
+  await create({ key: "match:1:team:2", name: "Les Genji" });
+  await create({ key: "match:1:team:3", name: "Les Genji" });
+
+  assert.equal(world.logs.length, 2);
+});
+
 test("createVoiceChannel_categoryMissing_returns503", async () => {
   world.category = "missing";
   const reply = await create({ key: "match:1:team:2", name: "Les Genji" });

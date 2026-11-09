@@ -24,8 +24,10 @@ import {
   parseVoiceKey,
   releaseVoiceChannel,
   releaseVoiceChannelByKey,
+  BOT_WIDE_LOG_COOLDOWN_MS,
   resetVoiceState,
   sanitizeVoiceChannelName,
+  shouldLogVoiceError,
   shouldSweep,
   sweepVoiceChannels,
   voiceCategoryId,
@@ -335,6 +337,26 @@ test("ensureTeamVoiceChannel_discordServerError_discordUnavailable", async () =>
   world.createError = Object.assign(new Error("Internal Server Error"), { status: 502 });
 
   await rejectsWith(ensureTeamVoiceChannel(client, KEY, "Les Genji", T0), "VOICE_DISCORD_UNAVAILABLE");
+});
+
+test("shouldLogVoiceError_botWideCodeWithinCooldown_false", () => {
+  assert.equal(shouldLogVoiceError("VOICE_MISSING_PERMISSIONS", T0), true);
+  assert.equal(shouldLogVoiceError("VOICE_MISSING_PERMISSIONS", T0 + BOT_WIDE_LOG_COOLDOWN_MS - 1), false);
+});
+
+test("shouldLogVoiceError_botWideCodeAfterCooldown_true", () => {
+  assert.equal(shouldLogVoiceError("VOICE_DISCORD_UNAVAILABLE", T0), true);
+  assert.equal(shouldLogVoiceError("VOICE_DISCORD_UNAVAILABLE", T0 + BOT_WIDE_LOG_COOLDOWN_MS), true);
+});
+
+test("shouldLogVoiceError_otherBotWideCode_trackedSeparately", () => {
+  assert.equal(shouldLogVoiceError("VOICE_DISCORD_UNAVAILABLE", T0), true);
+  assert.equal(shouldLogVoiceError("VOICE_CATEGORY_UNAVAILABLE", T0), true);
+});
+
+test("shouldLogVoiceError_channelSpecificCode_alwaysTrue", () => {
+  assert.equal(shouldLogVoiceError("VOICE_DISCORD_ERROR", T0), true);
+  assert.equal(shouldLogVoiceError("VOICE_DISCORD_ERROR", T0 + 1), true);
 });
 
 test("voiceErrorDetail_errorWithStatus_appendsStatus", () => {

@@ -20,6 +20,7 @@ import {
   releaseVoiceChannel,
   releaseVoiceChannelByKey,
   sanitizeVoiceChannelName,
+  shouldLogVoiceError,
   voiceChannelName,
 } from "./matchVoice.js";
 
@@ -36,7 +37,12 @@ async function replyVoiceError(client: Client, res: Response, route: string, err
     res.status(error.status).json({ error: error.code });
     if (error.status >= 500) {
       // Message fait du contexte et du code de la cause (constructeur) : jamais un texte reçu.
-      await sendLog(client, `${route} : ${voiceErrorDetail(error)}`);
+      // Un refus valant pour tous les salons ne part qu'une fois par délai ; les suivants vont à pm2.
+      if (shouldLogVoiceError(error.code)) {
+        await sendLog(client, `${route} : ${voiceErrorDetail(error)}`);
+      } else {
+        console.warn(`[voice] ${route} : ${error.code}`);
+      }
     }
     return;
   }
