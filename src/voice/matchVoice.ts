@@ -188,6 +188,9 @@ const BOT_WIDE_VOICE_CODES: ReadonlySet<LoggedVoiceCode> = new Set<LoggedVoiceCo
 /** Code d'un refus journalisé : ceux rendus au site, et l'erreur imprévue (`VOICE_INTERNAL_ERROR`). */
 export type LoggedVoiceCode = VoiceErrorCode | "VOICE_INTERNAL_ERROR";
 
+/** Origine d'un échec journalisé : route appelée par le site, ou événement Discord. */
+export type VoiceLogScope = "route" | "event";
+
 /** Délai entre deux journaux Discord d'un même refus. */
 export const BOT_WIDE_LOG_COOLDOWN_MS = 10 * 60 * 1000;
 
@@ -203,10 +206,17 @@ const botWideLoggedAt = new Map<string, number>();
  * @param code Code du refus.
  * @param now Instant courant (ms), pour les tests.
  * @param detail Détail sûr du refus (`voiceErrorDetail`) : deux refus différents partent tous deux.
+ * @param scope Origine (`route` : appel du site ; `event` : suppression ou retrait du suivi sur un
+ *   événement Discord) — un refus d'une route ne tait pas l'échec d'un événement, qui nomme un salon.
  * @returns `true` s'il faut journaliser sur Discord.
  */
-export function shouldLogVoiceError(code: LoggedVoiceCode, now: number = Date.now(), detail: string = ""): boolean {
-  const key = BOT_WIDE_VOICE_CODES.has(code) ? code : `${code}|${detail}`;
+export function shouldLogVoiceError(
+  code: LoggedVoiceCode,
+  now: number = Date.now(),
+  detail: string = "",
+  scope: VoiceLogScope = "route",
+): boolean {
+  const key = BOT_WIDE_VOICE_CODES.has(code) ? `${scope}|${code}` : `${scope}|${code}|${detail}`;
   const last = botWideLoggedAt.get(key);
   if (last !== undefined && now - last < BOT_WIDE_LOG_COOLDOWN_MS) { return false; }
   botWideLoggedAt.delete(key);
@@ -225,13 +235,21 @@ export function shouldLogVoiceError(code: LoggedVoiceCode, now: number = Date.no
  * @param client Client Discord, pour le journal.
  * @param error Erreur capturée.
  * @param message Message sûr (contexte, identifiant, `voiceErrorDetail`), jamais un texte reçu.
+ * @param scope Origine de l'échec (`shouldLogVoiceError`).
+ * @param quietMessage Ligne pm2 quand le salon de logs l'a déjà reçu (par défaut `message`).
  */
-export async function logVoiceFailure(client: Client, error: unknown, message: string): Promise<void> {
+export async function logVoiceFailure(
+  client: Client,
+  error: unknown,
+  message: string,
+  scope: VoiceLogScope,
+  quietMessage: string = message,
+): Promise<void> {
   const code: LoggedVoiceCode = error instanceof VoiceChannelError ? error.code : "VOICE_INTERNAL_ERROR";
-  if (shouldLogVoiceError(code, Date.now(), voiceErrorDetail(error))) {
+  if (shouldLogVoiceError(code, Date.now(), voiceErrorDetail(error), scope)) {
     await sendLog(client, message);
   } else {
-    console.warn(`[voice] ${message}`);
+    console.warn(`[voice] ${quietMessage}`);
   }
 }
 
@@ -705,7 +723,7 @@ export async function handleVoiceStateUpdate(client: Client, oldState: Pick<Voic
       await deleteTracked(client, channel);
     });
   } catch (error) {
-    await logVoiceFailure(client, error, `Salon vocal de match ${channelId} : suppression reportée au balayage (${voiceErrorDetail(error)}).`);
+    await logVoiceFailure(client, error, `Salon vocal de match ${channelId} : suppression reportée au balayage (${voiceErrorDetail(error)}).`, "event");
   }
 }
 
@@ -726,7 +744,7 @@ export async function handleVoiceChannelDeleted(
   try {
     await untrack(channelId);
   } catch (error) {
-    await logVoiceFailure(client, error, `channelDelete : retrait du suivi vocal ${channelId} échoué (${voiceErrorDetail(error)}).`);
+    await logVoiceFailure(client, error, `channelDelete : retrait du suivi vocal ${channelId} échoué (${voiceErrorDetail(error)}).`, "event");
   }
 }
 

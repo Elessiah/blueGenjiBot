@@ -10,7 +10,6 @@
 
 import type { Express, Request, Response } from "express";
 import type { Client } from "discord.js";
-import { sendLog } from "../safe/sendLog.js";
 import {
   voiceErrorDetail,
   VoiceChannelError,
@@ -21,7 +20,6 @@ import {
   releaseVoiceChannelByKey,
   sanitizeVoiceChannelName,
   logVoiceFailure,
-  shouldLogVoiceError,
   voiceChannelName,
 } from "./matchVoice.js";
 
@@ -40,19 +38,14 @@ async function replyVoiceError(client: Client, res: Response, route: string, err
       // Message fait du contexte et du code de la cause (constructeur) : jamais un texte reçu.
       // Un même refus ne part qu'une fois par délai (par code, et par détail s'il est propre au
       // salon) ; les suivants vont à pm2.
-      const detail = voiceErrorDetail(error);
-      if (shouldLogVoiceError(error.code, Date.now(), detail)) {
-        await sendLog(client, `${route} : ${detail}`);
-      } else {
-        console.warn(`[voice] ${route} : ${error.code}`);
-      }
+      await logVoiceFailure(client, error, `${route} : ${voiceErrorDetail(error)}`, "route", `${route} : ${error.code}`);
     }
     return;
   }
   res.status(500).json({ error: "VOICE_INTERNAL_ERROR" });
   // Le code seul : le message peut recopier une valeur reçue (nom, clé). Une fois par délai,
   // comme un refus valant pour tous les salons (le site redemande à chaque passe).
-  await logVoiceFailure(client, error, `${route} : VOICE_INTERNAL_ERROR (${voiceErrorDetail(error)})`);
+  await logVoiceFailure(client, error, `${route} : VOICE_INTERNAL_ERROR (${voiceErrorDetail(error)})`, "route", `${route} : VOICE_INTERNAL_ERROR`);
 }
 
 /**

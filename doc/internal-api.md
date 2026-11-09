@@ -400,7 +400,8 @@ même délai (un refus qui touche chaque salon, comme la limite de salons du ser
 n'inonde pas le salon) ; les suivants ne vont qu'à pm2 (`[voice] <route> : <code>`), pour
 ne pas ajouter d'appels à Discord pendant sa limite de débit. La même règle vaut pour les
 échecs de suppression d'un salon rendu qui se vide (`voiceStateUpdate`) et du retrait du
-suivi d'un salon supprimé à la main (`channelDelete`).
+suivi d'un salon supprimé à la main (`channelDelete`), comptés à part des routes : un refus
+d'une route ne tait pas l'échec d'un événement, qui nomme le salon laissé au balayage.
 
 - `POST /internal/voice/channels`
   - Body: `{ "key": "match:12:team:34", "name": "Nom de l'équipe" }`

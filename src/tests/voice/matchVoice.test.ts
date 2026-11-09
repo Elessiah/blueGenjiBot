@@ -418,18 +418,32 @@ test("shouldLogVoiceError_internalErrorAfterCooldown_true", () => {
 test("logVoiceFailure_unexpectedErrorTwice_oneDiscordLogThenPm2", async (t) => {
   const warned = t.mock.method(console, "warn", () => undefined);
 
-  await logVoiceFailure(client, new TypeError("boom"), "route : VOICE_INTERNAL_ERROR (TypeError)");
-  await logVoiceFailure(client, new TypeError("boom"), "route : VOICE_INTERNAL_ERROR (TypeError)");
+  await logVoiceFailure(client, new TypeError("boom"), "route : VOICE_INTERNAL_ERROR (TypeError)", "route");
+  await logVoiceFailure(client, new TypeError("boom"), "route : VOICE_INTERNAL_ERROR (TypeError)", "route", "route : VOICE_INTERNAL_ERROR");
 
   assert.equal(world.logs.length, 1);
-  assert.deepEqual(warned.mock.calls.map((c) => c.arguments), [["[voice] route : VOICE_INTERNAL_ERROR (TypeError)"]]);
+  assert.deepEqual(warned.mock.calls.map((c) => c.arguments), [["[voice] route : VOICE_INTERNAL_ERROR"]]);
 });
 
 test("logVoiceFailure_differentVoiceCodes_eachLoggedOnDiscord", async () => {
-  await logVoiceFailure(client, new VoiceChannelError("VOICE_DISCORD_UNAVAILABLE"), "a");
-  await logVoiceFailure(client, new VoiceChannelError("VOICE_STORAGE_ERROR"), "b");
+  await logVoiceFailure(client, new VoiceChannelError("VOICE_DISCORD_UNAVAILABLE"), "a", "route");
+  await logVoiceFailure(client, new VoiceChannelError("VOICE_STORAGE_ERROR"), "b", "route");
 
   assert.equal(world.logs.length, 2);
+});
+
+test("logVoiceFailure_routeRefusalThenEventFailure_bothLoggedOnDiscord", async () => {
+  // Un refus d'une route ne tait pas l'échec d'un événement, qui nomme le salon laissé derrière.
+  await logVoiceFailure(client, new VoiceChannelError("VOICE_STORAGE_ERROR"), "route", "route");
+  await logVoiceFailure(client, new VoiceChannelError("VOICE_STORAGE_ERROR"), "salon 1 : suppression reportée", "event");
+
+  assert.deepEqual(world.logs.slice(-2), ["route", "salon 1 : suppression reportée"]);
+});
+
+test("shouldLogVoiceError_sameCodeOtherScope_trackedSeparately", () => {
+  assert.equal(shouldLogVoiceError("VOICE_STORAGE_ERROR", T0, "", "route"), true);
+  assert.equal(shouldLogVoiceError("VOICE_STORAGE_ERROR", T0 + 1, "", "event"), true);
+  assert.equal(shouldLogVoiceError("VOICE_STORAGE_ERROR", T0 + 2, "", "event"), false);
 });
 
 test("shouldLogVoiceError_moreThanHundredDistinctRefusals_oldestForgotten", () => {
