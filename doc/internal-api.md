@@ -393,11 +393,14 @@ que par son code (`code 50035, statut 400`) et l'opération en cours, jamais par
 message de Discord ou de SQLite, qui peut recopier le nom ou la clé reçus (une
 catégorie introuvable est nommée par son identifiant, qui est de la configuration). Un refus valant pour
 tous les salons (`VOICE_DISCORD_UNAVAILABLE`, `VOICE_MISSING_PERMISSIONS`,
-`VOICE_CATEGORY_UNAVAILABLE`) n'y part qu'une fois par code et par 10 minutes, un refus
-propre au salon une fois par code **et** par code de Discord dans le même délai (un refus
-qui touche chaque salon, comme la limite de salons du serveur, n'inonde pas le salon) ; les
-suivants ne vont qu'à pm2 (`[voice] <route> : <code>`), pour ne pas ajouter d'appels à
-Discord pendant sa limite de débit.
+`VOICE_CATEGORY_UNAVAILABLE`, `VOICE_STORAGE_ERROR`, et l'erreur imprévue
+`VOICE_INTERNAL_ERROR`, que le site lit de même) n'y part qu'une fois par code et par
+10 minutes, un refus propre au salon une fois par code **et** par code de Discord dans le
+même délai (un refus qui touche chaque salon, comme la limite de salons du serveur,
+n'inonde pas le salon) ; les suivants ne vont qu'à pm2 (`[voice] <route> : <code>`), pour
+ne pas ajouter d'appels à Discord pendant sa limite de débit. La même règle vaut pour les
+échecs de suppression d'un salon rendu qui se vide (`voiceStateUpdate`) et du retrait du
+suivi d'un salon supprimé à la main (`channelDelete`).
 
 - `POST /internal/voice/channels`
   - Body: `{ "key": "match:12:team:34", "name": "Nom de l'équipe" }`

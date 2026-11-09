@@ -20,6 +20,7 @@ import {
   releaseVoiceChannel,
   releaseVoiceChannelByKey,
   sanitizeVoiceChannelName,
+  logVoiceFailure,
   shouldLogVoiceError,
   voiceChannelName,
 } from "./matchVoice.js";
@@ -49,8 +50,9 @@ async function replyVoiceError(client: Client, res: Response, route: string, err
     return;
   }
   res.status(500).json({ error: "VOICE_INTERNAL_ERROR" });
-  // Le code seul : le message peut recopier une valeur reçue (nom, clé).
-  await sendLog(client, `${route} : VOICE_INTERNAL_ERROR (${voiceErrorDetail(error)})`);
+  // Le code seul : le message peut recopier une valeur reçue (nom, clé). Une fois par délai,
+  // comme un refus valant pour tous les salons (le site redemande à chaque passe).
+  await logVoiceFailure(client, error, `${route} : VOICE_INTERNAL_ERROR (${voiceErrorDetail(error)})`);
 }
 
 /**

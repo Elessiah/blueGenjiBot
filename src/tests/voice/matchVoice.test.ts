@@ -27,6 +27,7 @@ import {
   BOT_WIDE_LOG_COOLDOWN_MS,
   resetVoiceState,
   sanitizeVoiceChannelName,
+  logVoiceFailure,
   shouldLogVoiceError,
   shouldSweep,
   sweepVoiceChannels,
@@ -398,6 +399,39 @@ test("shouldLogVoiceError_sameChannelRefusalAfterCooldown_true", () => {
   assert.equal(shouldLogVoiceError("VOICE_DISCORD_ERROR", T0 + BOT_WIDE_LOG_COOLDOWN_MS, "DiscordAPIError, code 30013"), true);
 });
 
+test("shouldLogVoiceError_storageErrorOtherDetail_withinCooldown_false", () => {
+  // Stockage du bot : vaut pour tous les salons, comme le site le lit — une fois par code.
+  assert.equal(shouldLogVoiceError("VOICE_STORAGE_ERROR", T0, "VOICE_STORAGE_ERROR (stockage)"), true);
+  assert.equal(shouldLogVoiceError("VOICE_STORAGE_ERROR", T0 + 1, "SqliteError, code SQLITE_BUSY"), false);
+});
+
+test("shouldLogVoiceError_internalErrorOtherDetail_withinCooldown_false", () => {
+  assert.equal(shouldLogVoiceError("VOICE_INTERNAL_ERROR", T0, "TypeError, code inconnu"), true);
+  assert.equal(shouldLogVoiceError("VOICE_INTERNAL_ERROR", T0 + 1, "RangeError, code inconnu"), false);
+});
+
+test("shouldLogVoiceError_internalErrorAfterCooldown_true", () => {
+  assert.equal(shouldLogVoiceError("VOICE_INTERNAL_ERROR", T0), true);
+  assert.equal(shouldLogVoiceError("VOICE_INTERNAL_ERROR", T0 + BOT_WIDE_LOG_COOLDOWN_MS), true);
+});
+
+test("logVoiceFailure_unexpectedErrorTwice_oneDiscordLogThenPm2", async (t) => {
+  const warned = t.mock.method(console, "warn", () => undefined);
+
+  await logVoiceFailure(client, new TypeError("boom"), "route : VOICE_INTERNAL_ERROR (TypeError)");
+  await logVoiceFailure(client, new TypeError("boom"), "route : VOICE_INTERNAL_ERROR (TypeError)");
+
+  assert.equal(world.logs.length, 1);
+  assert.deepEqual(warned.mock.calls.map((c) => c.arguments), [["[voice] route : VOICE_INTERNAL_ERROR (TypeError)"]]);
+});
+
+test("logVoiceFailure_differentVoiceCodes_eachLoggedOnDiscord", async () => {
+  await logVoiceFailure(client, new VoiceChannelError("VOICE_DISCORD_UNAVAILABLE"), "a");
+  await logVoiceFailure(client, new VoiceChannelError("VOICE_STORAGE_ERROR"), "b");
+
+  assert.equal(world.logs.length, 2);
+});
+
 test("shouldLogVoiceError_moreThanHundredDistinctRefusals_oldestForgotten", () => {
   for (let index = 0; index <= 100; index++) {
     shouldLogVoiceError("VOICE_DISCORD_ERROR", T0, `code ${index}`);
@@ -580,6 +614,26 @@ test("handleVoiceStateUpdate_deleteFails_loggedWithoutThrowing", async () => {
 
   assert.equal((await tracked()).length, 1);
   assert.match(world.logs.at(-1) ?? "", /reportée au balayage/);
+});
+
+test("handleVoiceStateUpdate_deleteFailsRepeatedly_loggedOnceOnDiscord", async (t) => {
+  // Limite de débit de Discord : chaque départ d'un salon rendu échoue, le salon de logs ne
+  // reçoit qu'une ligne (pas d'appels de plus pendant la limite), le reste va à pm2.
+  const warned = t.mock.method(console, "warn", () => undefined);
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  const voice = world.voices.get(channelId)!;
+  voice.members.size = 1;
+  await releaseVoiceChannel(client, channelId, T0);
+  world.deleteError = Object.assign(new Error("You are being rate limited"), { status: 429 });
+  const logsBefore = world.logs.length;
+
+  voice.members.size = 0;
+  await handleVoiceStateUpdate(client, leftFrom(voice, channelId));
+  await handleVoiceStateUpdate(client, leftFrom(voice, channelId));
+
+  assert.equal(world.logs.length - logsBefore, 1);
+  assert.equal(warned.mock.calls.length, 1);
+  assert.equal((await tracked()).length, 1);
 });
 
 test("handleVoiceChannelDeleted_trackedChannel_untracked", async () => {

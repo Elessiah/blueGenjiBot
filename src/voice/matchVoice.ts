@@ -176,11 +176,17 @@ let lastPermissionAlertAt = Number.NEGATIVE_INFINITY;
  * fois par code **et par détail** (code de Discord) dans le même délai : un refus qui touche
  * chaque salon (limite de salons du serveur) n'inonde pas le salon de logs.
  */
-const BOT_WIDE_VOICE_CODES: ReadonlySet<VoiceErrorCode> = new Set<VoiceErrorCode>([
+const BOT_WIDE_VOICE_CODES: ReadonlySet<LoggedVoiceCode> = new Set<LoggedVoiceCode>([
   "VOICE_DISCORD_UNAVAILABLE",
   "VOICE_MISSING_PERMISSIONS",
   "VOICE_CATEGORY_UNAVAILABLE",
+  // Stockage du bot et erreur imprévue : le site les lit aussi comme valant pour tous les salons.
+  "VOICE_STORAGE_ERROR",
+  "VOICE_INTERNAL_ERROR",
 ]);
+
+/** Code d'un refus journalisé : ceux rendus au site, et l'erreur imprévue (`VOICE_INTERNAL_ERROR`). */
+export type LoggedVoiceCode = VoiceErrorCode | "VOICE_INTERNAL_ERROR";
 
 /** Délai entre deux journaux Discord d'un même refus. */
 export const BOT_WIDE_LOG_COOLDOWN_MS = 10 * 60 * 1000;
@@ -199,7 +205,7 @@ const botWideLoggedAt = new Map<string, number>();
  * @param detail Détail sûr du refus (`voiceErrorDetail`) : deux refus différents partent tous deux.
  * @returns `true` s'il faut journaliser sur Discord.
  */
-export function shouldLogVoiceError(code: VoiceErrorCode, now: number = Date.now(), detail: string = ""): boolean {
+export function shouldLogVoiceError(code: LoggedVoiceCode, now: number = Date.now(), detail: string = ""): boolean {
   const key = BOT_WIDE_VOICE_CODES.has(code) ? code : `${code}|${detail}`;
   const last = botWideLoggedAt.get(key);
   if (last !== undefined && now - last < BOT_WIDE_LOG_COOLDOWN_MS) { return false; }
@@ -210,6 +216,23 @@ export function shouldLogVoiceError(code: VoiceErrorCode, now: number = Date.now
   }
   botWideLoggedAt.set(key, now);
   return true;
+}
+
+/**
+ * Journalise un échec vocal au salon de logs au plus une fois par délai (`shouldLogVoiceError`,
+ * par code de l'erreur — `VOICE_INTERNAL_ERROR` hors `VoiceChannelError`), sinon à pm2 : un
+ * échec répété (limite de débit de Discord) n'ajoute pas d'appels à Discord.
+ * @param client Client Discord, pour le journal.
+ * @param error Erreur capturée.
+ * @param message Message sûr (contexte, identifiant, `voiceErrorDetail`), jamais un texte reçu.
+ */
+export async function logVoiceFailure(client: Client, error: unknown, message: string): Promise<void> {
+  const code: LoggedVoiceCode = error instanceof VoiceChannelError ? error.code : "VOICE_INTERNAL_ERROR";
+  if (shouldLogVoiceError(code, Date.now(), voiceErrorDetail(error))) {
+    await sendLog(client, message);
+  } else {
+    console.warn(`[voice] ${message}`);
+  }
 }
 
 /** Remet à zéro l'état du module (alerte limitée, cache des libérés) ; pour les tests. */
@@ -682,7 +705,7 @@ export async function handleVoiceStateUpdate(client: Client, oldState: Pick<Voic
       await deleteTracked(client, channel);
     });
   } catch (error) {
-    await sendLog(client, `Salon vocal de match ${channelId} : suppression reportée au balayage (${voiceErrorDetail(error)}).`);
+    await logVoiceFailure(client, error, `Salon vocal de match ${channelId} : suppression reportée au balayage (${voiceErrorDetail(error)}).`);
   }
 }
 
@@ -703,7 +726,7 @@ export async function handleVoiceChannelDeleted(
   try {
     await untrack(channelId);
   } catch (error) {
-    await sendLog(client, `channelDelete : retrait du suivi vocal ${channelId} échoué (${voiceErrorDetail(error)}).`);
+    await logVoiceFailure(client, error, `channelDelete : retrait du suivi vocal ${channelId} échoué (${voiceErrorDetail(error)}).`);
   }
 }
 
