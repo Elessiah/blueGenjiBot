@@ -40,6 +40,8 @@ export type World = {
   disconnects: string[];
   /** Erreur levée par la déconnexion d'un occupant. */
   disconnectError: Error | null;
+  /** Issues des prochaines déconnexions, une par appel (`null` : réussie), avant `disconnectError`. */
+  disconnectQueue: (Error | null)[];
   /** État de la catégorie. */
   category: "ok" | "missing" | "text";
   ready: boolean;
@@ -56,6 +58,7 @@ export const world: World = {
   fetchVoiceError: null,
   disconnects: [],
   disconnectError: null,
+  disconnectQueue: [],
   category: "ok",
   ready: true,
   nextId: 300000000000000000n,
@@ -72,6 +75,7 @@ export function resetWorld(): void {
   world.fetchVoiceError = null;
   world.disconnects.length = 0;
   world.disconnectError = null;
+  world.disconnectQueue.length = 0;
   world.category = "ok";
   world.ready = true;
 }
@@ -94,7 +98,8 @@ export function addVoice(id: string, members: number, parentId: string): FakeVoi
       values: () => Array.from({ length: voice.members.size }, () => ({
         voice: {
           disconnect: async (reason?: string) => {
-            if (world.disconnectError) { throw world.disconnectError; }
+            const queued = world.disconnectQueue.length > 0 ? world.disconnectQueue.shift() : world.disconnectError;
+            if (queued) { throw queued; }
             voice.members.size -= 1;
             world.disconnects.push(reason ?? "");
             return null;

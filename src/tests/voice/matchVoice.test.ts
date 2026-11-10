@@ -559,6 +559,28 @@ test("clearVoiceChannel_missingPermissions_throwsAndAlertsMoveMembers", async ()
   assert.match(world.logs[0], /Déplacer des membres/);
 });
 
+test("clearVoiceChannel_oneOccupantRefused_othersStillDisconnectedThenThrows", async () => {
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  world.voices.get(channelId)!.members.size = 3;
+  world.disconnectQueue.push(null, discordError(50035, "Invalid"), null);
+
+  await rejectsWith(clearVoiceChannel(client, channelId), "VOICE_DISCORD_ERROR");
+  assert.equal(world.disconnects.length, 2);
+});
+
+test("clearVoiceChannel_moveMembersAlert_doesNotSilenceManageChannelsAlert", async () => {
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  world.voices.get(channelId)!.members.size = 1;
+  world.disconnectError = discordError(50013, "Missing Permissions");
+  await rejectsWith(clearVoiceChannel(client, channelId), "VOICE_MISSING_PERMISSIONS");
+  world.createError = discordError(50013, "Missing Permissions");
+
+  await rejectsWith(ensureTeamVoiceChannel(client, "match:12:team:35", "Autre", T0), "VOICE_MISSING_PERMISSIONS");
+
+  assert.equal(world.logs.length, 2);
+  assert.match(world.logs[1], /Gérer les salons/);
+});
+
 test("releaseVoiceChannel_emptyChannel_deletedAtOnceAndUntracked", async () => {
   const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
 

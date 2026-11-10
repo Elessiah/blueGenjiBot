@@ -181,7 +181,8 @@ const releasedIds = new Set<string>();
 /** Créations en cours par clé : deux demandes simultanées ne créent qu'un salon. */
 const pendingByKey = new Map<string, Promise<unknown>>();
 
-let lastPermissionAlertAt = Number.NEGATIVE_INFINITY;
+/** Dernière alerte « permission refusée », par permission nommée : l'une ne tait pas l'autre. */
+const lastPermissionAlertAt = new Map<string, number>();
 
 /**
  * Refus valant pour tous les salons (limite de débit ou panne de Discord, permission,
@@ -270,7 +271,7 @@ export async function logVoiceFailure(
 
 /** Remet à zéro l'état du module (alerte limitée, cache des libérés) ; pour les tests. */
 export function resetVoiceState(): void {
-  lastPermissionAlertAt = Number.NEGATIVE_INFINITY;
+  lastPermissionAlertAt.clear();
   botWideLoggedAt.clear();
   releasedIds.clear();
   pendingByKey.clear();
@@ -416,11 +417,12 @@ async function toVoiceError(client: Client, error: unknown, action: VoiceErrorCo
   const code = discordJsonCode(error);
   if (code === MISSING_PERMISSIONS || code === MISSING_ACCESS) {
     const now = Date.now();
-    if (now - lastPermissionAlertAt >= PERMISSION_ALERT_COOLDOWN_MS) {
-      lastPermissionAlertAt = now;
+    const permission = permissionFor(action);
+    if (now - (lastPermissionAlertAt.get(permission) ?? Number.NEGATIVE_INFINITY) >= PERMISSION_ALERT_COOLDOWN_MS) {
+      lastPermissionAlertAt.set(permission, now);
       await sendAlert(
         client,
-        `Salons vocaux de match : permission refusée par Discord (${action}). Le rôle du bot doit avoir « ${permissionFor(action)} » ` +
+        `Salons vocaux de match : permission refusée par Discord (${action}). Le rôle du bot doit avoir « ${permission} » ` +
           `sur la catégorie ${voiceCategoryId()} (action requise sur Discord ; signalé au plus une fois par heure).`,
       );
     }
@@ -675,7 +677,8 @@ export async function releaseVoiceChannel(
  * étant ouverts à qui voit la catégorie. Le salon reste ouvert (et suivi) ; rendu,
  * il se supprime dès qu'il se vide. Les occupants ne sont lus que pour être
  * déconnectés : ni identifiant, ni pseudo, ni nombre n'est gardé, journalisé ou
- * rendu au site. Un occupant parti entre-temps n'est pas une erreur.
+ * rendu au site. Un occupant parti entre-temps n'est pas une erreur ; un refus de Discord
+ * pour l'un n'arrête pas les autres (le premier refus est levé une fois tous essayés).
  * @param client Client Discord.
  * @param channelId Identifiant validé.
  * @returns `false` si le bot ne suit pas ce salon (ou s'il n'existe plus, ou a quitté la catégorie) : rien n'est touché.
@@ -685,15 +688,15 @@ export async function clearVoiceChannel(client: Client, channelId: string): Prom
     if (!row) { return false; }
     const channel = (await fetchVoice(client, channelId)) as ClearableVoice | null;
     if (!channel) { return false; }
+    let refusal: unknown = null;
     for (const occupant of [...channel.members.values()]) {
       try {
         await occupant.voice.disconnect(CLEAR_REASON);
       } catch (error) {
-        if (discordJsonCode(error) !== TARGET_NOT_IN_VOICE) {
-          throw await toVoiceError(client, error, "déconnexion des membres");
-        }
+        if (refusal === null && discordJsonCode(error) !== TARGET_NOT_IN_VOICE) { refusal = error; }
       }
     }
+    if (refusal !== null) { throw await toVoiceError(client, refusal, "déconnexion des membres"); }
     return true;
   });
 }
