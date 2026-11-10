@@ -2,7 +2,7 @@
 
 # Politique de Confidentialité — BlueGenji Bot
 
-**Dernière mise à jour** : 10 novembre 2026
+**Dernière mise à jour** : 12 novembre 2026
 
 > Copie du texte publié sur [https://bluegenji-esport.fr/privacy-policy-bot](https://bluegenji-esport.fr/privacy-policy-bot), **qui fait foi** en cas de divergence. Ne modifiez pas ce fichier à la main : il est régénéré depuis le site (`lib/shared/bot-legal-content.ts` d'AppBlueGenji).
 
@@ -51,7 +51,7 @@ Le fil d'activité public de la page du bot ne contient aucun identifiant Discor
 
 ### Salons vocaux d'équipe des matchs
 
-Dans les tournois BlueGenji qui en ont l'option, le Bot crée sur le serveur Discord de l'association un salon vocal par équipe d'un match, au nom que le site lui transmet (le nom de l'équipe, voir les messages du site ci-dessus), rend au site le seul identifiant de ce salon, et le supprime une fois rendu et vide. Il en garde une fiche : identifiant du salon, clé du match et de l'équipe (des numéros, aucun nom), heures de création et de rendu. Pour savoir si un salon est vide, il tient en mémoire en permanence, que l'option soit allumée ou non dans un tournoi, sans jamais l'enregistrer ni le transmettre au site, l'état vocal des membres du serveur de l'association (identifiant Discord du membre et de sa session vocale, salon où il se trouve, micro ou son coupés par lui ou par la modération, partage d'écran ou caméra actifs, demande de parole et mise en sourdine de scène), avec la fiche de membre que Discord y joint (dont pseudo, surnom, avatar et rôles). Il regarde seulement si un salon est vide : il ne dit jamais au site combien de personnes s'y trouvent, ni qui. Le détail figure au [paragraphe « Salons vocaux d'équipe » de la politique de confidentialité du site](https://bluegenji-esport.fr/rgpd#salons-vocaux) (traitement T18).
+Dans les tournois BlueGenji qui en ont l'option, le Bot crée sur le serveur Discord de l'association un salon vocal par équipe d'un match, au nom que le site lui transmet (le nom de l'équipe, voir les messages du site ci-dessus), rend au site le seul identifiant de ce salon, et le supprime une fois rendu et vide. Il en garde une fiche : identifiant du salon, clé du match et de l'équipe (des numéros, aucun nom), heures de création et de rendu. Pour savoir si un salon est vide, il tient en mémoire en permanence, que l'option soit allumée ou non dans un tournoi, sans jamais l'enregistrer ni le transmettre au site, l'état vocal des membres du serveur de l'association (identifiant Discord du membre et de sa session vocale, salon où il se trouve, micro ou son coupés par lui ou par la modération, partage d'écran ou caméra actifs, demande de parole et mise en sourdine de scène), avec la fiche de membre que Discord y joint (dont pseudo, surnom, avatar et rôles). Il ne s'en sert que pour savoir si un salon est vide et, quand l'arbitrage du site vide le salon d'une équipe, pour en déconnecter tous les occupants (le salon reste ouvert) : il n'en garde rien, n'en journalise rien et ne dit jamais au site combien de personnes s'y trouvent, ni qui. Les salons sont ouverts à qui voit la catégorie des matchs ; le journal d'audit de Discord garde les déconnexions telles que Discord les y inscrit. Le détail figure au [paragraphe « Salons vocaux d'équipe » de la politique de confidentialité du site](https://bluegenji-esport.fr/rgpd#salons-vocaux) (traitement T18).
 
 ### Base légale
 
