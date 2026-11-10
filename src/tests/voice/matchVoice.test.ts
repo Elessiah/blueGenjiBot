@@ -17,6 +17,7 @@ import {
   VOICE_SWEEP_CRON,
   VOICE_USER_LIMIT,
   VoiceChannelError,
+  clearVoiceChannel,
   ensureTeamVoiceChannel,
   handleVoiceChannelDeleted,
   handleVoiceStateUpdate,
@@ -511,6 +512,52 @@ test("releaseVoiceChannelByKey_unknownKey_resolvesWithoutDeleting", async () => 
 });
 
 // --- Libération ------------------------------------------------------------
+
+// --- Vidage par l'arbitre (D13) ----------------------------------------------
+
+test("clearVoiceChannel_trackedOccupied_disconnectsAllAndKeepsChannel", async () => {
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  world.voices.get(channelId)!.members.size = 3;
+
+  const cleared = await clearVoiceChannel(client, channelId);
+
+  assert.equal(cleared, true);
+  assert.deepEqual(world.disconnects, [
+    "Salon vocal de match vidé par l'arbitre",
+    "Salon vocal de match vidé par l'arbitre",
+    "Salon vocal de match vidé par l'arbitre",
+  ]);
+  assert.equal(world.voices.get(channelId)!.members.size, 0);
+  assert.deepEqual(world.deletions, []);
+  assert.deepEqual((await tracked()).map((row) => [row.channel_id, row.released_at]), [[channelId, null]]);
+});
+
+test("clearVoiceChannel_untracked_returnsFalseAndTouchesNothing", async () => {
+  addVoice("400000000000000009", 2, CATEGORY);
+
+  const cleared = await clearVoiceChannel(client, "400000000000000009");
+
+  assert.equal(cleared, false);
+  assert.deepEqual(world.disconnects, []);
+  assert.equal(world.voices.get("400000000000000009")!.members.size, 2);
+});
+
+test("clearVoiceChannel_occupantAlreadyLeft_notAnError", async () => {
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  world.voices.get(channelId)!.members.size = 1;
+  world.disconnectError = discordError(40032, "Target user is not connected to voice.");
+
+  assert.equal(await clearVoiceChannel(client, channelId), true);
+});
+
+test("clearVoiceChannel_missingPermissions_throwsAndAlertsMoveMembers", async () => {
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  world.voices.get(channelId)!.members.size = 1;
+  world.disconnectError = discordError(50013, "Missing Permissions");
+
+  await rejectsWith(clearVoiceChannel(client, channelId), "VOICE_MISSING_PERMISSIONS");
+  assert.match(world.logs[0], /Déplacer des membres/);
+});
 
 test("releaseVoiceChannel_emptyChannel_deletedAtOnceAndUntracked", async () => {
   const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);

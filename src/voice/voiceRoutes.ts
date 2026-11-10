@@ -1,6 +1,6 @@
 /**
- * Routes `/internal/voice/*` de l'API interne (MATCH-VOICE) : création et
- * libération des salons vocaux d'équipe, par identifiant ou par clé (aucune route de comptage). Montées par `startInternalApi`
+ * Routes `/internal/voice/*` de l'API interne (MATCH-VOICE) : création,
+ * libération (par identifiant ou par clé) et vidage des salons vocaux d'équipe (aucune route de comptage). Montées par `startInternalApi`
  * derrière la même garde `x-internal-token` que les autres routes ; la logique
  * vit dans `voice/matchVoice.ts`.
  *
@@ -13,6 +13,7 @@ import type { Client } from "discord.js";
 import {
   voiceErrorDetail,
   VoiceChannelError,
+  clearVoiceChannel,
   ensureTeamVoiceChannel,
   parseChannelId,
   parseVoiceKey,
@@ -99,6 +100,25 @@ export function registerVoiceRoutes(app: Express, client: Client): void {
       res.json({ released: true });
     } catch (error) {
       await replyVoiceError(client, res, "POST /internal/voice/channels/:id/release", error);
+    }
+  });
+
+  app.post("/internal/voice/channels/:channelId/clear", async (req: Request, res: Response) => {
+    const channelId = parseChannelId(req.params.channelId);
+    if (!channelId) {
+      res.status(400).json({ error: "INVALID_CHANNEL_ID" });
+      return;
+    }
+    if (refuseNotReady(client, res)) { return; }
+    try {
+      // « Vidé », rien de plus : ni qui, ni combien.
+      if (await clearVoiceChannel(client, channelId)) {
+        res.json({ cleared: true });
+      } else {
+        res.status(404).json({ error: "VOICE_CHANNEL_NOT_TRACKED" });
+      }
+    } catch (error) {
+      await replyVoiceError(client, res, "POST /internal/voice/channels/:id/clear", error);
     }
   });
 

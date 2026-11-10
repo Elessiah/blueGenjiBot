@@ -388,7 +388,7 @@ route inconnue, `404 INTERNAL_ROUTE_NOT_FOUND`). Les salons sont créés dans la
 permissions alignées sur la catégorie. Le bot ne supprime jamais
 un salon qu'il n'a pas créé : seuls les salons inscrits dans son suivi
 (table `MatchVoiceChannel`) sont concernés. Le rôle du bot doit avoir
-« Gérer les salons » sur la catégorie. Une erreur vocale ne part au salon de logs
+« Gérer les salons » et « Déplacer des membres » (vidage d'un salon) sur la catégorie. Une erreur vocale ne part au salon de logs
 que par son code (`code 50035, statut 400`) et l'opération en cours, jamais par le
 message de Discord ou de SQLite, qui peut recopier le nom ou la clé reçus (une
 catégorie introuvable est nommée par son identifiant, qui est de la configuration). Un refus valant pour
@@ -438,6 +438,20 @@ d'une route ne tait pas l'échec d'un événement, qui nomme le salon laissé au
     salon qu'il ne suit pas). Le site ferme alors sa ligne normalement. (Avant
     2026-11-06 : `404 VOICE_CHANNEL_NOT_TRACKED`, que le site lit toujours
     comme « déjà supprimé ».)
+
+- `POST /internal/voice/channels/:channelId/clear`
+  - Vide un salon suivi : tous ses occupants sont déconnectés (geste de l'arbitre
+    du match sur le site ; les salons sont ouverts à qui voit la catégorie). Le
+    salon reste ouvert et suivi ; un salon déjà rendu se supprime dès qu'il est vide.
+    Retourne `{ "cleared": true }` — ni qui, ni combien : les occupants ne sont lus
+    que pour être déconnectés, rien n'en est gardé ni journalisé. Un occupant parti
+    entre-temps (code Discord 40032) n'est pas une erreur. Motif du journal d'audit
+    de Discord : « Salon vocal de match vidé par l'arbitre » (aucun nom).
+  - Erreurs : `400 INVALID_CHANNEL_ID`, `404 VOICE_CHANNEL_NOT_TRACKED` (salon non
+    suivi, disparu ou sorti de la catégorie : rien n'est touché), `503 DISCORD_NOT_READY`,
+    `503 VOICE_MISSING_PERMISSIONS` (« Déplacer des membres » manquant : une alerte au
+    staff, au plus une par heure), `503 VOICE_DISCORD_UNAVAILABLE`,
+    `502 VOICE_DISCORD_ERROR`, `500 VOICE_STORAGE_ERROR`.
 
 - `POST /internal/voice/keys/release`
   - Body: `{ "key": "match:12:team:34" }`. Libère le salon d'une **clé** : le

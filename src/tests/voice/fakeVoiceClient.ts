@@ -12,7 +12,8 @@ export type FakeVoice = {
   type: ChannelType;
   parentId: string;
   name: string;
-  members: { size: number };
+  /** Effectif réglable ; `values()` rend autant d'occupants, que le bot peut déconnecter. */
+  members: { size: number; values: () => Iterable<{ voice: { disconnect: (reason?: string) => Promise<unknown> } }> };
   delete: (reason?: string) => Promise<unknown>;
 };
 
@@ -35,6 +36,10 @@ export type World = {
   deleteError: Error | null;
   /** Erreur levée par la lecture d'un salon vocal. */
   fetchVoiceError: Error | null;
+  /** Motifs des déconnexions d'occupants faites par le bot. */
+  disconnects: string[];
+  /** Erreur levée par la déconnexion d'un occupant. */
+  disconnectError: Error | null;
   /** État de la catégorie. */
   category: "ok" | "missing" | "text";
   ready: boolean;
@@ -49,6 +54,8 @@ export const world: World = {
   createError: null,
   deleteError: null,
   fetchVoiceError: null,
+  disconnects: [],
+  disconnectError: null,
   category: "ok",
   ready: true,
   nextId: 300000000000000000n,
@@ -63,6 +70,8 @@ export function resetWorld(): void {
   world.createError = null;
   world.deleteError = null;
   world.fetchVoiceError = null;
+  world.disconnects.length = 0;
+  world.disconnectError = null;
   world.category = "ok";
   world.ready = true;
 }
@@ -80,7 +89,19 @@ export function addVoice(id: string, members: number, parentId: string): FakeVoi
     type: ChannelType.GuildVoice,
     parentId,
     name: "salon",
-    members: { size: members },
+    members: {
+      size: members,
+      values: () => Array.from({ length: voice.members.size }, () => ({
+        voice: {
+          disconnect: async (reason?: string) => {
+            if (world.disconnectError) { throw world.disconnectError; }
+            voice.members.size -= 1;
+            world.disconnects.push(reason ?? "");
+            return null;
+          },
+        },
+      })),
+    },
     delete: async () => {
       if (world.deleteError) { throw world.deleteError; }
       world.voices.delete(id);

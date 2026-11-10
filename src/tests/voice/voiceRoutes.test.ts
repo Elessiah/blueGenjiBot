@@ -271,6 +271,35 @@ test("unknownInternalRoute_noToken_returns401", async () => {
   assert.deepEqual(reply, { status: 401, body: { error: "UNAUTHORIZED" } });
 });
 
+test("clearVoiceChannel_noToken_returns401", async () => {
+  const reply = await call(`/internal/voice/channels/${UNTRACKED}/clear`, { method: "POST", token: null });
+  assert.deepEqual(reply, { status: 401, body: { error: "UNAUTHORIZED" } });
+});
+
+test("clearVoiceChannel_invalidId_returns400", async () => {
+  const reply = await call("/internal/voice/channels/12/clear", { method: "POST" });
+  assert.deepEqual(reply, { status: 400, body: { error: "INVALID_CHANNEL_ID" } });
+});
+
+test("clearVoiceChannel_trackedOccupied_returnsClearedWithoutCount", async () => {
+  const { body } = await create({ key: "match:1:team:2", name: "Les Genji" });
+  world.voices.get(String(body.channelId))!.members.size = 2;
+
+  const reply = await call(`/internal/voice/channels/${String(body.channelId)}/clear`, { method: "POST" });
+
+  assert.deepEqual(reply, { status: 200, body: { cleared: true } });
+  assert.equal(world.disconnects.length, 2);
+});
+
+test("clearVoiceChannel_untrackedChannel_returns404AndTouchesNothing", async () => {
+  addVoice(UNTRACKED, 2, DEFAULT_VOICE_CATEGORY_ID);
+
+  const reply = await call(`/internal/voice/channels/${UNTRACKED}/clear`, { method: "POST" });
+
+  assert.deepEqual(reply, { status: 404, body: { error: "VOICE_CHANNEL_NOT_TRACKED" } });
+  assert.deepEqual(world.disconnects, []);
+});
+
 test("releaseVoiceChannel_invalidId_returns400", async () => {
   const reply = await call("/internal/voice/channels/12/release", { method: "POST" });
   assert.deepEqual(reply, { status: 400, body: { error: "INVALID_CHANNEL_ID" } });

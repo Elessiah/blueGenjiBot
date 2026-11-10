@@ -19,6 +19,8 @@
  *   jamais supprimé) ;
  * - **catégorie** : un salon suivi déplacé hors de la catégorie n'est plus
  *   rendu ni supprimé : il est oublié ;
+ * - **vider** : l'arbitre du match peut faire déconnecter tous les occupants d'un
+ *   salon suivi (les salons sont ouverts à qui voit la catégorie) ;
  * - **vie privée** : seul importe qu'un salon soit vide ou non ; aucun membre,
  *   identifiant de membre ni pseudo n'est rendu au site, stocké ou journalisé.
  */
@@ -89,6 +91,12 @@ const SNOWFLAKE_PATTERN = /^\d{17,20}$/;
 /** Raison inscrite au journal d'audit Discord à chaque suppression. */
 const DELETE_REASON = "Salon vocal de match terminé";
 
+/** Motif du journal d'audit de Discord quand l'arbitre vide un salon : aucun nom. */
+const CLEAR_REASON = "Salon vocal de match vidé par l'arbitre";
+
+/** Discord : le membre n'est plus dans un salon vocal (parti entre la lecture et la déconnexion). */
+const TARGET_NOT_IN_VOICE = 40032;
+
 /** Code d'erreur rendu au site. */
 export type VoiceErrorCode =
   | "VOICE_CATEGORY_UNAVAILABLE"
@@ -114,6 +122,7 @@ export type VoiceErrorContext =
   | "lecture de la catégorie"
   | "création du salon"
   | "catégorie introuvable"
+  | "déconnexion des membres"
   | "stockage";
 
 /** Échec d'une opération sur un salon vocal, porteur du code rendu au site. */
@@ -145,6 +154,12 @@ type TrackedRow = { channel_id: string; voice_key: string; created_at: number; r
 
 /** Ce que le bot lit d'un salon vocal suivi : son effectif et sa suppression. */
 type VoiceHandle = { id: string; parentId?: string | null; members: { size: number }; delete(reason?: string): Promise<unknown> };
+
+/** Occupant d'un salon tel que le bot le déconnecte : rien d'autre n'en est lu. */
+type VoiceOccupant = { voice: { disconnect(reason?: string): Promise<unknown> } };
+
+/** Salon vocal dont les occupants sont lus pour être déconnectés (`clearVoiceChannel`). */
+type ClearableVoice = VoiceHandle & { members: { size: number; values(): Iterable<VoiceOccupant> } };
 
 /**
  * Un salon est-il encore un salon vocal de match : rangé dans la catégorie ?
@@ -405,7 +420,7 @@ async function toVoiceError(client: Client, error: unknown, action: VoiceErrorCo
       lastPermissionAlertAt = now;
       await sendAlert(
         client,
-        `Salons vocaux de match : permission refusée par Discord (${action}). Le rôle du bot doit avoir « Gérer les salons » ` +
+        `Salons vocaux de match : permission refusée par Discord (${action}). Le rôle du bot doit avoir « ${permissionFor(action)} » ` +
           `sur la catégorie ${voiceCategoryId()} (action requise sur Discord ; signalé au plus une fois par heure).`,
       );
     }
@@ -421,6 +436,15 @@ async function toVoiceError(client: Client, error: unknown, action: VoiceErrorCo
     return new VoiceChannelError("VOICE_DISCORD_UNAVAILABLE", action, error);
   }
   return new VoiceChannelError("VOICE_DISCORD_ERROR", action, error);
+}
+
+/**
+ * Permission Discord que demande une opération, nommée dans l'alerte au staff.
+ * @param action Opération en cours.
+ * @returns Le nom de la permission sur Discord.
+ */
+function permissionFor(action: VoiceErrorContext): string {
+  return action === "déconnexion des membres" ? "Déplacer des membres" : "Gérer les salons";
 }
 
 /**
@@ -643,6 +667,35 @@ export async function releaseVoiceChannel(
   now: number = Date.now(),
 ): Promise<{ deleted: boolean }> {
   return withChannelLock(channelId, async (row) => (row ? releaseTrackedLocked(client, channelId, now) : { deleted: true }));
+}
+
+/**
+ * Vide un salon suivi (`POST …/clear`) : tous ses occupants sont déconnectés —
+ * l'arbitre du match en écarte ainsi qui ne devrait pas s'y trouver, les salons
+ * étant ouverts à qui voit la catégorie. Le salon reste ouvert (et suivi) ; rendu,
+ * il se supprime dès qu'il se vide. Les occupants ne sont lus que pour être
+ * déconnectés : ni identifiant, ni pseudo, ni nombre n'est gardé, journalisé ou
+ * rendu au site. Un occupant parti entre-temps n'est pas une erreur.
+ * @param client Client Discord.
+ * @param channelId Identifiant validé.
+ * @returns `false` si le bot ne suit pas ce salon (ou s'il n'existe plus, ou a quitté la catégorie) : rien n'est touché.
+ */
+export async function clearVoiceChannel(client: Client, channelId: string): Promise<boolean> {
+  return withChannelLock(channelId, async (row) => {
+    if (!row) { return false; }
+    const channel = (await fetchVoice(client, channelId)) as ClearableVoice | null;
+    if (!channel) { return false; }
+    for (const occupant of [...channel.members.values()]) {
+      try {
+        await occupant.voice.disconnect(CLEAR_REASON);
+      } catch (error) {
+        if (discordJsonCode(error) !== TARGET_NOT_IN_VOICE) {
+          throw await toVoiceError(client, error, "déconnexion des membres");
+        }
+      }
+    }
+    return true;
+  });
 }
 
 /**
