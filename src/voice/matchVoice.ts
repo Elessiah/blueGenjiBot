@@ -92,7 +92,7 @@ const SNOWFLAKE_PATTERN = /^\d{17,20}$/;
 const DELETE_REASON = "Salon vocal de match terminé";
 
 /** Motif du journal d'audit de Discord quand l'arbitre vide un salon : aucun nom. */
-const CLEAR_REASON = "Salon vocal de match vidé par l'arbitre";
+const CLEAR_REASON = "Salon vocal de match vidé par l'arbitrage";
 
 /** Discord : le membre n'est plus dans un salon vocal (parti entre la lecture et la déconnexion). */
 const TARGET_NOT_IN_VOICE = 40032;

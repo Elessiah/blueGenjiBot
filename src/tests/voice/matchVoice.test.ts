@@ -523,9 +523,9 @@ test("clearVoiceChannel_trackedOccupied_disconnectsAllAndKeepsChannel", async ()
 
   assert.equal(cleared, true);
   assert.deepEqual(world.disconnects, [
-    "Salon vocal de match vidé par l'arbitre",
-    "Salon vocal de match vidé par l'arbitre",
-    "Salon vocal de match vidé par l'arbitre",
+    "Salon vocal de match vidé par l'arbitrage",
+    "Salon vocal de match vidé par l'arbitrage",
+    "Salon vocal de match vidé par l'arbitrage",
   ]);
   assert.equal(world.voices.get(channelId)!.members.size, 0);
   assert.deepEqual(world.deletions, []);
