@@ -10,23 +10,30 @@ import { getBddInstance, resetBddInstance } from "../../bdd/Bdd.js";
 import {
   ABANDONED_MAX_AGE_MS,
   DEFAULT_VOICE_CATEGORY_ID,
+  FALLBACK_VOICE_LABEL,
   FALLBACK_VOICE_NAME,
   RELEASED_MAX_AGE_MS,
   UNRELEASED_MAX_AGE_MS,
   VOICE_SWEEP_CRON,
   VOICE_USER_LIMIT,
   VoiceChannelError,
+  clearVoiceChannel,
   ensureTeamVoiceChannel,
   handleVoiceChannelDeleted,
   handleVoiceStateUpdate,
   parseChannelId,
   parseVoiceKey,
   releaseVoiceChannel,
+  releaseVoiceChannelByKey,
+  BOT_WIDE_LOG_COOLDOWN_MS,
   resetVoiceState,
   sanitizeVoiceChannelName,
+  logVoiceFailure,
+  shouldLogVoiceError,
   shouldSweep,
   sweepVoiceChannels,
   voiceCategoryId,
+  voiceChannelName,
   voiceErrorDetail,
 } from "../../voice/matchVoice.js";
 import { addVoice, discordError, fakeVoiceClient, resetWorld, world } from "./fakeVoiceClient.js";
@@ -251,7 +258,7 @@ test("ensureTeamVoiceChannel_categoryUnknown_messageNamesCategoryId", async () =
   world.category = "missing";
   await assert.rejects(ensureTeamVoiceChannel(client, KEY, "Les Genji", T0), {
     name: "VoiceChannelError",
-    message: `catégorie ${CATEGORY} introuvable`,
+    message: `catégorie introuvable (${CATEGORY})`,
   });
 });
 
@@ -279,37 +286,329 @@ test("ensureTeamVoiceChannel_otherDiscordError_discordErrorWithoutAlert", async 
   assert.deepEqual(world.logs, []);
 });
 
-test("voiceErrorDetail_discordError_returnsCodeOnly", () => {
-  assert.equal(voiceErrorDetail(discordError(50035, "Invalid Form Body name: Equipe Bleue")), "code 50035");
+test("voiceErrorDetail_discordError_returnsKindAndCodeOnly", () => {
+  assert.equal(voiceErrorDetail(discordError(50035, "Invalid Form Body name: Equipe Bleue")), "Error, code 50035");
 });
 
 test("voiceErrorDetail_codeWithSpaces_returnsUnknownCode", () => {
-  assert.equal(voiceErrorDetail(Object.assign(new Error("x"), { code: "texte d'un joueur" })), "code inconnu");
+  assert.equal(voiceErrorDetail(Object.assign(new Error("x"), { code: "texte d'un joueur" })), "Error, code inconnu");
+});
+
+test("voiceErrorDetail_fetchFailedWithCauseCode_returnsCauseCodeAndNetwork", () => {
+  const error = new TypeError("fetch failed", { cause: Object.assign(new Error("socket hang up"), { code: "ECONNRESET" }) });
+
+  assert.equal(voiceErrorDetail(error), "TypeError, code ECONNRESET, réseau");
+});
+
+test("voiceErrorDetail_abortError_namesAbortErrorNotDiscordRefusal", () => {
+  const error = new DOMException("This operation was aborted", "AbortError");
+
+  assert.equal(voiceErrorDetail(error), "AbortError, code 20");
+});
+
+test("voiceErrorDetail_voiceChannelErrorWithoutContext_returnsCodeOnce", () => {
+  assert.equal(voiceErrorDetail(new VoiceChannelError("VOICE_STORAGE_ERROR")), "VOICE_STORAGE_ERROR");
+});
+
+test("VoiceChannelError_subjectIdNotSnowflake_subjectIgnored", () => {
+  const error = new VoiceChannelError("VOICE_CATEGORY_UNAVAILABLE", "catégorie introuvable", undefined, "Equipe Bleue");
+
+  assert.equal(error.message, "catégorie introuvable");
+});
+
+test("voiceChannelName_regularName_returnsNameUnchanged", () => {
+  assert.equal(voiceChannelName(KEY, "Les Genji"), "Les Genji");
+});
+
+test("voiceChannelName_fallbackName_returnsBilingualLabelWithTeamNumber", () => {
+  assert.equal(voiceChannelName(KEY, FALLBACK_VOICE_NAME), "Salon d'équipe / Team channel 34");
+});
+
+test("voiceChannelName_fallbackKeyWithoutTeam_returnsBilingualLabelOnly", () => {
+  assert.equal(voiceChannelName("tournoi-7", FALLBACK_VOICE_NAME), FALLBACK_VOICE_LABEL);
+});
+
+test("ensureTeamVoiceChannel_discordRateLimited_discordUnavailable503", async () => {
+  world.createError = Object.assign(new Error("You are being rate limited"), { status: 429 });
+
+  await assert.rejects(ensureTeamVoiceChannel(client, KEY, "Les Genji", T0), (error: unknown) =>
+    error instanceof VoiceChannelError && error.code === "VOICE_DISCORD_UNAVAILABLE" && error.status === 503);
+});
+
+test("ensureTeamVoiceChannel_networkFailureWithoutStatus_discordUnavailable", async () => {
+  // Discord injoignable : tous les salons échoueraient de même, le site arrête sa passe.
+  world.createError = Object.assign(new TypeError("fetch failed"), { cause: Object.assign(new Error("reset"), { code: "ECONNRESET" }) });
+
+  await rejectsWith(ensureTeamVoiceChannel(client, KEY, "Les Genji", T0), "VOICE_DISCORD_UNAVAILABLE");
+});
+
+test("ensureTeamVoiceChannel_restTimeoutAbort_discordUnavailable", async () => {
+  const abort = new Error("This operation was aborted");
+  abort.name = "AbortError";
+  world.createError = abort;
+
+  await rejectsWith(ensureTeamVoiceChannel(client, KEY, "Les Genji", T0), "VOICE_DISCORD_UNAVAILABLE");
+});
+
+test("ensureTeamVoiceChannel_unreadableCauseGetter_codedDiscordError", async () => {
+  // Une chaîne `cause` illisible ne fait jamais lever le chemin d'erreur : le refus reste codé.
+  const error = new Error("boom");
+  Object.defineProperty(error, "cause", {
+    get() {
+      throw new Error("revoked");
+    },
+  });
+  world.createError = error;
+
+  await rejectsWith(ensureTeamVoiceChannel(client, KEY, "Les Genji", T0), "VOICE_DISCORD_ERROR");
+});
+
+test("ensureTeamVoiceChannel_discordServerError_discordUnavailable", async () => {
+  world.createError = Object.assign(new Error("Internal Server Error"), { status: 502 });
+
+  await rejectsWith(ensureTeamVoiceChannel(client, KEY, "Les Genji", T0), "VOICE_DISCORD_UNAVAILABLE");
+});
+
+test("shouldLogVoiceError_botWideCodeWithinCooldown_false", () => {
+  assert.equal(shouldLogVoiceError("VOICE_MISSING_PERMISSIONS", T0), true);
+  assert.equal(shouldLogVoiceError("VOICE_MISSING_PERMISSIONS", T0 + BOT_WIDE_LOG_COOLDOWN_MS - 1), false);
+});
+
+test("shouldLogVoiceError_botWideCodeAfterCooldown_true", () => {
+  assert.equal(shouldLogVoiceError("VOICE_DISCORD_UNAVAILABLE", T0), true);
+  assert.equal(shouldLogVoiceError("VOICE_DISCORD_UNAVAILABLE", T0 + BOT_WIDE_LOG_COOLDOWN_MS), true);
+});
+
+test("shouldLogVoiceError_otherBotWideCode_trackedSeparately", () => {
+  assert.equal(shouldLogVoiceError("VOICE_DISCORD_UNAVAILABLE", T0), true);
+  assert.equal(shouldLogVoiceError("VOICE_CATEGORY_UNAVAILABLE", T0), true);
+});
+
+test("shouldLogVoiceError_sameChannelRefusalWithinCooldown_false", () => {
+  // Un refus qui touche chaque salon (limite de salons du serveur) n'inonde pas le salon de logs.
+  assert.equal(shouldLogVoiceError("VOICE_DISCORD_ERROR", T0, "DiscordAPIError, code 30013"), true);
+  assert.equal(shouldLogVoiceError("VOICE_DISCORD_ERROR", T0 + 1, "DiscordAPIError, code 30013"), false);
+});
+
+test("shouldLogVoiceError_otherChannelRefusalDetail_true", () => {
+  assert.equal(shouldLogVoiceError("VOICE_DISCORD_ERROR", T0, "DiscordAPIError, code 30013"), true);
+  assert.equal(shouldLogVoiceError("VOICE_DISCORD_ERROR", T0 + 1, "DiscordAPIError, code 50035"), true);
+});
+
+test("shouldLogVoiceError_sameChannelRefusalAfterCooldown_true", () => {
+  assert.equal(shouldLogVoiceError("VOICE_DISCORD_ERROR", T0, "DiscordAPIError, code 30013"), true);
+  assert.equal(shouldLogVoiceError("VOICE_DISCORD_ERROR", T0 + BOT_WIDE_LOG_COOLDOWN_MS, "DiscordAPIError, code 30013"), true);
+});
+
+test("shouldLogVoiceError_storageErrorOtherDetail_withinCooldown_false", () => {
+  // Stockage du bot : vaut pour tous les salons, comme le site le lit — une fois par code.
+  assert.equal(shouldLogVoiceError("VOICE_STORAGE_ERROR", T0, "VOICE_STORAGE_ERROR (stockage)"), true);
+  assert.equal(shouldLogVoiceError("VOICE_STORAGE_ERROR", T0 + 1, "SqliteError, code SQLITE_BUSY"), false);
+});
+
+test("shouldLogVoiceError_internalErrorOtherDetail_withinCooldown_false", () => {
+  assert.equal(shouldLogVoiceError("VOICE_INTERNAL_ERROR", T0, "TypeError, code inconnu"), true);
+  assert.equal(shouldLogVoiceError("VOICE_INTERNAL_ERROR", T0 + 1, "RangeError, code inconnu"), false);
+});
+
+test("shouldLogVoiceError_internalErrorAfterCooldown_true", () => {
+  assert.equal(shouldLogVoiceError("VOICE_INTERNAL_ERROR", T0), true);
+  assert.equal(shouldLogVoiceError("VOICE_INTERNAL_ERROR", T0 + BOT_WIDE_LOG_COOLDOWN_MS), true);
+});
+
+test("logVoiceFailure_unexpectedErrorTwice_oneDiscordLogThenPm2", async (t) => {
+  const warned = t.mock.method(console, "warn", () => undefined);
+
+  await logVoiceFailure(client, new TypeError("boom"), "route : VOICE_INTERNAL_ERROR (TypeError)", "route");
+  await logVoiceFailure(client, new TypeError("boom"), "route : VOICE_INTERNAL_ERROR (TypeError)", "route", "route : VOICE_INTERNAL_ERROR");
+
+  assert.equal(world.logs.length, 1);
+  assert.deepEqual(warned.mock.calls.map((c) => c.arguments), [["[voice] route : VOICE_INTERNAL_ERROR"]]);
+});
+
+test("logVoiceFailure_differentVoiceCodes_eachLoggedOnDiscord", async () => {
+  await logVoiceFailure(client, new VoiceChannelError("VOICE_DISCORD_UNAVAILABLE"), "a", "route");
+  await logVoiceFailure(client, new VoiceChannelError("VOICE_STORAGE_ERROR"), "b", "route");
+
+  assert.equal(world.logs.length, 2);
+});
+
+test("logVoiceFailure_routeRefusalThenEventFailure_bothLoggedOnDiscord", async () => {
+  // Un refus d'une route ne tait pas l'échec d'un événement, qui nomme le salon laissé derrière.
+  await logVoiceFailure(client, new VoiceChannelError("VOICE_STORAGE_ERROR"), "route", "route");
+  await logVoiceFailure(client, new VoiceChannelError("VOICE_STORAGE_ERROR"), "salon 1 : suppression reportée", "event");
+
+  assert.deepEqual(world.logs.slice(-2), ["route", "salon 1 : suppression reportée"]);
+});
+
+test("shouldLogVoiceError_sameCodeOtherScope_trackedSeparately", () => {
+  assert.equal(shouldLogVoiceError("VOICE_STORAGE_ERROR", T0, "", "route"), true);
+  assert.equal(shouldLogVoiceError("VOICE_STORAGE_ERROR", T0 + 1, "", "event"), true);
+  assert.equal(shouldLogVoiceError("VOICE_STORAGE_ERROR", T0 + 2, "", "event"), false);
+});
+
+test("shouldLogVoiceError_moreThanHundredDistinctRefusals_oldestForgotten", () => {
+  for (let index = 0; index <= 100; index++) {
+    shouldLogVoiceError("VOICE_DISCORD_ERROR", T0, `code ${index}`);
+  }
+  // Mémoire bornée : le plus ancien refus est oublié, journalisé de nouveau.
+  assert.equal(shouldLogVoiceError("VOICE_DISCORD_ERROR", T0 + 1, "code 0"), true);
+  assert.equal(shouldLogVoiceError("VOICE_DISCORD_ERROR", T0 + 1, "code 100"), false);
 });
 
 test("voiceErrorDetail_errorWithStatus_appendsStatus", () => {
   // Limite de débit de Discord : le statut distingue un 429 d'une panne.
   const error = Object.assign(new Error("You are being rate limited"), { status: 429 });
 
-  assert.equal(voiceErrorDetail(error), "code inconnu, statut 429");
+  assert.equal(voiceErrorDetail(error), "Error, code inconnu, statut 429");
 });
 
 test("voiceErrorDetail_voiceChannelError_returnsCodeAndContext", () => {
-  assert.equal(voiceErrorDetail(new VoiceChannelError("VOICE_CATEGORY_UNAVAILABLE", "catégorie 1 introuvable")),
-    "VOICE_CATEGORY_UNAVAILABLE (catégorie 1 introuvable)");
+  assert.equal(voiceErrorDetail(new VoiceChannelError("VOICE_CATEGORY_UNAVAILABLE", "catégorie introuvable", undefined, CATEGORY)),
+    `VOICE_CATEGORY_UNAVAILABLE (catégorie introuvable (${CATEGORY}))`);
 });
 
 test("VoiceChannelError_causeWithMessage_messageHasContextAndCodeOnly", () => {
   const error = new VoiceChannelError("VOICE_DISCORD_ERROR", "création du salon", discordError(50035, "Invalid Form Body name: Equipe Bleue"));
 
-  assert.equal(error.message, "création du salon : code 50035");
+  assert.equal(error.message, "création du salon : Error, code 50035");
 });
 
 test("voiceErrorDetail_noCode_returnsUnknownCode", () => {
-  assert.equal(voiceErrorDetail(new Error("UNIQUE constraint failed: Equipe Bleue")), "code inconnu");
+  assert.equal(voiceErrorDetail(new Error("UNIQUE constraint failed: Equipe Bleue")), "Error, code inconnu");
+});
+
+test("releaseVoiceChannelByKey_trackedKey_emptyChannelDeletedAndUntracked", async () => {
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+
+  await releaseVoiceChannelByKey(client, KEY, T0);
+
+  assert.deepEqual(world.deletions, [channelId]);
+  assert.deepEqual(await tracked(), []);
+});
+
+test("releaseVoiceChannelByKey_concurrentEnsure_waitsForReleaseThenCreatesNewChannel", async () => {
+  // Lecture et libération sous un seul verrou : une reprise de la clé ne se glisse pas entre
+  // les deux (elle rendrait au site un salon supprimé juste après).
+  const { channelId: first } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+
+  const released = releaseVoiceChannelByKey(client, KEY, T0);
+  const ensured = ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  await released;
+  const second = await ensured;
+
+  assert.deepEqual(world.deletions, [first]);
+  assert.equal(second.created, true);
+  assert.notEqual(second.channelId, first);
+  assert.deepEqual(await tracked(), [{ channel_id: second.channelId, voice_key: KEY, released_at: null }]);
+});
+
+test("releaseVoiceChannelByKey_unknownKey_resolvesWithoutDeleting", async () => {
+  addVoice("400000000000000003", 0, CATEGORY);
+
+  await releaseVoiceChannelByKey(client, KEY, T0);
+
+  assert.deepEqual(world.deletions, []);
 });
 
 // --- Libération ------------------------------------------------------------
+
+// --- Vidage par l'arbitre (D13) ----------------------------------------------
+
+test("clearVoiceChannel_trackedOccupied_disconnectsAllAndKeepsChannel", async () => {
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  world.voices.get(channelId)!.members.size = 3;
+
+  const cleared = await clearVoiceChannel(client, channelId);
+
+  assert.equal(cleared, true);
+  assert.deepEqual(world.disconnects, [
+    "Salon vocal de match vidé par l'arbitrage",
+    "Salon vocal de match vidé par l'arbitrage",
+    "Salon vocal de match vidé par l'arbitrage",
+  ]);
+  assert.equal(world.voices.get(channelId)!.members.size, 0);
+  assert.deepEqual(world.deletions, []);
+  assert.deepEqual((await tracked()).map((row) => [row.channel_id, row.released_at]), [[channelId, null]]);
+});
+
+test("clearVoiceChannel_untracked_returnsFalseAndTouchesNothing", async () => {
+  addVoice("400000000000000009", 2, CATEGORY);
+
+  const cleared = await clearVoiceChannel(client, "400000000000000009");
+
+  assert.equal(cleared, false);
+  assert.deepEqual(world.disconnects, []);
+  assert.equal(world.voices.get("400000000000000009")!.members.size, 2);
+});
+
+test("clearVoiceChannel_occupantAlreadyLeft_notAnError", async () => {
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  world.voices.get(channelId)!.members.size = 1;
+  world.disconnectError = discordError(40032, "Target user is not connected to voice.");
+
+  assert.equal(await clearVoiceChannel(client, channelId), true);
+});
+
+test("clearVoiceChannel_missingPermissions_throwsAndAlertsMoveMembers", async () => {
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  world.voices.get(channelId)!.members.size = 1;
+  world.disconnectError = discordError(50013, "Missing Permissions");
+
+  await rejectsWith(clearVoiceChannel(client, channelId), "VOICE_MISSING_PERMISSIONS");
+  assert.match(world.logs[0], /Déplacer des membres/);
+});
+
+test("clearVoiceChannel_oneOccupantRefused_othersStillDisconnectedThenThrows", async () => {
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  world.voices.get(channelId)!.members.size = 3;
+  world.disconnectQueue.push(null, discordError(50035, "Invalid"), null);
+
+  await rejectsWith(clearVoiceChannel(client, channelId), "VOICE_DISCORD_ERROR");
+  assert.equal(world.disconnects.length, 2);
+});
+
+test("clearVoiceChannel_rateLimited_stopsCallingDiscordForRemainingOccupants", async () => {
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  world.voices.get(channelId)!.members.size = 3;
+  world.disconnectQueue.push(Object.assign(new Error("You are being rate limited"), { status: 429 }), null, null);
+
+  await rejectsWith(clearVoiceChannel(client, channelId), "VOICE_DISCORD_UNAVAILABLE");
+  assert.deepEqual(world.disconnects, []);
+  assert.equal(world.voices.get(channelId)!.members.size, 3);
+});
+
+test("clearVoiceChannel_localErrorWithoutDiscordCode_othersStillDisconnected", async () => {
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  world.voices.get(channelId)!.members.size = 3;
+  world.disconnectQueue.push(new TypeError("member is partial"), null, null);
+
+  await rejectsWith(clearVoiceChannel(client, channelId), "VOICE_DISCORD_ERROR");
+  assert.equal(world.disconnects.length, 2);
+});
+
+test("clearVoiceChannel_occupantRefusalThenMissingPermissions_reportsPermissionAndAlerts", async () => {
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  world.voices.get(channelId)!.members.size = 3;
+  world.disconnectQueue.push(discordError(50035, "Invalid"), discordError(50013, "Missing Permissions"), null);
+
+  await rejectsWith(clearVoiceChannel(client, channelId), "VOICE_MISSING_PERMISSIONS");
+  assert.deepEqual(world.disconnects, []);
+  assert.match(world.logs[0], /Déplacer des membres/);
+});
+
+test("clearVoiceChannel_moveMembersAlert_doesNotSilenceManageChannelsAlert", async () => {
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  world.voices.get(channelId)!.members.size = 1;
+  world.disconnectError = discordError(50013, "Missing Permissions");
+  await rejectsWith(clearVoiceChannel(client, channelId), "VOICE_MISSING_PERMISSIONS");
+  world.createError = discordError(50013, "Missing Permissions");
+
+  await rejectsWith(ensureTeamVoiceChannel(client, "match:12:team:35", "Autre", T0), "VOICE_MISSING_PERMISSIONS");
+
+  assert.equal(world.logs.length, 2);
+  assert.match(world.logs[1], /Gérer les salons/);
+});
 
 test("releaseVoiceChannel_emptyChannel_deletedAtOnceAndUntracked", async () => {
   const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
@@ -427,6 +726,26 @@ test("handleVoiceStateUpdate_deleteFails_loggedWithoutThrowing", async () => {
 
   assert.equal((await tracked()).length, 1);
   assert.match(world.logs.at(-1) ?? "", /reportée au balayage/);
+});
+
+test("handleVoiceStateUpdate_deleteFailsRepeatedly_loggedOnceOnDiscord", async (t) => {
+  // Limite de débit de Discord : chaque départ d'un salon rendu échoue, le salon de logs ne
+  // reçoit qu'une ligne (pas d'appels de plus pendant la limite), le reste va à pm2.
+  const warned = t.mock.method(console, "warn", () => undefined);
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  const voice = world.voices.get(channelId)!;
+  voice.members.size = 1;
+  await releaseVoiceChannel(client, channelId, T0);
+  world.deleteError = Object.assign(new Error("You are being rate limited"), { status: 429 });
+  const logsBefore = world.logs.length;
+
+  voice.members.size = 0;
+  await handleVoiceStateUpdate(client, leftFrom(voice, channelId));
+  await handleVoiceStateUpdate(client, leftFrom(voice, channelId));
+
+  assert.equal(world.logs.length - logsBefore, 1);
+  assert.equal(warned.mock.calls.length, 1);
+  assert.equal((await tracked()).length, 1);
 });
 
 test("handleVoiceChannelDeleted_trackedChannel_untracked", async () => {
