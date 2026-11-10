@@ -431,13 +431,23 @@ async function toVoiceError(client: Client, error: unknown, action: VoiceErrorCo
   // Limite de débit, panne de Discord (sans code JSON), coupure réseau ou délai dépassé (sans
   // statut) : tous les salons suivants échoueraient de même, le site arrête sa passe au lieu
   // d'appeler pour chacun.
-  const status = safeErrorStatus(error);
-  const overloaded = status !== null && (status === 429 || status >= 500);
-  const unreachable = status === null && (transientNetwork(error) || safeErrorKind(error) === "AbortError");
-  if (code === null && (overloaded || unreachable)) {
+  if (discordUnavailable(error)) {
     return new VoiceChannelError("VOICE_DISCORD_UNAVAILABLE", action, error);
   }
   return new VoiceChannelError("VOICE_DISCORD_ERROR", action, error);
+}
+
+/**
+ * Discord saturé (429), en panne (5xx, sans code JSON), ou injoignable (coupure réseau, délai
+ * dépassé, sans statut) : tout appel suivant échouerait de même.
+ * @param error Erreur levée par discord.js.
+ * @returns `true` si l'erreur vaut pour tout appel, pas pour un seul salon ou occupant.
+ */
+function discordUnavailable(error: unknown): boolean {
+  if (discordJsonCode(error) !== null) { return false; }
+  const status = safeErrorStatus(error);
+  if (status !== null) { return status === 429 || status >= 500; }
+  return transientNetwork(error) || safeErrorKind(error) === "AbortError";
 }
 
 /**
@@ -696,9 +706,9 @@ export async function clearVoiceChannel(client: Client, channelId: string): Prom
       } catch (error) {
         const code = discordJsonCode(error);
         if (code === TARGET_NOT_IN_VOICE) { continue; }
-        // Permission manquante (alerte au staff) ou Discord saturé, en panne, injoignable (sans
-        // code JSON) : les suivants échoueraient de même, on n'appelle plus.
-        if (code === null || code === MISSING_PERMISSIONS || code === MISSING_ACCESS) {
+        // Permission manquante (alerte au staff) ou Discord saturé, en panne, injoignable
+        // (`discordUnavailable`) : les suivants échoueraient de même, on n'appelle plus.
+        if (code === MISSING_PERMISSIONS || code === MISSING_ACCESS || discordUnavailable(error)) {
           refusal = error;
           break;
         }

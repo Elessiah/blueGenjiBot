@@ -578,6 +578,15 @@ test("clearVoiceChannel_rateLimited_stopsCallingDiscordForRemainingOccupants", a
   assert.equal(world.voices.get(channelId)!.members.size, 3);
 });
 
+test("clearVoiceChannel_localErrorWithoutDiscordCode_othersStillDisconnected", async () => {
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  world.voices.get(channelId)!.members.size = 3;
+  world.disconnectQueue.push(new TypeError("member is partial"), null, null);
+
+  await rejectsWith(clearVoiceChannel(client, channelId), "VOICE_DISCORD_ERROR");
+  assert.equal(world.disconnects.length, 2);
+});
+
 test("clearVoiceChannel_occupantRefusalThenMissingPermissions_reportsPermissionAndAlerts", async () => {
   const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
   world.voices.get(channelId)!.members.size = 3;
