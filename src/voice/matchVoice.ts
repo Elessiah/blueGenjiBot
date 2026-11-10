@@ -19,7 +19,7 @@
  *   jamais supprimé) ;
  * - **catégorie** : un salon suivi déplacé hors de la catégorie n'est plus
  *   rendu ni supprimé : il est oublié ;
- * - **vider** : l'arbitrage (arbitres et administrateurs) peut faire déconnecter tous les occupants d'un
+ * - **vider** : l'arbitrage (arbitres et administrateurs) ou l'équipe (son propre salon) peut faire déconnecter tous les occupants d'un
  *   salon suivi (les salons sont ouverts à qui voit la catégorie) ;
  * - **vie privée** : seul importe qu'un salon soit vide ou non ; aucun membre,
  *   identifiant de membre ni pseudo n'est rendu au site, stocké ou journalisé.
@@ -91,8 +91,12 @@ const SNOWFLAKE_PATTERN = /^\d{17,20}$/;
 /** Raison inscrite au journal d'audit Discord à chaque suppression. */
 const DELETE_REASON = "Salon vocal de match terminé";
 
-/** Motif du journal d'audit de Discord quand l'arbitrage (arbitres et administrateurs) vide un salon : aucun nom. */
-const CLEAR_REASON = "Salon vocal de match vidé par l'arbitrage";
+/**
+ * Motif du journal d'audit de Discord quand un salon est vidé : neutre, aucun nom ni
+ * auteur — l'arbitrage (D13) comme l'équipe (propriétaire, manager, capitaine, D36)
+ * passent par la même route du bot, qui ne sait pas qui a demandé le vidage.
+ */
+const CLEAR_REASON = "Salon vocal de match vidé";
 
 /** Discord : le membre n'est plus dans un salon vocal (parti entre la lecture et la déconnexion). */
 const TARGET_NOT_IN_VOICE = 40032;
@@ -683,7 +687,7 @@ export async function releaseVoiceChannel(
 
 /**
  * Vide un salon suivi (`POST …/clear`) : tous ses occupants sont déconnectés —
- * l'arbitrage (arbitres et administrateurs) en écarte ainsi qui ne devrait pas s'y trouver, les salons
+ * l'arbitrage (arbitres et administrateurs, D13) ou l'équipe pour son propre salon (D36) en écarte ainsi qui ne devrait pas s'y trouver, les salons
  * étant ouverts à qui voit la catégorie. Le salon reste ouvert (et suivi) ; rendu,
  * il se supprime dès qu'il se vide. Les occupants ne sont lus que pour être
  * déconnectés : ni identifiant, ni pseudo, ni nombre n'est gardé, journalisé ou
