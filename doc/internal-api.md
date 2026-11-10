@@ -445,8 +445,9 @@ d'une route ne tait pas l'échec d'un événement, qui nomme le salon laissé au
     salon reste ouvert et suivi ; un salon déjà rendu se supprime dès qu'il est vide.
     Retourne `{ "cleared": true }` — ni qui, ni combien : les occupants ne sont lus
     que pour être déconnectés, rien n'en est gardé ni journalisé. Un occupant parti
-    entre-temps (code Discord 40032) n'est pas une erreur ; un refus pour un
-    occupant n'arrête pas les autres (le premier refus est rendu une fois tous essayés). Motif du journal d'audit
+    entre-temps (code Discord 40032) n'est pas une erreur ; un refus propre à un
+    occupant n'arrête pas les autres (rendu une fois tous essayés) ; une permission manquante ou
+    un Discord saturé ou injoignable arrête la boucle aussitôt. Motif du journal d'audit
     de Discord : « Salon vocal de match vidé par l'arbitre » (aucun nom).
   - Erreurs : `400 INVALID_CHANNEL_ID`, `404 VOICE_CHANNEL_NOT_TRACKED` (salon non
     suivi, disparu ou sorti de la catégorie : rien n'est touché), `503 DISCORD_NOT_READY`,

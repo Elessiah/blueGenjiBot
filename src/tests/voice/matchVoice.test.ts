@@ -568,6 +568,26 @@ test("clearVoiceChannel_oneOccupantRefused_othersStillDisconnectedThenThrows", a
   assert.equal(world.disconnects.length, 2);
 });
 
+test("clearVoiceChannel_rateLimited_stopsCallingDiscordForRemainingOccupants", async () => {
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  world.voices.get(channelId)!.members.size = 3;
+  world.disconnectQueue.push(Object.assign(new Error("You are being rate limited"), { status: 429 }), null, null);
+
+  await rejectsWith(clearVoiceChannel(client, channelId), "VOICE_DISCORD_UNAVAILABLE");
+  assert.deepEqual(world.disconnects, []);
+  assert.equal(world.voices.get(channelId)!.members.size, 3);
+});
+
+test("clearVoiceChannel_occupantRefusalThenMissingPermissions_reportsPermissionAndAlerts", async () => {
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  world.voices.get(channelId)!.members.size = 3;
+  world.disconnectQueue.push(discordError(50035, "Invalid"), discordError(50013, "Missing Permissions"), null);
+
+  await rejectsWith(clearVoiceChannel(client, channelId), "VOICE_MISSING_PERMISSIONS");
+  assert.deepEqual(world.disconnects, []);
+  assert.match(world.logs[0], /Déplacer des membres/);
+});
+
 test("clearVoiceChannel_moveMembersAlert_doesNotSilenceManageChannelsAlert", async () => {
   const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
   world.voices.get(channelId)!.members.size = 1;

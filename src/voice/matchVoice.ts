@@ -677,8 +677,9 @@ export async function releaseVoiceChannel(
  * étant ouverts à qui voit la catégorie. Le salon reste ouvert (et suivi) ; rendu,
  * il se supprime dès qu'il se vide. Les occupants ne sont lus que pour être
  * déconnectés : ni identifiant, ni pseudo, ni nombre n'est gardé, journalisé ou
- * rendu au site. Un occupant parti entre-temps n'est pas une erreur ; un refus de Discord
- * pour l'un n'arrête pas les autres (le premier refus est levé une fois tous essayés).
+ * rendu au site. Un occupant parti entre-temps n'est pas une erreur ; un refus propre à un
+ * occupant n'arrête pas les autres (levé une fois tous essayés), mais une permission manquante
+ * ou un Discord saturé, en panne ou injoignable arrête la boucle (les suivants échoueraient de même).
  * @param client Client Discord.
  * @param channelId Identifiant validé.
  * @returns `false` si le bot ne suit pas ce salon (ou s'il n'existe plus, ou a quitté la catégorie) : rien n'est touché.
@@ -693,7 +694,15 @@ export async function clearVoiceChannel(client: Client, channelId: string): Prom
       try {
         await occupant.voice.disconnect(CLEAR_REASON);
       } catch (error) {
-        if (refusal === null && discordJsonCode(error) !== TARGET_NOT_IN_VOICE) { refusal = error; }
+        const code = discordJsonCode(error);
+        if (code === TARGET_NOT_IN_VOICE) { continue; }
+        // Permission manquante (alerte au staff) ou Discord saturé, en panne, injoignable (sans
+        // code JSON) : les suivants échoueraient de même, on n'appelle plus.
+        if (code === null || code === MISSING_PERMISSIONS || code === MISSING_ACCESS) {
+          refusal = error;
+          break;
+        }
+        refusal ??= error;
       }
     }
     if (refusal !== null) { throw await toVoiceError(client, refusal, "déconnexion des membres"); }
