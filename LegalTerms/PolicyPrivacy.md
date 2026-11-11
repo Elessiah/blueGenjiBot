@@ -87,9 +87,9 @@ This processing is based on the association's **legitimate interest** (Article 6
 - Members of the association's Discord server allowed in the match category, who see the team voice channels and their occupants, and its administration, which reads in Discord's audit log the creation and deletion of each channel, with its name, and the disconnections of a clearing.
 - Moderators of the association's Discord server: if a Discord AutoMod rule blocks or flags a #live announcement, its text (including the public username in a solo tournament) may reach the server's moderation alert channel.
 - The administrators of any server where the Bot is installed, and the holders of the Bot administration role each server designates (**/set-bot-admin**), who can read the list of exclusions (**/ban-list** command, reply visible only to the person who asked).
-- The technical host, Keryan Houssin, the association's technical manager, who runs the Bot on their own machine (a Raspberry Pi in Caen, France) on the association's behalf: no hosting provider, so no processor.
+- The technical host, Keryan Houssin, the association's technical manager, who runs the Bot on their own machine (a Raspberry Pi in Caen, France) on the association's behalf: no hosting service provider, so no processor.
 - Discord, the platform the Bot runs on.
-- Hetzner Online GmbH (Germany), which stores the backups, encrypted before upload with keys Hetzner does not hold, within the European Union: processor of the association.
+- Hetzner Online GmbH (Germany), which stores the backups, encrypted before upload with keys Hetzner does not hold, within the European Union: processor, under Hetzner's data processing agreement accepted by the association's technical manager.
 - Microsoft, which hosts the technical host's personal mailbox (Outlook.com), through which any request about your data that you email to them, and their emailed reply, pass without encryption by the association, readable by Microsoft.
 - The technical host's phone operator, if you call them or leave them a text or voicemail about your data.
 - No data is sold, or handed over to any recipient other than those listed here.

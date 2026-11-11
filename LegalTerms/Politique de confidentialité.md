@@ -89,7 +89,7 @@ Ces traitements reposent sur l'**intérêt légitime** de l'association (article
 - Les administrateurs de tout serveur où le Bot est installé, et les titulaires du rôle d'administration du Bot que chaque serveur désigne (**/set-bot-admin**), qui peuvent lire la liste des exclusions (commande **/ban-list**, réponse visible du seul demandeur).
 - L'hébergeur technique, Keryan Houssin, responsable technique de l'association, qui fait tourner le Bot sur sa propre machine (un Raspberry Pi, à Caen) pour le compte de l'association : aucun prestataire d'hébergement, donc pas de sous-traitant.
 - Discord, plateforme sur laquelle le Bot fonctionne.
-- Hetzner Online GmbH (Allemagne), qui stocke les sauvegardes, chiffrées avant envoi avec des clés que Hetzner ne détient pas, dans l'Union européenne : sous-traitant de l'association.
+- Hetzner Online GmbH (Allemagne), qui stocke les sauvegardes, chiffrées avant envoi avec des clés que Hetzner ne détient pas, dans l'Union européenne : sous-traitant, dans le cadre du contrat de traitement des données de Hetzner accepté par le responsable technique de l'association.
 - Microsoft, qui héberge la messagerie personnelle (Outlook.com) de l'hébergeur technique, par où passent, non chiffrées par l'association et lisibles par Microsoft, toute demande relative à vos données que vous envoyez par courriel à l'hébergeur technique et la réponse que celui-ci vous adresse par courriel.
 - L'opérateur téléphonique de l'hébergeur technique, si vous l'appelez ou lui laissez un SMS ou un message vocal au sujet de vos données.
 - Aucune donnée n'est vendue, ni cédée à d'autres destinataires que ceux listés ici.
