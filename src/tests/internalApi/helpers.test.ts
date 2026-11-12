@@ -14,7 +14,10 @@ import {
   internalErrorLogLine,
   internalErrorReply,
   unwrappedRoutes,
+  wrapUnwrappedRoutes,
+  ROUTER_STACK_NOT_FOUND,
 } from "../../internalApi/helpers.js";
+import type { AddressInfo } from "node:net";
 
 test("absDelta formate le signe correctement", () => {
   assert.equal(absDelta(15, 12), "+3");
@@ -389,4 +392,83 @@ test("unwrappedRoutes_middlewareOnly_returnsEmpty", () => {
   app.use((_req, _res, next) => { next(); });
 
   assert.deepEqual(unwrappedRoutes(app), []);
+});
+
+test("unwrappedRoutes_syncMiddlewareBeforeWrappedHandler_returnsEmpty", () => {
+  const app = express();
+  app.post("/a", express.json({ limit: "1kb" }), asyncRoute(async () => undefined));
+
+  assert.deepEqual(unwrappedRoutes(app), []);
+});
+
+test("unwrappedRoutes_bareAsyncMiddleware_listsTheRoute", () => {
+  const app = express();
+  app.post("/a", async (_req, _res, next) => { next(); }, asyncRoute(async () => undefined));
+
+  assert.deepEqual(unwrappedRoutes(app), ["POST /a"]);
+});
+
+test("unwrappedRoutes_plainHandlerOnMountedRouter_listsIt", () => {
+  const app = express();
+  const router = express.Router();
+  router.get("/b", async () => undefined);
+  app.use("/internal/x", router);
+
+  assert.deepEqual(unwrappedRoutes(app), ["GET /b"]);
+});
+
+test("unwrappedRoutes_noRouterStack_returnsNotFoundMarker", () => {
+  // Pile absente (autre version d'Express) : jamais une liste vide qui ferait croire tout enveloppé.
+  assert.deepEqual(unwrappedRoutes({} as Parameters<typeof unwrappedRoutes>[0]), [ROUTER_STACK_NOT_FOUND]);
+});
+
+test("wrapUnwrappedRoutes_noRouterStack_returnsNotFoundMarker", () => {
+  assert.deepEqual(wrapUnwrappedRoutes({} as Parameters<typeof wrapUnwrappedRoutes>[0]), [ROUTER_STACK_NOT_FOUND]);
+});
+
+/** Démarre `app` sur un port libre, appelle `route`, rend le statut et le corps, puis ferme. */
+async function callOnce(app: ReturnType<typeof express>, route: string): Promise<{ status: number; body: string }> {
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise<void>((resolve) => server.once("listening", () => resolve()));
+  try {
+    const { port } = server.address() as AddressInfo;
+    const response = await fetch(`http://127.0.0.1:${port}${route}`, { signal: AbortSignal.timeout(5_000) });
+    return { status: response.status, body: await response.text() };
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+}
+
+test("wrapUnwrappedRoutes_rejectingPlainRoute_answers500AndListsIt", async () => {
+  const app = express();
+  app.get("/a", async () => { throw new Error("secret"); });
+  app.use(internalErrorHandler({ error: () => undefined }));
+
+  const wrapped = wrapUnwrappedRoutes(app);
+  const { status, body } = await callOnce(app, "/a");
+
+  assert.deepEqual(wrapped, ["GET /a"]);
+  assert.equal(status, 500);
+  assert.deepEqual(JSON.parse(body), { error: "INTERNAL_ERROR" });
+  assert.deepEqual(unwrappedRoutes(app), []);
+});
+
+test("wrapUnwrappedRoutes_wrappedAsyncMiddleware_stillCallsNext", async () => {
+  const app = express();
+  app.get("/a", async (_req, _res, next) => { next(); }, asyncRoute((_req, res) => { res.json({ ok: true }); }));
+
+  const wrapped = wrapUnwrappedRoutes(app);
+  const { status, body } = await callOnce(app, "/a");
+
+  assert.deepEqual(wrapped, ["GET /a"]);
+  assert.equal(status, 200);
+  assert.deepEqual(JSON.parse(body), { ok: true });
+});
+
+test("wrapUnwrappedRoutes_everyRouteWrapped_changesNothing", () => {
+  const app = express();
+  app.get("/a", asyncRoute(async () => undefined));
+
+  assert.deepEqual(wrapUnwrappedRoutes(app), []);
 });

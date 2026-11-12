@@ -181,8 +181,17 @@ const fakeClient = {
 let server: Server;
 let baseUrl: string;
 
+/** Lignes d'erreur écrites au démarrage de l'API (routes enveloppées d'office). */
+const startupErrors: string[] = [];
+
 test.before(async () => {
-  server = startInternalApi(fakeClient);
+  const consoleError = console.error;
+  console.error = (...args: unknown[]) => { startupErrors.push(args.map(String).join(" ")); };
+  try {
+    server = startInternalApi(fakeClient);
+  } finally {
+    console.error = consoleError;
+  }
   await once(server, "listening");
   baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
@@ -216,16 +225,19 @@ test.after(async () => {
 
 type CallOptions = { method?: string; body?: unknown; token?: string | null; headers?: Record<string, string> };
 
-async function call(route: string, options: CallOptions = {}): Promise<{ status: number; body: Record<string, unknown>; headers: Headers }> {
+/** Méthode, en-têtes et corps d'un appel : une seule construction pour les deux transports. */
+function buildRequest(options: CallOptions): { method: string; headers: Record<string, string>; payload: string | undefined } {
   const headers: Record<string, string> = { ...options.headers };
   const token = options.token === undefined ? TOKEN : options.token;
   if (token !== null) { headers["x-internal-token"] = token; }
-  if (options.body !== undefined) { headers["content-type"] = "application/json"; }
-  const response = await fetch(baseUrl + route, {
-    method: options.method ?? (options.body === undefined ? "GET" : "POST"),
-    headers,
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
-  });
+  const payload = options.body === undefined ? undefined : JSON.stringify(options.body);
+  if (payload !== undefined) { headers["content-type"] = "application/json"; }
+  return { method: options.method ?? (payload === undefined ? "GET" : "POST"), headers, payload };
+}
+
+async function call(route: string, options: CallOptions = {}): Promise<{ status: number; body: Record<string, unknown>; headers: Headers }> {
+  const { method, headers, payload } = buildRequest(options);
+  const response = await fetch(baseUrl + route, { method, headers, body: payload });
   const text = await response.text();
   return { status: response.status, body: text ? JSON.parse(text) : {}, headers: response.headers };
 }
@@ -238,22 +250,20 @@ async function call(route: string, options: CallOptions = {}): Promise<{ status:
  * pas l'horloge simulée.
  */
 function callUnderMockedClock(route: string, options: CallOptions = {}): Promise<{ status: number; body: Record<string, unknown> }> {
-  const token = options.token === undefined ? TOKEN : options.token;
-  const headers: Record<string, string> = { ...options.headers };
-  if (token !== null) { headers["x-internal-token"] = token; }
-  const payload = options.body === undefined ? undefined : JSON.stringify(options.body);
-  if (payload !== undefined) { headers["content-type"] = "application/json"; }
+  const { method, headers, payload } = buildRequest(options);
   return new Promise((resolve, reject) => {
-    const req = http.request(baseUrl + route, {
-      method: options.method ?? (payload === undefined ? "GET" : "POST"),
-      headers,
-      agent: false,
-    }, (res) => {
+    const req = http.request(baseUrl + route, { method, headers, agent: false }, (res) => {
       const chunks: Buffer[] = [];
       res.on("data", (chunk: Buffer) => chunks.push(chunk));
       res.on("end", () => {
         const text = Buffer.concat(chunks).toString("utf8");
-        resolve({ status: res.statusCode ?? 0, body: text ? JSON.parse(text) : {} });
+        // Un corps qui n'est pas du JSON (page d'erreur, réponse tronquée) rejette
+        // l'appel au lieu de lever dans l'écouteur, hors du test.
+        try {
+          resolve({ status: res.statusCode ?? 0, body: text ? JSON.parse(text) : {} });
+        } catch (error) {
+          reject(new Error(`réponse ${res.statusCode ?? 0} illisible : ${String(error)}`));
+        }
       });
       res.on("error", reject);
     });
@@ -1384,8 +1394,24 @@ test("shouldReportInternalError_otherLine_returnsTrue", () => {
 });
 
 test("startInternalApi_everyRoute_wrappedInAsyncRoute", () => {
-  // Express 4 laisse un rejet sans réponse : chaque route passe par `asyncRoute`.
+  // Express 4 laisse un rejet sans réponse : chaque route passe par `asyncRoute` dans
+  // le code, sans compter sur l'enveloppe posée d'office au démarrage.
   const app = server.listeners("request")[0] as Parameters<typeof unwrappedRoutes>[0];
 
+  assert.deepEqual(startupErrors.filter((line) => line.includes("asyncRoute")), []);
   assert.deepEqual(unwrappedRoutes(app), []);
+});
+
+test("shouldReportInternalError_sameFailureOtherHttpStatus_returnsFalse", () => {
+  resetInternalErrorReports();
+  shouldReportInternalError("[internalApi] INTERNAL_ERROR (DiscordAPIError, code 0, statut 429)", 1_000);
+
+  assert.equal(shouldReportInternalError("[internalApi] INTERNAL_ERROR (DiscordAPIError, code 0, statut 503)", 1_001), false);
+});
+
+test("shouldReportInternalError_otherCodeSameStatus_returnsTrue", () => {
+  resetInternalErrorReports();
+  shouldReportInternalError("[internalApi] INTERNAL_ERROR (DiscordAPIError, code 0, statut 500)", 1_000);
+
+  assert.equal(shouldReportInternalError("[internalApi] INTERNAL_ERROR (DiscordAPIError, code 50013, statut 500)", 1_001), true);
 });

@@ -105,10 +105,13 @@ export function runningMarkerPath(statusPath: string): string {
 }
 
 /**
- * Lit le départ d'une sauvegarde en cours (marqueur posé par le script).
+ * Lit le départ d'une sauvegarde en cours (marqueur posé par le script). Le
+ * marqueur porte une ligne par exécution en cours (`<date ISO> <PID>`, ou la date
+ * seule d'un script antérieur) : la plus ancienne des lignes lisibles et récentes
+ * est rendue, une ligne illisible, future ou trop vieille est ignorée.
  * @param statusPath Chemin du fichier de statut.
  * @param now Horloge injectable, pour les tests.
- * @returns L'instant du départ (ms) si le marqueur est présent, lisible et récent, sinon `null`.
+ * @returns L'instant du départ (ms) d'une exécution en cours récente, sinon `null`.
  */
 export async function readRunningSince(statusPath: string, now: number = Date.now()): Promise<number | null> {
   let raw: string;
@@ -117,9 +120,10 @@ export async function readRunningSince(statusPath: string, now: number = Date.no
   } catch {
     return null;
   }
-  const startedAt = Date.parse(raw.trim());
-  if (!Number.isFinite(startedAt) || startedAt > now || now - startedAt >= RUNNING_MAX_AGE_MS) { return null; }
-  return startedAt;
+  const starts = raw.split("\n")
+    .map((line) => Date.parse(line.trim().split(/\s+/)[0] ?? ""))
+    .filter((startedAt) => Number.isFinite(startedAt) && startedAt <= now && now - startedAt < RUNNING_MAX_AGE_MS);
+  return starts.length === 0 ? null : Math.min(...starts);
 }
 
 /**

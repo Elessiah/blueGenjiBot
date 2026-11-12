@@ -238,8 +238,30 @@ export function internalErrorHandler(sinks: InternalErrorSinks = {}): ErrorReque
 /** Gestionnaire de route, synchrone ou asynchrone. */
 type RouteHandler = (req: Request, res: Response) => unknown;
 
+/** Gestionnaire Express quelconque (route ou intergiciel), synchrone ou asynchrone. */
+type AnyHandler = (req: Request, res: Response, next: NextFunction) => unknown;
+
 /** Gestionnaires rendus par {@link asyncRoute}, relus par {@link unwrappedRoutes}. */
 const WRAPPED_ROUTES = new WeakSet<object>();
+
+/** Enveloppe de {@link asyncRoute}, `next` transmis (un intergiciel l'appelle). */
+function forwardRejections(handler: AnyHandler): (req: Request, res: Response, next: NextFunction) => void {
+  const wrapped = (req: Request, res: Response, next: NextFunction): void => {
+    const forward = (error: unknown): void => {
+      // `next()` sans valeur passe à la route suivante, `next("route")` / `next("router")`
+      // aussi : un rejet falsy ou l'une de ces chaînes devient une vraie erreur.
+      const usable = Boolean(error) && error !== "route" && error !== "router";
+      next(usable ? error : new Error("rejet sans valeur exploitable"));
+    };
+    try {
+      Promise.resolve(handler(req, res, next)).catch(forward);
+    } catch (error) {
+      forward(error);
+    }
+  };
+  WRAPPED_ROUTES.add(wrapped);
+  return wrapped;
+}
 
 /**
  * Enveloppe une route asynchrone pour Express 4, qui ignore la promesse rejetée
@@ -253,44 +275,97 @@ const WRAPPED_ROUTES = new WeakSet<object>();
  * @returns Gestionnaire Express.
  */
 export function asyncRoute(handler: RouteHandler): (req: Request, res: Response, next: NextFunction) => void {
-  const wrapped = (req: Request, res: Response, next: NextFunction): void => {
-    const forward = (error: unknown): void => {
-      // `next()` sans valeur passe à la route suivante, `next("route")` / `next("router")`
-      // aussi : un rejet falsy ou l'une de ces chaînes devient une vraie erreur.
-      const usable = error instanceof Error || (Boolean(error) && error !== "route" && error !== "router");
-      next(usable ? error : new Error("rejet sans valeur exploitable"));
-    };
-    try {
-      Promise.resolve(handler(req, res)).catch(forward);
-    } catch (error) {
-      forward(error);
-    }
-  };
-  WRAPPED_ROUTES.add(wrapped);
-  return wrapped;
+  return forwardRejections(handler);
 }
 
-/** Pile interne d'Express 4 (`app._router.stack`), lue sans dépendre de ses types. */
-type RouterLayer = { route?: { path?: unknown; methods?: Record<string, boolean>; stack?: { handle?: unknown }[] } };
+/** Entrée de la pile d'une route d'Express 4. */
+type RouteEntry = { handle?: unknown };
+
+/** Couche de la pile interne d'Express 4 (`app._router.stack`), lue sans dépendre de ses types. */
+type RouterLayer = {
+  route?: { path?: unknown; methods?: Record<string, boolean>; stack?: RouteEntry[] };
+  handle?: unknown;
+};
+
+/** Signalé quand la pile des routes n'est pas où Express 4 la range (autre version). */
+export const ROUTER_STACK_NOT_FOUND = "(pile des routes d'Express introuvable)";
+
+/** Pile d'un routeur (application ou `express.Router` monté), `null` si absente. */
+function routerStack(router: unknown): RouterLayer[] | null {
+  if (router === null || (typeof router !== "object" && typeof router !== "function")) { return null; }
+  const stack = (router as { stack?: unknown }).stack;
+  return Array.isArray(stack) ? (stack as RouterLayer[]) : null;
+}
+
+/**
+ * Entrée à envelopper : le gestionnaire final d'une route qui n'est pas passé par
+ * {@link asyncRoute}, ou un intergiciel de route asynchrone (`async`) nu. Un
+ * intergiciel synchrone (`express.json()`…) est sûr : Express rattrape ce qu'il lève.
+ * Un gestionnaire d'erreur (quatre paramètres) n'est jamais touché.
+ */
+function needsWrapping(entry: RouteEntry, isLast: boolean): entry is { handle: AnyHandler } {
+  const handle = entry.handle;
+  if (typeof handle !== "function" || WRAPPED_ROUTES.has(handle) || handle.length > 3) { return false; }
+  return isLast || handle.constructor?.name === "AsyncFunction";
+}
+
+/**
+ * Parcourt les routes d'une pile, routeurs montés compris, et rend `MÉTHODE chemin`
+ * de chacune dont une entrée est à envelopper ; `fix` l'enveloppe en place.
+ */
+function scanRoutes(stack: RouterLayer[], fix: boolean, found: string[]): void {
+  for (const layer of stack) {
+    const nested = layer.route ? null : routerStack(layer.handle);
+    if (nested) { scanRoutes(nested, fix, found); }
+    const route = layer.route;
+    if (!route) { continue; }
+    const entries = route.stack ?? [];
+    let faulty = false;
+    entries.forEach((entry, index) => {
+      if (!needsWrapping(entry, index === entries.length - 1)) { return; }
+      faulty = true;
+      if (fix) { entry.handle = forwardRejections(entry.handle); }
+    });
+    if (!faulty) { continue; }
+    const methods = Object.keys(route.methods ?? {}).map((method) => method.toUpperCase()).join(",");
+    found.push(`${methods} ${String(route.path)}`);
+  }
+}
+
+/** Pile de l'application (Express 4 : `app._router.stack`). */
+function appStack(app: Express): RouterLayer[] | null {
+  return routerStack((app as unknown as { _router?: unknown })._router);
+}
 
 /**
  * Routes dont un gestionnaire n'est pas passé par {@link asyncRoute} : Express 4 y
- * laisserait un rejet sans réponse jusqu'au délai du site. `startInternalApi` les
- * signale au démarrage, et les tests des routes exigent une liste vide.
+ * laisserait un rejet sans réponse jusqu'au délai du site. Les tests des routes
+ * exigent une liste vide. Une pile introuvable (autre version d'Express) rend
+ * {@link ROUTER_STACK_NOT_FOUND} plutôt qu'une liste vide trompeuse.
  *
  * @param app Application Express, routes montées.
  * @returns `MÉTHODE chemin` de chaque route fautive.
  */
 export function unwrappedRoutes(app: Express): string[] {
-  const stack = ((app as unknown as { _router?: { stack?: RouterLayer[] } })._router?.stack) ?? [];
+  const stack = appStack(app);
+  if (!stack) { return [ROUTER_STACK_NOT_FOUND]; }
   const found: string[] = [];
-  for (const layer of stack) {
-    const route = layer.route;
-    if (!route) { continue; }
-    const handlers = route.stack ?? [];
-    if (handlers.every((entry) => typeof entry.handle === "function" && WRAPPED_ROUTES.has(entry.handle))) { continue; }
-    const methods = Object.keys(route.methods ?? {}).map((method) => method.toUpperCase()).join(",");
-    found.push(`${methods} ${String(route.path)}`);
-  }
+  scanRoutes(stack, false, found);
+  return found;
+}
+
+/**
+ * Enveloppe d'office les routes oubliées ({@link unwrappedRoutes}) : un rejet y
+ * reçoit tout de même une réponse au lieu de laisser le site attendre. Appelé par
+ * `startInternalApi` une fois les routes montées, qui journalise la liste rendue.
+ *
+ * @param app Application Express, routes montées.
+ * @returns `MÉTHODE chemin` de chaque route enveloppée (ou {@link ROUTER_STACK_NOT_FOUND}).
+ */
+export function wrapUnwrappedRoutes(app: Express): string[] {
+  const stack = appStack(app);
+  if (!stack) { return [ROUTER_STACK_NOT_FOUND]; }
+  const found: string[] = [];
+  scanRoutes(stack, true, found);
   return found;
 }

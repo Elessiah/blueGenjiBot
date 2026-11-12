@@ -31,7 +31,7 @@ import {
   SPARKLINE_POINTS,
   internalErrorHandler,
   asyncRoute,
-  unwrappedRoutes,
+  wrapUnwrappedRoutes,
   type RelayStatus,
 } from "./internalApi/helpers.js";
 import { parseSiteVisitStats, saveSiteVisitStats } from "./siteVisits/siteVisits.js";
@@ -189,7 +189,8 @@ const INTERNAL_ERROR_REPORT_MEMORY = 100;
 const internalErrorReportedAt = new Map<string, number>();
 
 /**
- * Dit si une ligne d'erreur hors route part au salon de logs : une fois par ligne et
+ * Dit si une ligne d'erreur hors route part au salon de logs : une fois par ligne (statut
+ * HTTP mis à part) et
  * par {@link INTERNAL_ERROR_REPORT_COOLDOWN_MS}, pour qu'une panne répétée (chaque
  * appel du site) n'inonde pas le salon. Une ligne refusée part quand même à pm2.
  * @param line Ligne d'erreur (code et type seuls).
@@ -197,10 +198,13 @@ const internalErrorReportedAt = new Map<string, number>();
  * @returns `true` si la ligne doit partir.
  */
 export function shouldReportInternalError(line: string, now: number = Date.now()): boolean {
-  const last = internalErrorReportedAt.get(line);
+  // Le statut HTTP ne compte pas : une panne de Discord qui rend 429, 500 puis 503
+  // reste une seule panne, annoncée une fois.
+  const key = line.replace(/, statut \d+\)$/, ")");
+  const last = internalErrorReportedAt.get(key);
   if (last !== undefined && now - last < INTERNAL_ERROR_REPORT_COOLDOWN_MS) { return false; }
   if (internalErrorReportedAt.size >= INTERNAL_ERROR_REPORT_MEMORY) { internalErrorReportedAt.clear(); }
-  internalErrorReportedAt.set(line, now);
+  internalErrorReportedAt.set(key, now);
   return true;
 }
 
@@ -930,9 +934,10 @@ export function startInternalApi(client: Client) {
   // Erreur levée hors d'une route (corps illisible, trop gros…) : `internalApi/helpers.ts`.
   // Un défaut du serveur part aussi au salon de logs, une fois par ligne et par délai.
   app.use(internalErrorHandler({ report: (line) => reportInternalError(client, line) }));
-  // Une route ajoutée sans `asyncRoute` ramènerait la requête sans réponse sur un rejet.
-  const unwrapped = unwrappedRoutes(app);
-  if (unwrapped.length > 0) { console.error(`[internalApi] routes sans asyncRoute : ${unwrapped.join(" ; ")}`); }
+  // Une route ajoutée sans `asyncRoute` laisserait la requête sans réponse sur un rejet :
+  // elle est enveloppée d'office, et signalée pour être corrigée (les tests l'exigent).
+  const unwrapped = wrapUnwrappedRoutes(app);
+  if (unwrapped.length > 0) { console.error(`[internalApi] routes sans asyncRoute, enveloppées au démarrage : ${unwrapped.join(" ; ")}`); }
 
   const port = Number(process.env.INTERNAL_API_PORT || 4400);
   const host = process.env.INTERNAL_API_HOST || "127.0.0.1";

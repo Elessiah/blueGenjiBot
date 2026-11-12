@@ -518,11 +518,12 @@ autre erreur hors route `500 INTERNAL_ERROR` (le statut porté par une erreur Di
 n'est jamais repris ; un refus n'est reconnu que si son type et son statut sont ceux
 que pose body-parser). Un refus du client se journalise au niveau avertissement ; une
 erreur `500` va au journal d'erreurs **et** au salon de logs (code et type seuls, une
-fois par ligne et par dix minutes). Une route asynchrone qui rejette (même sans
+fois par ligne — statut HTTP mis à part — et par dix minutes). Une route asynchrone qui rejette (même sans
 valeur, ou par une valeur falsy) passe par ce même gestionnaire : le site reçoit
 toujours un code, jamais un délai dépassé. Chaque route est enveloppée par
-`asyncRoute` ; une route qui ne l'est pas est signalée au démarrage et fait échouer
-les tests. Le détail d'un échec de route au salon de logs, comme la ligne du
+`asyncRoute` ; une route qui ne l'est pas (gestionnaire final, ou intergiciel `async`,
+routes des `express.Router` montés comprises) est enveloppée d'office et signalée au
+démarrage, et fait échouer les tests — comme une pile de routes introuvable. Le détail d'un échec de route au salon de logs, comme la ligne du
 gestionnaire, se limite au type, au code (familles connues : numérique, `SQLITE_*`,
 `E*`, `UND_ERR_*`, codes de discord.js) et au statut HTTP de l'erreur — jamais son
 message, qui peut recopier un pseudo cherché.

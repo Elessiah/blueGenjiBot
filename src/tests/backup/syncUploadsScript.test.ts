@@ -140,3 +140,63 @@ test("backupScript_fail_controlCharactersStrippedFromError", { skip: spawnSync("
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(JSON.parse(result.stdout), { error: "a b c dehfg" });
 });
+
+/**
+ * Fonctions du marqueur de sauvegarde en cours, tirées du script et jouées sous
+ * `bash` dans un dossier temporaire (sans `flock` sous Git Bash : le verrou est
+ * alors sauté, le reste est le même).
+ */
+function runMarkerSteps(steps: string): { status: number | null; marker: string | null } {
+  const start = BACKUP_SCRIPT.indexOf('RUNNING_FILE="$STATUS_FILE.running"');
+  const end = BACKUP_SCRIPT.indexOf("trap '", start);
+  assert.ok(start > 0 && end > start, "fonctions du marqueur introuvables");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bg-running-"));
+  try {
+    const statusFile = path.join(dir, "status.json").split(path.sep).join("/");
+    const script = `set -euo pipefail\nSTATUS_FILE='${statusFile}'\n${BACKUP_SCRIPT.slice(start, end)}\n${steps}\n`;
+    const result = spawnSync("bash", ["-c", script], { encoding: "utf8" });
+    const markerPath = path.join(dir, "status.json.running");
+    return { status: result.status, marker: fs.existsSync(markerPath) ? fs.readFileSync(markerPath, "utf8") : null };
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+const HAS_BASH = spawnSync("bash", ["-c", "command -v grep"], { encoding: "utf8" }).status === 0;
+
+test("backupRunningMarker_laterRunEndsFirst_keepsTheEarlierRunLine", { skip: !HAS_BASH && "bash absent" }, () => {
+  // Cron parti à 23 h 49, lancement manuel à 23 h 55 fini avant lui : la ligne du cron reste.
+  const { status, marker } = runMarkerSteps([
+    'RUNNING_LINE="2026-11-08T23:49:00+01:00 100"; add_running_line',
+    'RUNNING_LINE="2026-11-08T23:55:00+01:00 200"; add_running_line',
+    "release_running_marker",
+  ].join("\n"));
+
+  assert.equal(status, 0);
+  assert.equal(marker, "2026-11-08T23:49:00+01:00 100\n");
+});
+
+test("backupRunningMarker_earlierRunEndsFirst_keepsTheLaterRunLine", { skip: !HAS_BASH && "bash absent" }, () => {
+  const { status, marker } = runMarkerSteps([
+    'RUNNING_LINE="2026-11-08T23:40:00+01:00 100"; add_running_line',
+    'RUNNING_LINE="2026-11-08T23:49:00+01:00 200"; add_running_line',
+    'RUNNING_LINE="2026-11-08T23:40:00+01:00 100"; release_running_marker',
+  ].join("\n"));
+
+  assert.equal(status, 0);
+  assert.equal(marker, "2026-11-08T23:49:00+01:00 200\n");
+});
+
+test("backupRunningMarker_lastRunEnds_removesTheMarker", { skip: !HAS_BASH && "bash absent" }, () => {
+  const { status, marker } = runMarkerSteps("add_running_line\nrelease_running_marker");
+
+  assert.equal(status, 0);
+  assert.equal(marker, null);
+});
+
+test("backupRunningMarker_releaseWithoutMarker_succeeds", { skip: !HAS_BASH && "bash absent" }, () => {
+  const { status, marker } = runMarkerSteps("release_running_marker");
+
+  assert.equal(status, 0);
+  assert.equal(marker, null);
+});

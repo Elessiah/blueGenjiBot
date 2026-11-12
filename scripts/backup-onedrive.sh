@@ -53,18 +53,39 @@ WORK_DIR="$(mktemp -d)"
 ARCHIVE="$WORK_DIR/bluegenji-$STAMP.tar"
 # Marqueur de sauvegarde en cours, à côté du statut (`runningMarkerPath` du bot) :
 # le rapport du lundi 4 h ne prend pas une sauvegarde du dimanche soir encore en
-# cours pour une sauvegarde manquée. Retiré à la sortie, quelle qu'elle soit — mais
-# seulement s'il est encore le sien : une exécution manuelle qui finit pendant le
-# cron ne retire pas le marqueur de la sauvegarde toujours en cours.
+# cours pour une sauvegarde manquée. Une ligne par exécution en cours (date ISO de
+# son départ, puis son PID), ajoutée au départ et retirée à la sortie, quelle
+# qu'elle soit, sous verrou : deux exécutions qui se chevauchent (lancement manuel
+# pendant le cron), dans un ordre ou dans l'autre, ne retirent jamais que leur
+# propre ligne — le fichier disparaît avec la dernière. Sans `flock` (machine
+# incomplète), l'écriture reste tentée.
 RUNNING_FILE="$STATUS_FILE.running"
-RUNNING_STAMP="$(date --iso-8601=seconds)"
-release_running_marker() {
-  if [[ "$(cat "$RUNNING_FILE" 2>/dev/null)" == "$RUNNING_STAMP" ]]; then
-    rm -f "$RUNNING_FILE"
+RUNNING_LINE="$(date --iso-8601=seconds) $$"
+with_running_lock() {
+  (
+    if command -v flock >/dev/null 2>&1; then
+      flock -w 30 9 || exit 1
+    fi
+    "$@"
+  ) 9>"$RUNNING_FILE.lock"
+}
+add_running_line() {
+  printf '%s\n' "$RUNNING_LINE" >> "$RUNNING_FILE"
+}
+remove_running_line() {
+  [[ -f "$RUNNING_FILE" ]] || return 0
+  grep -vxF -- "$RUNNING_LINE" "$RUNNING_FILE" > "$RUNNING_FILE.tmp.$$" || true
+  if [[ -s "$RUNNING_FILE.tmp.$$" ]]; then
+    mv "$RUNNING_FILE.tmp.$$" "$RUNNING_FILE"
+  else
+    rm -f "$RUNNING_FILE.tmp.$$" "$RUNNING_FILE"
   fi
 }
+release_running_marker() {
+  with_running_lock remove_running_line 2>/dev/null || true
+}
 trap 'rm -rf "$WORK_DIR"; release_running_marker' EXIT
-{ mkdir -p "$(dirname "$RUNNING_FILE")" && printf '%s\n' "$RUNNING_STAMP" > "$RUNNING_FILE"; } 2>/dev/null \
+{ mkdir -p "$(dirname "$RUNNING_FILE")" && with_running_lock add_running_line; } 2>/dev/null \
   || echo "[backup] marqueur de sauvegarde en cours non écrit." >&2
 
 # Chemin de l'historique écrit dans le statut : le bot relit celui-là au lieu de le

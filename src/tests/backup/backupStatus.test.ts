@@ -247,6 +247,31 @@ test("readRunningSince_futureMarker_returnsNull", async () => {
   assert.equal(await readRunningSince(file, REPORT_AT), null);
 });
 
+test("readRunningSince_lineWithPid_returnsStart", async () => {
+  const file = await withRunningMarker("2026-11-08T22:49:00+00:00 4242\n");
+
+  assert.equal(await readRunningSince(file, REPORT_AT), Date.parse("2026-11-08T22:49:00Z"));
+});
+
+test("readRunningSince_twoOverlappingRuns_returnsEarliestStart", async () => {
+  const file = await withRunningMarker("2026-11-08T23:10:00+00:00 5151\n2026-11-08T22:49:00+00:00 4242\n");
+
+  assert.equal(await readRunningSince(file, REPORT_AT), Date.parse("2026-11-08T22:49:00Z"));
+});
+
+test("readRunningSince_staleAndRecentLines_ignoresTheStaleOne", async () => {
+  const stale = new Date(REPORT_AT - RUNNING_MAX_AGE_MS).toISOString();
+  const file = await withRunningMarker(`${stale} 1\ndemain 2\n2026-11-08T22:49:00+00:00 4242\n`);
+
+  assert.equal(await readRunningSince(file, REPORT_AT), Date.parse("2026-11-08T22:49:00Z"));
+});
+
+test("readRunningSince_emptyMarker_returnsNull", async () => {
+  const file = await withRunningMarker("");
+
+  assert.equal(await readRunningSince(file, REPORT_AT), null);
+});
+
 test("readRunningSince_unreadableDate_returnsNull", async () => {
   const file = await withRunningMarker("demain");
 
@@ -257,14 +282,21 @@ test("readRunningSince_unreadableDate_returnsNull", async () => {
 const okStatusAged = (ageMs: number): BackupStatus => ({ ...OK_STATUS, date: new Date(REPORT_AT - ageMs).toISOString() });
 const HOUR = 60 * 60 * 1000;
 
+/** Statut du mardi 23 h 49 (heure de Paris), relu au rapport du lundi 4 h : 5 jours 4 h 11. */
+const TUESDAY_STATUS: BackupStatus = { ...OK_STATUS, date: "2026-11-03T22:49:00.000Z" };
+
 test("isBackupFresh_runningAndTuesdayStatus_returnsTrue", () => {
-  // Statut du mardi 23 h 49, rapport du lundi 4 h (heure de Paris) : 5 jours 4 h 11.
-  const tuesdayEvening = Date.parse("2026-11-03T22:49:00Z");
-  assert.equal(isBackupFresh({ ...OK_STATUS, date: new Date(tuesdayEvening).toISOString() }, REPORT_AT, true), true);
+  assert.equal(isBackupFresh(TUESDAY_STATUS, REPORT_AT, true), true);
 });
 
 test("isBackupFresh_notRunningAndTuesdayStatus_returnsFalse", () => {
-  assert.equal(isBackupFresh(okStatusAged(100 * HOUR), REPORT_AT, false), false);
+  assert.equal(isBackupFresh(TUESDAY_STATUS, REPORT_AT, false), false);
+});
+
+test("isBackupFresh_runningTuesdayStatus_olderThanATwoDayGrace", () => {
+  // Le délai de grâce doit dépasser l'écart réel : deux jours (5 j au total) ne suffiraient pas.
+  assert.ok(REPORT_AT - Date.parse(TUESDAY_STATUS.date) > STALE_AFTER_MS + 2 * 24 * HOUR);
+  assert.ok(RUNNING_GRACE_MS >= 3 * 24 * HOUR);
 });
 
 test("isBackupFresh_runningBeyondGrace_returnsFalse", () => {
@@ -272,7 +304,7 @@ test("isBackupFresh_runningBeyondGrace_returnsFalse", () => {
 });
 
 test("formatBackupStatus_freshOnlyThanksToRunning_mentionsRunningBackup", () => {
-  const line = formatBackupStatus(okStatusAged(100 * HOUR), REPORT_AT, Date.parse("2026-11-08T22:49:00Z"));
+  const line = formatBackupStatus(TUESDAY_STATUS, REPORT_AT, Date.parse("2026-11-08T22:49:00Z"));
 
   assert.match(line, /^☁️ /);
   assert.match(line, /Sauvegarde suivante en cours depuis le 2026-11-08 à 22:49 \(UTC\)\./);
