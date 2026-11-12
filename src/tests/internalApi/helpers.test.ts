@@ -683,10 +683,33 @@ test("logProcessError_sameLineWithinCooldown_writesOnceThenCountsSuppressed", (t
   const written: string[] = [];
   t.mock.method(console, "error", (line: unknown) => { written.push(String(line)); });
 
-  logProcessError("[internalApi] x", 0);
-  logProcessError("[internalApi] x", 1_000);
-  logProcessError("[internalApi] x", 61_000);
+  logProcessError("[internalApi] x", { now: 0 });
+  logProcessError("[internalApi] x", { now: 1_000 });
+  logProcessError("[internalApi] x", { now: 61_000 });
 
   assert.deepEqual(written, ["[internalApi] x", "[internalApi] x (+1 identiques tues)"]);
+  resetProcessLogThrottle();
+});
+
+test("logProcessError_sameKeyDifferentLines_throttledTogether", (t) => {
+  // Une étiquette du site qui change à chaque appel ne contourne pas l'étranglement.
+  resetProcessLogThrottle();
+  const written: string[] = [];
+  t.mock.method(console, "error", (line: unknown) => { written.push(String(line)); });
+
+  logProcessError("[internalApi] notify/dm error (match-1): 500", { key: "notify/dm error: 500", now: 0 });
+  logProcessError("[internalApi] notify/dm error (match-2): 500", { key: "notify/dm error: 500", now: 1_000 });
+
+  assert.deepEqual(written, ["[internalApi] notify/dm error (match-1): 500"]);
+  resetProcessLogThrottle();
+});
+
+test("logProcessError_customWrite_receivesTheLine", () => {
+  resetProcessLogThrottle();
+  const warned: string[] = [];
+
+  logProcessError("[internalApi] refus", { write: (line) => warned.push(line), now: 0 });
+
+  assert.deepEqual(warned, ["[internalApi] refus"]);
   resetProcessLogThrottle();
 });

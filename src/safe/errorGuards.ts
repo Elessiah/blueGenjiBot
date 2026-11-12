@@ -235,7 +235,8 @@ const SYSTEM_ERROR_CODES: ReadonlySet<string> = new Set([
     "EAI_ADDRFAMILY", "EAI_AGAIN", "EAI_BADFLAGS", "EAI_BADHINTS", "EAI_CANCELED", "EAI_FAIL",
     "EAI_FAMILY", "EAI_MEMORY", "EAI_NODATA", "EAI_NONAME", "EAI_OVERFLOW", "EAI_PROTOCOL",
     "EAI_SERVICE", "EAI_SOCKTYPE", "EAI_SYSTEM",
-    "ENOTFOUND", "ECONNRESET", "ETIMEDOUT", "ECONNREFUSED", "EPIPE", "ECONNABORTED", "EHOSTUNREACH", "ENETUNREACH",
+    // Les codes réseau passagers suivent toujours : un code ajouté là est journalisable ici.
+    ...TRANSIENT_NETWORK_CODES,
 ]);
 
 /**

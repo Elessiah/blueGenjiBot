@@ -903,9 +903,9 @@ test("notifyReferees_deliveryFails_failureLogNotifies", async (t) => {
   }
 });
 
-test("notifyReferees_failsWithAnotherContextEachCall_discordAlertedOnceButEveryFailureInPm2", async (t) => {
-  // Une étiquette `context` différente à chaque appel ne fait pas repartir l'alerte ;
-  // chaque échec reste au journal du processus, avec son étiquette.
+test("notifyReferees_failsWithAnotherContextEachCall_discordAndPm2EachWrittenOnce", async (t) => {
+  // Une étiquette `context` différente à chaque appel ne fait repartir ni l'alerte ni la
+  // ligne pm2 : la première part avec son étiquette, les suivantes sont comptées.
   resetInternalErrorReports();
   const errors: string[] = [];
   t.mock.method(console, "error", (line: unknown) => { errors.push(String(line)); });
@@ -918,9 +918,9 @@ test("notifyReferees_failsWithAnotherContextEachCall_discordAlertedOnceButEveryF
     }
 
     assert.equal(state.logs.filter((line) => line.startsWith("notify/referees error")).length, 1, JSON.stringify(state.logs));
-    for (const context of ["match-1", "match-2", "match-3"]) {
-      assert.ok(errors.some((line) => line.includes(`notify/referees error (${context})`)), JSON.stringify(errors));
-    }
+    const pm2Lines = errors.filter((line) => line.includes("notify/referees error"));
+    assert.equal(pm2Lines.length, 1, JSON.stringify(errors));
+    assert.ok(pm2Lines[0].includes("notify/referees error (match-1)"), pm2Lines[0]);
   } finally {
     state.cacheThrows = false;
     resetInternalErrorReports();

@@ -11,6 +11,7 @@
  */
 
 import { sliceWithoutSplittingPair } from "./dmLanguage.js";
+import { MAX_SITE_CONTEXT_LENGTH, sanitizeSiteContext } from "./siteContext.js";
 
 /** Destinataire d'un message privé, tel que l'app le connaît. */
 export interface DirectMessageRecipient {
@@ -97,23 +98,17 @@ function toTrimmedString(value: unknown): string | null {
 }
 
 /** Longueur maximale de l'étiquette `context` du site (journaux pm2 et salon de logs). */
-export const MAX_CONTEXT_LENGTH = 200;
-
-/** Caractères d'une étiquette `context` du site (`match-12`, `tournoi-7 round-2`). */
-const CONTEXT_UNSAFE = /[^A-Za-z0-9 ,+…_:-]/gu;
+export const MAX_CONTEXT_LENGTH = MAX_SITE_CONTEXT_LENGTH;
 
 /**
- * Étiquette `context` du site, réduite à des caractères sûrs et bornée : elle part
- * au salon de logs et au journal du processus, jamais une mention, une mise en forme
- * Discord ni un texte sans limite.
+ * Étiquette `context` du site, réduite à des caractères sûrs et bornée
+ * ({@link sanitizeSiteContext}) : elle part au salon de logs et au journal du
+ * processus, jamais une mention, une mise en forme Discord ni un texte sans limite.
  * @param value Valeur reçue.
  * @returns L'étiquette, ou `site` à défaut.
  */
 export function parseContext(value: unknown): string {
-  const raw = toTrimmedString(value);
-  if (raw === null) { return "site"; }
-  const clean = raw.replace(CONTEXT_UNSAFE, "_").slice(0, MAX_CONTEXT_LENGTH);
-  return clean.length > 0 ? clean : "site";
+  return sanitizeSiteContext(value, "site");
 }
 
 /**

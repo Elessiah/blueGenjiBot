@@ -176,10 +176,10 @@ test("sendDatabaseBackup_runningMarkerKeepsOlderStatusHealthy_sentSilent", async
 test("sendDatabaseBackup_historyFileNamedInStatus_failureReported", async () => {
   const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "bluegenji-weekly-histpath-"));
   const statusPath = path.join(dir, "status.json");
-  // Historique déplacé par le seul script (`STATUS_HISTORY_FILE`) : le statut en donne le chemin.
-  const historyFile = path.join(dir, "ailleurs", "historique.jsonl");
+  // Historique renommé par le seul script (`STATUS_HISTORY_FILE`), dans le dossier du statut :
+  // le statut en donne le chemin.
+  const historyFile = path.join(dir, "historique.jsonl");
   const failedAt = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
-  await fs.promises.mkdir(path.dirname(historyFile));
   await fs.promises.writeFile(historyFile, JSON.stringify({ date: failedAt, ok: false, error: "rclone injoignable" }) + "\n");
   await fs.promises.writeFile(statusPath, JSON.stringify({ date: new Date().toISOString(), ok: true, historyFile }));
   try {

@@ -241,7 +241,7 @@ async function reportRouteFailure(
 ): Promise<void> {
   const { context, alert = false } = options;
   const line = context === undefined ? `${label}: ${detail}` : `${label} (${context}): ${detail}`;
-  logProcessError(`[internalApi] ${line}`);
+  logProcessError(`[internalApi] ${line}`, { key: `[internalApi] ${label}: ${detail}` });
   if (!shouldReportInternalError(`${label}: ${detail}`)) { return; }
   await (alert ? sendAlert(client, line) : sendLog(client, line));
 }

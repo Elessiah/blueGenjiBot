@@ -88,12 +88,18 @@ running_line_alive() {
   [[ -d "/proc/$pid" ]] || kill -0 "$pid" 2>/dev/null
 }
 # Fichier temporaire à côté de `$1`, créé par `mktemp` (nom imprévisible, jamais un
-# lien suivi) avec les droits que l'umask donnerait au fichier lui-même : le bot, qui
-# peut tourner sous un autre compte, le relit après le `mv`.
+# lien suivi). Il reprend les droits et le groupe du fichier qu'il remplacera (réglés
+# par l'exploitant pour que le bot, sous un autre compte, le lise) ; sans fichier
+# existant, ceux que l'umask lui donnerait. Le bot le relit après le `mv`.
 sibling_tmp() {
   local tmp
   tmp="$(mktemp "$1.tmp.XXXXXXXX")" || return 1
-  chmod "$(printf '%o' $(( 0666 & ~0$(umask) )))" "$tmp" || { rm -f "$tmp"; return 1; }
+  if [[ -f "$1" && ! -L "$1" ]]; then
+    chmod --reference="$1" "$tmp" || { rm -f "$tmp"; return 1; }
+    chgrp --reference="$1" "$tmp" 2>/dev/null || true
+  else
+    chmod "$(printf '%o' $(( 0666 & ~0$(umask) )))" "$tmp" || { rm -f "$tmp"; return 1; }
+  fi
   printf '%s' "$tmp"
 }
 # Le marqueur est toujours réécrit en entier dans un temporaire puis renommé : aucun
@@ -152,9 +158,12 @@ write_status() {
   now="$(date --iso-8601=seconds)"
   # Écrit dans un temporaire `mktemp` puis renommé : jamais `>` sur le statut, qui
   # suivrait un lien posé à sa place, et le bot ne lit jamais un statut à moitié écrit.
-  # Sans temporaire (dossier plein ou fermé), l'écriture directe reste tentée.
+  # Sans temporaire (dossier plein ou fermé), le statut est recréé : l'ancien (ou le
+  # lien posé à sa place) est retiré, puis le nouveau créé en exclusif (`set -C`,
+  # O_EXCL) — un lien reposé entre-temps fait échouer l'écriture, jamais suivi.
   local status_tmp
   status_tmp="$(sibling_tmp "$STATUS_FILE")" || status_tmp=""
+  if [[ -z "$status_tmp" ]]; then rm -f "$STATUS_FILE"; fi
   {
     cat <<JSON
 {
@@ -167,8 +176,11 @@ write_status() {
   "historyFile": "$STATUS_HISTORY_JSON"
 }
 JSON
-  } > "${status_tmp:-$STATUS_FILE}"
-  if [[ -n "$status_tmp" ]]; then mv -f -T "$status_tmp" "$STATUS_FILE"; fi
+  } | if [[ -n "$status_tmp" ]]; then
+    cat > "$status_tmp" && mv -f -T "$status_tmp" "$STATUS_FILE" || { rm -f "$status_tmp"; false; }
+  else
+    ( set -C; cat > "$STATUS_FILE" )
+  fi || echo "[backup] statut non écrit." >&2
   # Au mieux : un historique qui ne s'écrit pas ne fait pas échouer la sauvegarde.
   # L'ajout et l'élagage forment un tout sous verrou (pris sur le dossier de
   # l'historique, sans fichier de verrou à côté) : deux exécutions qui se

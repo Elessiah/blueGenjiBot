@@ -69,30 +69,85 @@ export const RUNNING_MAX_BYTES = 4 * 1024;
 /**
  * Lit au plus les `maxBytes` derniers octets d'un fichier **ordinaire** : un lien vers
  * `/dev/zero`, une FIFO ou un dossier rendent `null` (jamais une lecture sans fin), et
- * un gros fichier n'est pas chargé en entier. La première ligne, coupée par la borne,
- * est écartée.
+ * un gros fichier n'est pas chargé en entier. La première ligne, si la borne la coupe,
+ * est écartée (l'octet qui précède la fenêtre dit si elle commence une ligne).
  * @param filePath Chemin du fichier.
  * @param maxBytes Octets lus au plus.
  * @returns Le texte lu, ou `null` (absent, illisible ou pas un fichier ordinaire).
  */
 export async function readFileTail(filePath: string, maxBytes: number): Promise<string | null> {
-  let handle: fs.promises.FileHandle | null = null;
+  let opened: OpenedFile | null = null;
   try {
-    handle = await fs.promises.open(filePath, fs.constants.O_RDONLY | (fs.constants.O_NONBLOCK ?? 0));
-    const stat = await handle.stat();
-    if (!stat.isFile()) { return null; }
-    const length = Math.min(stat.size, maxBytes);
-    const start = stat.size - length;
-    const buffer = Buffer.alloc(length);
-    const { bytesRead } = await handle.read(buffer, 0, length, start);
-    const text = buffer.subarray(0, bytesRead).toString("utf8");
-    if (start === 0) { return text; }
+    opened = await openRegularFile(filePath);
+    if (!opened) { return null; }
+    const length = Math.min(opened.size, maxBytes);
+    const start = opened.size - length;
+    // Un octet de plus, avant la fenêtre : un saut de ligne y dit que la première ligne est entière.
+    const before = start > 0 ? 1 : 0;
+    const buffer = Buffer.alloc(length + before);
+    const { bytesRead } = await opened.handle.read(buffer, 0, length + before, start - before);
+    const read = buffer.subarray(0, bytesRead);
+    if (before === 0) { return read.toString("utf8"); }
+    const text = read.subarray(1).toString("utf8");
+    if (read[0] === 0x0a) { return text; }
     const firstBreak = text.indexOf("\n");
     return firstBreak === -1 ? "" : text.slice(firstBreak + 1);
   } catch {
     return null;
   } finally {
-    await handle?.close().catch(() => undefined);
+    await opened?.handle.close().catch(() => undefined);
+  }
+}
+
+/**
+ * Taille maximale du statut : le script en écrit moins d'un kilo-octet ; un statut plus
+ * gros (fichier détourné, enflé) n'est pas lu.
+ */
+export const STATUS_MAX_BYTES = 16 * 1024;
+
+/** Fichier ordinaire ouvert en lecture, avec sa taille. */
+interface OpenedFile {
+  handle: fs.promises.FileHandle;
+  size: number;
+}
+
+/**
+ * Ouvre un fichier **ordinaire** en lecture, sans jamais bloquer : une FIFO ou un
+ * périphérique est ouvert sans attendre, puis écarté (et refermé).
+ * @param filePath Chemin du fichier.
+ * @returns Le fichier ouvert, ou `null` (pas un fichier ordinaire).
+ */
+async function openRegularFile(filePath: string): Promise<OpenedFile | null> {
+  const handle = await fs.promises.open(filePath, fs.constants.O_RDONLY | (fs.constants.O_NONBLOCK ?? 0));
+  try {
+    const stat = await handle.stat();
+    if (stat.isFile()) { return { handle, size: stat.size }; }
+  } catch {
+    // Refermé ci-dessous, comme un fichier qui n'est pas ordinaire.
+  }
+  await handle.close().catch(() => undefined);
+  return null;
+}
+
+/**
+ * Lit en entier un fichier **ordinaire** d'au plus `maxBytes` octets : un lien vers
+ * `/dev/zero`, une FIFO, un dossier ou un fichier plus gros rendent `null`.
+ * @param filePath Chemin du fichier.
+ * @param maxBytes Taille maximale acceptée.
+ * @returns Le texte, ou `null` (absent, illisible, trop gros ou pas un fichier ordinaire).
+ */
+export async function readSmallFile(filePath: string, maxBytes: number): Promise<string | null> {
+  let opened: OpenedFile | null = null;
+  try {
+    opened = await openRegularFile(filePath);
+    if (!opened || opened.size > maxBytes) { return null; }
+    const buffer = Buffer.alloc(opened.size);
+    const { bytesRead } = await opened.handle.read(buffer, 0, opened.size, 0);
+    return buffer.subarray(0, bytesRead).toString("utf8");
+  } catch {
+    return null;
+  } finally {
+    await opened?.handle.close().catch(() => undefined);
   }
 }
 
@@ -111,14 +166,18 @@ export interface BackupHistoryEntry {
  *
  * Le script tourne en cron système, indépendamment du bot : le fichier peut
  * donc être absent (script pas encore installé) ou illisible sans que ce soit
- * une anomalie du bot.
+ * une anomalie du bot. Seul un fichier ordinaire d'au plus {@link STATUS_MAX_BYTES}
+ * est lu : un statut détourné (FIFO, lien vers `/dev/zero`) ne bloque pas le rapport.
  * @param statusPath Chemin du fichier de statut JSON.
  * @returns Le statut lu, ou `null` s'il est absent ou invalide.
  */
 export async function readBackupStatus(statusPath: string): Promise<BackupStatus | null> {
   try {
-    const raw = await fs.promises.readFile(statusPath, "utf8");
-    const parsed = JSON.parse(raw) as Partial<BackupStatus>;
+    const raw = await readSmallFile(statusPath, STATUS_MAX_BYTES);
+    if (raw === null) {
+      return null;
+    }
+    const parsed = JSON.parse(raw) as Partial<Record<keyof BackupStatus, unknown>>;
 
     if (typeof parsed.date !== "string" || typeof parsed.ok !== "boolean") {
       return null;
@@ -127,11 +186,11 @@ export async function readBackupStatus(statusPath: string): Promise<BackupStatus
     return {
       date: parsed.date,
       ok: parsed.ok,
-      remote: parsed.remote ?? "",
+      remote: typeof parsed.remote === "string" ? parsed.remote : "",
       sizeBytes: typeof parsed.sizeBytes === "number" ? parsed.sizeBytes : 0,
-      parts: parsed.parts ?? "",
-      error: parsed.error ?? "",
-      historyFile: isHistoryFilePath(parsed.historyFile) ? parsed.historyFile : "",
+      parts: typeof parsed.parts === "string" ? parsed.parts : "",
+      error: typeof parsed.error === "string" ? parsed.error : "",
+      historyFile: isHistoryFilePath(parsed.historyFile, statusPath) ? parsed.historyFile : "",
     };
   } catch {
     return null;
@@ -140,16 +199,24 @@ export async function readBackupStatus(statusPath: string): Promise<BackupStatus
 
 /**
  * Chemin d'historique accepté depuis le statut : absolu, sans `..`, terminé par
- * `.jsonl` (celui du script) — jamais un fichier quelconque désigné par un statut
- * réécrit à la main ou détourné.
+ * `.jsonl` (celui du script), et rangé dans le dossier du statut — ou égal à
+ * `BACKUP_STATUS_HISTORY_PATH`, seul autre emplacement déclaré au bot. Jamais un
+ * fichier quelconque désigné par un statut réécrit à la main ou détourné (le journal
+ * d'une autre application, dont les causes d'échec partiraient dans le rapport).
  * @param value Valeur lue dans le statut.
+ * @param statusPath Chemin du statut qui la porte.
  * @returns `true` si le chemin peut être relu.
  */
-function isHistoryFilePath(value: unknown): value is string {
-  return typeof value === "string"
-    && path.isAbsolute(value)
-    && value.endsWith(".jsonl")
-    && !value.split(/[\\/]/).includes("..");
+export function isHistoryFilePath(value: unknown, statusPath: string): value is string {
+  if (typeof value !== "string"
+    || !path.isAbsolute(value)
+    || !value.endsWith(".jsonl")
+    || value.split(/[\\/]/).includes("..")) {
+    return false;
+  }
+  const declared = process.env.BACKUP_STATUS_HISTORY_PATH;
+  return path.resolve(path.dirname(value)) === path.resolve(path.dirname(statusPath))
+    || (declared !== undefined && declared !== "" && path.resolve(declared) === path.resolve(value));
 }
 
 /**

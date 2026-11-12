@@ -33,10 +33,15 @@ exécution tuée sans repasser par sa sortie ne compte pas, et la suivante effac
 réussi précédent (celui du mardi 23 h 49 a 5 jours 4 h au rapport), et le rapport le dit : le dimanche 23 h 49 qui déborde sur le
 lundi 4 h ne lève plus de fausse alerte.
 Le statut, le marqueur et l'historique ne sont jamais écrits en place : chaque écriture
-passe par un temporaire `mktemp` voisin (nom imprévisible, droits de l'umask) puis un
-renommage, si bien qu'un lien posé à leur place n'est jamais suivi. Le bot ne relit que
+passe par un temporaire `mktemp` voisin (nom imprévisible ; droits et groupe du fichier
+remplacé, réglés par l'exploitant pour que le bot le lise, ou ceux de l'umask s'il
+n'existe pas encore) puis un renommage, si bien qu'un lien posé à leur place n'est jamais
+suivi. Sans temporaire possible (dossier plein), le statut est retiré puis recréé en
+exclusif (`set -C`) : un lien reposé entre-temps fait échouer l'écriture, jamais suivi.
+Le bot ne lit le statut que s'il est un fichier ordinaire de 16 Kio au plus, ne relit que
 la fin de l'historique (64 Kio) et du marqueur (4 Kio), d'un fichier ordinaire seulement,
-et n'accepte du statut qu'un chemin d'historique absolu en `.jsonl`, sans `..`.
+et n'accepte du statut qu'un chemin d'historique absolu en `.jsonl`, sans `..`, rangé dans
+le dossier du statut ou égal à `BACKUP_STATUS_HISTORY_PATH`.
 
 **Tout part chiffré depuis le Raspberry** : `age` pour les archives, un remote
 `rclone crypt` pour les images, les logos masqués et le journal des
@@ -518,7 +523,7 @@ mettent dans `rclone.conf`, ou dans des variables `RCLONE_CONFIG_<REMOTE>_*`.
 | Variable | Défaut | Rôle |
 | --- | --- | --- |
 | `BACKUP_STATUS_PATH` | `/var/lib/bluegenji/backup-status.json` | Fichier de statut relu pour le rapport hebdomadaire. |
-| `BACKUP_STATUS_HISTORY_PATH` | `BACKUP_STATUS_PATH` sans `.json`, suivi de `-history.jsonl` (même défaut que `STATUS_HISTORY_FILE` du script) | Repli seulement : le script écrit le chemin de son historique dans le statut (`historyFile`), et le bot relit celui-là — surcharger `STATUS_HISTORY_FILE` seul ne lui fait plus lire un fichier absent. Historique des statuts (une ligne JSON par exécution, 20 dernières gardées) : le rapport y relit les échecs des sept derniers jours. Le script l'écrit sous verrou `flock` (pris sur le dossier de l'historique, sans fichier de verrou voisin) : deux exécutions qui se chevauchent n'y perdent aucune ligne. |
+| `BACKUP_STATUS_HISTORY_PATH` | `BACKUP_STATUS_PATH` sans `.json`, suivi de `-history.jsonl` (même défaut que `STATUS_HISTORY_FILE` du script) | Repli seulement : le script écrit le chemin de son historique dans le statut (`historyFile`), et le bot relit celui-là s'il est rangé dans le dossier du statut — surcharger `STATUS_HISTORY_FILE` seul ne lui fait plus lire un fichier absent. Hors de ce dossier, le même chemin doit être déclaré ici : un chemin que le statut seul désigne ailleurs est ignoré (repli sur cette variable). Historique des statuts (une ligne JSON par exécution, 20 dernières gardées) : le rapport y relit les échecs des sept derniers jours. Le script l'écrit sous verrou `flock` (pris sur le dossier de l'historique, sans fichier de verrou voisin) : deux exécutions qui se chevauchent n'y perdent aucune ligne. |
 | `BACKUP_UPLOADS_REMOTE` | `UPLOADS_RCLONE_REMOTE:UPLOADS_REMOTE_DIR` de `scripts/backup-onedrive.env` (défauts du script compris) ; sans objet si `UPLOADS_DIR` est vide | Remote `crypt` et dossier des images, lu par la vérification. |
 | `BACKUP_RECIPIENTS_FILE` | `AGE_RECIPIENTS_FILE` du même fichier (chemin absolu, `$SCRIPT_DIR`, `~` ou `$HOME` en tête — un chemin relatif n'est pas deviné, régler alors cette variable), sinon `scripts/backup-recipients.txt` (`$SCRIPT_DIR` est le dossier du script, même si sa configuration vit ailleurs) | Clés publiques autorisées, comparées à la clé du bot. |
 | `BACKUP_ONEDRIVE_ENV` (ou `BACKUP_CONFIG`) | `scripts/backup-onedrive.env` | Fichier de configuration du script, relu (jamais exécuté) pour les défauts ci-dessus. |

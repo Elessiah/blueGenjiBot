@@ -100,7 +100,8 @@ test("backupScript_writeStatus_historyUpdatedUnderFlock", () => {
   assert.match(write, /mv -f -T "\$tmp" "\$STATUS_HISTORY_FILE" \|\| \{ rm -f "\$tmp"; exit 1; \}\n\s+\) 8<"\$\(dirname "\$STATUS_HISTORY_FILE"\)"/);
   // Jamais `>` ni `>>` sur l'historique ou le statut eux-mêmes : un lien posé à leur place serait suivi.
   assert.doesNotMatch(write, />>? "\$STATUS_HISTORY_FILE"/);
-  assert.doesNotMatch(write, /> "\$STATUS_FILE"/);
+  // Seule écriture directe du statut : recréé en exclusif (`set -C`), quand aucun temporaire n'est possible.
+  assert.deepEqual(write.match(/[^\n]*> "\$STATUS_FILE"[^\n]*/g), ['    ( set -C; cat > "$STATUS_FILE" )']);
 });
 
 /** Fonction `sibling_tmp` du script, nécessaire à `write_status` jouée seule. */
@@ -112,13 +113,13 @@ function siblingTmpFunction(): string {
 }
 
 /** Joue `write_status` seule (`count` fois de suite) dans `dir` ; rend le statut de bash. */
-function runWriteStatus(dir: string, count: number, lines = 100): { status: number | null; stderr: string } {
+function runWriteStatus(dir: string, count: number, lines = 100, siblingTmp = siblingTmpFunction()): { status: number | null; stderr: string } {
   const write = BACKUP_SCRIPT.slice(BACKUP_SCRIPT.indexOf("write_status() {"), BACKUP_SCRIPT.indexOf("\nfail() {"));
   const script = [
     `STATUS_FILE="${dir}/status.json"`,
     `STATUS_HISTORY_FILE="${dir}/status-history.jsonl"`,
     `STATUS_HISTORY_LINES=${lines} STATUS_OK=false STATUS_ERROR=boom STATUS_SIZE=0 STATUS_PARTS= RCLONE_REMOTE=r REMOTE_DIR=d STAMP=s STATUS_HISTORY_JSON=`,
-    siblingTmpFunction(),
+    siblingTmp,
     write,
     `for i in $(seq 1 ${count}); do write_status; done`,
   ].join("\n");
@@ -157,6 +158,47 @@ test("backupScript_writeStatus_symlinkedHistory_replacedNotFollowed", { skip: !B
     assert.equal(status, 0, stderr);
     assert.equal(fs.readFileSync(victim, "utf8"), "intact\n");
     assert.equal(fs.lstatSync(path.join(dir, "status-history.jsonl")).isSymbolicLink(), false);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("backupScript_writeStatus_noTempPossibleAndSymlinkedStatus_linkNotFollowed", { skip: !BASH_PRESENT && "bash absent" }, (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bluegenji-status-link-")).split(path.sep).join("/");
+  try {
+    const victim = path.join(dir, "victim.txt");
+    fs.writeFileSync(victim, "intact\n");
+    try {
+      fs.symlinkSync(victim, path.join(dir, "status.json"));
+    } catch {
+      t.skip("liens symboliques indisponibles");
+      return;
+    }
+
+    // Dossier plein : aucun temporaire possible.
+    const { status, stderr } = runWriteStatus(dir, 1, 100, "sibling_tmp() { return 1; }");
+
+    assert.equal(status, 0, stderr);
+    assert.equal(fs.readFileSync(victim, "utf8"), "intact\n");
+    assert.equal(fs.lstatSync(path.join(dir, "status.json")).isSymbolicLink(), false);
+    assert.equal((JSON.parse(fs.readFileSync(path.join(dir, "status.json"), "utf8")) as { error: string }).error, "boom");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("backupScript_writeStatus_existingStatusMode_keptOnReplacement", { skip: (!BASH_PRESENT || process.platform === "win32") && "bash absent ou droits POSIX indisponibles" }, () => {
+  // L'exploitant a ouvert le statut au groupe du bot (640) : le remplacement garde ces droits.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bluegenji-status-mode-"));
+  try {
+    const statusFile = path.join(dir, "status.json");
+    fs.writeFileSync(statusFile, "{}");
+    fs.chmodSync(statusFile, 0o640);
+
+    const { status, stderr } = runWriteStatus(dir, 1);
+
+    assert.equal(status, 0, stderr);
+    assert.equal(fs.statSync(statusFile).mode & 0o777, 0o640);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

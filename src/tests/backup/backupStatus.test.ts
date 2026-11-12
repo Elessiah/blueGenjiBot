@@ -10,6 +10,9 @@ import {
   isBackupFresh,
   HISTORY_MAX_BYTES,
   readFileTail,
+  readSmallFile,
+  isHistoryFilePath,
+  STATUS_MAX_BYTES,
   RUNNING_MAX_BYTES,
   readBackupFailures,
   FAILURE_CAUSE_MAX_LENGTH,
@@ -199,11 +202,58 @@ test("formatBackupFailures_longCause_shortened", () => {
   );
 });
 
-test("readBackupStatus_absoluteHistoryFile_returnsIt", async () => {
-  const historyFile = path.join(os.tmpdir(), "ailleurs", "history.jsonl");
-  const file = await writeStatusFile(JSON.stringify({ ...OK_STATUS, historyFile }));
+test("readBackupStatus_absoluteHistoryFileBesideStatus_returnsIt", async () => {
+  const file = await writeStatusFile("{}");
+  const historyFile = path.join(path.dirname(file), "history.jsonl");
+  await fs.promises.writeFile(file, JSON.stringify({ ...OK_STATUS, historyFile }));
 
   assert.equal((await readBackupStatus(file))?.historyFile, historyFile);
+});
+
+test("readBackupStatus_historyFileInAnotherDirectory_returnsEmpty", async () => {
+  // Le journal d'une autre application ne devient pas l'historique relu par le rapport.
+  const historyFile = path.join(os.tmpdir(), "autre-appli", "journal.jsonl");
+  const file = await writeStatusFile(JSON.stringify({ ...OK_STATUS, historyFile }));
+
+  assert.equal((await readBackupStatus(file))?.historyFile, "");
+});
+
+test("isHistoryFilePath_otherDirectoryDeclaredToTheBot_accepted", () => {
+  const declared = path.join(os.tmpdir(), "historiques", "backup-history.jsonl");
+  const previous = process.env.BACKUP_STATUS_HISTORY_PATH;
+  process.env.BACKUP_STATUS_HISTORY_PATH = declared;
+  try {
+    assert.equal(isHistoryFilePath(declared, path.join(os.tmpdir(), "statut", "backup-status.json")), true);
+  } finally {
+    if (previous === undefined) { delete process.env.BACKUP_STATUS_HISTORY_PATH; } else { process.env.BACKUP_STATUS_HISTORY_PATH = previous; }
+  }
+});
+
+test("readBackupStatus_nonStringFields_emptied", async () => {
+  const file = await writeStatusFile(JSON.stringify({ ...OK_STATUS, remote: { x: 1 }, parts: 3, error: ["a"] }));
+
+  const status = await readBackupStatus(file);
+
+  assert.deepEqual([status?.remote, status?.parts, status?.error], ["", "", ""]);
+});
+
+test("readBackupStatus_largerThanBound_returnsNull", async () => {
+  const file = await writeStatusFile(JSON.stringify({ ...OK_STATUS, error: "x".repeat(STATUS_MAX_BYTES) }));
+
+  assert.equal(await readBackupStatus(file), null);
+});
+
+test("readBackupStatus_directoryInsteadOfFile_returnsNull", async () => {
+  const file = await writeStatusFile("{}");
+
+  assert.equal(await readBackupStatus(path.dirname(file)), null);
+});
+
+test("readSmallFile_exactlyAtBound_returnsText", async () => {
+  const file = await writeStatusFile("abcd");
+
+  assert.equal(await readSmallFile(file, 4), "abcd");
+  assert.equal(await readSmallFile(file, 3), null);
 });
 
 test("readBackupStatus_relativeHistoryFile_returnsEmpty", async () => {
@@ -232,6 +282,19 @@ test("readFileTail_largerThanBound_readsOnlyTheEndWithoutCutLine", async () => {
   assert.equal(await readFileTail(file, 12), "fin1\nfin2\n");
   // Borne au milieu d'une ligne : la ligne coupée est écartée.
   assert.equal(await readFileTail(file, 8), "fin2\n");
+});
+
+test("readFileTail_windowStartsOnLineBoundary_keepsFirstLine", async () => {
+  // L'octet avant la fenêtre est un saut de ligne : « fin1 » est entière, gardée.
+  const file = await writeStatusFile("debut\nfin1\nfin2\n");
+
+  assert.equal(await readFileTail(file, 10), "fin1\nfin2\n");
+});
+
+test("readFileTail_windowCutsALine_dropsThePartialLine", async () => {
+  const file = await writeStatusFile("debut\nfin1\nfin2\n");
+
+  assert.equal(await readFileTail(file, 9), "fin2\n");
 });
 
 test("readFileTail_directoryOrMissing_returnsNull", async () => {

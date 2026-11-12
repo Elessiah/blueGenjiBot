@@ -243,11 +243,15 @@ test("truncateMessage_cutInsideEmoji_noLoneSurrogate", () => {
 
 test("parseContext_safeLabel_keptAsIs", () => {
   assert.equal(parseContext("live-announce tournoi-7 match-12,13"), "live-announce tournoi-7 match-12,13");
-  assert.equal(parseContext("match:4"), "match:4");
 });
 
-test("parseContext_mentionOrMarkdown_replaced", () => {
-  assert.equal(parseContext("<@123>**x**"), "__123___x__");
+test("parseContext_mentionOrMarkdown_replacedByNeutralHyphen", () => {
+  assert.equal(parseContext("<@123>**x**"), "--123---x--");
+});
+
+test("parseContext_underscoreAndColonFormatting_neutralised", () => {
+  // `__x__` soulignerait, `_x_` mettrait en italique, `:emoji:` deviendrait un émoji.
+  assert.equal(parseContext("__urgent__ _x_ :fire:"), "--urgent-- -x- -fire-");
 });
 
 test("parseContext_tooLong_cutToBound", () => {

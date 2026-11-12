@@ -270,3 +270,10 @@ test("safeErrorCode_wordOutsideDiscordjsEnum_returnsNull", () => {
 
   assert.equal(safeErrorCode(error), null);
 });
+
+test("safeErrorDetail_transientNetworkCode_kept", () => {
+  // Les codes réseau passagers sont toujours journalisables (liste fermée des codes système).
+  const error = Object.assign(new Error("getaddrinfo EAI_FAIL discord.com"), { code: "EAI_FAIL" });
+
+  assert.equal(safeErrorDetail(error), "Error, code EAI_FAIL");
+});

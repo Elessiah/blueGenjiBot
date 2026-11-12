@@ -261,17 +261,29 @@ export function resetProcessLogThrottle(): void {
   processLogThrottle.reset();
 }
 
+/** Options de {@link logProcessError}. */
+export type ProcessLogOptions = {
+  /** Clé d'étranglement, la ligne elle-même par défaut (une étiquette variable en est exclue). */
+  key?: string;
+  /** Écriture de la ligne : `console.error` par défaut. */
+  write?: (line: string) => void;
+  /** Horloge injectable, pour les tests. */
+  now?: number;
+};
+
 /**
- * Écrit une ligne au journal d'erreurs du processus (pm2), au plus une fois par
- * {@link PROCESS_LOG_COOLDOWN_MS} pour une ligne identique, le compte des suivantes
- * tues s'ajoutant à la prochaine qui part.
+ * Écrit une ligne au journal du processus (pm2), au plus une fois par
+ * {@link PROCESS_LOG_COOLDOWN_MS} pour une même clé, le compte des suivantes tues
+ * s'ajoutant à la prochaine qui part. Seul chemin d'écriture étranglée du journal du
+ * processus : gestionnaire d'erreur, rejets tardifs, échecs de route.
  * @param line Ligne (code et type seuls).
- * @param now Horloge injectable, pour les tests.
+ * @param options Clé, destination et horloge.
  * @returns `true` si la ligne est partie.
  */
-export function logProcessError(line: string, now: number = Date.now()): boolean {
-  const verdict = processLogThrottle.check(line, now);
-  if (verdict.emit) { console.error(withSuppressed(line, verdict.suppressed)); }
+export function logProcessError(line: string, options: ProcessLogOptions = {}): boolean {
+  const { key = line, write = (text: string) => console.error(text), now = Date.now() } = options;
+  const verdict = processLogThrottle.check(key, now);
+  if (verdict.emit) { write(withSuppressed(line, verdict.suppressed)); }
   return verdict.emit;
 }
 
@@ -282,11 +294,10 @@ export function logProcessError(line: string, now: number = Date.now()): boolean
  * @param error Rejet.
  */
 function logLateRejection(error: unknown): void {
-  const line = internalErrorLogLine(error);
-  const verdict = processLogThrottle.check(line);
-  if (!verdict.emit) { return; }
-  const text = withSuppressed(line, verdict.suppressed);
-  if (internalErrorReply(error).status >= 500) { console.error(text); } else { console.warn(text); }
+  const write = internalErrorReply(error).status >= 500
+    ? (text: string) => console.error(text)
+    : (text: string) => console.warn(text);
+  logProcessError(internalErrorLogLine(error), { write });
 }
 
 /** Destinations des lignes du gestionnaire d'erreur. */
@@ -320,14 +331,12 @@ export function internalErrorHandler(sinks: InternalErrorSinks = {}): ErrorReque
   return (error, _req, res, _next) => {
     const reply = internalErrorReply(error);
     const line = internalErrorLogLine(error);
-    const verdict = processLogThrottle.check(line, now?.());
-    if (reply.status >= 500) {
-      if (verdict.emit) { logError(withSuppressed(line, verdict.suppressed)); }
+    const serverFault = reply.status >= 500;
+    logProcessError(line, { write: serverFault ? logError : warn, now: now?.() });
+    if (serverFault) {
       // Au mieux : un salon de logs injoignable ne doit pas faire lever le gestionnaire.
       // Le salon a son propre étranglement : la ligne lui est transmise sans le compte.
       try { report?.(line); } catch { /* journal Discord indisponible */ }
-    } else if (verdict.emit) {
-      warn(withSuppressed(line, verdict.suppressed));
     }
     if (res.writableEnded) {
       // Réponse déjà envoyée en entier (un geste après `res.json` a levé) : le site a
