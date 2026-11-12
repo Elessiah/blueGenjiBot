@@ -538,7 +538,9 @@ client, erreurs `500`, rejets tardifs) sont étranglées : une ligne identique n
 qu'une fois par minute, le nombre des suivantes tues s'ajoutant à la prochaine
 (`(+N identiques tues)`) ; l'étranglement retient cent lignes et oublie d'abord les échues,
 puis la plus ancienne. Le `catch` d'une route envoie lui aussi au salon de logs au plus une fois par
-ligne et par dix minutes (`reportRouteFailure`, même étranglement que les erreurs hors route) :
+ligne et par dix minutes (`reportRouteFailure`, même étranglement que les erreurs hors route ;
+même clé pour pm2 et le salon, sans l'étiquette du site ni le statut HTTP, et le compte des
+lignes tues y est dit `(+N du même type tues)`, jamais « identiques ») :
 une base en panne, interrogée toutes les quelques secondes par le site, n'inonde pas le salon
 (la réponse `500` part à chaque appel). Les intergiciels synchrones reçoivent une enveloppe
 légère, sans coût par requête ; l'enveloppe complète est réservée aux `async` et au gestionnaire final.

@@ -691,6 +691,20 @@ test("logProcessError_sameLineWithinCooldown_writesOnceThenCountsSuppressed", (t
   resetProcessLogThrottle();
 });
 
+test("logProcessError_suppressedNote_usedInCount", (t) => {
+  // Clé qui ignore l'étiquette : les lignes tues ne sont pas dites « identiques ».
+  resetProcessLogThrottle();
+  const written: string[] = [];
+  t.mock.method(console, "error", (line: unknown) => { written.push(String(line)); });
+
+  logProcessError("[internalApi] x (match-1)", { key: "k", now: 0, suppressedNote: "du même type" });
+  logProcessError("[internalApi] x (match-2)", { key: "k", now: 1_000, suppressedNote: "du même type" });
+  logProcessError("[internalApi] x (match-3)", { key: "k", now: 61_000, suppressedNote: "du même type" });
+
+  assert.deepEqual(written, ["[internalApi] x (match-1)", "[internalApi] x (match-3) (+1 du même type tues)"]);
+  resetProcessLogThrottle();
+});
+
 test("logProcessError_sameKeyDifferentLines_throttledTogether", (t) => {
   // Une étiquette du site qui change à chaque appel ne contourne pas l'étranglement.
   resetProcessLogThrottle();

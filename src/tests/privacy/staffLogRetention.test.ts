@@ -314,6 +314,20 @@ test("deleteBanMessages_bannedUserUnreachable_withdrawalQueued", async () => {
   assert.deepEqual(logs, ["Ban notice withdrawal postponed to the nightly purge"]);
 });
 
+test("deleteBanMessages_queuedPreviousNotice_withdrawnAtUnban", async () => {
+  // Un avis remplacé quand Discord était injoignable part à la levée, sans attendre la nuit.
+  process.env.INFO_SERV = "info-1";
+  await clearWithdrawals();
+  await withdrawBanNotice(noticeFailureClient([], UNAVAILABLE()), BAN.id_user, "notice-old", NOW);
+  const deleted: string[] = [];
+
+  const count = await deleteBanMessages(banClient(deleted), BAN);
+
+  assert.equal(count, 3);
+  assert.deepEqual(deleted.sort(), ["600000000000000001:notice-1", "600000000000000001:notice-old", "salon:reason-1"]);
+  assert.deepEqual(await pendingWithdrawals(), []);
+});
+
 test("withdrawBanNotice_deleteFails_queuedForNightlyPurge", async () => {
   await clearWithdrawals();
   const logs: string[] = [];

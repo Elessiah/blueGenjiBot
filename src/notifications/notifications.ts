@@ -10,7 +10,7 @@
  * ni à Discord ni à la base. La distribution vit dans `deliver.ts`.
  */
 
-import { sliceWithoutSplittingPair } from "./dmLanguage.js";
+import { sliceWithoutSplittingPair } from "../utils/cutText.js";
 import { MAX_SITE_CONTEXT_LENGTH, sanitizeSiteContext } from "./siteContext.js";
 
 /** Destinataire d'un message privé, tel que l'app le connaît. */

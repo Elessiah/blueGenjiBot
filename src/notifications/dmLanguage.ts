@@ -21,6 +21,8 @@
  * Module pur : aucun accès à Discord ni à la base.
  */
 
+import { sliceWithoutSplittingPair } from "../utils/cutText.js";
+
 /** Langue d'un compte du site. */
 export type DmLocale = "fr" | "en";
 
@@ -175,19 +177,6 @@ export function banNoticeMessage(date: Date | string, reason: string): string {
   const room = DISCORD_DM_MAX_LENGTH - head.length;
   if (reason.length <= room) { return head + reason; }
   return head + sliceWithoutSplittingPair(reason, Math.max(0, room - 1)) + "…";
-}
-
-/**
- * Coupe un texte sans séparer une paire de substitution UTF-16 (un émoji) :
- * une moitié d'émoji s'afficherait en caractère cassé.
- * @param text Texte à couper.
- * @param length Longueur maximale (en unités UTF-16).
- * @returns Au plus `length` unités, sans moitié de paire à la fin.
- */
-export function sliceWithoutSplittingPair(text: string, length: number): string {
-  let cut = Math.max(0, Math.min(length, text.length));
-  if (cut > 0 && cut < text.length && /[\uD800-\uDBFF]/.test(text.charAt(cut - 1))) { cut -= 1; }
-  return text.slice(0, cut);
 }
 
 /** Plafond d'un message Discord (l'API refuse au-delà). */

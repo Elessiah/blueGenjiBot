@@ -534,14 +534,40 @@ export async function retryBanNoticeWithdrawals(client: Client, now: number = Da
   return settled;
 }
 
+/** Avis précédents d'un exclu (remplacés, encore en file) retirés à la levée, au plus. */
+export const MAX_PREVIOUS_NOTICES_AT_UNBAN = 10;
+
 /**
- * Supprime les messages du journal qui décrivent une exclusion levée, et le
- * dernier avis remis en message privé à l'exclu (`checkBan`).
+ * Avis précédents de l'exclu, remplacés par un nouvel avis mais restés en file
+ * (`BanNoticeWithdrawal` : Discord injoignable au remplacement), hors l'avis courant.
+ * Au mieux : une file illisible n'en rend aucun (la purge de nuit les reprend).
+ * @param idUser Exclu.
+ * @param current Avis courant (retiré à part), ou `null`.
+ * @returns Les identifiants des avis à retirer.
+ */
+async function queuedPreviousNotices(idUser: string, current: string | null): Promise<string[]> {
+  try {
+    const rows = await (await getBddInstance()).raw<{ id_message: string }>(
+      "SELECT id_message FROM BanNoticeWithdrawal WHERE id_user = ? AND id_message <> ? ORDER BY queued_at LIMIT ?",
+      [idUser, current ?? "", MAX_PREVIOUS_NOTICES_AT_UNBAN],
+    );
+    return rows.map((row) => row.id_message);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Supprime les messages du journal qui décrivent une exclusion levée, le
+ * dernier avis remis en message privé à l'exclu (`checkBan`), et les avis
+ * précédents encore en file de retrait : ceux qu'un nouvel avis a remplacés
+ * quand Discord était injoignable partent eux aussi à la levée, sans attendre la nuit.
  *
  * Au mieux : un message déjà effacé (ménage du staff, purge d'un an) ou un
  * salon injoignable n'empêche pas les autres de partir. Ce qui resterait est
  * repris par la purge de nuit, la ligne `Ban` ne le protégeant plus ; l'avis
- * à l'exclu, qu'elle ne parcourt pas, par `withdrawBanNotice`.
+ * à l'exclu, qu'elle ne parcourt pas, par `withdrawBanNotice` (un avis encore
+ * injoignable reste en file, réessayé chaque nuit).
  * @param client Client Discord.
  * @param ban Ligne `Ban` de l'exclusion levée (rendue par sa suppression).
  * @returns Le nombre de messages supprimés.
@@ -566,6 +592,9 @@ export async function deleteBanMessages(client: Client, ban: Ban): Promise<numbe
   }
   if (ban.id_notice_user) {
     attempts.push(withdrawBanNotice(client, ban.id_user, ban.id_notice_user).then((outcome) => outcome === "gone"));
+  }
+  for (const previous of await queuedPreviousNotices(ban.id_user, ban.id_notice_user ?? null)) {
+    attempts.push(withdrawBanNotice(client, ban.id_user, previous).then((outcome) => outcome === "gone", () => false));
   }
   return (await Promise.all(attempts)).filter(Boolean).length;
 }

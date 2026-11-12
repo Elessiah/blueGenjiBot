@@ -1,6 +1,6 @@
 import { MessageFlags, type Client, type User } from "discord.js";
 import { formatDiskUsage, getDiskUsage } from "./diskSpace.js";
-import { formatBackupFailures, formatBackupStatus, isBackupFresh, readBackupFailures, readBackupStatus, readRunningSince, type BackupStatus } from "./backupStatus.js";
+import { IGNORED_HISTORY_LINE, formatBackupFailures, formatBackupStatus, isBackupFresh, readBackupFailures, readBackupStatus, readRunningSince, type BackupStatus } from "./backupStatus.js";
 import { resolveBddPath } from "../bdd/Bdd.js";
 import { backupChecksPassed, formatBackupChecks, runBackupChecks, type BackupCheckReport } from "./backupCheck.js";
 
@@ -62,7 +62,11 @@ export async function sendDatabaseBackup(
     const failures = history.filter((failure) => failure.date !== status?.date);
     const failuresLine = formatBackupFailures(failures);
     const statusLine = formatBackupStatus(status, Date.now(), runningSince);
-    const cloudLine = failuresLine === null ? statusLine : `${statusLine}\n${failuresLine}`;
+    // Un historique refusé tairait les échecs passés : le rapport le dit et passe en alerte.
+    const historyIgnored = status?.historyFileIgnored === true;
+    if (historyIgnored) { console.warn("[backup] historique désigné par le statut ignoré (hors du dossier du statut)."); }
+    const cloudLine = [statusLine, failuresLine, historyIgnored ? IGNORED_HISTORY_LINE : null]
+      .filter((line): line is string => line !== null).join("\n");
     // L'état du disque intéresse surtout quand la place manque : on le joint dans les deux cas.
     const diskLine = formatDiskUsage(await getDiskUsage(dbPath));
     // Une archive présente mais illisible ne vaut pas mieux qu'une absente.
@@ -70,7 +74,7 @@ export async function sendDatabaseBackup(
 
     // Une sauvegarde absente ou périmée est la seule situation qui demande une
     // action : elle mérite d'être annoncée dès la première ligne du message.
-    const healthy = isBackupFresh(status, Date.now(), runningSince !== null) && failuresLine === null && backupChecksPassed(checks);
+    const healthy = isBackupFresh(status, Date.now(), runningSince !== null) && failuresLine === null && !historyIgnored && backupChecksPassed(checks);
     const header = healthy
       ? `🗄️ Rapport de sauvegarde BlueGenji — ${stamp}`
       : `🚨 Sauvegarde BlueGenji à vérifier — ${stamp}`;

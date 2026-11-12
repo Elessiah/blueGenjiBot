@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { sliceWithoutSplittingPair } from "../notifications/dmLanguage.js";
+import { sliceWithoutSplittingPair } from "../utils/cutText.js";
 
 /** Statut déposé par `scripts/backup-onedrive.sh` après chaque exécution. */
 export interface BackupStatus {
@@ -22,6 +22,12 @@ export interface BackupStatus {
    * script antérieur : le bot relit celui-là, jamais un chemin recalculé de son côté.
    */
   historyFile: string;
+  /**
+   * `true` si le statut désignait un historique refusé ({@link isHistoryFilePath} : hors du
+   * dossier du statut et non déclaré au bot) : le rapport le dit et passe en alerte, au lieu
+   * de taire les échecs passés qu'il n'a pas pu relire.
+   */
+  historyFileIgnored?: boolean;
 }
 
 /**
@@ -112,13 +118,23 @@ interface OpenedFile {
 }
 
 /**
- * Ouvre un fichier **ordinaire** en lecture, sans jamais bloquer : une FIFO ou un
- * périphérique est ouvert sans attendre, puis écarté (et refermé).
+ * Drapeaux d'ouverture en lecture : sans bloquer (`O_NONBLOCK`) et sans suivre un lien
+ * symbolique en dernier élément du chemin (`O_NOFOLLOW`, refusé par le système : `ELOOP`).
+ * Le script ne crée jamais de lien (il remplace par renommage) : un lien au chemin du
+ * statut, du marqueur ou de l'historique a été posé par un tiers, et le suivre ferait
+ * lire au rapport un fichier hors du dossier du statut. Absents (Windows) : 0.
+ */
+export const SAFE_READ_FLAGS = fs.constants.O_RDONLY | (fs.constants.O_NONBLOCK ?? 0) | (fs.constants.O_NOFOLLOW ?? 0);
+
+/**
+ * Ouvre un fichier **ordinaire** en lecture, sans jamais bloquer ni suivre un lien
+ * ({@link SAFE_READ_FLAGS}) : une FIFO ou un périphérique est ouvert sans attendre,
+ * puis écarté (et refermé).
  * @param filePath Chemin du fichier.
  * @returns Le fichier ouvert, ou `null` (pas un fichier ordinaire).
  */
 async function openRegularFile(filePath: string): Promise<OpenedFile | null> {
-  const handle = await fs.promises.open(filePath, fs.constants.O_RDONLY | (fs.constants.O_NONBLOCK ?? 0));
+  const handle = await fs.promises.open(filePath, SAFE_READ_FLAGS);
   try {
     const stat = await handle.stat();
     if (stat.isFile()) { return { handle, size: stat.size }; }
@@ -150,6 +166,12 @@ export async function readSmallFile(filePath: string, maxBytes: number): Promise
     await opened?.handle.close().catch(() => undefined);
   }
 }
+
+/**
+ * Ligne du rapport quand l'historique désigné par le statut a été refusé.
+ */
+export const IGNORED_HISTORY_LINE = "⚠️ Historique des statuts ignoré : le statut désigne un fichier hors de son dossier, "
+  + "non déclaré dans BACKUP_STATUS_HISTORY_PATH — les échecs passés n'ont pas été relus.";
 
 /** Une ligne de l'historique des statuts (`STATUS_HISTORY_FILE` du script). */
 export interface BackupHistoryEntry {
@@ -191,6 +213,9 @@ export async function readBackupStatus(statusPath: string): Promise<BackupStatus
       parts: typeof parsed.parts === "string" ? parsed.parts : "",
       error: typeof parsed.error === "string" ? parsed.error : "",
       historyFile: isHistoryFilePath(parsed.historyFile, statusPath) ? parsed.historyFile : "",
+      ...(typeof parsed.historyFile === "string" && parsed.historyFile !== "" && !isHistoryFilePath(parsed.historyFile, statusPath)
+        ? { historyFileIgnored: true }
+        : {}),
     };
   } catch {
     return null;

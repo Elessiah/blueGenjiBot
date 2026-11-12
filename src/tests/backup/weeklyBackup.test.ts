@@ -6,7 +6,7 @@ import path from "node:path";
 import { MessageFlags, type Client } from "discord.js";
 
 import { backupHistoryPath, sendDatabaseBackup } from "../../backup/weeklyBackup.js";
-import { runningMarkerPath } from "../../backup/backupStatus.js";
+import { IGNORED_HISTORY_LINE, runningMarkerPath } from "../../backup/backupStatus.js";
 import type { BackupCheckReport } from "../../backup/backupCheck.js";
 
 type Sent = { content: string; allowedMentions?: unknown; flags?: unknown };
@@ -189,6 +189,26 @@ test("sendDatabaseBackup_historyFileNamedInStatus_failureReported", async () => 
       await sendDatabaseBackup(ownerClient(sent), checksWith(true));
 
       assert.ok(sent[0].content.includes(`❌ Échec depuis le rapport précédent : ${failedAt.slice(0, 10)} — rclone injoignable.`));
+    });
+  } finally {
+    await fs.promises.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("sendDatabaseBackup_historyIgnored_alertHeaderAndLine", async () => {
+  const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "bluegenji-weekly-histignored-"));
+  const statusPath = path.join(dir, "status.json");
+  // Historique désigné hors du dossier du statut, non déclaré au bot : refusé.
+  const historyFile = path.join(os.tmpdir(), "ailleurs", "historique.jsonl");
+  await fs.promises.writeFile(statusPath, JSON.stringify({ date: new Date().toISOString(), ok: true, historyFile }));
+  try {
+    await withBackupEnv({ BACKUP_STATUS_PATH: statusPath }, async () => {
+      const sent: Sent[] = [];
+
+      await sendDatabaseBackup(ownerClient(sent), checksWith(true));
+
+      assert.ok(sent[0].content.startsWith("🚨 Sauvegarde BlueGenji à vérifier"));
+      assert.ok(sent[0].content.includes(IGNORED_HISTORY_LINE));
     });
   } finally {
     await fs.promises.rm(dir, { recursive: true, force: true });

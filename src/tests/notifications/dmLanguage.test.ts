@@ -14,8 +14,8 @@ import {
   loginCodeMessage,
   parseCodePurpose,
   parseDmLocale,
-  sliceWithoutSplittingPair,
 } from "../../notifications/dmLanguage.js";
+import { sliceWithoutSplittingPair } from "../../utils/cutText.js";
 
 const TEXT = { fr: "Bonjour", en: "Hello" };
 

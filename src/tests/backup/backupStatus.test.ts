@@ -218,6 +218,31 @@ test("readBackupStatus_historyFileInAnotherDirectory_returnsEmpty", async () => 
   assert.equal((await readBackupStatus(file))?.historyFile, "");
 });
 
+test("readBackupStatus_historyOutsideDir_flagsIgnored", async () => {
+  // Refusé, l'historique n'est pas tu : le rapport saura qu'il n'a pas relu les échecs.
+  const historyFile = path.join(os.tmpdir(), "autre-appli", "journal.jsonl");
+  const file = await writeStatusFile(JSON.stringify({ ...OK_STATUS, historyFile }));
+
+  assert.equal((await readBackupStatus(file))?.historyFileIgnored, true);
+});
+
+test("readBackupStatus_historyInDir_notFlagged", async () => {
+  const file = await writeStatusFile("{}");
+  const historyFile = path.join(path.dirname(file), "history.jsonl");
+  await fs.promises.writeFile(file, JSON.stringify({ ...OK_STATUS, historyFile }));
+
+  assert.equal((await readBackupStatus(file))?.historyFileIgnored, undefined);
+});
+
+test("readSmallFile_symlink_returnsNull", { skip: process.platform === "win32" && "O_NOFOLLOW indisponible" }, async () => {
+  // Un lien posé au chemin du statut n'est jamais suivi.
+  const target = await writeStatusFile(JSON.stringify(OK_STATUS));
+  const link = path.join(path.dirname(target), "lien.json");
+  await fs.promises.symlink(target, link);
+
+  assert.equal(await readSmallFile(link, 16 * 1024), null);
+});
+
 test("isHistoryFilePath_otherDirectoryDeclaredToTheBot_accepted", () => {
   const declared = path.join(os.tmpdir(), "historiques", "backup-history.jsonl");
   const previous = process.env.BACKUP_STATUS_HISTORY_PATH;

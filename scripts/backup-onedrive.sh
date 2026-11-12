@@ -89,15 +89,20 @@ running_line_alive() {
 }
 # Fichier temporaire à côté de `$1`, créé par `mktemp` (nom imprévisible, jamais un
 # lien suivi). Il reprend les droits et le groupe du fichier qu'il remplacera (réglés
-# par l'exploitant pour que le bot, sous un autre compte, le lise) ; sans fichier
-# existant, ceux que l'umask lui donnerait. Le bot le relit après le `mv`.
+# par l'exploitant pour que le bot, sous un autre compte, le lise), lus d'un seul
+# `stat` qui ne suit pas les liens : un lien posé entre-temps n'en prête pas les siens.
+# Sans fichier ordinaire existant, ou si son groupe ne peut pas être repris (le bot ne
+# le lirait plus), ceux que l'umask lui donnerait. Le bot le relit après le `mv`.
 sibling_tmp() {
-  local tmp
+  local tmp kind mode group
   tmp="$(mktemp "$1.tmp.XXXXXXXX")" || return 1
-  if [[ -f "$1" && ! -L "$1" ]]; then
-    chmod --reference="$1" "$tmp" || { rm -f "$tmp"; return 1; }
-    chgrp --reference="$1" "$tmp" 2>/dev/null || true
+  IFS='|' read -r kind mode group < <(stat -c '%F|%a|%g' -- "$1" 2>/dev/null || true) || true
+  if [[ "$kind" == "regular file" || "$kind" == "regular empty file" ]]     && chgrp "$group" "$tmp" 2>/dev/null; then
+    chmod "$mode" "$tmp" || { rm -f "$tmp"; return 1; }
   else
+    if [[ "$kind" == regular* ]]; then
+      echo "[backup] groupe de $(basename "$1") non repris : droits par défaut." >&2
+    fi
     chmod "$(printf '%o' $(( 0666 & ~0$(umask) )))" "$tmp" || { rm -f "$tmp"; return 1; }
   fi
   printf '%s' "$tmp"
@@ -152,18 +157,39 @@ STATUS_SIZE=0
 # Lignes gardées dans l'historique : un peu plus de deux mois.
 STATUS_HISTORY_LINES=20
 
+# Statut écrit sans temporaire (dossier plein, ou fermé à ce compte), seulement si aucun
+# autre compte ne peut écrire dans son dossier (ni groupe ni autres, `-perm /022`) : nul
+# ne peut alors y poser un lien (vers une FIFO, un périphérique) entre la vérification
+# et l'écriture. Dossier ouvert à ce compte : statut retiré puis recréé en exclusif
+# (`set -C`). Dossier fermé : statut existant, ordinaire, réécrit en place. Sinon rien
+# n'est écrit (et le dit). Jamais d'arrêt du script (`set -e`) : tout échec rend 1.
+status_fallback() {
+  local dir
+  dir="$(dirname "$STATUS_FILE")"
+  if [[ ! -d "$dir" || -L "$dir" ]] || [[ -n "$(find "$dir" -maxdepth 0 -perm /022 2>/dev/null)" ]]; then
+    cat > /dev/null
+    return 1
+  fi
+  if [[ -w "$dir" ]]; then
+    rm -f -- "$STATUS_FILE" 2>/dev/null || { cat > /dev/null; return 1; }
+    ( set -C; cat > "$STATUS_FILE" )
+  elif [[ -f "$STATUS_FILE" && ! -L "$STATUS_FILE" && -w "$STATUS_FILE" ]]; then
+    cat > "$STATUS_FILE"
+  else
+    cat > /dev/null
+    return 1
+  fi
+}
+
 write_status() {
-  mkdir -p "$(dirname "$STATUS_FILE")" "$(dirname "$STATUS_HISTORY_FILE")"
+  mkdir -p "$(dirname "$STATUS_FILE")" "$(dirname "$STATUS_HISTORY_FILE")" 2>/dev/null || true
   local now
   now="$(date --iso-8601=seconds)"
   # Écrit dans un temporaire `mktemp` puis renommé : jamais `>` sur le statut, qui
   # suivrait un lien posé à sa place, et le bot ne lit jamais un statut à moitié écrit.
-  # Sans temporaire (dossier plein ou fermé), le statut est recréé : l'ancien (ou le
-  # lien posé à sa place) est retiré, puis le nouveau créé en exclusif (`set -C`,
-  # O_EXCL) — un lien reposé entre-temps fait échouer l'écriture, jamais suivi.
+  # Sans temporaire (dossier plein ou fermé) : `status_fallback`.
   local status_tmp
   status_tmp="$(sibling_tmp "$STATUS_FILE")" || status_tmp=""
-  if [[ -z "$status_tmp" ]]; then rm -f "$STATUS_FILE"; fi
   {
     cat <<JSON
 {
@@ -179,7 +205,7 @@ JSON
   } | if [[ -n "$status_tmp" ]]; then
     cat > "$status_tmp" && mv -f -T "$status_tmp" "$STATUS_FILE" || { rm -f "$status_tmp"; false; }
   else
-    ( set -C; cat > "$STATUS_FILE" )
+    status_fallback
   fi || echo "[backup] statut non écrit." >&2
   # Au mieux : un historique qui ne s'écrit pas ne fait pas échouer la sauvegarde.
   # L'ajout et l'élagage forment un tout sous verrou (pris sur le dossier de
@@ -209,8 +235,9 @@ fail() {
   # afficher au bot « aucune sauvegarde » au lieu de la vraie cause de l'échec
   # — ou retirerait l'échec de l'historique relu par le rapport du lundi.
   STATUS_ERROR="$(printf '%s' "$1" | tr '\n\r\t' '   ' | tr -d '\000-\037\\"')"
-  write_status
+  # La cause part au journal d'abord : un statut impossible à écrire ne la tait pas.
   echo "[backup] ÉCHEC : $1" >&2
+  write_status || true
   exit 1
 }
 

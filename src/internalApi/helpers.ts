@@ -249,8 +249,8 @@ export function createLineThrottle(cooldownMs: number, memory: number = LINE_THR
 }
 
 /** Ligne avec le compte des occurrences tues depuis sa dernière écriture. */
-function withSuppressed(line: string, suppressed: number): string {
-  return suppressed > 0 ? `${line} (+${suppressed} identiques tues)` : line;
+function withSuppressed(line: string, suppressed: number, note: string = "identiques"): string {
+  return suppressed > 0 ? `${line} (+${suppressed} ${note} tues)` : line;
 }
 
 /** Étranglement des lignes du journal du processus : gestionnaire d'erreur et rejets tardifs. */
@@ -269,6 +269,12 @@ export type ProcessLogOptions = {
   write?: (line: string) => void;
   /** Horloge injectable, pour les tests. */
   now?: number;
+  /**
+   * Qualificatif du compte des lignes tues (`identiques` par défaut) : quand la clé ignore
+   * une partie de la ligne (étiquette du site, statut HTTP), les lignes tues n'avaient pas
+   * forcément cette partie-là, et le compte ne doit pas la leur prêter.
+   */
+  suppressedNote?: string;
 };
 
 /**
@@ -281,9 +287,9 @@ export type ProcessLogOptions = {
  * @returns `true` si la ligne est partie.
  */
 export function logProcessError(line: string, options: ProcessLogOptions = {}): boolean {
-  const { key = line, write = (text: string) => console.error(text), now = Date.now() } = options;
+  const { key = line, write = (text: string) => console.error(text), now = Date.now(), suppressedNote } = options;
   const verdict = processLogThrottle.check(key, now);
-  if (verdict.emit) { write(withSuppressed(line, verdict.suppressed)); }
+  if (verdict.emit) { write(withSuppressed(line, verdict.suppressed, suppressedNote)); }
   return verdict.emit;
 }
 

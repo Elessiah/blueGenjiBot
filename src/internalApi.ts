@@ -226,8 +226,10 @@ export function resetInternalErrorReports(): void {
  * panne et par {@link INTERNAL_ERROR_REPORT_COOLDOWN_MS} — une base ou Discord en panne,
  * interrogés toutes les quelques secondes par le site, n'inondent pas le salon (ni ne
  * consomment la limite de Discord). L'étiquette `context` du site est dans la ligne
- * mais pas dans la clé d'étranglement : changer d'étiquette à chaque appel ne fait pas
- * repartir l'alerte. La réponse 500 part, elle, à chaque appel.
+ * mais pas dans la clé d'étranglement (ni le statut HTTP, {@link internalErrorThrottleKey},
+ * même clé pour pm2 et le salon) : changer d'étiquette à chaque appel ne fait pas
+ * repartir l'alerte, et le compte des lignes tues se dit « du même type ». La réponse 500
+ * part, elle, à chaque appel.
  * @param client Client Discord.
  * @param label Étiquette de la route (`notify/dm error`).
  * @param detail Détail de l'erreur (`safeErrorDetail` : type, code, statut).
@@ -241,8 +243,12 @@ async function reportRouteFailure(
 ): Promise<void> {
   const { context, alert = false } = options;
   const line = context === undefined ? `${label}: ${detail}` : `${label} (${context}): ${detail}`;
-  logProcessError(`[internalApi] ${line}`, { key: `[internalApi] ${label}: ${detail}` });
-  if (!shouldReportInternalError(`${label}: ${detail}`)) { return; }
+  // Même clé pour pm2 et pour le salon (étiquette du site et statut HTTP mis à part) : une
+  // panne qui rend 500 puis 502 reste une ligne par minute, et le compte des lignes tues
+  // ne leur prête ni l'étiquette ni le statut de celle qui part.
+  const key = internalErrorThrottleKey(`${label}: ${detail}`);
+  logProcessError(`[internalApi] ${line}`, { key: `[internalApi] ${key}`, suppressedNote: "du même type" });
+  if (!shouldReportInternalError(key)) { return; }
   await (alert ? sendAlert(client, line) : sendLog(client, line));
 }
 

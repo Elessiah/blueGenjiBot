@@ -4,8 +4,6 @@ import { DISCORD_UNKNOWN_MESSAGE, discordJsonCode, safeErrorDetail } from "../sa
 import { MAX_SITE_CONTEXT_LENGTH, sanitizeSiteContext } from "./siteContext.js";
 import { cutText } from "../utils/cutText.js";
 
-export { cutText };
-
 /**
  * Annonce d'un live dans le salon #live du serveur BlueGenji, poussée par l'app
  * web au début d'un match diffusé (`POST /internal/announce/live`).

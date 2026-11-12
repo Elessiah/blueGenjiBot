@@ -95,13 +95,14 @@ test("backupScript_writeStatus_appendsToHistory", () => {
 
 test("backupScript_writeStatus_historyUpdatedUnderFlock", () => {
   // Lancement manuel pendant le cron : l'ajout puis l'élagage forment un tout.
-  const write = BACKUP_SCRIPT.slice(BACKUP_SCRIPT.indexOf("write_status() {"), BACKUP_SCRIPT.indexOf("\nfail() {"));
+  const write = BACKUP_SCRIPT.slice(BACKUP_SCRIPT.indexOf("status_fallback() {"), BACKUP_SCRIPT.indexOf("\nfail() {"));
   assert.match(write, /\(\n\s+if command -v flock >\/dev\/null 2>&1; then\n\s+flock -w 30 8 \|\| exit 1\n\s+fi\n/);
   assert.match(write, /mv -f -T "\$tmp" "\$STATUS_HISTORY_FILE" \|\| \{ rm -f "\$tmp"; exit 1; \}\n\s+\) 8<"\$\(dirname "\$STATUS_HISTORY_FILE"\)"/);
   // Jamais `>` ni `>>` sur l'historique ou le statut eux-mêmes : un lien posé à leur place serait suivi.
   assert.doesNotMatch(write, />>? "\$STATUS_HISTORY_FILE"/);
-  // Seule écriture directe du statut : recréé en exclusif (`set -C`), quand aucun temporaire n'est possible.
-  assert.deepEqual(write.match(/[^\n]*> "\$STATUS_FILE"[^\n]*/g), ['    ( set -C; cat > "$STATUS_FILE" )']);
+  // Seules écritures directes du statut, sans temporaire possible : recréé en exclusif
+  // (`set -C`) dans un dossier ouvert à ce compte, réécrit en place dans un dossier fermé.
+  assert.deepEqual(write.match(/[^\n]*> "\$STATUS_FILE"[^\n]*/g), ['    ( set -C; cat > "$STATUS_FILE" )', '    cat > "$STATUS_FILE"']);
 });
 
 /** Fonction `sibling_tmp` du script, nécessaire à `write_status` jouée seule. */
@@ -113,12 +114,13 @@ function siblingTmpFunction(): string {
 }
 
 /** Joue `write_status` seule (`count` fois de suite) dans `dir` ; rend le statut de bash. */
-function runWriteStatus(dir: string, count: number, lines = 100, siblingTmp = siblingTmpFunction()): { status: number | null; stderr: string } {
-  const write = BACKUP_SCRIPT.slice(BACKUP_SCRIPT.indexOf("write_status() {"), BACKUP_SCRIPT.indexOf("\nfail() {"));
+function runWriteStatus(dir: string, count: number, lines = 100, siblingTmp = siblingTmpFunction(), prelude = ""): { status: number | null; stderr: string } {
+  const write = BACKUP_SCRIPT.slice(BACKUP_SCRIPT.indexOf("status_fallback() {"), BACKUP_SCRIPT.indexOf("\nfail() {"));
   const script = [
     `STATUS_FILE="${dir}/status.json"`,
     `STATUS_HISTORY_FILE="${dir}/status-history.jsonl"`,
     `STATUS_HISTORY_LINES=${lines} STATUS_OK=false STATUS_ERROR=boom STATUS_SIZE=0 STATUS_PARTS= RCLONE_REMOTE=r REMOTE_DIR=d STAMP=s STATUS_HISTORY_JSON=`,
+    prelude,
     siblingTmp,
     write,
     `for i in $(seq 1 ${count}); do write_status; done`,
@@ -204,10 +206,96 @@ test("backupScript_writeStatus_existingStatusMode_keptOnReplacement", { skip: (!
   }
 });
 
+const POSIX_BASH = BASH_PRESENT && process.platform !== "win32";
+
+test("siblingTmp_symlinkTarget_umaskModeNotLinkTarget", { skip: !POSIX_BASH && "bash ou droits POSIX indisponibles" }, () => {
+  // Un lien posé à la place du statut ne lui prête pas les droits de sa cible.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bluegenji-status-linkmode-"));
+  try {
+    const victim = path.join(dir, "victim.txt");
+    fs.writeFileSync(victim, "intact\n");
+    // eslint-disable-next-line sonarjs/file-permissions -- cible ouverte à tous à dessein : le statut ne doit pas en hériter
+    fs.chmodSync(victim, 0o666);
+    fs.symlinkSync(victim, path.join(dir, "status.json"));
+
+    const { status, stderr } = runWriteStatus(dir, 1, 100, siblingTmpFunction(), "umask 022");
+
+    assert.equal(status, 0, stderr);
+    assert.equal(fs.lstatSync(path.join(dir, "status.json")).mode & 0o777, 0o644);
+    assert.equal(fs.readFileSync(victim, "utf8"), "intact\n");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("siblingTmp_chgrpFails_defaultModeAndWarning", { skip: !POSIX_BASH && "bash ou droits POSIX indisponibles" }, () => {
+  // Groupe non repris : des droits 640 au groupe de ce compte cacheraient le statut au bot.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bluegenji-status-chgrp-"));
+  try {
+    const statusFile = path.join(dir, "status.json");
+    fs.writeFileSync(statusFile, "{}");
+    fs.chmodSync(statusFile, 0o640);
+
+    const { status, stderr } = runWriteStatus(dir, 1, 100, siblingTmpFunction(), "umask 022\nchgrp() { return 1; }");
+
+    assert.equal(status, 0, stderr);
+    assert.equal(fs.statSync(statusFile).mode & 0o777, 0o644);
+    assert.match(stderr, /groupe de status\.json non repris/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("writeStatus_noTempGroupWritableDir_notWritten", { skip: !POSIX_BASH && "bash ou droits POSIX indisponibles" }, () => {
+  // Dossier ouvert à d'autres comptes : un lien pourrait y être posé entre le retrait et l'écriture.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bluegenji-status-shared-"));
+  try {
+    // eslint-disable-next-line sonarjs/file-permissions -- dossier ouvert au groupe à dessein : le repli doit refuser d'y écrire
+    fs.chmodSync(dir, 0o775);
+
+    const { status, stderr } = runWriteStatus(dir, 1, 100, "sibling_tmp() { return 1; }");
+
+    assert.equal(status, 0, stderr);
+    assert.equal(fs.existsSync(path.join(dir, "status.json")), false);
+    assert.match(stderr, /statut non écrit/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("writeStatus_noTempClosedDir_regularStatusRewrittenInPlace", {
+  skip: (!POSIX_BASH || process.getuid?.() === 0) && "bash, droits POSIX ou compte non root indisponibles",
+}, () => {
+  // Dossier fermé à ce compte : le statut existant, ordinaire, est réécrit en place.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bluegenji-status-closed-"));
+  const statusFile = path.join(dir, "status.json");
+  try {
+    fs.writeFileSync(statusFile, "{}");
+    fs.chmodSync(dir, 0o500);
+
+    const { status, stderr } = runWriteStatus(dir, 1, 100, "sibling_tmp() { return 1; }");
+
+    assert.equal(status, 0, stderr);
+    assert.equal((JSON.parse(fs.readFileSync(statusFile, "utf8")) as { error: string }).error, "boom");
+  } finally {
+    fs.chmodSync(dir, 0o700);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("fail_causeLoggedBeforeStatus", () => {
+  // Un statut impossible à écrire ne tait pas la cause de l'échec.
+  const start = BACKUP_SCRIPT.indexOf("\nfail() {");
+  const failBody = BACKUP_SCRIPT.slice(start, BACKUP_SCRIPT.indexOf("\n}\n", start));
+  const echo = failBody.indexOf('echo "[backup] ÉCHEC : $1" >&2');
+  const write = failBody.indexOf("write_status || true");
+  assert.ok(echo > 0 && write > echo, failBody);
+});
+
 test("backupScript_writeStatus_overlappingRuns_noLineLost", { skip: !hasBashWithFlock() && "bash ou flock absent" }, () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bluegenji-history-lock-"));
   try {
-    const write = BACKUP_SCRIPT.slice(BACKUP_SCRIPT.indexOf("write_status() {"), BACKUP_SCRIPT.indexOf("\nfail() {"));
+    const write = BACKUP_SCRIPT.slice(BACKUP_SCRIPT.indexOf("status_fallback() {"), BACKUP_SCRIPT.indexOf("\nfail() {"));
     const script = [
       `STATUS_FILE="${dir}/status.json"`,
       `STATUS_HISTORY_FILE="${dir}/status-history.jsonl"`,
