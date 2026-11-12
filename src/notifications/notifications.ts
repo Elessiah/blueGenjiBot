@@ -96,6 +96,26 @@ function toTrimmedString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
+/** Longueur maximale de l'étiquette `context` du site (journaux pm2 et salon de logs). */
+export const MAX_CONTEXT_LENGTH = 200;
+
+/** Caractères d'une étiquette `context` du site (`match-12`, `tournoi-7 round-2`). */
+const CONTEXT_UNSAFE = /[^A-Za-z0-9 ,+…_:-]/gu;
+
+/**
+ * Étiquette `context` du site, réduite à des caractères sûrs et bornée : elle part
+ * au salon de logs et au journal du processus, jamais une mention, une mise en forme
+ * Discord ni un texte sans limite.
+ * @param value Valeur reçue.
+ * @returns L'étiquette, ou `site` à défaut.
+ */
+export function parseContext(value: unknown): string {
+  const raw = toTrimmedString(value);
+  if (raw === null) { return "site"; }
+  const clean = raw.replace(CONTEXT_UNSAFE, "_").slice(0, MAX_CONTEXT_LENGTH);
+  return clean.length > 0 ? clean : "site";
+}
+
 /**
  * Tronque un message trop long en le signalant.
  *
@@ -183,7 +203,7 @@ export function parseDirectMessageRequest(payload: unknown): DirectMessageReques
   return {
     message: truncateMessage(message),
     recipients,
-    context: toTrimmedString(raw.context) ?? "site",
+    context: parseContext(raw.context),
   };
 }
 
@@ -204,7 +224,7 @@ export function parseRefereeAlert(payload: unknown): RefereeAlertRequest | null 
   return {
     message: truncateMessage(message),
     dmMessage: dmMessage === null ? null : truncateMessage(dmMessage),
-    context: toTrimmedString(raw.context) ?? "site",
+    context: parseContext(raw.context),
   };
 }
 

@@ -222,14 +222,14 @@ test("safeErrorStatus_outOfRangeOrThrowing_returnsNull", () => {
 });
 
 test("safeErrorCode_knownFamilies_returnsCode", () => {
-  for (const code of ["SQLITE_BUSY", "ECONNRESET", "EAI_AGAIN", "ERR_HTTP_HEADERS_SENT", "UND_ERR_SOCKET", "ABORT_ERR", "50035"]) {
+  for (const code of ["SQLITE_BUSY", "ECONNRESET", "ETIMEDOUT", "ENOTFOUND", "EPIPE", "EAI_AGAIN", "ERR_HTTP_HEADERS_SENT", "ERR_ASSERTION", "UND_ERR_SOCKET", "ABORT_ERR", "50035"]) {
     assert.equal(safeErrorCode(Object.assign(new Error("x"), { code })), code);
   }
 });
 
 test("safeErrorCode_singleWordFromInput_returnsNull", () => {
   // Un mot isolé a la forme d'un identifiant, sans en être un : il peut recopier une valeur reçue.
-  for (const code of ["EquipeBleue", "auth/invalid-token", "CanalBleuNonCache", "pseudo.joueur"]) {
+  for (const code of ["EquipeBleue", "auth/invalid-token", "CanalBleuNonCache", "pseudo.joueur", "EVIL", "ESPORTX", "EQUIPE_BLEUE", "ERR_"]) {
     assert.equal(safeErrorCode(Object.assign(new Error("x"), { code })), null);
   }
 });

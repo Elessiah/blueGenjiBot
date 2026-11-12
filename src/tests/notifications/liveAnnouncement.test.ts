@@ -225,7 +225,7 @@ test("LiveChannelUnavailableError : clé stable, indépendante du texte d'erreur
   assert.ok(error instanceof LiveChannelUnavailableError);
   // Sans code Discord, rien ne dit qu'une permission manque : panne passagère.
   assert.equal(error.key, "discord-down");
-  assert.match(error.message, /Missing Permissions/);
+  assert.doesNotMatch(error.message, /Missing Permissions/);
 });
 
 test("announceLive : salon absent, illisible, fermé ou envoi refusé → LiveChannelUnavailableError", async () => {
@@ -298,10 +298,19 @@ test("forgetLiveIssue : un signalement qui n'est pas parti ne fait pas taire l'h
   resetLiveLogThrottle();
 });
 
-test("LiveChannelUnavailableError : le détail brut de Discord est gardé à part", async () => {
+test("LiveChannelUnavailableError : le détail ne garde que le type et le code, jamais le message de Discord", async () => {
   const error = await announceLive(fakeClient({ sent: [], channel: "send-fails" }), REQUEST).catch((e: unknown) => e);
   assert.ok(error instanceof LiveChannelUnavailableError);
-  assert.equal(error.detail, "Missing Permissions");
+  assert.equal(error.detail, "Error, code inconnu");
+  const quoted = Object.assign(new Error("Invalid Form Body: content « EquipeSecrete »"), { code: 50035 });
+  const rejected = await announceLive(fakeClient({ sent: [], sendError: quoted }), REQUEST).catch((e: unknown) => e);
+  assert.ok(rejected instanceof LiveChannelUnavailableError);
+  assert.equal(rejected.detail, "Error, code 50035");
+  assert.doesNotMatch(rejected.message, /EquipeSecrete/);
+  const unreadable = Object.assign(new Error("Unknown Channel « secret »"), { code: 10003 });
+  const fetchFailed = await announceLive(fakeClient({ sent: [], fetchError: unreadable }), REQUEST).catch((e: unknown) => e);
+  assert.ok(fetchFailed instanceof LiveChannelUnavailableError);
+  assert.equal(fetchFailed.detail, "Error, code 10003");
 });
 
 test("announceLive : une permission manquante se distingue d'une panne passagère de Discord", async () => {

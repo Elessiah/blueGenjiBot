@@ -12,6 +12,8 @@ import {
   capRefereeTargets,
   homeGuildIds,
   leadershipIds,
+  parseContext,
+  MAX_CONTEXT_LENGTH,
   type DirectMessageRecipient,
 } from "../../notifications/notifications.js";
 
@@ -237,4 +239,23 @@ test("truncateMessage_cutInsideEmoji_noLoneSurrogate", () => {
   const message = "a".repeat(cut - 1) + "😀" + "b".repeat(100);
   const actual = truncateMessage(message);
   assert.equal(actual, "a".repeat(cut - 1) + suffix);
+});
+
+test("parseContext_safeLabel_keptAsIs", () => {
+  assert.equal(parseContext("live-announce tournoi-7 match-12,13"), "live-announce tournoi-7 match-12,13");
+  assert.equal(parseContext("match:4"), "match:4");
+});
+
+test("parseContext_mentionOrMarkdown_replaced", () => {
+  assert.equal(parseContext("<@123>**x**"), "__123___x__");
+});
+
+test("parseContext_tooLong_cutToBound", () => {
+  assert.equal(parseContext("a".repeat(MAX_CONTEXT_LENGTH + 50)).length, MAX_CONTEXT_LENGTH);
+});
+
+test("parseContext_missingOrBlank_returnsSite", () => {
+  assert.equal(parseContext(undefined), "site");
+  assert.equal(parseContext("   "), "site");
+  assert.equal(parseContext(42), "site");
 });

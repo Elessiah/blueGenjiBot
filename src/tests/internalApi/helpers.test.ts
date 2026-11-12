@@ -19,6 +19,7 @@ import {
   resetProcessLogThrottle,
   createLineThrottle,
   LINE_THROTTLE_MEMORY,
+  logProcessError,
 } from "../../internalApi/helpers.js";
 import type { AddressInfo } from "node:net";
 
@@ -238,9 +239,20 @@ test("internalErrorReply_throwingTypeGetter_returns500", () => {
   assert.deepEqual(internalErrorReply(error), { code: "INTERNAL_ERROR", status: 500 });
 });
 
-test("internalErrorReply_exposedClientErrorWithoutType_returnsInvalidBody", () => {
-  // Flux gzip corrompu : body-parser lève un 400 exposé, sans `type` listé.
-  assert.deepEqual(internalErrorReply({ expose: true, status: 400 }), { code: "INVALID_BODY", status: 400 });
+test("internalErrorReply_exposedZlibErrorWithoutType_returnsInvalidBody", () => {
+  // Flux gzip corrompu : body-parser lève un 400 exposé, sans `type` listé, code de zlib gardé.
+  assert.deepEqual(internalErrorReply({ expose: true, status: 400, code: "Z_DATA_ERROR" }), { code: "INVALID_BODY", status: 400 });
+});
+
+test("internalErrorReply_exposedHttpErrorFromRoute_returns500", () => {
+  // Un `http-errors` 4xx levé par une route n'est pas un refus du corps : défaut du serveur.
+  assert.deepEqual(internalErrorReply({ expose: true, status: 400 }), { code: "INTERNAL_ERROR", status: 500 });
+  assert.deepEqual(internalErrorReply({ expose: true, status: 404, code: "Z_DATA_ERROR" }), { code: "INTERNAL_ERROR", status: 500 });
+  assert.deepEqual(internalErrorReply({ expose: true, status: 409, code: "ECONFLICT" }), { code: "INTERNAL_ERROR", status: 500 });
+});
+
+test("internalErrorReply_zlibCodeWithoutExpose_returns500", () => {
+  assert.deepEqual(internalErrorReply({ status: 400, code: "Z_DATA_ERROR" }), { code: "INTERNAL_ERROR", status: 500 });
 });
 
 test("internalErrorReply_exposedWith5xx_returns500", () => {
@@ -664,4 +676,17 @@ test("forwardRejections_lateRejectionRepeated_loggedOncePerMinute", async (t) =>
   await callOnce(app, "/a");
 
   assert.equal(logged.mock.calls.length, 1);
+});
+
+test("logProcessError_sameLineWithinCooldown_writesOnceThenCountsSuppressed", (t) => {
+  resetProcessLogThrottle();
+  const written: string[] = [];
+  t.mock.method(console, "error", (line: unknown) => { written.push(String(line)); });
+
+  logProcessError("[internalApi] x", 0);
+  logProcessError("[internalApi] x", 1_000);
+  logProcessError("[internalApi] x", 61_000);
+
+  assert.deepEqual(written, ["[internalApi] x", "[internalApi] x (+1 identiques tues)"]);
+  resetProcessLogThrottle();
 });

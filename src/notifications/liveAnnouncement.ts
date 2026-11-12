@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { PermissionFlagsBits, type Client } from "discord.js";
-import { DISCORD_UNKNOWN_MESSAGE, discordJsonCode } from "../safe/errorGuards.js";
+import { DISCORD_UNKNOWN_MESSAGE, discordJsonCode, safeErrorDetail } from "../safe/errorGuards.js";
 
 /**
  * Annonce d'un live dans le salon #live du serveur BlueGenji, poussée par l'app
@@ -83,7 +83,7 @@ function discordCode(error: unknown): number | undefined {
  * @returns L'erreur à lever.
  */
 function sendFailure(error: unknown): LiveChannelUnavailableError {
-  const detail = (error as Error).message;
+  const detail = safeErrorDetail(error);
   const code = discordCode(error);
   if (code === UNKNOWN_CHANNEL) {
     // Salon supprimé ou recréé alors que le cache le gardait.
@@ -924,7 +924,7 @@ async function editEveningMessage(
     const code = discordCode(error);
     if (code !== undefined && NOT_EDITABLE.has(code)) { return null; }
     if (code === UNKNOWN_MESSAGE) {
-      const detail = (error as Error).message;
+      const detail = safeErrorDetail(error);
       throw new LiveChannelUnavailableError(MESSAGE_DELETED, `message de la soirée supprimé (${detail})`, detail);
     }
     throw sendFailure(error);
@@ -956,7 +956,7 @@ export async function announceLive(client: Client, request: LiveAnnouncementRequ
   try {
     channel = await client.channels.fetch(LIVE_ANNOUNCE_CHANNEL_ID) as unknown as SendableChannel | null;
   } catch (error) {
-    const detail = (error as Error).message;
+    const detail = safeErrorDetail(error);
     // Seuls un salon inconnu ou un accès refusé désignent le salon ; le reste
     // est une panne passagère de Discord (réseau, 5xx, limite de débit).
     const code = discordCode(error);

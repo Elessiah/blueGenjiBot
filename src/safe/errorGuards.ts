@@ -20,6 +20,8 @@
 
 
 import { DiscordjsErrorCodes } from "discord.js";
+import { constants as osConstants } from "node:os";
+import * as dns from "node:dns";
 
 /** Codes système/undici signalant une indisponibilité réseau passagère. */
 const TRANSIENT_NETWORK_CODES: ReadonlySet<string> = new Set([
@@ -207,18 +209,34 @@ const DISCORD_UNKNOWN_CHANNEL = 10003;
 
 /**
  * Codes d'erreur journalisables, par famille connue — jamais par la seule forme :
- * un mot isolé recopié d'une valeur reçue (« EquipeBleue ») a la forme d'un
- * identifiant. Numérique (Discord `50035`, statut), SQLite (`SQLITE_BUSY`),
- * système ou Node (`ECONNRESET`, `EAI_AGAIN`, `ERR_HTTP_HEADERS_SENT`), undici
- * (`UND_ERR_SOCKET`), abandon (`ABORT_ERR`).
+ * un mot isolé recopié d'une valeur reçue (« EquipeBleue », un sigle « EVIL ») a la
+ * forme d'un identifiant. Numérique (Discord `50035`, statut), SQLite (`SQLITE_BUSY`),
+ * Node (`ERR_HTTP_HEADERS_SENT`), undici (`UND_ERR_SOCKET`), abandon (`ABORT_ERR`) ;
+ * les codes système (`ECONNRESET`, `EAI_AGAIN`) sont, eux, lus dans une liste fermée
+ * ({@link SYSTEM_ERROR_CODES}).
  */
 const SAFE_ERROR_CODES: readonly RegExp[] = [
     /^\d{1,10}$/,
     /^SQLITE_[A-Z_]{1,40}$/,
-    /^E[A-Z][A-Z0-9_]{1,38}$/,
+    /^ERR_[A-Z0-9_]{3,60}$/,
     /^UND_ERR_[A-Z_]{1,40}$/,
     /^ABORT_ERR$/,
 ];
+
+/**
+ * Codes système journalisables : ceux du système (`os.constants.errno` :
+ * `ECONNRESET`, `ETIMEDOUT`…), ceux de la résolution DNS (`EAI_*` de getaddrinfo,
+ * `dns` : `ENOTFOUND`, `ECONNREFUSED`…) — une liste fermée, jamais toute
+ * majuscule commençant par `E`.
+ */
+const SYSTEM_ERROR_CODES: ReadonlySet<string> = new Set([
+    ...Object.keys(osConstants.errno),
+    ...(Object.values(dns) as unknown[]).filter((value): value is string => typeof value === "string" && /^E[A-Z]+$/.test(value)),
+    "EAI_ADDRFAMILY", "EAI_AGAIN", "EAI_BADFLAGS", "EAI_BADHINTS", "EAI_CANCELED", "EAI_FAIL",
+    "EAI_FAMILY", "EAI_MEMORY", "EAI_NODATA", "EAI_NONAME", "EAI_OVERFLOW", "EAI_PROTOCOL",
+    "EAI_SERVICE", "EAI_SOCKTYPE", "EAI_SYSTEM",
+    "ENOTFOUND", "ECONNRESET", "ETIMEDOUT", "ECONNREFUSED", "EPIPE", "ECONNABORTED", "EHOSTUNREACH", "ENETUNREACH",
+]);
 
 /**
  * Codes de discord.js (`TokenInvalid`, `GuildMembersTimeout`…) : valeurs fixes de
@@ -243,7 +261,7 @@ function safeErrorCode(error: unknown): string | number | null {
     const code = errorCode(error);
     if (code === null) return null;
     if (typeof code === "number") return Number.isFinite(code) ? code : null;
-    if (DISCORDJS_ERROR_CODES.has(code)) return code;
+    if (DISCORDJS_ERROR_CODES.has(code) || SYSTEM_ERROR_CODES.has(code)) return code;
     return SAFE_ERROR_CODES.some((pattern) => pattern.test(code)) ? code : null;
 }
 

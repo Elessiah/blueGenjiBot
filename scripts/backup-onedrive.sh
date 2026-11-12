@@ -72,31 +72,53 @@ with_running_lock() {
     "$@"
   ) 9<"$(dirname "$RUNNING_FILE")"
 }
-# Une ligne dont le PID ne tourne plus (ni `/proc/<pid>`, ni `kill -0`) est effacée.
+# Une ligne dont le PID ne tourne plus (ni `/proc/<pid>`, ni `kill -0`) est effacée ;
+# une ligne sans PID (script antérieur) ne vit que douze heures (`RUNNING_MAX_AGE_MS`
+# du bot), une ligne illisible est effacée.
+RUNNING_MAX_AGE_S=$((12 * 60 * 60))
 running_line_alive() {
   local pid="${1##* }"
-  [[ "$pid" == "$1" || ! "$pid" =~ ^[0-9]+$ ]] && return 0
+  if [[ "$pid" == "$1" ]]; then
+    local started
+    started="$(date -d "$1" +%s 2>/dev/null)" || return 1
+    (( $(date +%s) - started < RUNNING_MAX_AGE_S ))
+    return
+  fi
+  [[ "$pid" =~ ^[0-9]+$ ]] || return 1
   [[ -d "/proc/$pid" ]] || kill -0 "$pid" 2>/dev/null
 }
+# Fichier temporaire à côté de `$1`, créé par `mktemp` (nom imprévisible, jamais un
+# lien suivi) avec les droits que l'umask donnerait au fichier lui-même : le bot, qui
+# peut tourner sous un autre compte, le relit après le `mv`.
+sibling_tmp() {
+  local tmp
+  tmp="$(mktemp "$1.tmp.XXXXXXXX")" || return 1
+  chmod "$(printf '%o' $(( 0666 & ~0$(umask) )))" "$tmp" || { rm -f "$tmp"; return 1; }
+  printf '%s' "$tmp"
+}
+# Le marqueur est toujours réécrit en entier dans un temporaire puis renommé : aucun
+# `>` ni `>>` sur le marqueur lui-même, qui suivrait un lien posé à sa place.
 add_running_line() {
-  if [[ -f "$RUNNING_FILE" ]]; then
-    local line
-    : > "$RUNNING_FILE.tmp.$$"
+  local tmp line
+  tmp="$(sibling_tmp "$RUNNING_FILE")" || return 1
+  if [[ -f "$RUNNING_FILE" && ! -L "$RUNNING_FILE" ]]; then
     while IFS= read -r line || [[ -n "$line" ]]; do
       [[ -z "$line" ]] && continue
-      if running_line_alive "$line"; then printf '%s\n' "$line" >> "$RUNNING_FILE.tmp.$$"; fi
+      if running_line_alive "$line"; then printf '%s\n' "$line" >> "$tmp"; fi
     done < "$RUNNING_FILE"
-    mv "$RUNNING_FILE.tmp.$$" "$RUNNING_FILE"
   fi
-  printf '%s\n' "$RUNNING_LINE" >> "$RUNNING_FILE"
+  printf '%s\n' "$RUNNING_LINE" >> "$tmp"
+  mv -f -T "$tmp" "$RUNNING_FILE"
 }
 remove_running_line() {
-  [[ -f "$RUNNING_FILE" ]] || return 0
-  grep -vxF -- "$RUNNING_LINE" "$RUNNING_FILE" > "$RUNNING_FILE.tmp.$$" || true
-  if [[ -s "$RUNNING_FILE.tmp.$$" ]]; then
-    mv "$RUNNING_FILE.tmp.$$" "$RUNNING_FILE"
+  if [[ ! -f "$RUNNING_FILE" || -L "$RUNNING_FILE" ]]; then rm -f "$RUNNING_FILE"; return 0; fi
+  local tmp
+  tmp="$(sibling_tmp "$RUNNING_FILE")" || return 1
+  grep -vxF -- "$RUNNING_LINE" "$RUNNING_FILE" >> "$tmp" || true
+  if [[ -s "$tmp" ]]; then
+    mv -f -T "$tmp" "$RUNNING_FILE"
   else
-    rm -f "$RUNNING_FILE.tmp.$$" "$RUNNING_FILE"
+    rm -f "$tmp" "$RUNNING_FILE"
   fi
 }
 release_running_marker() {
@@ -128,7 +150,13 @@ write_status() {
   mkdir -p "$(dirname "$STATUS_FILE")" "$(dirname "$STATUS_HISTORY_FILE")"
   local now
   now="$(date --iso-8601=seconds)"
-  cat > "$STATUS_FILE" <<JSON
+  # Écrit dans un temporaire `mktemp` puis renommé : jamais `>` sur le statut, qui
+  # suivrait un lien posé à sa place, et le bot ne lit jamais un statut à moitié écrit.
+  # Sans temporaire (dossier plein ou fermé), l'écriture directe reste tentée.
+  local status_tmp
+  status_tmp="$(sibling_tmp "$STATUS_FILE")" || status_tmp=""
+  {
+    cat <<JSON
 {
   "date": "$now",
   "ok": $STATUS_OK,
@@ -139,6 +167,8 @@ write_status() {
   "historyFile": "$STATUS_HISTORY_JSON"
 }
 JSON
+  } > "${status_tmp:-$STATUS_FILE}"
+  if [[ -n "$status_tmp" ]]; then mv -f -T "$status_tmp" "$STATUS_FILE"; fi
   # Au mieux : un historique qui ne s'écrit pas ne fait pas échouer la sauvegarde.
   # L'ajout et l'élagage forment un tout sous verrou (pris sur le dossier de
   # l'historique, sans fichier de verrou à côté) : deux exécutions qui se
@@ -149,9 +179,14 @@ JSON
       if command -v flock >/dev/null 2>&1; then
         flock -w 30 8 || exit 1
       fi
-      printf '{"date":"%s","ok":%s,"error":"%s"}\n' "$now" "$STATUS_OK" "$STATUS_ERROR" >> "$STATUS_HISTORY_FILE" \
-        && tail -n "$STATUS_HISTORY_LINES" "$STATUS_HISTORY_FILE" > "$STATUS_HISTORY_FILE.tmp.$$" \
-        && mv "$STATUS_HISTORY_FILE.tmp.$$" "$STATUS_HISTORY_FILE"
+      # Réécrit dans un temporaire `mktemp` puis renommé : jamais `>>` sur l'historique,
+      # qui suivrait un lien posé à sa place.
+      tmp="$(sibling_tmp "$STATUS_HISTORY_FILE")" || exit 1
+      { if [[ -f "$STATUS_HISTORY_FILE" && ! -L "$STATUS_HISTORY_FILE" ]]; then
+          tail -n "$((STATUS_HISTORY_LINES - 1))" "$STATUS_HISTORY_FILE"
+        fi
+        printf '{"date":"%s","ok":%s,"error":"%s"}\n' "$now" "$STATUS_OK" "$STATUS_ERROR"
+      } >> "$tmp" && mv -f -T "$tmp" "$STATUS_HISTORY_FILE" || { rm -f "$tmp"; exit 1; }
     ) 8<"$(dirname "$STATUS_HISTORY_FILE")"
   } || echo "[backup] historique des statuts non écrit." >&2
 }

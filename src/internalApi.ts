@@ -31,6 +31,7 @@ import {
   SPARKLINE_POINTS,
   createLineThrottle,
   resetProcessLogThrottle,
+  logProcessError,
   internalErrorHandler,
   asyncRoute,
   wrapUnwrappedRoutes,
@@ -189,18 +190,28 @@ const INTERNAL_ERROR_REPORT_COOLDOWN_MS = 10 * 60 * 1000;
 const internalErrorReports = createLineThrottle(INTERNAL_ERROR_REPORT_COOLDOWN_MS);
 
 /**
+ * Clé d'étranglement d'une ligne d'erreur : la ligne sans le statut HTTP final
+ * (`, statut 503` ou `, statut 503)`) — une panne de Discord qui rend 429, 500 puis 503
+ * reste une seule panne, annoncée une fois.
+ * @param line Ligne d'erreur.
+ * @returns La clé.
+ */
+export function internalErrorThrottleKey(line: string): string {
+  return line.replace(/, statut \d{3}(\)?)$/, "$1");
+}
+
+/**
  * Dit si une ligne d'erreur part au salon de logs : une fois par ligne (statut HTTP mis
- * à part) et par {@link INTERNAL_ERROR_REPORT_COOLDOWN_MS}, pour qu'une panne répétée
- * (chaque appel du site) n'inonde pas le salon — qu'elle vienne d'une erreur hors route
- * ou du `catch` d'une route. Une ligne refusée part quand même à pm2.
+ * à part, {@link internalErrorThrottleKey}) et par {@link INTERNAL_ERROR_REPORT_COOLDOWN_MS},
+ * pour qu'une panne répétée (chaque appel du site) n'inonde pas le salon — qu'elle vienne
+ * d'une erreur hors route ou du `catch` d'une route. Une ligne refusée part quand même
+ * au journal du processus (pm2), lui-même étranglé à une ligne identique par minute.
  * @param line Ligne d'erreur (code et type seuls).
  * @param now Horloge injectable, pour les tests.
  * @returns `true` si la ligne doit partir.
  */
 export function shouldReportInternalError(line: string, now: number = Date.now()): boolean {
-  // Le statut HTTP ne compte pas : une panne de Discord qui rend 429, 500 puis 503
-  // reste une seule panne, annoncée une fois.
-  return internalErrorReports.check(line.replace(/, statut \d+\)$/, ")"), now).emit;
+  return internalErrorReports.check(internalErrorThrottleKey(line), now).emit;
 }
 
 /** Vide la mémoire des étranglements, salon de logs et journal du processus (tests). */
@@ -210,16 +221,28 @@ export function resetInternalErrorReports(): void {
 }
 
 /**
- * Envoie au salon de logs la ligne d'une route en échec (`catch` d'une route), au plus une
- * fois par ligne et par {@link INTERNAL_ERROR_REPORT_COOLDOWN_MS} : une base ou Discord
- * en panne, interrogés toutes les quelques secondes par le site, n'inondent pas le salon
- * (ni ne consomment la limite de Discord). La réponse 500 part, elle, à chaque appel.
+ * Signale l'échec d'une route (`catch` d'une route) : toujours au journal du processus
+ * (pm2, une ligne identique par minute), et au salon de logs au plus une fois par
+ * panne et par {@link INTERNAL_ERROR_REPORT_COOLDOWN_MS} — une base ou Discord en panne,
+ * interrogés toutes les quelques secondes par le site, n'inondent pas le salon (ni ne
+ * consomment la limite de Discord). L'étiquette `context` du site est dans la ligne
+ * mais pas dans la clé d'étranglement : changer d'étiquette à chaque appel ne fait pas
+ * repartir l'alerte. La réponse 500 part, elle, à chaque appel.
  * @param client Client Discord.
- * @param line Ligne d'erreur (étiquette de la route et code d'erreur seuls).
- * @param alert `true` pour une alerte qui notifie (`sendAlert`), `false` pour un log silencieux.
+ * @param label Étiquette de la route (`notify/dm error`).
+ * @param detail Détail de l'erreur (`safeErrorDetail` : type, code, statut).
+ * @param options `context` du site (bornée par son analyse) ; `alert` pour une alerte qui notifie (`sendAlert`).
  */
-async function reportRouteFailure(client: Client, line: string, alert = false): Promise<void> {
-  if (!shouldReportInternalError(line)) { return; }
+async function reportRouteFailure(
+  client: Client,
+  label: string,
+  detail: string,
+  options: { context?: string; alert?: boolean } = {},
+): Promise<void> {
+  const { context, alert = false } = options;
+  const line = context === undefined ? `${label}: ${detail}` : `${label} (${context}): ${detail}`;
+  logProcessError(`[internalApi] ${line}`);
+  if (!shouldReportInternalError(`${label}: ${detail}`)) { return; }
   await (alert ? sendAlert(client, line) : sendLog(client, line));
 }
 
@@ -298,7 +321,7 @@ export function startInternalApi(client: Client) {
         try { res.end(); } catch { /* noop */ }
       });
     } catch (error) {
-      await reportRouteFailure(client, `/internal/feed/stream error: ${safeErrorDetail(error)}`);
+      await reportRouteFailure(client, "/internal/feed/stream error", safeErrorDetail(error));
       // `flushHeaders()` a deja repondu : `res.status().json()` leverait ici
       // ERR_HTTP_HEADERS_SENT, dans un `catch` -- donc un rejet non gere qu'
       // Express 4 ne rattrape pas. Un flux deja ouvert se ferme, il ne se
@@ -371,7 +394,7 @@ export function startInternalApi(client: Client) {
         status,
       });
     } catch (error) {
-      await reportRouteFailure(client, `/internal/status error: ${safeErrorDetail(error)}`);
+      await reportRouteFailure(client, "/internal/status error", safeErrorDetail(error));
       res.status(500).json({ error: "INTERNAL_STATUS_ERROR" });
     }
   }));
@@ -424,7 +447,7 @@ export function startInternalApi(client: Client) {
         windowDays: MESSAGE_WINDOW_DAYS,
       });
     } catch (error) {
-      await reportRouteFailure(client, `/internal/stats error: ${safeErrorDetail(error)}`);
+      await reportRouteFailure(client, "/internal/stats error", safeErrorDetail(error));
       res.status(500).json({ error: "INTERNAL_STATS_ERROR" });
     }
   }));
@@ -456,7 +479,7 @@ export function startInternalApi(client: Client) {
         return;
       }
       // Le tag cherché est le pseudo d'une personne : il ne part pas au journal.
-      await reportRouteFailure(client, `Failed to resolve a discord handle: ${safeErrorDetail(error)}`);
+      await reportRouteFailure(client, "Failed to resolve a discord handle", safeErrorDetail(error));
       res.status(500).json({ error: "INTERNAL_RESOLVE_ERROR" });
     }
   }));
@@ -484,7 +507,7 @@ export function startInternalApi(client: Client) {
       // Jamais l'identifiant Discord du joueur ni le code : le salon de logs est
       // un message Discord (« un joueur », RGPD_LOGS_AND_VISITS du site). Seul
       // le code d'erreur part, le texte de Discord pouvant citer la valeur reçue.
-      await reportRouteFailure(client, `Failed to send auth code to a player: ${safeErrorDetail(error)}`);
+      await reportRouteFailure(client, "Failed to send auth code to a player", safeErrorDetail(error));
       res.status(500).json({ error: "DISCORD_DM_FAILED" });
     }
   }));
@@ -522,7 +545,7 @@ export function startInternalApi(client: Client) {
       await saveSiteVisitStats(stats);
       res.json({ success: true });
     } catch (error) {
-      await reportRouteFailure(client, `site-visits save error: ${safeErrorDetail(error)}`);
+      await reportRouteFailure(client, "site-visits save error", safeErrorDetail(error));
       res.status(500).json({ error: "SITE_VISIT_STATS_SAVE_FAILED" });
     }
   }));
@@ -559,7 +582,7 @@ export function startInternalApi(client: Client) {
         return;
       }
       // Aucun message n'est parti : l'échec notifie.
-      await reportRouteFailure(client, `notify/dm error (${request.context}): ${safeErrorDetail(error)}`, true);
+      await reportRouteFailure(client, "notify/dm error", safeErrorDetail(error), { context: request.context, alert: true });
       res.status(500).json({ error: "NOTIFICATION_DELIVERY_FAILED" });
     }
   }));
@@ -580,7 +603,7 @@ export function startInternalApi(client: Client) {
       res.json(report);
     } catch (error) {
       // L'alerte n'est pas partie : l'échec notifie, lui.
-      await reportRouteFailure(client, `notify/referees error (${request.context}): ${safeErrorDetail(error)}`, true);
+      await reportRouteFailure(client, "notify/referees error", safeErrorDetail(error), { context: request.context, alert: true });
       res.status(500).json({ error: "NOTIFICATION_DELIVERY_FAILED" });
     }
   }));
@@ -602,7 +625,7 @@ export function startInternalApi(client: Client) {
       res.json(report);
     } catch (error) {
       // L'alerte n'est pas partie : l'échec notifie, lui.
-      await reportRouteFailure(client, `notify/leadership error (${request.context}): ${safeErrorDetail(error)}`, true);
+      await reportRouteFailure(client, "notify/leadership error", safeErrorDetail(error), { context: request.context, alert: true });
       res.status(500).json({ error: "NOTIFICATION_DELIVERY_FAILED" });
     }
   }));
@@ -755,7 +778,7 @@ export function startInternalApi(client: Client) {
         windowDays: MESSAGE_WINDOW_DAYS,
       });
     } catch (error) {
-      await reportRouteFailure(client, `/internal/kpis error: ${safeErrorDetail(error)}`);
+      await reportRouteFailure(client, "/internal/kpis error", safeErrorDetail(error));
       res.status(500).json({ error: "INTERNAL_KPIS_ERROR" });
     }
   }));
@@ -814,7 +837,7 @@ export function startInternalApi(client: Client) {
       const paged = enriched.slice(offset, offset + limit);
       res.json({ servers: paged, total: enriched.length, limit, offset, windowDays: MESSAGE_WINDOW_DAYS });
     } catch (error) {
-      await reportRouteFailure(client, `/internal/servers error: ${safeErrorDetail(error)}`);
+      await reportRouteFailure(client, "/internal/servers error", safeErrorDetail(error));
       res.status(500).json({ error: "INTERNAL_SERVERS_ERROR" });
     }
   }));
@@ -871,7 +894,7 @@ export function startInternalApi(client: Client) {
       const avgPerDay = Number((sumRelays / relayDays).toFixed(2));
       res.json({ range, labels, relays, scrims, avgPerDay, windowDays: MESSAGE_WINDOW_DAYS });
     } catch (error) {
-      await reportRouteFailure(client, `/internal/activity error: ${safeErrorDetail(error)}`);
+      await reportRouteFailure(client, "/internal/activity error", safeErrorDetail(error));
       res.status(500).json({ error: "INTERNAL_ACTIVITY_ERROR" });
     }
   }));
@@ -908,7 +931,7 @@ export function startInternalApi(client: Client) {
       const enriched = modules.map((m) => ({ key: m.key, enabled: m.enabled, count30j: counters[m.key] }));
       res.json({ guildId, modules: enriched });
     } catch (error) {
-      await reportRouteFailure(client, `/internal/servers/:id/modules error: ${safeErrorDetail(error)}`);
+      await reportRouteFailure(client, "/internal/servers/:id/modules error", safeErrorDetail(error));
       res.status(500).json({ error: "INTERNAL_MODULES_ERROR" });
     }
   }));
@@ -930,7 +953,7 @@ export function startInternalApi(client: Client) {
       await setModuleEnabled(guildId, moduleKey as ModuleKey, enabled);
       res.json({ guildId, module: moduleKey, enabled });
     } catch (error) {
-      await reportRouteFailure(client, `/internal/servers/:id/modules/:moduleKey error: ${safeErrorDetail(error)}`);
+      await reportRouteFailure(client, "/internal/servers/:id/modules/:moduleKey error", safeErrorDetail(error));
       res.status(500).json({ error: "INTERNAL_MODULE_TOGGLE_ERROR" });
     }
   }));

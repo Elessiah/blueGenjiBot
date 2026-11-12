@@ -512,11 +512,12 @@ répond `404 INTERNAL_ROUTE_NOT_FOUND` — hors de `/internal`, `404 NOT_FOUND`,
 ne désigne pas l'API —, jamais la page HTML d'Express qui recopie le chemin ; un corps JSON illisible `400 INVALID_JSON`, trop gros
 `413 PAYLOAD_TOO_LARGE`, d'encodage ou de jeu de caractères inconnu
 `415 UNSUPPORTED_ENCODING`, interrompu `400 REQUEST_ABORTED`, de longueur contraire à
-son `Content-Length` `400 INVALID_CONTENT_LENGTH`, un autre refus du client que
-body-parser marque exposé (flux gzip ou deflate corrompu) `400 INVALID_BODY`, toute
+son `Content-Length` `400 INVALID_CONTENT_LENGTH`, un flux gzip ou deflate corrompu
+(`400` exposé de body-parser portant un code zlib `Z_*`) `400 INVALID_BODY`, toute
 autre erreur hors route `500 INTERNAL_ERROR` (le statut porté par une erreur Discord
-n'est jamais repris ; un refus n'est reconnu que si son type et son statut sont ceux
-que pose body-parser). Un refus du client se journalise au niveau avertissement ; une
+n'est jamais repris, ni celui d'une erreur `http-errors` levée par une route ; un refus
+n'est reconnu que si son type et son statut, ou pour zlib son code, sont ceux que pose
+body-parser). Un refus du client se journalise au niveau avertissement ; une
 erreur `500` va au journal d'erreurs **et** au salon de logs (code et type seuls, une
 fois par ligne — statut HTTP mis à part — et par dix minutes). Une route asynchrone qui rejette (même sans
 valeur, ou par une valeur falsy) passe par ce même gestionnaire : le site reçoit
@@ -530,7 +531,8 @@ tests — comme une pile de routes introuvable. Un intergiciel qui rejette **apr
 avoir appelé `next()` n'envoie pas de second `next(err)` (la suite de la chaîne
 répond) : le rejet est seulement journalisé, code et type. Le détail d'un échec de route au salon de logs, comme la ligne du
 gestionnaire, se limite au type, au code (familles connues : numérique, `SQLITE_*`,
-`E*`, `UND_ERR_*`, codes de discord.js) et au statut HTTP de l'erreur — jamais son
+`ERR_*`, `UND_ERR_*`, codes de discord.js, et liste fermée des codes système et DNS —
+jamais toute majuscule commençant par `E`) et au statut HTTP de l'erreur — jamais son
 message, qui peut recopier un pseudo cherché. Les lignes du journal du processus (refus du
 client, erreurs `500`, rejets tardifs) sont étranglées : une ligne identique n'est écrite
 qu'une fois par minute, le nombre des suivantes tues s'ajoutant à la prochaine

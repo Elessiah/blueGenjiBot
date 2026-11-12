@@ -8,6 +8,9 @@ import {
   formatBackupFailures,
   formatBackupStatus,
   isBackupFresh,
+  HISTORY_MAX_BYTES,
+  readFileTail,
+  RUNNING_MAX_BYTES,
   readBackupFailures,
   FAILURE_CAUSE_MAX_LENGTH,
   readBackupStatus,
@@ -207,6 +210,53 @@ test("readBackupStatus_relativeHistoryFile_returnsEmpty", async () => {
   const file = await writeStatusFile(JSON.stringify({ ...OK_STATUS, historyFile: "history.jsonl" }));
 
   assert.equal((await readBackupStatus(file))?.historyFile, "");
+});
+
+test("readBackupStatus_historyFileNotJsonlOrWithDotDot_returnsEmpty", async () => {
+  // Un statut réécrit ou détourné ne désigne jamais un fichier quelconque (`/dev/zero`, un gros journal).
+  for (const historyFile of ["/dev/zero", "/var/log/syslog", "/var/lib/bluegenji/../../etc/x.jsonl"]) {
+    const file = await writeStatusFile(JSON.stringify({ ...OK_STATUS, historyFile }));
+    assert.equal((await readBackupStatus(file))?.historyFile, "", historyFile);
+  }
+});
+
+test("readFileTail_smallFile_returnsWholeText", async () => {
+  const file = await writeStatusFile("a\nb\n");
+
+  assert.equal(await readFileTail(file, 1024), "a\nb\n");
+});
+
+test("readFileTail_largerThanBound_readsOnlyTheEndWithoutCutLine", async () => {
+  const file = await writeStatusFile(`${"x".repeat(100)}\nfin1\nfin2\n`);
+
+  assert.equal(await readFileTail(file, 12), "fin1\nfin2\n");
+  // Borne au milieu d'une ligne : la ligne coupée est écartée.
+  assert.equal(await readFileTail(file, 8), "fin2\n");
+});
+
+test("readFileTail_directoryOrMissing_returnsNull", async () => {
+  const file = await writeStatusFile("{}");
+
+  assert.equal(await readFileTail(path.dirname(file), 1024), null);
+  assert.equal(await readFileTail(path.join(path.dirname(file), "absent"), 1024), null);
+});
+
+test("readBackupFailures_hugeHistory_readsOnlyTheBoundedTail", async () => {
+  // Un historique enflé n'est pas chargé en entier : seule sa fin compte, l'échec récent y est.
+  const failedAt = new Date(NOW - 60 * 60 * 1000).toISOString();
+  const filler = `${JSON.stringify({ date: failedAt, ok: true, error: "" })}\n`.repeat(Math.ceil((HISTORY_MAX_BYTES * 2) / 60));
+  const file = await writeStatusFile(`${filler}${JSON.stringify({ date: failedAt, ok: false, error: "fin" })}\n`);
+
+  const failures = await readBackupFailures(file, NOW);
+
+  assert.deepEqual(failures.map((failure) => failure.error), ["fin"]);
+});
+
+test("readRunningSince_markerBeyondByteBound_readsOnlyTheEnd", async () => {
+  const garbage = "x".repeat(RUNNING_MAX_BYTES * 4);
+  const file = await withRunningMarker(`${garbage}\n2026-11-08T22:49:00+00:00 222\n`);
+
+  assert.equal(await readRunningSince(file, REPORT_AT, ALIVE), Date.parse("2026-11-08T22:49:00Z"));
 });
 
 /** Statut temporaire accompagné d'un marqueur de sauvegarde en cours. */

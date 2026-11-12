@@ -56,6 +56,46 @@ export const RUNNING_GRACE_MS = 3 * 24 * 60 * 60 * 1000;
 /** Fenêtre relue dans l'historique : depuis le rapport précédent, une semaine plus tôt. */
 export const HISTORY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
+/**
+ * Octets relus, au plus, à la fin de l'historique : le script en garde vingt lignes
+ * de moins de 300 octets ; un fichier plus gros (chemin détourné, fichier enflé)
+ * n'est jamais lu en entier.
+ */
+export const HISTORY_MAX_BYTES = 64 * 1024;
+
+/** Octets relus, au plus, à la fin du marqueur de sauvegarde en cours. */
+export const RUNNING_MAX_BYTES = 4 * 1024;
+
+/**
+ * Lit au plus les `maxBytes` derniers octets d'un fichier **ordinaire** : un lien vers
+ * `/dev/zero`, une FIFO ou un dossier rendent `null` (jamais une lecture sans fin), et
+ * un gros fichier n'est pas chargé en entier. La première ligne, coupée par la borne,
+ * est écartée.
+ * @param filePath Chemin du fichier.
+ * @param maxBytes Octets lus au plus.
+ * @returns Le texte lu, ou `null` (absent, illisible ou pas un fichier ordinaire).
+ */
+export async function readFileTail(filePath: string, maxBytes: number): Promise<string | null> {
+  let handle: fs.promises.FileHandle | null = null;
+  try {
+    handle = await fs.promises.open(filePath, fs.constants.O_RDONLY | (fs.constants.O_NONBLOCK ?? 0));
+    const stat = await handle.stat();
+    if (!stat.isFile()) { return null; }
+    const length = Math.min(stat.size, maxBytes);
+    const start = stat.size - length;
+    const buffer = Buffer.alloc(length);
+    const { bytesRead } = await handle.read(buffer, 0, length, start);
+    const text = buffer.subarray(0, bytesRead).toString("utf8");
+    if (start === 0) { return text; }
+    const firstBreak = text.indexOf("\n");
+    return firstBreak === -1 ? "" : text.slice(firstBreak + 1);
+  } catch {
+    return null;
+  } finally {
+    await handle?.close().catch(() => undefined);
+  }
+}
+
 /** Une ligne de l'historique des statuts (`STATUS_HISTORY_FILE` du script). */
 export interface BackupHistoryEntry {
   /** Date ISO de la tentative. */
@@ -91,11 +131,25 @@ export async function readBackupStatus(statusPath: string): Promise<BackupStatus
       sizeBytes: typeof parsed.sizeBytes === "number" ? parsed.sizeBytes : 0,
       parts: parsed.parts ?? "",
       error: parsed.error ?? "",
-      historyFile: typeof parsed.historyFile === "string" && path.isAbsolute(parsed.historyFile) ? parsed.historyFile : "",
+      historyFile: isHistoryFilePath(parsed.historyFile) ? parsed.historyFile : "",
     };
   } catch {
     return null;
   }
+}
+
+/**
+ * Chemin d'historique accepté depuis le statut : absolu, sans `..`, terminé par
+ * `.jsonl` (celui du script) — jamais un fichier quelconque désigné par un statut
+ * réécrit à la main ou détourné.
+ * @param value Valeur lue dans le statut.
+ * @returns `true` si le chemin peut être relu.
+ */
+function isHistoryFilePath(value: unknown): value is string {
+  return typeof value === "string"
+    && path.isAbsolute(value)
+    && value.endsWith(".jsonl")
+    && !value.split(/[\\/]/).includes("..");
 }
 
 /**
@@ -139,14 +193,11 @@ export async function readRunningSince(
   now: number = Date.now(),
   isAlive: (pid: number) => boolean = isProcessAlive,
 ): Promise<number | null> {
-  let raw: string;
-  try {
-    raw = await fs.promises.readFile(runningMarkerPath(statusPath), "utf8");
-  } catch {
-    return null;
-  }
   // Les lignes récentes sont à la fin (le script ajoute) : un marqueur enflé (exécutions
-  // tuées, édition à la main) n'est pas relu en entier à chaque rapport.
+  // tuées, édition à la main) n'est pas relu en entier à chaque rapport — seuls ses
+  // derniers octets le sont ({@link RUNNING_MAX_BYTES}).
+  const raw = await readFileTail(runningMarkerPath(statusPath), RUNNING_MAX_BYTES);
+  if (raw === null) { return null; }
   const starts = raw.split("\n").slice(-RUNNING_MAX_LINES)
     .map((line) => line.trim().split(/\s+/))
     .filter(([, pid]) => pid === undefined || !/^\d+$/.test(pid) || isAlive(Number(pid)))
@@ -187,12 +238,10 @@ export function isBackupFresh(status: BackupStatus | null, now: number = Date.no
  * @returns Les échecs de la fenêtre {@link HISTORY_WINDOW_MS}, du plus ancien au plus récent.
  */
 export async function readBackupFailures(historyPath: string, now: number = Date.now()): Promise<BackupHistoryEntry[]> {
-  let raw: string;
-  try {
-    raw = await fs.promises.readFile(historyPath, "utf8");
-  } catch {
-    return [];
-  }
+  // Fin du fichier seulement ({@link HISTORY_MAX_BYTES}), et jamais autre chose qu'un
+  // fichier ordinaire : un chemin détourné vers `/dev/zero` ne bloque pas le rapport.
+  const raw = await readFileTail(historyPath, HISTORY_MAX_BYTES);
+  if (raw === null) { return []; }
   const failures: BackupHistoryEntry[] = [];
   for (const line of raw.split("\n")) {
     const entry = parseHistoryLine(line);

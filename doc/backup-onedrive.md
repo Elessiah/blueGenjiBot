@@ -29,9 +29,14 @@ passe en alerte dès qu'aucune sauvegarde réussie n'a moins de trois jours ou
 qu'une exécution a échoué depuis le rapport précédent. Une sauvegarde encore en
 cours au moment du rapport (marqueur `<statut>.running`, posé au départ du script,
 retiré à sa sortie, ignoré au-delà de 12 h ou quand son PID ne tourne plus — une
-exécution tuée sans repasser par sa sortie ne compte pas, et la suivante efface sa ligne) accorde trois jours de plus au statut
+exécution tuée sans repasser par sa sortie ne compte pas, et la suivante efface sa ligne, comme une ligne illisible ou sans PID de plus de 12 h) accorde trois jours de plus au statut
 réussi précédent (celui du mardi 23 h 49 a 5 jours 4 h au rapport), et le rapport le dit : le dimanche 23 h 49 qui déborde sur le
 lundi 4 h ne lève plus de fausse alerte.
+Le statut, le marqueur et l'historique ne sont jamais écrits en place : chaque écriture
+passe par un temporaire `mktemp` voisin (nom imprévisible, droits de l'umask) puis un
+renommage, si bien qu'un lien posé à leur place n'est jamais suivi. Le bot ne relit que
+la fin de l'historique (64 Kio) et du marqueur (4 Kio), d'un fichier ordinaire seulement,
+et n'accepte du statut qu'un chemin d'historique absolu en `.jsonl`, sans `..`.
 
 **Tout part chiffré depuis le Raspberry** : `age` pour les archives, un remote
 `rclone crypt` pour les images, les logos masqués et le journal des

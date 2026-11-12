@@ -353,3 +353,15 @@ test("liveFailureReport : mise à jour de la soirée échouée → rien à poste
     assert.doesNotMatch(report, /peut être postée|peuvent être postés|réessaie seul pendant les deux heures/, key);
   }
 });
+
+test("announceLive_editRefusedWithQuotedText_detailCarriesCodeOnly", async () => {
+  const request = parseLiveAnnouncement({ ...EVENING, editMessageId: MESSAGE_ID });
+  assert.ok(request);
+  const editError = discordError("Missing Access « EquipeSecrete »", 50001);
+
+  const error = await announceLive(fakeClient({ sent: [], editError }), request).catch((e: unknown) => e);
+
+  assert.ok(error instanceof LiveChannelUnavailableError);
+  assert.equal(error.detail, "Error, code 50001");
+  assert.doesNotMatch(error.message, /EquipeSecrete/);
+});

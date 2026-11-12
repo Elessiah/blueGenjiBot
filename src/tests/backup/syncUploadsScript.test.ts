@@ -88,16 +88,78 @@ test("scripts_retentionDaysValidated_beforePurge", () => {
 
 test("backupScript_writeStatus_appendsToHistory", () => {
   assert.match(BACKUP_SCRIPT, /: "\$\{STATUS_HISTORY_FILE:=\$\{STATUS_FILE%\.json\}-history\.jsonl\}"/);
-  assert.match(BACKUP_SCRIPT, />> "\$STATUS_HISTORY_FILE"/);
+  assert.match(BACKUP_SCRIPT, /mv -f -T "\$tmp" "\$STATUS_HISTORY_FILE"/);
   assert.match(BACKUP_SCRIPT, /mkdir -p "\$\(dirname "\$STATUS_FILE"\)" "\$\(dirname "\$STATUS_HISTORY_FILE"\)"/);
-  assert.match(BACKUP_SCRIPT, /tail -n "\$STATUS_HISTORY_LINES"/);
+  assert.match(BACKUP_SCRIPT, /tail -n "\$\(\(STATUS_HISTORY_LINES - 1\)\)"/);
 });
 
 test("backupScript_writeStatus_historyUpdatedUnderFlock", () => {
   // Lancement manuel pendant le cron : l'ajout puis l'élagage forment un tout.
   const write = BACKUP_SCRIPT.slice(BACKUP_SCRIPT.indexOf("write_status() {"), BACKUP_SCRIPT.indexOf("\nfail() {"));
-  assert.match(write, /\(\n\s+if command -v flock >\/dev\/null 2>&1; then\n\s+flock -w 30 8 \|\| exit 1\n\s+fi\n\s+printf [^\n]+>> "\$STATUS_HISTORY_FILE"/);
-  assert.match(write, /mv "\$STATUS_HISTORY_FILE\.tmp\.\$\$" "\$STATUS_HISTORY_FILE"\n\s+\) 8<"\$\(dirname "\$STATUS_HISTORY_FILE"\)"/);
+  assert.match(write, /\(\n\s+if command -v flock >\/dev\/null 2>&1; then\n\s+flock -w 30 8 \|\| exit 1\n\s+fi\n/);
+  assert.match(write, /mv -f -T "\$tmp" "\$STATUS_HISTORY_FILE" \|\| \{ rm -f "\$tmp"; exit 1; \}\n\s+\) 8<"\$\(dirname "\$STATUS_HISTORY_FILE"\)"/);
+  // Jamais `>` ni `>>` sur l'historique ou le statut eux-mêmes : un lien posé à leur place serait suivi.
+  assert.doesNotMatch(write, />>? "\$STATUS_HISTORY_FILE"/);
+  assert.doesNotMatch(write, /> "\$STATUS_FILE"/);
+});
+
+/** Fonction `sibling_tmp` du script, nécessaire à `write_status` jouée seule. */
+function siblingTmpFunction(): string {
+  const start = BACKUP_SCRIPT.indexOf("sibling_tmp() {");
+  const end = BACKUP_SCRIPT.indexOf("\n}\n", start);
+  assert.ok(start > 0 && end > start, "sibling_tmp introuvable");
+  return BACKUP_SCRIPT.slice(start, end + 2);
+}
+
+/** Joue `write_status` seule (`count` fois de suite) dans `dir` ; rend le statut de bash. */
+function runWriteStatus(dir: string, count: number, lines = 100): { status: number | null; stderr: string } {
+  const write = BACKUP_SCRIPT.slice(BACKUP_SCRIPT.indexOf("write_status() {"), BACKUP_SCRIPT.indexOf("\nfail() {"));
+  const script = [
+    `STATUS_FILE="${dir}/status.json"`,
+    `STATUS_HISTORY_FILE="${dir}/status-history.jsonl"`,
+    `STATUS_HISTORY_LINES=${lines} STATUS_OK=false STATUS_ERROR=boom STATUS_SIZE=0 STATUS_PARTS= RCLONE_REMOTE=r REMOTE_DIR=d STAMP=s STATUS_HISTORY_JSON=`,
+    siblingTmpFunction(),
+    write,
+    `for i in $(seq 1 ${count}); do write_status; done`,
+  ].join("\n");
+  const result = spawnSync("bash", ["-c", script], { encoding: "utf8", timeout: 30_000 });
+  return { status: result.status, stderr: result.stderr };
+}
+
+const BASH_PRESENT = spawnSync("bash", ["-c", "true"]).status === 0;
+
+test("backupScript_writeStatus_historyPrunedToLimit_noTempLeft", { skip: !BASH_PRESENT && "bash absent" }, () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bluegenji-history-prune-")).split(path.sep).join("/");
+  try {
+    const { status, stderr } = runWriteStatus(dir, 5, 3);
+    assert.equal(status, 0, stderr);
+    const lines = fs.readFileSync(path.join(dir, "status-history.jsonl"), "utf8").trim().split("\n");
+    assert.equal(lines.length, 3);
+    assert.equal((JSON.parse(fs.readFileSync(path.join(dir, "status.json"), "utf8")) as { error: string }).error, "boom");
+    assert.deepEqual(fs.readdirSync(dir).sort(), ["status-history.jsonl", "status.json"]);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("backupScript_writeStatus_symlinkedHistory_replacedNotFollowed", { skip: !BASH_PRESENT && "bash absent" }, (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bluegenji-history-link-")).split(path.sep).join("/");
+  try {
+    const victim = path.join(dir, "victim.txt");
+    fs.writeFileSync(victim, "intact\n");
+    try {
+      fs.symlinkSync(victim, path.join(dir, "status-history.jsonl"));
+    } catch {
+      t.skip("liens symboliques indisponibles");
+      return;
+    }
+    const { status, stderr } = runWriteStatus(dir, 1);
+    assert.equal(status, 0, stderr);
+    assert.equal(fs.readFileSync(victim, "utf8"), "intact\n");
+    assert.equal(fs.lstatSync(path.join(dir, "status-history.jsonl")).isSymbolicLink(), false);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test("backupScript_writeStatus_overlappingRuns_noLineLost", { skip: !hasBashWithFlock() && "bash ou flock absent" }, () => {
@@ -108,6 +170,7 @@ test("backupScript_writeStatus_overlappingRuns_noLineLost", { skip: !hasBashWith
       `STATUS_FILE="${dir}/status.json"`,
       `STATUS_HISTORY_FILE="${dir}/status-history.jsonl"`,
       "STATUS_HISTORY_LINES=100 STATUS_OK=true STATUS_ERROR= STATUS_SIZE=0 STATUS_PARTS= RCLONE_REMOTE=r REMOTE_DIR=d STAMP=s",
+      siblingTmpFunction(),
       write,
       "for i in 1 2 3 4 5 6 7 8 9 10; do write_status & done; wait",
     ].join("\n");
@@ -217,14 +280,40 @@ test("backupRunningMarker_deadPidLine_prunedOnAdd", { skip: !HAS_BASH && "bash a
   assert.match(marker ?? "", /^2026-11-08T23:50:00\+01:00 \d+\n2026-11-09T01:00:00\+01:00 \d+\n$/);
 });
 
-test("backupRunningMarker_lineWithoutPid_keptOnAdd", { skip: !HAS_BASH && "bash absent" }, () => {
+test("backupRunningMarker_recentLineWithoutPid_keptOnAdd", { skip: !HAS_BASH && "bash absent" }, () => {
+  // Ligne d'un script antérieur (date seule) encore récente : elle reste.
   const { status, marker } = runMarkerSteps([
-    `printf '2026-11-08T23:49:00+01:00\n' > "$RUNNING_FILE"`,
+    `RECENT="$(date --iso-8601=seconds)"; printf '%s\n' "$RECENT" > "$RUNNING_FILE"`,
     'RUNNING_LINE="2026-11-09T01:00:00+01:00 $$"; add_running_line',
   ].join("\n"));
 
   assert.equal(status, 0);
-  assert.match(marker ?? "", /^2026-11-08T23:49:00\+01:00\n2026-11-09T01:00:00\+01:00 \d+\n$/);
+  assert.match(marker ?? "", /^\d{4}-\d\d-\d\dT[^ \n]+\n2026-11-09T01:00:00\+01:00 \d+\n$/);
+});
+
+test("backupRunningMarker_oldOrMalformedLine_prunedOnAdd", { skip: !HAS_BASH && "bash absent" }, () => {
+  // Une ligne sans PID de plus de douze heures, ou illisible, ne reste pas pour toujours.
+  const { status, marker } = runMarkerSteps([
+    `printf '2020-01-01T00:00:00+01:00\npas une date\n2026-11-08T23:49:00+01:00 abc\n' > "$RUNNING_FILE"`,
+    'RUNNING_LINE="2026-11-09T01:00:00+01:00 $$"; add_running_line',
+  ].join("\n"));
+
+  assert.equal(status, 0);
+  assert.match(marker ?? "", /^2026-11-09T01:00:00\+01:00 \d+\n$/);
+});
+
+test("backupRunningMarker_symlinkedMarker_replacedNotFollowed", { skip: !HAS_BASH && "bash absent" }, () => {
+  // Un lien posé à la place du marqueur n'est jamais suivi : sa cible reste intacte.
+  const { status, marker, files } = runMarkerSteps([
+    `printf 'intact\n' > "$RUNNING_FILE.victim"`,
+    `ln -s "$RUNNING_FILE.victim" "$RUNNING_FILE" 2>/dev/null || cp "$RUNNING_FILE.victim" "$RUNNING_FILE"`,
+    'RUNNING_LINE="2026-11-09T01:00:00+01:00 $$"; add_running_line',
+    `[[ "$(cat "$RUNNING_FILE.victim")" == intact ]]`,
+  ].join("\n"));
+
+  assert.equal(status, 0);
+  assert.match(marker ?? "", /2026-11-09T01:00:00\+01:00 \d+\n$/);
+  assert.deepEqual(files.filter((name) => name.includes(".tmp.")), []);
 });
 
 test("backupRunningMarker_release_leavesNoLockFile", { skip: !HAS_BASH && "bash absent" }, () => {
@@ -232,4 +321,19 @@ test("backupRunningMarker_release_leavesNoLockFile", { skip: !HAS_BASH && "bash 
 
   assert.equal(status, 0);
   assert.deepEqual(files, []);
+});
+
+test("backupRunningMarker_releaseWithSymlinkedMarker_removesLinkKeepsTarget", { skip: !HAS_BASH && "bash absent" }, (t) => {
+  const { status, marker, files } = runMarkerSteps([
+    `printf 'intact' > "$RUNNING_FILE.victim"`,
+    // Git Bash copie au lieu de lier : sans vrai lien, rien à prouver ici.
+    `ln -s "$RUNNING_FILE.victim" "$RUNNING_FILE" && [[ -L "$RUNNING_FILE" ]] || exit 3`,
+    "release_running_marker",
+    `[[ "$(cat "$RUNNING_FILE.victim")" == intact ]]`,
+  ].join(String.fromCharCode(10)));
+  if (status === 3) { t.skip("liens symboliques indisponibles"); return; }
+
+  assert.equal(status, 0);
+  assert.equal(marker, null);
+  assert.deepEqual(files, ["status.json.running.victim"]);
 });

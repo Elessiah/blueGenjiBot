@@ -32,7 +32,7 @@ process.env.GUILD_ID = "700000000000000001";
 process.env.CLIENT_ID = "600000000000000001";
 
 import { MessageFlags, type Client } from "discord.js";
-import { resetInternalErrorReports, shouldReportInternalError, startInternalApi, startupUnwrappedRoutes } from "../../internalApi.js";
+import { internalErrorThrottleKey, resetInternalErrorReports, shouldReportInternalError, startInternalApi, startupUnwrappedRoutes } from "../../internalApi.js";
 import { getBddInstance, resetBddInstance } from "../../bdd/Bdd.js";
 import { recordEvent } from "../../feed/feedBus.js";
 import { readSiteVisitStats } from "../../siteVisits/siteVisits.js";
@@ -903,6 +903,61 @@ test("notifyReferees_deliveryFails_failureLogNotifies", async (t) => {
   }
 });
 
+test("notifyReferees_failsWithAnotherContextEachCall_discordAlertedOnceButEveryFailureInPm2", async (t) => {
+  // Une étiquette `context` différente à chaque appel ne fait pas repartir l'alerte ;
+  // chaque échec reste au journal du processus, avec son étiquette.
+  resetInternalErrorReports();
+  const errors: string[] = [];
+  t.mock.method(console, "error", (line: unknown) => { errors.push(String(line)); });
+  t.mock.method(console, "log", () => {});
+  state.cacheThrows = true;
+  try {
+    for (const context of ["match-1", "match-2", "match-3"]) {
+      const res = await call("/internal/notify/referees", { body: { message: "x", context } });
+      assert.equal(res.status, 500);
+    }
+
+    assert.equal(state.logs.filter((line) => line.startsWith("notify/referees error")).length, 1, JSON.stringify(state.logs));
+    for (const context of ["match-1", "match-2", "match-3"]) {
+      assert.ok(errors.some((line) => line.includes(`notify/referees error (${context})`)), JSON.stringify(errors));
+    }
+  } finally {
+    state.cacheThrows = false;
+    resetInternalErrorReports();
+  }
+});
+
+test("notifyReferees_contextWithMarkdownOrMention_sanitizedInLog", async (t) => {
+  resetInternalErrorReports();
+  t.mock.method(console, "error", () => {});
+  t.mock.method(console, "log", () => {});
+  state.cacheThrows = true;
+  try {
+    await call("/internal/notify/referees", { body: { message: "x", context: `<@123>**${"y".repeat(500)}` } });
+
+    const line = state.logs.find((entry) => entry.startsWith("notify/referees error")) ?? "";
+    assert.ok(!line.includes("<@") && !line.includes("**"), line);
+    assert.ok(line.length < 400, `${line.length} caractères`);
+  } finally {
+    state.cacheThrows = false;
+    resetInternalErrorReports();
+  }
+});
+
+test("internalErrorThrottleKey_routeLineOrHandlerLine_dropsTheFinalStatus", () => {
+  assert.equal(internalErrorThrottleKey("/internal/stats error: DiscordAPIError, code 0, statut 503"), "/internal/stats error: DiscordAPIError, code 0");
+  assert.equal(internalErrorThrottleKey("[internalApi] INTERNAL_ERROR (DiscordAPIError, code 0, statut 429)"), "[internalApi] INTERNAL_ERROR (DiscordAPIError, code 0)");
+  assert.equal(internalErrorThrottleKey("/internal/stats error: Error, code inconnu"), "/internal/stats error: Error, code inconnu");
+});
+
+test("shouldReportInternalError_routeLineOtherHttpStatus_returnsFalse", () => {
+  resetInternalErrorReports();
+  shouldReportInternalError("/internal/stats error: DiscordAPIError, code 0, statut 429", 1_000);
+
+  assert.equal(shouldReportInternalError("/internal/stats error: DiscordAPIError, code 0, statut 503", 1_001), false);
+  resetInternalErrorReports();
+});
+
 test("/internal/site-visits : corps inexploitable, 400 INVALID_SITE_VISIT_STATS", async () => {
   for (const body of [[], { autre: 1 }]) {
     const res = await call("/internal/site-visits", { body });
@@ -1068,7 +1123,7 @@ test("/internal/announce/live : envoi refusé → 503, puis un seul signalement 
   assert.equal(
     state.logs[0],
     "[AppBlueGenji] Annonce de live non publiée (live-announce match-2) : Discord a refusé l'envoi faute de " +
-    "permission (Missing Permissions) — vérifier les permissions du bot dans #live. Le site la réessaie seul " +
+    "permission (Error, code 50013) — vérifier les permissions du bot dans #live. Le site la réessaie seul " +
     "pendant les deux heures qui suivent le début du direct : ne pas la reposter à la main avant. Signalé au " +
     "plus une fois par heure, d'autres annonces peuvent échouer pour la même raison. Annonce concernée :" +
     "\n> Alpha contre Beta — Coupe\n<https://twitch.tv/bluegenji>",

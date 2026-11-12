@@ -130,24 +130,30 @@ const UNEXPECTED_ERROR: InternalErrorReply = { code: "INTERNAL_ERROR", status: 5
 /** Code générique d'un corps refusé par body-parser sans `type` connu (gzip corrompu…). */
 const INVALID_BODY = "INVALID_BODY";
 
+/** Codes d'erreur de zlib (`Z_DATA_ERROR`, `Z_BUF_ERROR`…) : un corps compressé illisible. */
+const ZLIB_ERROR_CODE = /^Z_[A-Z_]{1,30}$/;
+
 /**
- * Refus de lecture du corps que body-parser lève sans `type` listé : une erreur
- * `http-errors` marquée `expose` (faute du client) au statut 4xx — un flux gzip
- * ou deflate corrompu, par exemple. Une erreur Discord porte un `status` 4xx
- * mais jamais `expose` : elle reste une erreur du serveur.
+ * Refus de lecture du corps que body-parser lève sans `type` listé : un flux gzip
+ * ou deflate corrompu, que body-parser rend en `400` exposé (`http-errors`) en gardant
+ * le `code` de zlib. Seule cette forme est reconnue : une autre erreur `expose` 4xx
+ * (un `http-errors` levé par une route ou une bibliothèque) reste un défaut du
+ * serveur (`500`, journalisé et signalé), et une erreur Discord porte un `status`
+ * 4xx mais jamais `expose`.
  * @param expose Champ `expose` de l'erreur.
  * @param status Champ `status` de l'erreur.
+ * @param code Champ `code` de l'erreur.
  * @returns La réponse, ou `null`.
  */
-function exposedClientRefusal(expose: unknown, status: unknown): InternalErrorReply | null {
-  return expose === true && typeof status === "number" && Number.isInteger(status) && status >= 400 && status <= 499
-    ? { code: INVALID_BODY, status }
+function exposedClientRefusal(expose: unknown, status: unknown, code: unknown): InternalErrorReply | null {
+  return expose === true && status === 400 && typeof code === "string" && ZLIB_ERROR_CODE.test(code)
+    ? { code: INVALID_BODY, status: 400 }
     : null;
 }
 
 /**
  * Code et statut d'une erreur levée hors d'une route : ceux du refus de lecture
- * du corps, `INVALID_BODY` pour un autre refus 4xx exposé de body-parser, sinon
+ * du corps, `INVALID_BODY` pour un corps compressé illisible (code zlib), sinon
  * `500 INTERNAL_ERROR` — le `status` d'une autre erreur (une erreur Discord en
  * porte un, sans `expose`) n'est jamais repris.
  *
@@ -156,9 +162,9 @@ function exposedClientRefusal(expose: unknown, status: unknown): InternalErrorRe
  */
 export function internalErrorReply(error: unknown): InternalErrorReply {
   try {
-    const { type, status, expose } = (error ?? {}) as { type?: unknown; status?: unknown; expose?: unknown };
+    const { type, status, expose, code } = (error ?? {}) as { type?: unknown; status?: unknown; expose?: unknown; code?: unknown };
     if (typeof type !== "string" || !Object.hasOwn(BODY_PARSER_REFUSALS, type)) {
-      return exposedClientRefusal(expose, status) ?? UNEXPECTED_ERROR;
+      return exposedClientRefusal(expose, status, code) ?? UNEXPECTED_ERROR;
     }
     // Le statut que body-parser pose avec son `type` : une autre erreur qui reprendrait
     // ce `type` reste une erreur du serveur.
@@ -253,6 +259,20 @@ const processLogThrottle = createLineThrottle(PROCESS_LOG_COOLDOWN_MS);
 /** Vide la mémoire de l'étranglement du journal du processus (tests). */
 export function resetProcessLogThrottle(): void {
   processLogThrottle.reset();
+}
+
+/**
+ * Écrit une ligne au journal d'erreurs du processus (pm2), au plus une fois par
+ * {@link PROCESS_LOG_COOLDOWN_MS} pour une ligne identique, le compte des suivantes
+ * tues s'ajoutant à la prochaine qui part.
+ * @param line Ligne (code et type seuls).
+ * @param now Horloge injectable, pour les tests.
+ * @returns `true` si la ligne est partie.
+ */
+export function logProcessError(line: string, now: number = Date.now()): boolean {
+  const verdict = processLogThrottle.check(line, now);
+  if (verdict.emit) { console.error(withSuppressed(line, verdict.suppressed)); }
+  return verdict.emit;
 }
 
 /**
