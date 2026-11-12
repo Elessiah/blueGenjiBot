@@ -229,7 +229,7 @@ test("safeErrorCode_knownFamilies_returnsCode", () => {
 
 test("safeErrorCode_singleWordFromInput_returnsNull", () => {
   // Un mot isolé a la forme d'un identifiant, sans en être un : il peut recopier une valeur reçue.
-  for (const code of ["EquipeBleue", "auth/invalid-token", "ChannelNotCached", "pseudo.joueur"]) {
+  for (const code of ["EquipeBleue", "auth/invalid-token", "CanalBleuNonCache", "pseudo.joueur"]) {
     assert.equal(safeErrorCode(Object.assign(new Error("x"), { code })), null);
   }
 });
@@ -257,4 +257,16 @@ test("safeErrorDetail_errorWithCodeAndStatus_returnsKindCodeStatusWithoutMessage
 test("safeErrorDetail_nullRejection_returnsTypeWithUnknownCode", () => {
   assert.equal(safeErrorDetail(null), "object, code inconnu");
   assert.equal(safeErrorDetail(undefined), "undefined, code inconnu");
+});
+
+test("safeErrorCode_discordjsEnumCode_returnsIt", () => {
+  const error = Object.assign(new Error("x"), { code: "GuildMembersTimeout" });
+
+  assert.equal(safeErrorCode(error), "GuildMembersTimeout");
+});
+
+test("safeErrorCode_wordOutsideDiscordjsEnum_returnsNull", () => {
+  const error = Object.assign(new Error("x"), { code: "GuildMembersTimeoutX" });
+
+  assert.equal(safeErrorCode(error), null);
 });

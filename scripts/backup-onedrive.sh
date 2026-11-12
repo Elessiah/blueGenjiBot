@@ -53,10 +53,18 @@ WORK_DIR="$(mktemp -d)"
 ARCHIVE="$WORK_DIR/bluegenji-$STAMP.tar"
 # Marqueur de sauvegarde en cours, à côté du statut (`runningMarkerPath` du bot) :
 # le rapport du lundi 4 h ne prend pas une sauvegarde du dimanche soir encore en
-# cours pour une sauvegarde manquée. Retiré à la sortie, quelle qu'elle soit.
+# cours pour une sauvegarde manquée. Retiré à la sortie, quelle qu'elle soit — mais
+# seulement s'il est encore le sien : une exécution manuelle qui finit pendant le
+# cron ne retire pas le marqueur de la sauvegarde toujours en cours.
 RUNNING_FILE="$STATUS_FILE.running"
-trap 'rm -rf "$WORK_DIR"; rm -f "$RUNNING_FILE"' EXIT
-{ mkdir -p "$(dirname "$RUNNING_FILE")" && date --iso-8601=seconds > "$RUNNING_FILE"; } 2>/dev/null \
+RUNNING_STAMP="$(date --iso-8601=seconds)"
+release_running_marker() {
+  if [[ "$(cat "$RUNNING_FILE" 2>/dev/null)" == "$RUNNING_STAMP" ]]; then
+    rm -f "$RUNNING_FILE"
+  fi
+}
+trap 'rm -rf "$WORK_DIR"; release_running_marker' EXIT
+{ mkdir -p "$(dirname "$RUNNING_FILE")" && printf '%s\n' "$RUNNING_STAMP" > "$RUNNING_FILE"; } 2>/dev/null \
   || echo "[backup] marqueur de sauvegarde en cours non écrit." >&2
 
 # Chemin de l'historique écrit dans le statut : le bot relit celui-là au lieu de le

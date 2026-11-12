@@ -1,6 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
-import type { ErrorRequestHandler, NextFunction, Request, Response } from "express";
-import { safeErrorCode, safeErrorKind } from "../safe/errorGuards.js";
+import type { ErrorRequestHandler, Express, NextFunction, Request, Response } from "express";
+import { safeErrorDetail } from "../safe/errorGuards.js";
 
 /** Adresses d'ecoute sur lesquelles seul un process de la machine peut se connecter. */
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
@@ -181,10 +181,9 @@ export function internalErrorReply(error: unknown): InternalErrorReply {
 export function internalErrorLogLine(error: unknown): string {
   const reply = internalErrorReply(error);
   if (reply !== UNEXPECTED_ERROR) { return `[internalApi] ${reply.code}`; }
-  // Type et code filtrés (`safe/errorGuards.ts`), lus sans jamais lever.
-  const code = safeErrorCode(error);
-  const shown = code === null ? "" : " " + String(code);
-  return `[internalApi] ${reply.code} (${safeErrorKind(error)}${shown})`;
+  // Type, code et statut filtrés (`safe/errorGuards.ts`), lus sans jamais lever : même
+  // forme que les lignes des `catch` des routes.
+  return `[internalApi] ${reply.code} (${safeErrorDetail(error)})`;
 }
 
 /** Destinations des lignes du gestionnaire d'erreur. */
@@ -220,6 +219,12 @@ export function internalErrorHandler(sinks: InternalErrorSinks = {}): ErrorReque
     } else {
       warn(line);
     }
+    if (res.writableEnded) {
+      // Réponse déjà envoyée en entier (un geste après `res.json` a levé) : le site a
+      // sa réponse ; couper la connexion la perdrait si elle attend encore dans le
+      // tampon de la socket.
+      return;
+    }
     if (res.headersSent) {
       // Réponse commencée (flux) : la connexion est coupée, pour que le lecteur voie
       // une réponse tronquée et non une fin normale ; rien ne repart vers Express.
@@ -233,20 +238,27 @@ export function internalErrorHandler(sinks: InternalErrorSinks = {}): ErrorReque
 /** Gestionnaire de route, synchrone ou asynchrone. */
 type RouteHandler = (req: Request, res: Response) => unknown;
 
+/** Gestionnaires rendus par {@link asyncRoute}, relus par {@link unwrappedRoutes}. */
+const WRAPPED_ROUTES = new WeakSet<object>();
+
 /**
  * Enveloppe une route asynchrone pour Express 4, qui ignore la promesse rejetée
  * d'un gestionnaire : le rejet part à `next(err)`, et `internalErrorHandler`
  * répond toujours un code au lieu de laisser la requête du site sans réponse
- * jusqu'à son délai. Un rejet sans valeur (`null`, `undefined`) devient une
- * `Error` : `next()` sans argument passerait à la route suivante (404).
+ * jusqu'à son délai. Un rejet falsy (`null`, `undefined`, `0`, `""`, `false`) ou
+ * `"route"` / `"router"` devient une `Error` : `next()` les prendrait pour « route
+ * suivante » (404).
  *
  * @param handler Gestionnaire de la route.
  * @returns Gestionnaire Express.
  */
 export function asyncRoute(handler: RouteHandler): (req: Request, res: Response, next: NextFunction) => void {
-  return (req, res, next) => {
+  const wrapped = (req: Request, res: Response, next: NextFunction): void => {
     const forward = (error: unknown): void => {
-      next(error ?? new Error("rejet sans valeur"));
+      // `next()` sans valeur passe à la route suivante, `next("route")` / `next("router")`
+      // aussi : un rejet falsy ou l'une de ces chaînes devient une vraie erreur.
+      const usable = error instanceof Error || (Boolean(error) && error !== "route" && error !== "router");
+      next(usable ? error : new Error("rejet sans valeur exploitable"));
     };
     try {
       Promise.resolve(handler(req, res)).catch(forward);
@@ -254,4 +266,31 @@ export function asyncRoute(handler: RouteHandler): (req: Request, res: Response,
       forward(error);
     }
   };
+  WRAPPED_ROUTES.add(wrapped);
+  return wrapped;
+}
+
+/** Pile interne d'Express 4 (`app._router.stack`), lue sans dépendre de ses types. */
+type RouterLayer = { route?: { path?: unknown; methods?: Record<string, boolean>; stack?: { handle?: unknown }[] } };
+
+/**
+ * Routes dont un gestionnaire n'est pas passé par {@link asyncRoute} : Express 4 y
+ * laisserait un rejet sans réponse jusqu'au délai du site. `startInternalApi` les
+ * signale au démarrage, et les tests des routes exigent une liste vide.
+ *
+ * @param app Application Express, routes montées.
+ * @returns `MÉTHODE chemin` de chaque route fautive.
+ */
+export function unwrappedRoutes(app: Express): string[] {
+  const stack = ((app as unknown as { _router?: { stack?: RouterLayer[] } })._router?.stack) ?? [];
+  const found: string[] = [];
+  for (const layer of stack) {
+    const route = layer.route;
+    if (!route) { continue; }
+    const handlers = route.stack ?? [];
+    if (handlers.every((entry) => typeof entry.handle === "function" && WRAPPED_ROUTES.has(entry.handle))) { continue; }
+    const methods = Object.keys(route.methods ?? {}).map((method) => method.toUpperCase()).join(",");
+    found.push(`${methods} ${String(route.path)}`);
+  }
+  return found;
 }

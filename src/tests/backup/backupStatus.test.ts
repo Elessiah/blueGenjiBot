@@ -258,8 +258,9 @@ const okStatusAged = (ageMs: number): BackupStatus => ({ ...OK_STATUS, date: new
 const HOUR = 60 * 60 * 1000;
 
 test("isBackupFresh_runningAndTuesdayStatus_returnsTrue", () => {
-  // Statut du mardi 23 h 49, rapport du lundi 4 h : ~4 jours 4 h.
-  assert.equal(isBackupFresh(okStatusAged(100 * HOUR), REPORT_AT, true), true);
+  // Statut du mardi 23 h 49, rapport du lundi 4 h (heure de Paris) : 5 jours 4 h 11.
+  const tuesdayEvening = Date.parse("2026-11-03T22:49:00Z");
+  assert.equal(isBackupFresh({ ...OK_STATUS, date: new Date(tuesdayEvening).toISOString() }, REPORT_AT, true), true);
 });
 
 test("isBackupFresh_notRunningAndTuesdayStatus_returnsFalse", () => {

@@ -5,7 +5,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { once } from "node:events";
 import type { AddressInfo } from "node:net";
-import type { Server } from "node:http";
+import http, { type Server } from "node:http";
 import { randomUUID } from "node:crypto";
 
 /**
@@ -33,6 +33,7 @@ process.env.CLIENT_ID = "600000000000000001";
 
 import { MessageFlags, type Client } from "discord.js";
 import { resetInternalErrorReports, shouldReportInternalError, startInternalApi } from "../../internalApi.js";
+import { unwrappedRoutes } from "../../internalApi/helpers.js";
 import { getBddInstance, resetBddInstance } from "../../bdd/Bdd.js";
 import { recordEvent } from "../../feed/feedBus.js";
 import { readSiteVisitStats } from "../../siteVisits/siteVisits.js";
@@ -229,6 +230,38 @@ async function call(route: string, options: CallOptions = {}): Promise<{ status:
   return { status: response.status, body: text ? JSON.parse(text) : {}, headers: response.headers };
 }
 
+/**
+ * Appel sous horloge simulée, par `node:http` sans connexion gardée plutôt que `fetch` :
+ * undici arme ses minuteries internes au premier appel, et un `setTimeout` simulé
+ * à ce moment-là déréglait les délais d'en-têtes des appels suivants
+ * (`UND_ERR_HEADERS_TIMEOUT` intermittent). Les sockets de `node:http` ne lisent
+ * pas l'horloge simulée.
+ */
+function callUnderMockedClock(route: string, options: CallOptions = {}): Promise<{ status: number; body: Record<string, unknown> }> {
+  const token = options.token === undefined ? TOKEN : options.token;
+  const headers: Record<string, string> = { ...options.headers };
+  if (token !== null) { headers["x-internal-token"] = token; }
+  const payload = options.body === undefined ? undefined : JSON.stringify(options.body);
+  if (payload !== undefined) { headers["content-type"] = "application/json"; }
+  return new Promise((resolve, reject) => {
+    const req = http.request(baseUrl + route, {
+      method: options.method ?? (payload === undefined ? "GET" : "POST"),
+      headers,
+      agent: false,
+    }, (res) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (chunk: Buffer) => chunks.push(chunk));
+      res.on("end", () => {
+        const text = Buffer.concat(chunks).toString("utf8");
+        resolve({ status: res.statusCode ?? 0, body: text ? JSON.parse(text) : {} });
+      });
+      res.on("error", reject);
+    });
+    req.on("error", reject);
+    req.end(payload);
+  });
+}
+
 async function sql(query: string, values: unknown[] = []): Promise<void> {
   const bdd = await getBddInstance();
   await bdd.raw(query, values);
@@ -334,11 +367,11 @@ test("/internal/health : latence négative bornée à 0, client en panne signal�
  * `/internal/status` mesure le CPU sur 100 ms (`setTimeout`) : l'horloge est
  * simulée et avancée jusqu'à la réponse, plutôt que d'attendre en vrai.
  */
-async function callStatus(t: test.TestContext): Promise<Awaited<ReturnType<typeof call>>> {
+async function callStatus(t: test.TestContext): Promise<Awaited<ReturnType<typeof callUnderMockedClock>>> {
   t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: Date.now() });
   try {
     let settled = false;
-    const pending = call("/internal/status").finally(() => { settled = true; });
+    const pending = callUnderMockedClock("/internal/status").finally(() => { settled = true; });
     for (let i = 0; i < 1000 && !settled; i++) {
       t.mock.timers.tick(10);
       await new Promise((r) => setImmediate(r));
@@ -671,7 +704,7 @@ test("/internal/auth/resolve : serveurs muets, 504 BOT_RESOLVE_TIMEOUT sans jour
   let searched = 0;
   state.searchHangs = true;
   state.onSearch = () => { searched++; };
-  const pending = call("/internal/auth/resolve", { body: { handle: "lent" } });
+  const pending = callUnderMockedClock("/internal/auth/resolve", { body: { handle: "lent" } });
   for (let i = 0; i < 1000 && searched < joined.size; i++) { await new Promise((r) => setImmediate(r)); }
   assert.equal(searched, joined.size, "chaque serveur rejoint interrogé");
   t.mock.timers.tick(RESOLVE_BUDGET_MS);
@@ -1348,4 +1381,11 @@ test("shouldReportInternalError_otherLine_returnsTrue", () => {
   shouldReportInternalError("[internalApi] INTERNAL_ERROR (Error)", 1_000);
 
   assert.equal(shouldReportInternalError("[internalApi] INTERNAL_ERROR (TypeError)", 1_001), true);
+});
+
+test("startInternalApi_everyRoute_wrappedInAsyncRoute", () => {
+  // Express 4 laisse un rejet sans réponse : chaque route passe par `asyncRoute`.
+  const app = server.listeners("request")[0] as Parameters<typeof unwrappedRoutes>[0];
+
+  assert.deepEqual(unwrappedRoutes(app), []);
 });

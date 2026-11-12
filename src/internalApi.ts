@@ -31,6 +31,7 @@ import {
   SPARKLINE_POINTS,
   internalErrorHandler,
   asyncRoute,
+  unwrappedRoutes,
   type RelayStatus,
 } from "./internalApi/helpers.js";
 import { parseSiteVisitStats, saveSiteVisitStats } from "./siteVisits/siteVisits.js";
@@ -310,7 +311,7 @@ export function startInternalApi(client: Client) {
     res.status(allOk ? 200 : 503).json({ status: allOk ? "healthy" : "unhealthy", checks });
   }));
 
-  app.get("/internal/invite", (_req: Request, res: Response) => {
+  app.get("/internal/invite", asyncRoute((_req: Request, res: Response) => {
     const clientId = process.env.CLIENT_ID ?? "";
     if (!clientId) {
       res.status(500).json({ error: "CLIENT_ID_NOT_CONFIGURED" });
@@ -320,7 +321,7 @@ export function startInternalApi(client: Client) {
     const scopes = ["bot", "applications.commands"];
     const url = `https://discord.com/api/oauth2/authorize?client_id=${encodeURIComponent(clientId)}&permissions=${permissions}&scope=${scopes.map(encodeURIComponent).join("%20")}`;
     res.json({ url, permissions, scopes });
-  });
+  }));
 
   app.get("/internal/status", asyncRoute(async (_req: Request, res: Response) => {
     try {
@@ -929,6 +930,9 @@ export function startInternalApi(client: Client) {
   // Erreur levée hors d'une route (corps illisible, trop gros…) : `internalApi/helpers.ts`.
   // Un défaut du serveur part aussi au salon de logs, une fois par ligne et par délai.
   app.use(internalErrorHandler({ report: (line) => reportInternalError(client, line) }));
+  // Une route ajoutée sans `asyncRoute` ramènerait la requête sans réponse sur un rejet.
+  const unwrapped = unwrappedRoutes(app);
+  if (unwrapped.length > 0) { console.error(`[internalApi] routes sans asyncRoute : ${unwrapped.join(" ; ")}`); }
 
   const port = Number(process.env.INTERNAL_API_PORT || 4400);
   const host = process.env.INTERNAL_API_HOST || "127.0.0.1";

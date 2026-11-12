@@ -28,8 +28,8 @@ n'est pas effacé par le succès du dimanche) et à l'espace disque restant, et
 passe en alerte dès qu'aucune sauvegarde réussie n'a moins de trois jours ou
 qu'une exécution a échoué depuis le rapport précédent. Une sauvegarde encore en
 cours au moment du rapport (marqueur `<statut>.running`, posé au départ du script,
-retiré à sa sortie, ignoré au-delà de 12 h) accorde deux jours de plus au statut
-réussi précédent, et le rapport le dit : le dimanche 23 h 49 qui déborde sur le
+retiré à sa sortie, ignoré au-delà de 12 h) accorde trois jours de plus au statut
+réussi précédent (celui du mardi 23 h 49 a 5 jours 4 h au rapport), et le rapport le dit : le dimanche 23 h 49 qui déborde sur le
 lundi 4 h ne lève plus de fausse alerte.
 
 **Tout part chiffré depuis le Raspberry** : `age` pour les archives, un remote

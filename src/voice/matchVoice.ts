@@ -320,18 +320,9 @@ export function parseChannelId(raw: unknown): string | null {
  * est repris ailleurs. Espaces resserrés, coupe à 100 caractères (points de
  * code, pour ne pas couper un emoji en deux).
  *
- * @param raw Valeur brute du corps.
- * @returns Le nom nettoyé (`FALLBACK_VOICE_NAME` s'il ne reste rien), ou `null` pour une valeur inexploitable.
- */
-export function sanitizeVoiceChannelName(raw: unknown): string | null {
-  const cleaned = cleanVoiceChannelName(raw);
-  if (cleaned === null) { return null; }
-  return cleaned === "" ? FALLBACK_VOICE_NAME : cleaned;
-}
-
-/**
- * Nettoyage de {@link sanitizeVoiceChannelName}, sans le repli : une chaîne vide
- * dit qu'il ne reste aucun caractère affichable.
+ * Une chaîne vide dit qu'il ne reste aucun caractère affichable : la route
+ * donne alors le nom de repli ({@link voiceChannelName}).
+ *
  * @param raw Valeur brute du corps.
  * @returns Le nom nettoyé (vide s'il ne reste rien), ou `null` pour une valeur inexploitable.
  */
@@ -366,7 +357,7 @@ export function parseVoiceFallback(raw: unknown): boolean | undefined {
  * site (`fallback`) : une équipe nommée « Salon d'équipe » garde son nom. Sans le
  * drapeau (site antérieur), il se reconnaît à l'égalité avec `FALLBACK_VOICE_NAME`.
  * @param key Clé d'idempotence validée.
- * @param name Nom nettoyé (`sanitizeVoiceChannelName`).
+ * @param name Nom nettoyé (`cleanVoiceChannelName`).
  * @param fallback Drapeau du site (`parseVoiceFallback`), `undefined` s'il est absent.
  * @returns Le nom du salon.
  */

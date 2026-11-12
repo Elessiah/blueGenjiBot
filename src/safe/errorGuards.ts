@@ -19,6 +19,8 @@
  */
 
 
+import { DiscordjsErrorCodes } from "discord.js";
+
 /** Codes système/undici signalant une indisponibilité réseau passagère. */
 const TRANSIENT_NETWORK_CODES: ReadonlySet<string> = new Set([
     "EAI_AGAIN",
@@ -219,6 +221,12 @@ const SAFE_ERROR_CODES: readonly RegExp[] = [
 ];
 
 /**
+ * Codes de discord.js (`TokenInvalid`, `GuildMembersTimeout`…) : valeurs fixes de
+ * son énumération, jamais recopiées d'une valeur reçue.
+ */
+const DISCORDJS_ERROR_CODES: ReadonlySet<string> = new Set(Object.values(DiscordjsErrorCodes) as string[]);
+
+/**
  * Type d'une `Error` journalisable : un nom de classe d'erreur (`TypeError`,
  * `DiscordAPIError`, `DOMException`), jamais un mot quelconque.
  */
@@ -235,6 +243,7 @@ function safeErrorCode(error: unknown): string | number | null {
     const code = errorCode(error);
     if (code === null) return null;
     if (typeof code === "number") return Number.isFinite(code) ? code : null;
+    if (DISCORDJS_ERROR_CODES.has(code)) return code;
     return SAFE_ERROR_CODES.some((pattern) => pattern.test(code)) ? code : null;
 }
 

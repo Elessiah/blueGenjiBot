@@ -21,7 +21,6 @@ import {
   releaseVoiceChannel,
   releaseVoiceChannelByKey,
   cleanVoiceChannelName,
-  FALLBACK_VOICE_NAME,
   parseVoiceFallback,
   logVoiceFailure,
   voiceChannelName,
@@ -82,9 +81,7 @@ export function registerVoiceRoutes(app: Express, client: Client): void {
       return;
     }
     // Rien d'affichable : le repli, quel que soit le drapeau du site.
-    const name = cleaned === ""
-      ? voiceChannelName(key, FALLBACK_VOICE_NAME, true)
-      : voiceChannelName(key, cleaned, parseVoiceFallback(req.body?.fallback));
+    const name = voiceChannelName(key, cleaned, cleaned === "" || parseVoiceFallback(req.body?.fallback));
     if (refuseNotReady(client, res)) { return; }
     try {
       const { channelId, created } = await ensureTeamVoiceChannel(client, key, name);

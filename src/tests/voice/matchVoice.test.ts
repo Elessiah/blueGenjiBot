@@ -27,7 +27,6 @@ import {
   releaseVoiceChannelByKey,
   BOT_WIDE_LOG_COOLDOWN_MS,
   resetVoiceState,
-  sanitizeVoiceChannelName,
   cleanVoiceChannelName,
   parseVoiceFallback,
   logVoiceFailure,
@@ -101,48 +100,48 @@ test.after(async () => {
 
 // --- Validation ------------------------------------------------------------
 
-test("sanitizeVoiceChannelName_plainName_keptAsIs", () => {
-  assert.equal(sanitizeVoiceChannelName("Les Genji Bleus"), "Les Genji Bleus");
+test("cleanVoiceChannelName_plainName_keptAsIs", () => {
+  assert.equal(cleanVoiceChannelName("Les Genji Bleus"), "Les Genji Bleus");
 });
 
-test("sanitizeVoiceChannelName_mentionsAndMarkdown_stripped", () => {
-  assert.equal(sanitizeVoiceChannelName("@everyone **<@123>** _x_ `y` ~z~ |w| # \\v"), "everyone 123 x y z w v");
+test("cleanVoiceChannelName_mentionsAndMarkdown_stripped", () => {
+  assert.equal(cleanVoiceChannelName("@everyone **<@123>** _x_ `y` ~z~ |w| # \\v"), "everyone 123 x y z w v");
 });
 
-test("sanitizeVoiceChannelName_controlAndInvisibleChars_collapsedToOneSpace", () => {
-  assert.equal(sanitizeVoiceChannelName("Team\n​Alpha\t  Bravo"), "Team Alpha Bravo");
+test("cleanVoiceChannelName_controlAndInvisibleChars_collapsedToOneSpace", () => {
+  assert.equal(cleanVoiceChannelName("Team\n​Alpha\t  Bravo"), "Team Alpha Bravo");
 });
 
-test("sanitizeVoiceChannelName_100CodePoints_kept", () => {
+test("cleanVoiceChannelName_100CodePoints_kept", () => {
   const name = "é".repeat(100);
-  assert.equal(sanitizeVoiceChannelName(name), name);
+  assert.equal(cleanVoiceChannelName(name), name);
 });
 
-test("sanitizeVoiceChannelName_101CodePoints_cutTo100WithoutSplittingEmoji", () => {
+test("cleanVoiceChannelName_101CodePoints_cutTo100WithoutSplittingEmoji", () => {
   const name = "a".repeat(99) + "🎮🎮";
-  assert.equal(sanitizeVoiceChannelName(name), "a".repeat(99) + "🎮");
+  assert.equal(cleanVoiceChannelName(name), "a".repeat(99) + "🎮");
 });
 
-test("sanitizeVoiceChannelName_zwjEmojiAndBidiOverride_emojiKeptOverrideRemoved", () => {
-  assert.equal(sanitizeVoiceChannelName("Team \u202Eabc 👨\u200D👩\u200D👧"), "Team abc 👨\u200D👩\u200D👧");
+test("cleanVoiceChannelName_zwjEmojiAndBidiOverride_emojiKeptOverrideRemoved", () => {
+  assert.equal(cleanVoiceChannelName("Team \u202Eabc 👨\u200D👩\u200D👧"), "Team abc 👨\u200D👩\u200D👧");
 });
 
-test("sanitizeVoiceChannelName_onlyStrippedChars_fallbackName", () => {
-  assert.equal(sanitizeVoiceChannelName("@@**__"), FALLBACK_VOICE_NAME);
+test("cleanVoiceChannelName_onlyStrippedChars_returnsEmpty", () => {
+  assert.equal(cleanVoiceChannelName("@@**__"), "");
 });
 
-test("sanitizeVoiceChannelName_200Chars_accepted", () => {
-  assert.equal(sanitizeVoiceChannelName("a".repeat(200)), "a".repeat(100));
+test("cleanVoiceChannelName_200Chars_accepted", () => {
+  assert.equal(cleanVoiceChannelName("a".repeat(200)), "a".repeat(100));
 });
 
-test("sanitizeVoiceChannelName_201Chars_rejected", () => {
-  assert.equal(sanitizeVoiceChannelName("a".repeat(201)), null);
+test("cleanVoiceChannelName_201Chars_rejected", () => {
+  assert.equal(cleanVoiceChannelName("a".repeat(201)), null);
 });
 
-test("sanitizeVoiceChannelName_blankOrNonString_rejected", () => {
-  assert.equal(sanitizeVoiceChannelName("   "), null);
-  assert.equal(sanitizeVoiceChannelName(42), null);
-  assert.equal(sanitizeVoiceChannelName(undefined), null);
+test("cleanVoiceChannelName_blankOrNonString_rejected", () => {
+  assert.equal(cleanVoiceChannelName("   "), null);
+  assert.equal(cleanVoiceChannelName(42), null);
+  assert.equal(cleanVoiceChannelName(undefined), null);
 });
 
 test("parseVoiceKey_siteKey_accepted", () => {

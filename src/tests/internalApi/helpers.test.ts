@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import type { Request, Response } from "express";
+import express, { type Request, type Response } from "express";
 import {
   absDelta,
   deterministicColor,
@@ -13,6 +13,7 @@ import {
   internalErrorHandler,
   internalErrorLogLine,
   internalErrorReply,
+  unwrappedRoutes,
 } from "../../internalApi/helpers.js";
 
 test("absDelta formate le signe correctement", () => {
@@ -162,24 +163,25 @@ test("internalErrorLogLine_bodyParserRefusal_returnsCodeOnly", () => {
 test("internalErrorLogLine_unexpectedError_returnsNameAndCodeWithoutMessage", () => {
   const error = Object.assign(new Error("UNIQUE constraint failed: Team.name 'Equipe Bleue'"), { code: "SQLITE_CONSTRAINT" });
 
-  assert.equal(internalErrorLogLine(error), "[internalApi] INTERNAL_ERROR (Error SQLITE_CONSTRAINT)");
+  assert.equal(internalErrorLogLine(error), "[internalApi] INTERNAL_ERROR (Error, code SQLITE_CONSTRAINT)");
 });
 
 test("internalErrorLogLine_codeWithSpaces_dropsCode", () => {
   const error = Object.assign(new TypeError("x"), { code: "texte libre d'un joueur" });
 
-  assert.equal(internalErrorLogLine(error), "[internalApi] INTERNAL_ERROR (TypeError)");
+  assert.equal(internalErrorLogLine(error), "[internalApi] INTERNAL_ERROR (TypeError, code inconnu)");
 });
 
 test("internalErrorLogLine_nonError_returnsItsType", () => {
-  assert.equal(internalErrorLogLine("Equipe Bleue"), "[internalApi] INTERNAL_ERROR (string)");
+  assert.equal(internalErrorLogLine("Equipe Bleue"), "[internalApi] INTERNAL_ERROR (string, code inconnu)");
 });
 
 /** Réponse Express factice : retient ce qui lui est écrit. */
-function fakeResponse(headersSent: boolean) {
+function fakeResponse(headersSent: boolean, writableEnded = false) {
   const written = { status: 0, json: undefined as unknown, destroyed: false };
   const res = {
     headersSent,
+    writableEnded,
     status(code: number) { written.status = code; return res; },
     json(body: unknown) { written.json = body; return res; },
     destroy() { written.destroyed = true; return res; },
@@ -194,7 +196,7 @@ test("internalErrorHandler_unexpectedError_replies500AndLogs", () => {
   internalErrorHandler({ error: (line) => lines.push(line) })(new Error("secret"), {} as Request, res, () => undefined);
 
   assert.deepEqual(written, { status: 500, json: { error: "INTERNAL_ERROR" }, destroyed: false });
-  assert.deepEqual(lines, ["[internalApi] INTERNAL_ERROR (Error)"]);
+  assert.deepEqual(lines, ["[internalApi] INTERNAL_ERROR (Error, code inconnu)"]);
 });
 
 test("internalErrorHandler_headersAlreadySent_destroysSocketWithoutBodyNorNext", () => {
@@ -207,13 +209,13 @@ test("internalErrorHandler_headersAlreadySent_destroysSocketWithoutBodyNorNext",
   // Connexion coupée : le lecteur voit une réponse tronquée, jamais une fin normale.
   assert.deepEqual(written, { status: 0, json: undefined, destroyed: true });
   assert.equal(nextCalled, false);
-  assert.deepEqual(lines, ["[internalApi] INTERNAL_ERROR (Error)"]);
+  assert.deepEqual(lines, ["[internalApi] INTERNAL_ERROR (Error, code inconnu)"]);
 });
 
 test("internalErrorLogLine_freeTextName_fallsBackToError", () => {
   const error = Object.assign(new Error("x"), { name: "Equipe Bleue a triché" });
 
-  assert.equal(internalErrorLogLine(error), "[internalApi] INTERNAL_ERROR (Error)");
+  assert.equal(internalErrorLogLine(error), "[internalApi] INTERNAL_ERROR (Error, code inconnu)");
 });
 
 test("internalErrorHandler_destroyThrowsAfterHeadersSent_swallowsIt", () => {
@@ -265,7 +267,7 @@ test("internalErrorHandler_unexpectedError_reportsSameLine", () => {
     Object.assign(new Error("secret Equipe Bleue"), { code: "SQLITE_BUSY" }), {} as Request, res, () => undefined,
   );
 
-  assert.deepEqual(reports, ["[internalApi] INTERNAL_ERROR (Error SQLITE_BUSY)"]);
+  assert.deepEqual(reports, ["[internalApi] INTERNAL_ERROR (Error, code SQLITE_BUSY)"]);
 });
 
 test("internalErrorHandler_throwingReport_stillReplies", () => {
@@ -307,4 +309,84 @@ test("asyncRoute_synchronousThrow_forwardsError", async () => {
 
 test("asyncRoute_resolvedHandler_doesNotCallNext", async () => {
   assert.deepEqual(await nextOf(async () => undefined), []);
+});
+
+test("asyncRoute_zeroRejection_forwardsAnError", async () => {
+  const calls = await nextOf(() => Promise.reject(0)); // NOSONAR : rejet falsy, le cas éprouvé
+
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0] instanceof Error);
+});
+
+test("asyncRoute_emptyStringRejection_forwardsAnError", async () => {
+  const calls = await nextOf(() => Promise.reject("")); // NOSONAR : rejet falsy, le cas éprouvé
+
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0] instanceof Error);
+});
+
+test("asyncRoute_falseRejection_forwardsAnError", async () => {
+  const calls = await nextOf(() => Promise.reject(false)); // NOSONAR : rejet falsy, le cas éprouvé
+
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0] instanceof Error);
+});
+
+test("asyncRoute_routeStringRejection_forwardsAnError", async () => {
+  // `next("route")` passerait à la route suivante au lieu du gestionnaire d'erreur.
+  const calls = await nextOf(() => Promise.reject("route")); // NOSONAR : chaîne spéciale d'Express
+
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0] instanceof Error);
+});
+
+test("asyncRoute_routerStringRejection_forwardsAnError", async () => {
+  const calls = await nextOf(() => Promise.reject("router")); // NOSONAR : chaîne spéciale d'Express
+
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0] instanceof Error);
+});
+
+test("asyncRoute_truthyNonErrorRejection_forwardsItUnchanged", async () => {
+  const rejection = { code: 1 };
+
+  assert.deepEqual(await nextOf(() => Promise.reject(rejection)), [rejection]); // NOSONAR : rejet non-Error, le cas éprouvé
+});
+
+test("internalErrorHandler_responseAlreadyEnded_neitherDestroysNorWritesButLogsAndReports", () => {
+  const lines: string[] = [];
+  const reports: string[] = [];
+  const { res, written } = fakeResponse(true, true);
+
+  internalErrorHandler({ error: (line) => lines.push(line), report: (line) => reports.push(line) })(
+    new Error("x"), {} as Request, res, () => undefined,
+  );
+
+  // Réponse déjà partie en entier : la couper la ferait perdre au site.
+  assert.deepEqual(written, { status: 0, json: undefined, destroyed: false });
+  assert.deepEqual(lines, ["[internalApi] INTERNAL_ERROR (Error, code inconnu)"]);
+  assert.deepEqual(reports, ["[internalApi] INTERNAL_ERROR (Error, code inconnu)"]);
+});
+
+test("unwrappedRoutes_everyHandlerWrapped_returnsEmpty", () => {
+  const app = express();
+  app.get("/a", asyncRoute(async () => undefined));
+  app.post("/b", asyncRoute(() => undefined));
+
+  assert.deepEqual(unwrappedRoutes(app), []);
+});
+
+test("unwrappedRoutes_plainAsyncHandler_listsMethodAndPath", () => {
+  const app = express();
+  app.get("/a", asyncRoute(async () => undefined));
+  app.post("/b", async () => undefined);
+
+  assert.deepEqual(unwrappedRoutes(app), ["POST /b"]);
+});
+
+test("unwrappedRoutes_middlewareOnly_returnsEmpty", () => {
+  const app = express();
+  app.use((_req, _res, next) => { next(); });
+
+  assert.deepEqual(unwrappedRoutes(app), []);
 });

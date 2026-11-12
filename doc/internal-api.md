@@ -519,12 +519,16 @@ n'est jamais repris ; un refus n'est reconnu que si son type et son statut sont 
 que pose body-parser). Un refus du client se journalise au niveau avertissement ; une
 erreur `500` va au journal d'erreurs **et** au salon de logs (code et type seuls, une
 fois par ligne et par dix minutes). Une route asynchrone qui rejette (même sans
-valeur) passe par ce même gestionnaire : le site reçoit toujours un code, jamais un
-délai dépassé. Le détail d'un échec de route au salon de logs se limite au type, au
-code (familles connues : numérique, `SQLITE_*`, `E*`, `UND_ERR_*`) et au statut
-HTTP de l'erreur — jamais son message, qui peut recopier un pseudo cherché.
+valeur, ou par une valeur falsy) passe par ce même gestionnaire : le site reçoit
+toujours un code, jamais un délai dépassé. Chaque route est enveloppée par
+`asyncRoute` ; une route qui ne l'est pas est signalée au démarrage et fait échouer
+les tests. Le détail d'un échec de route au salon de logs, comme la ligne du
+gestionnaire, se limite au type, au code (familles connues : numérique, `SQLITE_*`,
+`E*`, `UND_ERR_*`, codes de discord.js) et au statut HTTP de l'erreur — jamais son
+message, qui peut recopier un pseudo cherché.
 Une réponse déjà commencée (flux) voit sa connexion coupée : le lecteur voit une
-réponse tronquée, jamais une fin normale. Toute route qui lit un corps vit sous
+réponse tronquée, jamais une fin normale ; une réponse déjà envoyée en entier n'est
+pas coupée (l'erreur est seulement journalisée). Toute route qui lit un corps vit sous
 `/internal` (ailleurs, le corps n'est pas lu). Le
 jeton est vérifié avant la lecture du corps, et le corps n'est lu que sous `/internal`. `GET /internal/servers/:id/modules` et
 `PUT /internal/servers/:id/modules/:moduleKey` répondent en outre

@@ -38,14 +38,17 @@ export const STALE_AFTER_MS = 3 * 24 * 60 * 60 * 1000;
  * Sauvegarde en cours au moment du rapport : le script pose `<statut>.running`
  * (date ISO de son départ) et le retire en sortant. Une sauvegarde du dimanche
  * 23 h 49 encore en cours au rapport du lundi 4 h laisse lire le statut du mardi
- * précédent (~4 jours) : tant que le marqueur a moins de {@link RUNNING_MAX_AGE_MS},
+ * précédent 23 h 49 (5 jours 4 h) : tant que le marqueur a moins de {@link RUNNING_MAX_AGE_MS},
  * le statut réussi garde {@link RUNNING_GRACE_MS} de plus avant d'être périmé.
  * Un marqueur plus vieux (script tué sans nettoyer) ne compte pas.
  */
 export const RUNNING_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 
-/** Délai ajouté à {@link STALE_AFTER_MS} pendant une sauvegarde en cours. */
-export const RUNNING_GRACE_MS = 2 * 24 * 60 * 60 * 1000;
+/**
+ * Délai ajouté à {@link STALE_AFTER_MS} pendant une sauvegarde en cours : trois jours
+ * (six au total), au-delà des 5 jours 4 h qui séparent le mardi 23 h 49 du lundi 4 h.
+ */
+export const RUNNING_GRACE_MS = 3 * 24 * 60 * 60 * 1000;
 
 /** Fenêtre relue dans l'historique : depuis le rapport précédent, une semaine plus tôt. */
 export const HISTORY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
