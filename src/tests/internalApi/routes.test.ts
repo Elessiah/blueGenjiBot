@@ -32,8 +32,7 @@ process.env.GUILD_ID = "700000000000000001";
 process.env.CLIENT_ID = "600000000000000001";
 
 import { MessageFlags, type Client } from "discord.js";
-import { resetInternalErrorReports, shouldReportInternalError, startInternalApi } from "../../internalApi.js";
-import { unwrappedRoutes } from "../../internalApi/helpers.js";
+import { resetInternalErrorReports, shouldReportInternalError, startInternalApi, startupUnwrappedRoutes } from "../../internalApi.js";
 import { getBddInstance, resetBddInstance } from "../../bdd/Bdd.js";
 import { recordEvent } from "../../feed/feedBus.js";
 import { readSiteVisitStats } from "../../siteVisits/siteVisits.js";
@@ -1396,10 +1395,10 @@ test("shouldReportInternalError_otherLine_returnsTrue", () => {
 test("startInternalApi_everyRoute_wrappedInAsyncRoute", () => {
   // Express 4 laisse un rejet sans réponse : chaque route passe par `asyncRoute` dans
   // le code, sans compter sur l'enveloppe posée d'office au démarrage.
-  const app = server.listeners("request")[0] as Parameters<typeof unwrappedRoutes>[0];
-
-  assert.deepEqual(startupErrors.filter((line) => line.includes("asyncRoute")), []);
-  assert.deepEqual(unwrappedRoutes(app), []);
+  // `startupUnwrappedRoutes` est la liste relevée **avant** l'enveloppe d'office : relire la
+  // pile après le démarrage ne prouverait rien, tout y est déjà enveloppé.
+  assert.deepEqual(startupUnwrappedRoutes, []);
+  assert.deepEqual(startupErrors, []);
 });
 
 test("shouldReportInternalError_sameFailureOtherHttpStatus_returnsFalse", () => {

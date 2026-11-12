@@ -11,6 +11,7 @@ import {
   readBackupFailures,
   FAILURE_CAUSE_MAX_LENGTH,
   readBackupStatus,
+  isProcessAlive,
   readRunningSince,
   runningMarkerPath,
   RUNNING_GRACE_MS,
@@ -215,6 +216,8 @@ async function withRunningMarker(content: string): Promise<string> {
 }
 
 const REPORT_AT = Date.parse("2026-11-09T03:00:00Z");
+/** Test de vie d'un PID : tous vivants (les PID des marqueurs de test sont fictifs). */
+const ALIVE = (): boolean => true;
 
 test("readRunningSince_recentMarker_returnsStart", async () => {
   const file = await withRunningMarker("2026-11-08T22:49:00+00:00\n");
@@ -250,20 +253,20 @@ test("readRunningSince_futureMarker_returnsNull", async () => {
 test("readRunningSince_lineWithPid_returnsStart", async () => {
   const file = await withRunningMarker("2026-11-08T22:49:00+00:00 4242\n");
 
-  assert.equal(await readRunningSince(file, REPORT_AT), Date.parse("2026-11-08T22:49:00Z"));
+  assert.equal(await readRunningSince(file, REPORT_AT, ALIVE), Date.parse("2026-11-08T22:49:00Z"));
 });
 
 test("readRunningSince_twoOverlappingRuns_returnsEarliestStart", async () => {
   const file = await withRunningMarker("2026-11-08T23:10:00+00:00 5151\n2026-11-08T22:49:00+00:00 4242\n");
 
-  assert.equal(await readRunningSince(file, REPORT_AT), Date.parse("2026-11-08T22:49:00Z"));
+  assert.equal(await readRunningSince(file, REPORT_AT, ALIVE), Date.parse("2026-11-08T22:49:00Z"));
 });
 
 test("readRunningSince_staleAndRecentLines_ignoresTheStaleOne", async () => {
   const stale = new Date(REPORT_AT - RUNNING_MAX_AGE_MS).toISOString();
   const file = await withRunningMarker(`${stale} 1\ndemain 2\n2026-11-08T22:49:00+00:00 4242\n`);
 
-  assert.equal(await readRunningSince(file, REPORT_AT), Date.parse("2026-11-08T22:49:00Z"));
+  assert.equal(await readRunningSince(file, REPORT_AT, ALIVE), Date.parse("2026-11-08T22:49:00Z"));
 });
 
 test("readRunningSince_emptyMarker_returnsNull", async () => {
@@ -314,4 +317,27 @@ test("formatBackupStatus_freshWithoutNeedOfRunning_noRunningMention", () => {
   const line = formatBackupStatus(okStatusAged(HOUR), REPORT_AT, Date.parse("2026-11-09T02:00:00Z"));
 
   assert.doesNotMatch(line, /en cours/);
+});
+
+test("readRunningSince_lineWithDeadPid_returnsNull", async () => {
+  // Exécution tuée sans repasser par sa sortie : sa ligne reste, son PID ne tourne plus.
+  const file = await withRunningMarker("2026-11-08T22:49:00+00:00 4242\n");
+
+  assert.equal(await readRunningSince(file, REPORT_AT, () => false), null);
+});
+
+test("readRunningSince_deadAndAliveLines_returnsAliveStart", async () => {
+  const file = await withRunningMarker("2026-11-08T22:49:00+00:00 4242\n2026-11-09T00:30:00+00:00 5151\n");
+
+  const since = await readRunningSince(file, REPORT_AT, (pid) => pid === 5151);
+
+  assert.equal(since, Date.parse("2026-11-09T00:30:00Z"));
+});
+
+test("isProcessAlive_currentProcess_returnsTrue", () => {
+  assert.equal(isProcessAlive(process.pid), true);
+});
+
+test("isProcessAlive_unknownPid_returnsFalse", () => {
+  assert.equal(isProcessAlive(2_147_483_646), false);
 });

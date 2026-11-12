@@ -521,9 +521,14 @@ erreur `500` va au journal d'erreurs **et** au salon de logs (code et type seuls
 fois par ligne — statut HTTP mis à part — et par dix minutes). Une route asynchrone qui rejette (même sans
 valeur, ou par une valeur falsy) passe par ce même gestionnaire : le site reçoit
 toujours un code, jamais un délai dépassé. Chaque route est enveloppée par
-`asyncRoute` ; une route qui ne l'est pas (gestionnaire final, ou intergiciel `async`,
-routes des `express.Router` montés comprises) est enveloppée d'office et signalée au
-démarrage, et fait échouer les tests — comme une pile de routes introuvable. Le détail d'un échec de route au salon de logs, comme la ligne du
+`asyncRoute`. Au démarrage, tout gestionnaire qui ne l'est pas (routes, intergiciels
+`app.use`, `express.Router` montés compris ; jamais un gestionnaire d'erreur) est
+enveloppé d'office — y compris un intergiciel qui rend une promesse sans être déclaré
+`async`. Ce qui se repère sans l'appeler (gestionnaire final, ou intergiciel `async`)
+est en outre signalé au démarrage avec son chemin de montage, et fait échouer les
+tests — comme une pile de routes introuvable. Un intergiciel qui rejette **après**
+avoir appelé `next()` n'envoie pas de second `next(err)` (la suite de la chaîne
+répond) : le rejet est seulement journalisé, code et type. Le détail d'un échec de route au salon de logs, comme la ligne du
 gestionnaire, se limite au type, au code (familles connues : numérique, `SQLITE_*`,
 `E*`, `UND_ERR_*`, codes de discord.js) et au statut HTTP de l'erreur — jamais son
 message, qui peut recopier un pseudo cherché.

@@ -224,6 +224,12 @@ function reportInternalError(client: Client, line: string): void {
 }
 
 /**
+ * Routes que le dernier `startInternalApi` a dû envelopper d'office (`wrapUnwrappedRoutes`),
+ * relues par les tests des routes : la liste doit rester vide, l'enveloppe n'étant qu'un filet.
+ */
+export let startupUnwrappedRoutes: readonly string[] = [];
+
+/**
  * Construit, monte et demarre le serveur Express de l'API interne.
  *
  * Le port reste en ecoute sur `INTERNAL_API_HOST` (127.0.0.1 par defaut) et
@@ -937,6 +943,7 @@ export function startInternalApi(client: Client) {
   // Une route ajoutée sans `asyncRoute` laisserait la requête sans réponse sur un rejet :
   // elle est enveloppée d'office, et signalée pour être corrigée (les tests l'exigent).
   const unwrapped = wrapUnwrappedRoutes(app);
+  startupUnwrappedRoutes = unwrapped;
   if (unwrapped.length > 0) { console.error(`[internalApi] routes sans asyncRoute, enveloppées au démarrage : ${unwrapped.join(" ; ")}`); }
 
   const port = Number(process.env.INTERNAL_API_PORT || 4400);

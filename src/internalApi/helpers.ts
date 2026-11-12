@@ -244,17 +244,32 @@ type AnyHandler = (req: Request, res: Response, next: NextFunction) => unknown;
 /** Gestionnaires rendus par {@link asyncRoute}, relus par {@link unwrappedRoutes}. */
 const WRAPPED_ROUTES = new WeakSet<object>();
 
-/** Enveloppe de {@link asyncRoute}, `next` transmis (un intergiciel l'appelle). */
+/**
+ * Enveloppe de {@link asyncRoute}, `next` transmis (un intergiciel l'appelle). Un
+ * rejet **après** que le gestionnaire a passé la main (`next()` déjà appelé) ne
+ * repasse pas par `next` : la suite de la chaîne répond, un second `next(err)`
+ * enverrait un 500 par-dessus sa réponse. Il est seulement journalisé (code et type).
+ */
 function forwardRejections(handler: AnyHandler): (req: Request, res: Response, next: NextFunction) => void {
   const wrapped = (req: Request, res: Response, next: NextFunction): void => {
+    let passed = false;
+    const guardedNext: NextFunction = (...args: Parameters<NextFunction>) => {
+      passed = true;
+      next(...args);
+    };
     const forward = (error: unknown): void => {
+      if (passed) {
+        console.error(internalErrorLogLine(error));
+        return;
+      }
+      passed = true;
       // `next()` sans valeur passe à la route suivante, `next("route")` / `next("router")`
       // aussi : un rejet falsy ou l'une de ces chaînes devient une vraie erreur.
       const usable = Boolean(error) && error !== "route" && error !== "router";
       next(usable ? error : new Error("rejet sans valeur exploitable"));
     };
     try {
-      Promise.resolve(handler(req, res, next)).catch(forward);
+      Promise.resolve(handler(req, res, guardedNext)).catch(forward);
     } catch (error) {
       forward(error);
     }
@@ -285,6 +300,7 @@ type RouteEntry = { handle?: unknown };
 type RouterLayer = {
   route?: { path?: unknown; methods?: Record<string, boolean>; stack?: RouteEntry[] };
   handle?: unknown;
+  regexp?: unknown;
 };
 
 /** Signalé quand la pile des routes n'est pas où Express 4 la range (autre version). */
@@ -297,39 +313,70 @@ function routerStack(router: unknown): RouterLayer[] | null {
   return Array.isArray(stack) ? (stack as RouterLayer[]) : null;
 }
 
-/**
- * Entrée à envelopper : le gestionnaire final d'une route qui n'est pas passé par
- * {@link asyncRoute}, ou un intergiciel de route asynchrone (`async`) nu. Un
- * intergiciel synchrone (`express.json()`…) est sûr : Express rattrape ce qu'il lève.
- * Un gestionnaire d'erreur (quatre paramètres) n'est jamais touché.
- */
-function needsWrapping(entry: RouteEntry, isLast: boolean): entry is { handle: AnyHandler } {
-  const handle = entry.handle;
-  if (typeof handle !== "function" || WRAPPED_ROUTES.has(handle) || handle.length > 3) { return false; }
-  return isLast || handle.constructor?.name === "AsyncFunction";
+/** Gestionnaire d'Express qui peut être enveloppé : ni déjà enveloppé, ni gestionnaire d'erreur. */
+function isWrappable(handle: unknown): handle is AnyHandler {
+  return typeof handle === "function" && !WRAPPED_ROUTES.has(handle) && handle.length <= 3;
+}
+
+/** Fonction déclarée `async` (seule promesse repérable sans l'appeler). */
+function isAsyncFunction(handle: AnyHandler): boolean {
+  return handle.constructor?.name === "AsyncFunction";
 }
 
 /**
- * Parcourt les routes d'une pile, routeurs montés compris, et rend `MÉTHODE chemin`
- * de chacune dont une entrée est à envelopper ; `fix` l'enveloppe en place.
+ * Préfixe de montage d'un `express.Router` (`app.use("/x", router)`), relu dans
+ * l'expression qu'Express 4 en tire : `""` à la racine, `"/…"` sinon, ou `"/(?)"`
+ * quand le chemin a des paramètres (illisible tel quel).
  */
-function scanRoutes(stack: RouterLayer[], fix: boolean, found: string[]): void {
+function mountPrefix(layer: RouterLayer): string {
+  const regexp = layer.regexp as { fast_slash?: boolean; source?: unknown } | undefined;
+  if (!regexp || regexp.fast_slash || typeof regexp.source !== "string") { return ""; }
+  const body = regexp.source.replace(/^\^/, "").replace(/\\\/\?\(\?=\\\/\|\$\)$/, "");
+  const path = body.replace(/\\\//g, "/");
+  return /^\/[\w\-./]*$/.test(path) ? path : "/(?)";
+}
+
+/**
+ * Parcourt une pile, routeurs montés compris, et rend `MÉTHODE chemin` de chaque
+ * route fautive — gestionnaire final qui n'est pas passé par {@link asyncRoute}, ou
+ * intergiciel déclaré `async` nu — et `USE chemin` de chaque intergiciel `async` nu
+ * monté par `app.use`. Avec `fix`, **tout** gestionnaire non enveloppé l'est en
+ * place, signalé ou non : un intergiciel qui rend une promesse sans être déclaré
+ * `async` ne se repère pas sans l'appeler, l'enveloppe le couvre quand même (sans
+ * effet sur un intergiciel synchrone : Express rattrapait déjà ce qu'il lève). Un
+ * gestionnaire d'erreur (quatre paramètres) n'est jamais touché.
+ */
+function scanRoutes(stack: RouterLayer[], prefix: string, fix: boolean, found: string[]): void {
   for (const layer of stack) {
-    const nested = layer.route ? null : routerStack(layer.handle);
-    if (nested) { scanRoutes(nested, fix, found); }
-    const route = layer.route;
-    if (!route) { continue; }
-    const entries = route.stack ?? [];
-    let faulty = false;
-    entries.forEach((entry, index) => {
-      if (!needsWrapping(entry, index === entries.length - 1)) { return; }
-      faulty = true;
-      if (fix) { entry.handle = forwardRejections(entry.handle); }
-    });
-    if (!faulty) { continue; }
-    const methods = Object.keys(route.methods ?? {}).map((method) => method.toUpperCase()).join(",");
-    found.push(`${methods} ${String(route.path)}`);
+    if (layer.route) {
+      scanRoute(layer.route, prefix, fix, found);
+      continue;
+    }
+    const nested = routerStack(layer.handle);
+    if (nested) {
+      scanRoutes(nested, prefix + mountPrefix(layer), fix, found);
+      continue;
+    }
+    const handle = layer.handle;
+    if (!isWrappable(handle)) { continue; }
+    if (isAsyncFunction(handle)) { found.push(`USE ${prefix + mountPrefix(layer) || "/"}`); }
+    if (fix) { layer.handle = forwardRejections(handle); }
   }
+}
+
+/** Une route de {@link scanRoutes} : ses entrées enveloppées avec `fix`, elle notée si fautive. */
+function scanRoute(route: NonNullable<RouterLayer["route"]>, prefix: string, fix: boolean, found: string[]): void {
+  const entries = route.stack ?? [];
+  let faulty = false;
+  entries.forEach((entry, index) => {
+    const handle = entry.handle;
+    if (!isWrappable(handle)) { return; }
+    if (index === entries.length - 1 || isAsyncFunction(handle)) { faulty = true; }
+    if (fix) { entry.handle = forwardRejections(handle); }
+  });
+  if (!faulty) { return; }
+  const methods = Object.keys(route.methods ?? {}).map((method) => method.toUpperCase()).join(",");
+  found.push(`${methods} ${prefix}${String(route.path)}`);
 }
 
 /** Pile de l'application (Express 4 : `app._router.stack`). */
@@ -350,7 +397,7 @@ export function unwrappedRoutes(app: Express): string[] {
   const stack = appStack(app);
   if (!stack) { return [ROUTER_STACK_NOT_FOUND]; }
   const found: string[] = [];
-  scanRoutes(stack, false, found);
+  scanRoutes(stack, "", false, found);
   return found;
 }
 
@@ -366,6 +413,6 @@ export function wrapUnwrappedRoutes(app: Express): string[] {
   const stack = appStack(app);
   if (!stack) { return [ROUTER_STACK_NOT_FOUND]; }
   const found: string[] = [];
-  scanRoutes(stack, true, found);
+  scanRoutes(stack, "", true, found);
   return found;
 }

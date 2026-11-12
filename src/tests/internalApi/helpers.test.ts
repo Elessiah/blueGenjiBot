@@ -414,7 +414,8 @@ test("unwrappedRoutes_plainHandlerOnMountedRouter_listsIt", () => {
   router.get("/b", async () => undefined);
   app.use("/internal/x", router);
 
-  assert.deepEqual(unwrappedRoutes(app), ["GET /b"]);
+  // Le chemin de montage est repris : la ligne de démarrage désigne la vraie route.
+  assert.deepEqual(unwrappedRoutes(app), ["GET /internal/x/b"]);
 });
 
 test("unwrappedRoutes_noRouterStack_returnsNotFoundMarker", () => {
@@ -471,4 +472,94 @@ test("wrapUnwrappedRoutes_everyRouteWrapped_changesNothing", () => {
   app.get("/a", asyncRoute(async () => undefined));
 
   assert.deepEqual(wrapUnwrappedRoutes(app), []);
+});
+
+test("wrapUnwrappedRoutes_middlewareRejectsAfterNext_answersOnceAndLogs", async () => {
+  const logged: string[] = [];
+  const app = express();
+  app.get(
+    "/a",
+    async (_req, _res, next) => {
+      next();
+      throw new TypeError("pseudo secret");
+    },
+    asyncRoute(async (_req, res) => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      res.json({ ok: true });
+    }),
+  );
+  app.use(internalErrorHandler({ error: () => undefined }));
+  wrapUnwrappedRoutes(app);
+
+  const consoleError = console.error;
+  console.error = (...args: unknown[]) => { logged.push(args.map(String).join(" ")); };
+  let answer: { status: number; body: string };
+  try {
+    answer = await callOnce(app, "/a");
+  } finally {
+    console.error = consoleError;
+  }
+
+  // La suite de la chaîne répond : pas de second `next(err)` (500) par-dessus sa réponse.
+  assert.equal(answer.status, 200);
+  assert.deepEqual(JSON.parse(answer.body), { ok: true });
+  assert.deepEqual(logged, ["[internalApi] INTERNAL_ERROR (TypeError, code inconnu)"]);
+});
+
+test("unwrappedRoutes_asyncAppUseMiddleware_listsUsePath", () => {
+  const app = express();
+  app.use("/internal", async (_req, _res, next) => { next(); });
+  app.get("/internal/a", asyncRoute(async () => undefined));
+
+  assert.deepEqual(unwrappedRoutes(app), ["USE /internal"]);
+});
+
+test("unwrappedRoutes_routerMountedWithParam_listsPlaceholderPrefix", () => {
+  const app = express();
+  const router = express.Router();
+  router.get("/b", async () => undefined);
+  app.use("/i/:id", router);
+
+  assert.deepEqual(unwrappedRoutes(app), ["GET /(?)/b"]);
+});
+
+test("unwrappedRoutes_routerMountedAtRoot_listsRoutePath", () => {
+  const app = express();
+  const router = express.Router();
+  router.get("/b", async () => undefined);
+  app.use(router);
+
+  assert.deepEqual(unwrappedRoutes(app), ["GET /b"]);
+});
+
+test("wrapUnwrappedRoutes_promiseReturningNonAsyncMiddleware_answers500", async () => {
+  // Rend une promesse sans être déclaré `async` : invisible sans l'appeler, enveloppé quand même.
+  const app = express();
+  app.get(
+    "/a",
+    () => Promise.reject(new Error("secret")),
+    asyncRoute((_req, res) => { res.json({ ok: true }); }),
+  );
+  app.use(internalErrorHandler({ error: () => undefined }));
+
+  const wrapped = wrapUnwrappedRoutes(app);
+  const { status, body } = await callOnce(app, "/a");
+
+  assert.deepEqual(wrapped, []);
+  assert.equal(status, 500);
+  assert.deepEqual(JSON.parse(body), { error: "INTERNAL_ERROR" });
+});
+
+test("wrapUnwrappedRoutes_asyncAppUseMiddlewareRejects_answers500", async () => {
+  const app = express();
+  app.use(async () => { throw new Error("secret"); });
+  app.get("/a", asyncRoute((_req, res) => { res.json({ ok: true }); }));
+  app.use(internalErrorHandler({ error: () => undefined }));
+
+  const wrapped = wrapUnwrappedRoutes(app);
+  const { status, body } = await callOnce(app, "/a");
+
+  assert.deepEqual(wrapped, ["USE /"]);
+  assert.equal(status, 500);
+  assert.deepEqual(JSON.parse(body), { error: "INTERNAL_ERROR" });
 });

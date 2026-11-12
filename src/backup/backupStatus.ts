@@ -105,15 +105,37 @@ export function runningMarkerPath(statusPath: string): string {
 }
 
 /**
+ * Dit si le processus `pid` tourne encore sur cette machine (celle du script de
+ * sauvegarde) : `EPERM` veut dire qu'il existe sous un autre compte.
+ * @param pid PID relu dans le marqueur.
+ * @returns `false` seulement si le processus n'existe plus.
+ */
+export function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as { code?: string }).code === "EPERM";
+  }
+}
+
+/**
  * Lit le départ d'une sauvegarde en cours (marqueur posé par le script). Le
  * marqueur porte une ligne par exécution en cours (`<date ISO> <PID>`, ou la date
  * seule d'un script antérieur) : la plus ancienne des lignes lisibles et récentes
- * est rendue, une ligne illisible, future ou trop vieille est ignorée.
+ * est rendue, une ligne illisible, future ou trop vieille est ignorée — comme celle
+ * dont le PID ne tourne plus (exécution tuée sans repasser par sa sortie : manque de
+ * mémoire, redémarrage), qui ferait sinon passer une sauvegarde manquée pour en cours.
  * @param statusPath Chemin du fichier de statut.
  * @param now Horloge injectable, pour les tests.
+ * @param isAlive Test de vie d'un PID, injectable pour les tests.
  * @returns L'instant du départ (ms) d'une exécution en cours récente, sinon `null`.
  */
-export async function readRunningSince(statusPath: string, now: number = Date.now()): Promise<number | null> {
+export async function readRunningSince(
+  statusPath: string,
+  now: number = Date.now(),
+  isAlive: (pid: number) => boolean = isProcessAlive,
+): Promise<number | null> {
   let raw: string;
   try {
     raw = await fs.promises.readFile(runningMarkerPath(statusPath), "utf8");
@@ -121,7 +143,9 @@ export async function readRunningSince(statusPath: string, now: number = Date.no
     return null;
   }
   const starts = raw.split("\n")
-    .map((line) => Date.parse(line.trim().split(/\s+/)[0] ?? ""))
+    .map((line) => line.trim().split(/\s+/))
+    .filter(([, pid]) => pid === undefined || !/^\d+$/.test(pid) || isAlive(Number(pid)))
+    .map(([date]) => Date.parse(date ?? ""))
     .filter((startedAt) => Number.isFinite(startedAt) && startedAt <= now && now - startedAt < RUNNING_MAX_AGE_MS);
   return starts.length === 0 ? null : Math.min(...starts);
 }

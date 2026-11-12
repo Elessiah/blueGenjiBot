@@ -97,7 +97,7 @@ test("backupScript_writeStatus_historyUpdatedUnderFlock", () => {
   // Lancement manuel pendant le cron : l'ajout puis l'élagage forment un tout.
   const write = BACKUP_SCRIPT.slice(BACKUP_SCRIPT.indexOf("write_status() {"), BACKUP_SCRIPT.indexOf("\nfail() {"));
   assert.match(write, /\(\n\s+if command -v flock >\/dev\/null 2>&1; then\n\s+flock -w 30 8 \|\| exit 1\n\s+fi\n\s+printf [^\n]+>> "\$STATUS_HISTORY_FILE"/);
-  assert.match(write, /mv "\$STATUS_HISTORY_FILE\.tmp\.\$\$" "\$STATUS_HISTORY_FILE"\n\s+\) 8>"\$STATUS_HISTORY_FILE\.lock"/);
+  assert.match(write, /mv "\$STATUS_HISTORY_FILE\.tmp\.\$\$" "\$STATUS_HISTORY_FILE"\n\s+\) 8<"\$\(dirname "\$STATUS_HISTORY_FILE"\)"/);
 });
 
 test("backupScript_writeStatus_overlappingRuns_noLineLost", { skip: !hasBashWithFlock() && "bash ou flock absent" }, () => {
@@ -146,7 +146,7 @@ test("backupScript_fail_controlCharactersStrippedFromError", { skip: spawnSync("
  * `bash` dans un dossier temporaire (sans `flock` sous Git Bash : le verrou est
  * alors sauté, le reste est le même).
  */
-function runMarkerSteps(steps: string): { status: number | null; marker: string | null } {
+function runMarkerSteps(steps: string): { status: number | null; marker: string | null; files: string[] } {
   const start = BACKUP_SCRIPT.indexOf('RUNNING_FILE="$STATUS_FILE.running"');
   const end = BACKUP_SCRIPT.indexOf("trap '", start);
   assert.ok(start > 0 && end > start, "fonctions du marqueur introuvables");
@@ -156,7 +156,11 @@ function runMarkerSteps(steps: string): { status: number | null; marker: string 
     const script = `set -euo pipefail\nSTATUS_FILE='${statusFile}'\n${BACKUP_SCRIPT.slice(start, end)}\n${steps}\n`;
     const result = spawnSync("bash", ["-c", script], { encoding: "utf8" });
     const markerPath = path.join(dir, "status.json.running");
-    return { status: result.status, marker: fs.existsSync(markerPath) ? fs.readFileSync(markerPath, "utf8") : null };
+    return {
+      status: result.status,
+      marker: fs.existsSync(markerPath) ? fs.readFileSync(markerPath, "utf8") : null,
+      files: fs.readdirSync(dir),
+    };
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -167,24 +171,24 @@ const HAS_BASH = spawnSync("bash", ["-c", "command -v grep"], { encoding: "utf8"
 test("backupRunningMarker_laterRunEndsFirst_keepsTheEarlierRunLine", { skip: !HAS_BASH && "bash absent" }, () => {
   // Cron parti à 23 h 49, lancement manuel à 23 h 55 fini avant lui : la ligne du cron reste.
   const { status, marker } = runMarkerSteps([
-    'RUNNING_LINE="2026-11-08T23:49:00+01:00 100"; add_running_line',
-    'RUNNING_LINE="2026-11-08T23:55:00+01:00 200"; add_running_line',
+    'RUNNING_LINE="2026-11-08T23:49:00+01:00 $$"; add_running_line',
+    'RUNNING_LINE="2026-11-08T23:55:00+01:00 $$"; add_running_line',
     "release_running_marker",
   ].join("\n"));
 
   assert.equal(status, 0);
-  assert.equal(marker, "2026-11-08T23:49:00+01:00 100\n");
+  assert.match(marker ?? "", /^2026-11-08T23:49:00\+01:00 \d+\n$/);
 });
 
 test("backupRunningMarker_earlierRunEndsFirst_keepsTheLaterRunLine", { skip: !HAS_BASH && "bash absent" }, () => {
   const { status, marker } = runMarkerSteps([
-    'RUNNING_LINE="2026-11-08T23:40:00+01:00 100"; add_running_line',
-    'RUNNING_LINE="2026-11-08T23:49:00+01:00 200"; add_running_line',
-    'RUNNING_LINE="2026-11-08T23:40:00+01:00 100"; release_running_marker',
+    'RUNNING_LINE="2026-11-08T23:40:00+01:00 $$"; add_running_line',
+    'RUNNING_LINE="2026-11-08T23:49:00+01:00 $$"; add_running_line',
+    'RUNNING_LINE="2026-11-08T23:40:00+01:00 $$"; release_running_marker',
   ].join("\n"));
 
   assert.equal(status, 0);
-  assert.equal(marker, "2026-11-08T23:49:00+01:00 200\n");
+  assert.match(marker ?? "", /^2026-11-08T23:49:00\+01:00 \d+\n$/);
 });
 
 test("backupRunningMarker_lastRunEnds_removesTheMarker", { skip: !HAS_BASH && "bash absent" }, () => {
@@ -199,4 +203,33 @@ test("backupRunningMarker_releaseWithoutMarker_succeeds", { skip: !HAS_BASH && "
 
   assert.equal(status, 0);
   assert.equal(marker, null);
+});
+
+test("backupRunningMarker_deadPidLine_prunedOnAdd", { skip: !HAS_BASH && "bash absent" }, () => {
+  // Cron tué (manque de mémoire) sans repasser par sa sortie : la ligne de son PID mort part
+  // au lancement suivant, qui n'efface jamais la ligne d'une exécution vivante.
+  const { status, marker } = runMarkerSteps([
+    `printf '2026-11-08T23:49:00+01:00 2147483646\n2026-11-08T23:50:00+01:00 %s\n' "$$" > "$RUNNING_FILE"`,
+    'RUNNING_LINE="2026-11-09T01:00:00+01:00 $$"; add_running_line',
+  ].join("\n"));
+
+  assert.equal(status, 0);
+  assert.match(marker ?? "", /^2026-11-08T23:50:00\+01:00 \d+\n2026-11-09T01:00:00\+01:00 \d+\n$/);
+});
+
+test("backupRunningMarker_lineWithoutPid_keptOnAdd", { skip: !HAS_BASH && "bash absent" }, () => {
+  const { status, marker } = runMarkerSteps([
+    `printf '2026-11-08T23:49:00+01:00\n' > "$RUNNING_FILE"`,
+    'RUNNING_LINE="2026-11-09T01:00:00+01:00 $$"; add_running_line',
+  ].join("\n"));
+
+  assert.equal(status, 0);
+  assert.match(marker ?? "", /^2026-11-08T23:49:00\+01:00\n2026-11-09T01:00:00\+01:00 \d+\n$/);
+});
+
+test("backupRunningMarker_release_leavesNoLockFile", { skip: !HAS_BASH && "bash absent" }, () => {
+  const { status, files } = runMarkerSteps("add_running_line\nrelease_running_marker");
+
+  assert.equal(status, 0);
+  assert.deepEqual(files, []);
 });

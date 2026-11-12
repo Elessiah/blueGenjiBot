@@ -57,8 +57,11 @@ ARCHIVE="$WORK_DIR/bluegenji-$STAMP.tar"
 # son départ, puis son PID), ajoutée au départ et retirée à la sortie, quelle
 # qu'elle soit, sous verrou : deux exécutions qui se chevauchent (lancement manuel
 # pendant le cron), dans un ordre ou dans l'autre, ne retirent jamais que leur
-# propre ligne — le fichier disparaît avec la dernière. Sans `flock` (machine
-# incomplète), l'écriture reste tentée.
+# propre ligne — le fichier disparaît avec la dernière. Une exécution tuée sans
+# repasser par sa sortie (manque de mémoire, redémarrage) laisse sa ligne : la
+# suivante l'efface en ajoutant la sienne, et le bot l'ignore (PID mort). Le verrou
+# est pris sur le dossier du marqueur, sans fichier de verrou à côté ; sans `flock`
+# (machine incomplète), l'écriture reste tentée.
 RUNNING_FILE="$STATUS_FILE.running"
 RUNNING_LINE="$(date --iso-8601=seconds) $$"
 with_running_lock() {
@@ -67,9 +70,24 @@ with_running_lock() {
       flock -w 30 9 || exit 1
     fi
     "$@"
-  ) 9>"$RUNNING_FILE.lock"
+  ) 9<"$(dirname "$RUNNING_FILE")"
+}
+# Une ligne dont le PID ne tourne plus (ni `/proc/<pid>`, ni `kill -0`) est effacée.
+running_line_alive() {
+  local pid="${1##* }"
+  [[ "$pid" == "$1" || ! "$pid" =~ ^[0-9]+$ ]] && return 0
+  [[ -d "/proc/$pid" ]] || kill -0 "$pid" 2>/dev/null
 }
 add_running_line() {
+  if [[ -f "$RUNNING_FILE" ]]; then
+    local line
+    : > "$RUNNING_FILE.tmp.$$"
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      [[ -z "$line" ]] && continue
+      if running_line_alive "$line"; then printf '%s\n' "$line" >> "$RUNNING_FILE.tmp.$$"; fi
+    done < "$RUNNING_FILE"
+    mv "$RUNNING_FILE.tmp.$$" "$RUNNING_FILE"
+  fi
   printf '%s\n' "$RUNNING_LINE" >> "$RUNNING_FILE"
 }
 remove_running_line() {
@@ -122,7 +140,8 @@ write_status() {
 }
 JSON
   # Au mieux : un historique qui ne s'écrit pas ne fait pas échouer la sauvegarde.
-  # L'ajout et l'élagage forment un tout sous verrou : deux exécutions qui se
+  # L'ajout et l'élagage forment un tout sous verrou (pris sur le dossier de
+  # l'historique, sans fichier de verrou à côté) : deux exécutions qui se
   # chevauchent (lancement manuel pendant le cron) ne perdent aucune ligne
   # d'échec. Sans `flock` (machine incomplète), l'écriture reste tentée.
   {
@@ -133,7 +152,7 @@ JSON
       printf '{"date":"%s","ok":%s,"error":"%s"}\n' "$now" "$STATUS_OK" "$STATUS_ERROR" >> "$STATUS_HISTORY_FILE" \
         && tail -n "$STATUS_HISTORY_LINES" "$STATUS_HISTORY_FILE" > "$STATUS_HISTORY_FILE.tmp.$$" \
         && mv "$STATUS_HISTORY_FILE.tmp.$$" "$STATUS_HISTORY_FILE"
-    ) 8>"$STATUS_HISTORY_FILE.lock"
+    ) 8<"$(dirname "$STATUS_HISTORY_FILE")"
   } || echo "[backup] historique des statuts non écrit." >&2
 }
 
