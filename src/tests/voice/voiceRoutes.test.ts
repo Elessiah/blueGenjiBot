@@ -8,7 +8,7 @@ import { randomUUID } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 
-import { startInternalApi } from "../../internalApi.js";
+import { resetInternalErrorReports, startInternalApi } from "../../internalApi.js";
 import { getBddInstance, resetBddInstance } from "../../bdd/Bdd.js";
 import { DEFAULT_VOICE_CATEGORY_ID, resetVoiceState } from "../../voice/matchVoice.js";
 import { addVoice, discordError, fakeVoiceClient, resetWorld, world } from "./fakeVoiceClient.js";
@@ -42,6 +42,7 @@ test.before(async () => {
 });
 
 test.beforeEach(async () => {
+  resetInternalErrorReports();
   resetWorld();
   resetVoiceState();
   await (await getBddInstance()).raw("DELETE FROM MatchVoiceChannel");

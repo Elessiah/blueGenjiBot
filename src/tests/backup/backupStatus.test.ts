@@ -16,6 +16,7 @@ import {
   runningMarkerPath,
   RUNNING_GRACE_MS,
   RUNNING_MAX_AGE_MS,
+  RUNNING_MAX_LINES,
   STALE_AFTER_MS,
   type BackupStatus,
 } from "../../backup/backupStatus.js";
@@ -223,6 +224,19 @@ test("readRunningSince_recentMarker_returnsStart", async () => {
   const file = await withRunningMarker("2026-11-08T22:49:00+00:00\n");
 
   assert.equal(await readRunningSince(file, REPORT_AT), Date.parse("2026-11-08T22:49:00Z"));
+});
+
+test("readRunningSince_swollenMarker_readsOnlyTheLastLines", async () => {
+  // Les lignes anciennes (au-delà du plafond) ne sont ni lues ni sondées.
+  const old = Array.from({ length: RUNNING_MAX_LINES }, () => "2026-11-08T20:00:00+00:00 111").join("\n");
+  const file = await withRunningMarker(`${old}\n2026-11-08T22:49:00+00:00 222\n`);
+  const probed: number[] = [];
+
+  const since = await readRunningSince(file, REPORT_AT, (pid) => { probed.push(pid); return pid !== 111; });
+
+  assert.equal(since, Date.parse("2026-11-08T22:49:00Z"));
+  assert.ok(probed.length <= RUNNING_MAX_LINES, `${probed.length} sondes`);
+  assert.ok(probed.includes(222));
 });
 
 test("readRunningSince_noMarker_returnsNull", async () => {

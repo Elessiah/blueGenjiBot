@@ -531,7 +531,15 @@ avoir appelé `next()` n'envoie pas de second `next(err)` (la suite de la chaîn
 répond) : le rejet est seulement journalisé, code et type. Le détail d'un échec de route au salon de logs, comme la ligne du
 gestionnaire, se limite au type, au code (familles connues : numérique, `SQLITE_*`,
 `E*`, `UND_ERR_*`, codes de discord.js) et au statut HTTP de l'erreur — jamais son
-message, qui peut recopier un pseudo cherché.
+message, qui peut recopier un pseudo cherché. Les lignes du journal du processus (refus du
+client, erreurs `500`, rejets tardifs) sont étranglées : une ligne identique n'est écrite
+qu'une fois par minute, le nombre des suivantes tues s'ajoutant à la prochaine
+(`(+N identiques tues)`) ; l'étranglement retient cent lignes et oublie d'abord les échues,
+puis la plus ancienne. Le `catch` d'une route envoie lui aussi au salon de logs au plus une fois par
+ligne et par dix minutes (`reportRouteFailure`, même étranglement que les erreurs hors route) :
+une base en panne, interrogée toutes les quelques secondes par le site, n'inonde pas le salon
+(la réponse `500` part à chaque appel). Les intergiciels synchrones reçoivent une enveloppe
+légère, sans coût par requête ; l'enveloppe complète est réservée aux `async` et au gestionnaire final.
 Une réponse déjà commencée (flux) voit sa connexion coupée : le lecteur voit une
 réponse tronquée, jamais une fin normale ; une réponse déjà envoyée en entier n'est
 pas coupée (l'erreur est seulement journalisée). Toute route qui lit un corps vit sous

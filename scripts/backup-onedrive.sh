@@ -67,7 +67,7 @@ RUNNING_LINE="$(date --iso-8601=seconds) $$"
 with_running_lock() {
   (
     if command -v flock >/dev/null 2>&1; then
-      flock -w 30 9 || exit 1
+      flock -w 10 9 || exit 1
     fi
     "$@"
   ) 9<"$(dirname "$RUNNING_FILE")"

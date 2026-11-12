@@ -29,6 +29,8 @@ import {
   relayStatus,
   sparklineFromBuckets,
   SPARKLINE_POINTS,
+  createLineThrottle,
+  resetProcessLogThrottle,
   internalErrorHandler,
   asyncRoute,
   wrapUnwrappedRoutes,
@@ -183,16 +185,14 @@ function queryInteger(value: unknown, fallback: number): number {
 
 /** Délai entre deux envois au salon de logs d'une même ligne d'erreur hors route. */
 const INTERNAL_ERROR_REPORT_COOLDOWN_MS = 10 * 60 * 1000;
-/** Lignes retenues pour l'étranglement : au-delà, la mémoire repart à vide. */
-const INTERNAL_ERROR_REPORT_MEMORY = 100;
-/** Dernier envoi au salon de logs de chaque ligne d'erreur hors route. */
-const internalErrorReportedAt = new Map<string, number>();
+/** Étranglement des envois au salon de logs : routes (`catch`) et erreurs hors route. */
+const internalErrorReports = createLineThrottle(INTERNAL_ERROR_REPORT_COOLDOWN_MS);
 
 /**
- * Dit si une ligne d'erreur hors route part au salon de logs : une fois par ligne (statut
- * HTTP mis à part) et
- * par {@link INTERNAL_ERROR_REPORT_COOLDOWN_MS}, pour qu'une panne répétée (chaque
- * appel du site) n'inonde pas le salon. Une ligne refusée part quand même à pm2.
+ * Dit si une ligne d'erreur part au salon de logs : une fois par ligne (statut HTTP mis
+ * à part) et par {@link INTERNAL_ERROR_REPORT_COOLDOWN_MS}, pour qu'une panne répétée
+ * (chaque appel du site) n'inonde pas le salon — qu'elle vienne d'une erreur hors route
+ * ou du `catch` d'une route. Une ligne refusée part quand même à pm2.
  * @param line Ligne d'erreur (code et type seuls).
  * @param now Horloge injectable, pour les tests.
  * @returns `true` si la ligne doit partir.
@@ -200,17 +200,27 @@ const internalErrorReportedAt = new Map<string, number>();
 export function shouldReportInternalError(line: string, now: number = Date.now()): boolean {
   // Le statut HTTP ne compte pas : une panne de Discord qui rend 429, 500 puis 503
   // reste une seule panne, annoncée une fois.
-  const key = line.replace(/, statut \d+\)$/, ")");
-  const last = internalErrorReportedAt.get(key);
-  if (last !== undefined && now - last < INTERNAL_ERROR_REPORT_COOLDOWN_MS) { return false; }
-  if (internalErrorReportedAt.size >= INTERNAL_ERROR_REPORT_MEMORY) { internalErrorReportedAt.clear(); }
-  internalErrorReportedAt.set(key, now);
-  return true;
+  return internalErrorReports.check(line.replace(/, statut \d+\)$/, ")"), now).emit;
 }
 
-/** Vide la mémoire de l'étranglement (tests). */
+/** Vide la mémoire des étranglements, salon de logs et journal du processus (tests). */
 export function resetInternalErrorReports(): void {
-  internalErrorReportedAt.clear();
+  internalErrorReports.reset();
+  resetProcessLogThrottle();
+}
+
+/**
+ * Envoie au salon de logs la ligne d'une route en échec (`catch` d'une route), au plus une
+ * fois par ligne et par {@link INTERNAL_ERROR_REPORT_COOLDOWN_MS} : une base ou Discord
+ * en panne, interrogés toutes les quelques secondes par le site, n'inondent pas le salon
+ * (ni ne consomment la limite de Discord). La réponse 500 part, elle, à chaque appel.
+ * @param client Client Discord.
+ * @param line Ligne d'erreur (étiquette de la route et code d'erreur seuls).
+ * @param alert `true` pour une alerte qui notifie (`sendAlert`), `false` pour un log silencieux.
+ */
+async function reportRouteFailure(client: Client, line: string, alert = false): Promise<void> {
+  if (!shouldReportInternalError(line)) { return; }
+  await (alert ? sendAlert(client, line) : sendLog(client, line));
 }
 
 /**
@@ -288,7 +298,7 @@ export function startInternalApi(client: Client) {
         try { res.end(); } catch { /* noop */ }
       });
     } catch (error) {
-      await sendLog(client, `/internal/feed/stream error: ${safeErrorDetail(error)}`);
+      await reportRouteFailure(client, `/internal/feed/stream error: ${safeErrorDetail(error)}`);
       // `flushHeaders()` a deja repondu : `res.status().json()` leverait ici
       // ERR_HTTP_HEADERS_SENT, dans un `catch` -- donc un rejet non gere qu'
       // Express 4 ne rattrape pas. Un flux deja ouvert se ferme, il ne se
@@ -361,7 +371,7 @@ export function startInternalApi(client: Client) {
         status,
       });
     } catch (error) {
-      await sendLog(client, `/internal/status error: ${safeErrorDetail(error)}`);
+      await reportRouteFailure(client, `/internal/status error: ${safeErrorDetail(error)}`);
       res.status(500).json({ error: "INTERNAL_STATUS_ERROR" });
     }
   }));
@@ -414,7 +424,7 @@ export function startInternalApi(client: Client) {
         windowDays: MESSAGE_WINDOW_DAYS,
       });
     } catch (error) {
-      await sendLog(client, `/internal/stats error: ${safeErrorDetail(error)}`);
+      await reportRouteFailure(client, `/internal/stats error: ${safeErrorDetail(error)}`);
       res.status(500).json({ error: "INTERNAL_STATS_ERROR" });
     }
   }));
@@ -446,7 +456,7 @@ export function startInternalApi(client: Client) {
         return;
       }
       // Le tag cherché est le pseudo d'une personne : il ne part pas au journal.
-      await sendLog(client, `Failed to resolve a discord handle: ${safeErrorDetail(error)}`);
+      await reportRouteFailure(client, `Failed to resolve a discord handle: ${safeErrorDetail(error)}`);
       res.status(500).json({ error: "INTERNAL_RESOLVE_ERROR" });
     }
   }));
@@ -474,7 +484,7 @@ export function startInternalApi(client: Client) {
       // Jamais l'identifiant Discord du joueur ni le code : le salon de logs est
       // un message Discord (« un joueur », RGPD_LOGS_AND_VISITS du site). Seul
       // le code d'erreur part, le texte de Discord pouvant citer la valeur reçue.
-      await sendLog(client, `Failed to send auth code to a player: ${safeErrorDetail(error)}`);
+      await reportRouteFailure(client, `Failed to send auth code to a player: ${safeErrorDetail(error)}`);
       res.status(500).json({ error: "DISCORD_DM_FAILED" });
     }
   }));
@@ -512,7 +522,7 @@ export function startInternalApi(client: Client) {
       await saveSiteVisitStats(stats);
       res.json({ success: true });
     } catch (error) {
-      await sendLog(client, `site-visits save error: ${safeErrorDetail(error)}`);
+      await reportRouteFailure(client, `site-visits save error: ${safeErrorDetail(error)}`);
       res.status(500).json({ error: "SITE_VISIT_STATS_SAVE_FAILED" });
     }
   }));
@@ -549,7 +559,7 @@ export function startInternalApi(client: Client) {
         return;
       }
       // Aucun message n'est parti : l'échec notifie.
-      await sendAlert(client, `notify/dm error (${request.context}): ${safeErrorDetail(error)}`);
+      await reportRouteFailure(client, `notify/dm error (${request.context}): ${safeErrorDetail(error)}`, true);
       res.status(500).json({ error: "NOTIFICATION_DELIVERY_FAILED" });
     }
   }));
@@ -570,7 +580,7 @@ export function startInternalApi(client: Client) {
       res.json(report);
     } catch (error) {
       // L'alerte n'est pas partie : l'échec notifie, lui.
-      await sendAlert(client, `notify/referees error (${request.context}): ${safeErrorDetail(error)}`);
+      await reportRouteFailure(client, `notify/referees error (${request.context}): ${safeErrorDetail(error)}`, true);
       res.status(500).json({ error: "NOTIFICATION_DELIVERY_FAILED" });
     }
   }));
@@ -592,7 +602,7 @@ export function startInternalApi(client: Client) {
       res.json(report);
     } catch (error) {
       // L'alerte n'est pas partie : l'échec notifie, lui.
-      await sendAlert(client, `notify/leadership error (${request.context}): ${safeErrorDetail(error)}`);
+      await reportRouteFailure(client, `notify/leadership error (${request.context}): ${safeErrorDetail(error)}`, true);
       res.status(500).json({ error: "NOTIFICATION_DELIVERY_FAILED" });
     }
   }));
@@ -745,7 +755,7 @@ export function startInternalApi(client: Client) {
         windowDays: MESSAGE_WINDOW_DAYS,
       });
     } catch (error) {
-      await sendLog(client, `/internal/kpis error: ${safeErrorDetail(error)}`);
+      await reportRouteFailure(client, `/internal/kpis error: ${safeErrorDetail(error)}`);
       res.status(500).json({ error: "INTERNAL_KPIS_ERROR" });
     }
   }));
@@ -804,7 +814,7 @@ export function startInternalApi(client: Client) {
       const paged = enriched.slice(offset, offset + limit);
       res.json({ servers: paged, total: enriched.length, limit, offset, windowDays: MESSAGE_WINDOW_DAYS });
     } catch (error) {
-      await sendLog(client, `/internal/servers error: ${safeErrorDetail(error)}`);
+      await reportRouteFailure(client, `/internal/servers error: ${safeErrorDetail(error)}`);
       res.status(500).json({ error: "INTERNAL_SERVERS_ERROR" });
     }
   }));
@@ -861,7 +871,7 @@ export function startInternalApi(client: Client) {
       const avgPerDay = Number((sumRelays / relayDays).toFixed(2));
       res.json({ range, labels, relays, scrims, avgPerDay, windowDays: MESSAGE_WINDOW_DAYS });
     } catch (error) {
-      await sendLog(client, `/internal/activity error: ${safeErrorDetail(error)}`);
+      await reportRouteFailure(client, `/internal/activity error: ${safeErrorDetail(error)}`);
       res.status(500).json({ error: "INTERNAL_ACTIVITY_ERROR" });
     }
   }));
@@ -898,7 +908,7 @@ export function startInternalApi(client: Client) {
       const enriched = modules.map((m) => ({ key: m.key, enabled: m.enabled, count30j: counters[m.key] }));
       res.json({ guildId, modules: enriched });
     } catch (error) {
-      await sendLog(client, `/internal/servers/:id/modules error: ${safeErrorDetail(error)}`);
+      await reportRouteFailure(client, `/internal/servers/:id/modules error: ${safeErrorDetail(error)}`);
       res.status(500).json({ error: "INTERNAL_MODULES_ERROR" });
     }
   }));
@@ -920,7 +930,7 @@ export function startInternalApi(client: Client) {
       await setModuleEnabled(guildId, moduleKey as ModuleKey, enabled);
       res.json({ guildId, module: moduleKey, enabled });
     } catch (error) {
-      await sendLog(client, `/internal/servers/:id/modules/:moduleKey error: ${safeErrorDetail(error)}`);
+      await reportRouteFailure(client, `/internal/servers/:id/modules/:moduleKey error: ${safeErrorDetail(error)}`);
       res.status(500).json({ error: "INTERNAL_MODULE_TOGGLE_ERROR" });
     }
   }));

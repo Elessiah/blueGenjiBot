@@ -44,6 +44,9 @@ export const STALE_AFTER_MS = 3 * 24 * 60 * 60 * 1000;
  */
 export const RUNNING_MAX_AGE_MS = 12 * 60 * 60 * 1000;
 
+/** Lignes du marqueur de sauvegarde en cours relues, au plus (les plus récentes). */
+export const RUNNING_MAX_LINES = 32;
+
 /**
  * Délai ajouté à {@link STALE_AFTER_MS} pendant une sauvegarde en cours : trois jours
  * (six au total), au-delà des 5 jours 4 h qui séparent le mardi 23 h 49 du lundi 4 h.
@@ -142,7 +145,9 @@ export async function readRunningSince(
   } catch {
     return null;
   }
-  const starts = raw.split("\n")
+  // Les lignes récentes sont à la fin (le script ajoute) : un marqueur enflé (exécutions
+  // tuées, édition à la main) n'est pas relu en entier à chaque rapport.
+  const starts = raw.split("\n").slice(-RUNNING_MAX_LINES)
     .map((line) => line.trim().split(/\s+/))
     .filter(([, pid]) => pid === undefined || !/^\d+$/.test(pid) || isAlive(Number(pid)))
     .map(([date]) => Date.parse(date ?? ""))

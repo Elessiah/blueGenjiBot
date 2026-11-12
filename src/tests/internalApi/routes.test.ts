@@ -211,6 +211,7 @@ test.beforeEach(() => {
   state.liveSendError = null;
   state.logSendFailures = 0;
   resetLiveLogThrottle();
+  resetInternalErrorReports();
   process.env.INTERNAL_API_TOKEN = TOKEN;
   process.env.INTERNAL_API_HOST = "127.0.0.1";
   process.env.CLIENT_ID = "600000000000000001";

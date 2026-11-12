@@ -186,6 +186,89 @@ export function internalErrorLogLine(error: unknown): string {
   return `[internalApi] ${reply.code} (${safeErrorDetail(error)})`;
 }
 
+/** Délai entre deux écritures d'une même ligne d'erreur au journal du processus (pm2). */
+const PROCESS_LOG_COOLDOWN_MS = 60 * 1000;
+/** Lignes distinctes retenues par un étranglement : au-delà, la plus ancienne est oubliée. */
+export const LINE_THROTTLE_MEMORY = 100;
+
+/** Verdict d'un étranglement pour une ligne. */
+export type LineVerdict = {
+  /** `true` si la ligne doit partir. */
+  emit: boolean;
+  /** Occurrences identiques tues depuis la dernière ligne partie (0 si aucune). */
+  suppressed: number;
+};
+
+/** Étranglement par ligne : une ligne identique ne part qu'une fois par délai. */
+export type LineThrottle = {
+  check(line: string, now?: number): LineVerdict;
+  reset(): void;
+};
+
+/**
+ * Étranglement par ligne, pour qu'une panne répétée (chaque appel du site, un client
+ * qui renvoie le même corps illisible) n'écrive pas une ligne par requête, au journal
+ * du processus ou au salon de logs. La mémoire est bornée : à la limite, les lignes
+ * échues sont oubliées d'abord, puis la plus ancienne — jamais toutes d'un coup, ce qui
+ * rendrait leur tour, tout de suite, aux lignes qui répètent à ce moment.
+ *
+ * @param cooldownMs Délai entre deux lignes identiques (ms).
+ * @param memory Lignes distinctes retenues, au plus.
+ * @returns L'étranglement.
+ */
+export function createLineThrottle(cooldownMs: number, memory: number = LINE_THROTTLE_MEMORY): LineThrottle {
+  const seen = new Map<string, { at: number; suppressed: number }>();
+  return {
+    check(line, now = Date.now()) {
+      const last = seen.get(line);
+      if (last !== undefined && now - last.at < cooldownMs) {
+        last.suppressed += 1;
+        return { emit: false, suppressed: 0 };
+      }
+      seen.delete(line);
+      if (seen.size >= memory) {
+        for (const [key, value] of seen) {
+          if (now - value.at >= cooldownMs) { seen.delete(key); }
+        }
+        const oldest = seen.keys().next();
+        if (seen.size >= memory && !oldest.done) { seen.delete(oldest.value); }
+      }
+      seen.set(line, { at: now, suppressed: 0 });
+      return { emit: true, suppressed: last?.suppressed ?? 0 };
+    },
+    reset() {
+      seen.clear();
+    },
+  };
+}
+
+/** Ligne avec le compte des occurrences tues depuis sa dernière écriture. */
+function withSuppressed(line: string, suppressed: number): string {
+  return suppressed > 0 ? `${line} (+${suppressed} identiques tues)` : line;
+}
+
+/** Étranglement des lignes du journal du processus : gestionnaire d'erreur et rejets tardifs. */
+const processLogThrottle = createLineThrottle(PROCESS_LOG_COOLDOWN_MS);
+
+/** Vide la mémoire de l'étranglement du journal du processus (tests). */
+export function resetProcessLogThrottle(): void {
+  processLogThrottle.reset();
+}
+
+/**
+ * Écrit au journal du processus le rejet d'un gestionnaire arrivé trop tard pour
+ * répondre : niveau erreur pour un défaut du serveur, avertissement pour un refus du
+ * client, une ligne identique par {@link PROCESS_LOG_COOLDOWN_MS} au plus.
+ * @param error Rejet.
+ */
+function logLateRejection(error: unknown): void {
+  const line = internalErrorLogLine(error);
+  const verdict = processLogThrottle.check(line);
+  if (!verdict.emit) { return; }
+  const text = withSuppressed(line, verdict.suppressed);
+  if (internalErrorReply(error).status >= 500) { console.error(text); } else { console.warn(text); }
+}
+
 /** Destinations des lignes du gestionnaire d'erreur. */
 export type InternalErrorSinks = {
   /** Défaut du serveur (500) : journal d'erreurs du processus. */
@@ -194,6 +277,8 @@ export type InternalErrorSinks = {
   warn?: (line: string) => void;
   /** Défaut du serveur (500), aussi au salon de logs (`sendLog`) : même ligne, code et type seuls. */
   report?: (line: string) => void;
+  /** Horloge de l'étranglement des lignes du processus, injectable pour les tests. */
+  now?: () => number;
 };
 
 /**
@@ -202,22 +287,27 @@ export type InternalErrorSinks = {
  * par le gestionnaire d'Express, qui écrirait la pile au journal. Un refus du client
  * (4xx) va au niveau avertissement — un appel annulé par le site n'encombre pas le
  * journal d'erreurs relu après déploiement ; un défaut du serveur (500) va au journal
- * d'erreurs **et** au salon de logs.
+ * d'erreurs **et** au salon de logs. Une ligne identique n'est écrite qu'une fois par
+ * minute au journal du processus (le compte des suivantes tues s'ajoute à la suivante
+ * qui part) : un client qui répète une requête refusée n'y écrit pas une ligne par appel.
+ * Le salon de logs a son propre étranglement (`reportInternalError`).
  *
  * @param sinks Destinations des lignes (console par défaut, aucun salon de logs).
  * @returns Gestionnaire à monter après toutes les routes.
  */
 export function internalErrorHandler(sinks: InternalErrorSinks = {}): ErrorRequestHandler {
-  const { error: logError = (line) => console.error(line), warn = (line) => console.warn(line), report } = sinks;
+  const { error: logError = (line) => console.error(line), warn = (line) => console.warn(line), report, now } = sinks;
   return (error, _req, res, _next) => {
     const reply = internalErrorReply(error);
     const line = internalErrorLogLine(error);
+    const verdict = processLogThrottle.check(line, now?.());
     if (reply.status >= 500) {
-      logError(line);
+      if (verdict.emit) { logError(withSuppressed(line, verdict.suppressed)); }
       // Au mieux : un salon de logs injoignable ne doit pas faire lever le gestionnaire.
+      // Le salon a son propre étranglement : la ligne lui est transmise sans le compte.
       try { report?.(line); } catch { /* journal Discord indisponible */ }
-    } else {
-      warn(line);
+    } else if (verdict.emit) {
+      warn(withSuppressed(line, verdict.suppressed));
     }
     if (res.writableEnded) {
       // Réponse déjà envoyée en entier (un geste après `res.json` a levé) : le site a
@@ -259,7 +349,7 @@ function forwardRejections(handler: AnyHandler): (req: Request, res: Response, n
     };
     const forward = (error: unknown): void => {
       if (passed) {
-        console.error(internalErrorLogLine(error));
+        logLateRejection(error);
         return;
       }
       passed = true;
@@ -273,6 +363,29 @@ function forwardRejections(handler: AnyHandler): (req: Request, res: Response, n
     } catch (error) {
       forward(error);
     }
+  };
+  WRAPPED_ROUTES.add(wrapped);
+  return wrapped;
+}
+
+/**
+ * Enveloppe légère d'un intergiciel qui n'est ni déclaré `async` ni le gestionnaire
+ * final : aucune fermeture ni promesse de plus par requête quand il répond de façon
+ * synchrone (le cas de tous ceux d'Express). Ce qu'il lève, Express le rattrape ; la
+ * promesse qu'il rendrait, si elle est rejetée, repart à `next(err)` — ou au seul
+ * journal quand la réponse est déjà partie.
+ */
+function forwardLateRejections(handler: AnyHandler): (req: Request, res: Response, next: NextFunction) => void {
+  const wrapped = (req: Request, res: Response, next: NextFunction): void => {
+    const result = handler(req, res, next) as { then?: unknown } | null | undefined;
+    if (result === null || result === undefined || typeof result.then !== "function") { return; }
+    (result as PromiseLike<unknown>).then(undefined, (error: unknown) => {
+      if (res.headersSent || res.writableEnded) {
+        logLateRejection(error);
+        return;
+      }
+      next(Boolean(error) && error !== "route" && error !== "router" ? error : new Error("rejet sans valeur exploitable"));
+    });
   };
   WRAPPED_ROUTES.add(wrapped);
   return wrapped;
@@ -342,8 +455,10 @@ function mountPrefix(layer: RouterLayer): string {
  * intergiciel déclaré `async` nu — et `USE chemin` de chaque intergiciel `async` nu
  * monté par `app.use`. Avec `fix`, **tout** gestionnaire non enveloppé l'est en
  * place, signalé ou non : un intergiciel qui rend une promesse sans être déclaré
- * `async` ne se repère pas sans l'appeler, l'enveloppe le couvre quand même (sans
- * effet sur un intergiciel synchrone : Express rattrapait déjà ce qu'il lève). Un
+ * `async` ne se repère pas sans l'appeler, l'enveloppe légère le couvre quand même
+ * (`forwardLateRejections` : sans coût pour un intergiciel synchrone, dont Express
+ * rattrapait déjà ce qu'il lève ; l'enveloppe complète est réservée aux `async` et
+ * au gestionnaire final). Un
  * gestionnaire d'erreur (quatre paramètres) n'est jamais touché.
  */
 function scanRoutes(stack: RouterLayer[], prefix: string, fix: boolean, found: string[]): void {
@@ -359,8 +474,9 @@ function scanRoutes(stack: RouterLayer[], prefix: string, fix: boolean, found: s
     }
     const handle = layer.handle;
     if (!isWrappable(handle)) { continue; }
-    if (isAsyncFunction(handle)) { found.push(`USE ${prefix + mountPrefix(layer) || "/"}`); }
-    if (fix) { layer.handle = forwardRejections(handle); }
+    const isAsync = isAsyncFunction(handle);
+    if (isAsync) { found.push(`USE ${prefix + mountPrefix(layer) || "/"}`); }
+    if (fix) { layer.handle = isAsync ? forwardRejections(handle) : forwardLateRejections(handle); }
   }
 }
 
@@ -371,8 +487,9 @@ function scanRoute(route: NonNullable<RouterLayer["route"]>, prefix: string, fix
   entries.forEach((entry, index) => {
     const handle = entry.handle;
     if (!isWrappable(handle)) { return; }
-    if (index === entries.length - 1 || isAsyncFunction(handle)) { faulty = true; }
-    if (fix) { entry.handle = forwardRejections(handle); }
+    const full = index === entries.length - 1 || isAsyncFunction(handle);
+    if (full) { faulty = true; }
+    if (fix) { entry.handle = full ? forwardRejections(handle) : forwardLateRejections(handle); }
   });
   if (!faulty) { return; }
   const methods = Object.keys(route.methods ?? {}).map((method) => method.toUpperCase()).join(",");

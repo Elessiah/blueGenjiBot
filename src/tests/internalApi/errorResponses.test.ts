@@ -45,7 +45,7 @@ test("chaque reponse 500 porte un code stable en majuscules", () => {
 test("le detail de l'erreur part au journal Discord, filtre", () => {
   // L'exploitant lit le type, le code et le statut dans le salon de logs ; l'appelant
   // recoit un code. Jamais le message, qui peut recopier un pseudo cherche.
-  const logged = [...SOURCE.matchAll(/sendLog\(client, `\/internal\/[^`]*error: \$\{safeErrorDetail\(error\)\}`\)/g)];
+  const logged = [...SOURCE.matchAll(/reportRouteFailure\(client, `\/internal\/[^`]*error: \$\{safeErrorDetail\(error\)\}`\)/g)];
   assert.ok(logged.length >= 8, `trop peu de journalisations (${logged.length})`);
 });
 

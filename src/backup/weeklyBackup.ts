@@ -47,10 +47,15 @@ export async function sendDatabaseBackup(
   const stamp = new Date().toISOString().slice(0, 10);
 
   try {
-    // Le statut et le marqueur d'une sauvegarde en cours se lisent ensemble ; l'historique
-    // ensuite, au chemin que le script a écrit dans le statut (`backupHistoryPath`).
-    const [status, runningSince] = await Promise.all([readBackupStatus(statusPath), readRunningSince(statusPath)]);
-    const history = await readBackupFailures(backupHistoryPath(statusPath, status));
+    // Le marqueur d'une sauvegarde en cours se lit pendant le statut, puis avec l'historique,
+    // lu au chemin que le script a écrit dans le statut (`backupHistoryPath`) : au plus
+    // deux tours de lecture, pas trois.
+    const runningRead = readRunningSince(statusPath);
+    const status = await readBackupStatus(statusPath);
+    const [runningSince, history] = await Promise.all([
+      runningRead,
+      readBackupFailures(backupHistoryPath(statusPath, status)),
+    ]);
     // Deux sauvegardes par semaine : un échec du mardi ne doit pas disparaître
     // derrière le succès du dimanche.
     // Le dernier passage figure déjà dans la ligne du statut : pas deux ❌ pour un incident.

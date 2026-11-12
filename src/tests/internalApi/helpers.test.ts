@@ -16,8 +16,13 @@ import {
   unwrappedRoutes,
   wrapUnwrappedRoutes,
   ROUTER_STACK_NOT_FOUND,
+  resetProcessLogThrottle,
+  createLineThrottle,
+  LINE_THROTTLE_MEMORY,
 } from "../../internalApi/helpers.js";
 import type { AddressInfo } from "node:net";
+
+test.beforeEach(() => resetProcessLogThrottle());
 
 test("absDelta formate le signe correctement", () => {
   assert.equal(absDelta(15, 12), "+3");
@@ -562,4 +567,101 @@ test("wrapUnwrappedRoutes_asyncAppUseMiddlewareRejects_answers500", async () => 
   assert.deepEqual(wrapped, ["USE /"]);
   assert.equal(status, 500);
   assert.deepEqual(JSON.parse(body), { error: "INTERNAL_ERROR" });
+});
+
+test("createLineThrottle_sameLineWithinCooldown_suppressedThenCountedOnNextEmit", () => {
+  const throttle = createLineThrottle(1_000);
+
+  assert.deepEqual(throttle.check("a", 0), { emit: true, suppressed: 0 });
+  assert.deepEqual(throttle.check("a", 999), { emit: false, suppressed: 0 });
+  assert.deepEqual(throttle.check("a", 999), { emit: false, suppressed: 0 });
+  assert.deepEqual(throttle.check("a", 1_000), { emit: true, suppressed: 2 });
+});
+
+test("createLineThrottle_memoryFull_evictsExpiredThenOldestNeverAll", () => {
+  const throttle = createLineThrottle(1_000, 3);
+  throttle.check("a", 0);
+  throttle.check("b", 500);
+  throttle.check("c", 600);
+
+  // « a » est échue : elle seule part ; « b » et « c » gardent leur délai.
+  assert.equal(throttle.check("d", 1_000).emit, true);
+  assert.equal(throttle.check("b", 1_001).emit, false);
+  assert.equal(throttle.check("c", 1_001).emit, false);
+  // Rien d'échu : la plus ancienne (« b ») part, « c » et « d » restent étranglées.
+  assert.equal(throttle.check("e", 1_002).emit, true);
+  assert.equal(throttle.check("c", 1_003).emit, false);
+  assert.equal(throttle.check("d", 1_003).emit, false);
+});
+
+test("createLineThrottle_defaultMemory_isBounded", () => {
+  assert.equal(LINE_THROTTLE_MEMORY, 100);
+  const throttle = createLineThrottle(10_000);
+  for (let i = 0; i < 300; i++) throttle.check(`l${i}`, i);
+  // La dernière ligne est encore étranglée : la mémoire ne s'est pas vidée d'un coup.
+  assert.equal(throttle.check("l299", 300).emit, false);
+});
+
+test("internalErrorHandler_sameClientRefusalRepeated_warnsOncePerMinuteWithCount", () => {
+  const warnings: string[] = [];
+  let clock = 0;
+  const handler = internalErrorHandler({ warn: (l) => warnings.push(l), now: () => clock });
+  const res = () => ({ headersSent: false, writableEnded: false, status() { return this; }, json() { return this; } }) as unknown as Response;
+  const refusal = () => Object.assign(new Error("x"), { type: "entity.parse.failed", status: 400 });
+
+  for (let i = 0; i < 3; i++) handler(refusal(), {} as Request, res(), () => undefined);
+  clock = 60_000;
+  handler(refusal(), {} as Request, res(), () => undefined);
+
+  assert.deepEqual(warnings, ["[internalApi] INVALID_JSON", "[internalApi] INVALID_JSON (+2 identiques tues)"]);
+});
+
+test("internalErrorHandler_repeatedServerError_reportsEveryTimeToSinkOnly", () => {
+  const errors: string[] = [];
+  const reports: string[] = [];
+  const handler = internalErrorHandler({ error: (l) => errors.push(l), report: (l) => reports.push(l), now: () => 0 });
+  const res = () => ({ headersSent: false, writableEnded: false, status() { return this; }, json() { return this; } }) as unknown as Response;
+
+  handler(new Error("x"), {} as Request, res(), () => undefined);
+  handler(new Error("x"), {} as Request, res(), () => undefined);
+
+  assert.equal(errors.length, 1);
+  // Le salon a son propre étranglement : la ligne lui est toujours transmise.
+  assert.equal(reports.length, 2);
+});
+
+test("wrapUnwrappedRoutes_syncMiddleware_noPromiseAndStillRuns", async () => {
+  const app = express();
+  app.use((_req, res, next) => { res.setHeader("x-test", "1"); next(); });
+  app.get("/a", (_req, res) => { res.json({ ok: true }); });
+
+  wrapUnwrappedRoutes(app);
+  const { status } = await callOnce(app, "/a");
+
+  assert.equal(status, 200);
+});
+
+test("wrapUnwrappedRoutes_nonAsyncMiddlewareReturningRejectedPromise_answers500", async () => {
+  const app = express();
+  app.use((): Promise<void> => Promise.reject(new Error("secret")));
+  app.get("/a", (_req, res) => { res.json({ ok: true }); });
+  app.use(internalErrorHandler({ error: () => undefined }));
+
+  wrapUnwrappedRoutes(app);
+  const { status, body } = await callOnce(app, "/a");
+
+  assert.equal(status, 500);
+  assert.deepEqual(JSON.parse(body), { error: "INTERNAL_ERROR" });
+});
+
+test("forwardRejections_lateRejectionRepeated_loggedOncePerMinute", async (t) => {
+  const logged = t.mock.method(console, "error", () => undefined);
+  const app = express();
+  app.get("/a", async (_req, _res, next) => { next(); throw new Error("late"); }, asyncRoute((_req, res) => { res.json({ ok: true }); }));
+  wrapUnwrappedRoutes(app);
+
+  await callOnce(app, "/a");
+  await callOnce(app, "/a");
+
+  assert.equal(logged.mock.calls.length, 1);
 });
