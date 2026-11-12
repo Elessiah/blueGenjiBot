@@ -88,26 +88,219 @@ test("scripts_retentionDaysValidated_beforePurge", () => {
 
 test("backupScript_writeStatus_appendsToHistory", () => {
   assert.match(BACKUP_SCRIPT, /: "\$\{STATUS_HISTORY_FILE:=\$\{STATUS_FILE%\.json\}-history\.jsonl\}"/);
-  assert.match(BACKUP_SCRIPT, />> "\$STATUS_HISTORY_FILE"/);
+  assert.match(BACKUP_SCRIPT, /mv -f -T "\$tmp" "\$STATUS_HISTORY_FILE"/);
   assert.match(BACKUP_SCRIPT, /mkdir -p "\$\(dirname "\$STATUS_FILE"\)" "\$\(dirname "\$STATUS_HISTORY_FILE"\)"/);
-  assert.match(BACKUP_SCRIPT, /tail -n "\$STATUS_HISTORY_LINES"/);
+  assert.match(BACKUP_SCRIPT, /tail -n "\$\(\(STATUS_HISTORY_LINES - 1\)\)"/);
 });
 
 test("backupScript_writeStatus_historyUpdatedUnderFlock", () => {
   // Lancement manuel pendant le cron : l'ajout puis l'élagage forment un tout.
-  const write = BACKUP_SCRIPT.slice(BACKUP_SCRIPT.indexOf("write_status() {"), BACKUP_SCRIPT.indexOf("\nfail() {"));
-  assert.match(write, /\(\n\s+if command -v flock >\/dev\/null 2>&1; then\n\s+flock -w 30 8 \|\| exit 1\n\s+fi\n\s+printf [^\n]+>> "\$STATUS_HISTORY_FILE"/);
-  assert.match(write, /mv "\$STATUS_HISTORY_FILE\.tmp\.\$\$" "\$STATUS_HISTORY_FILE"\n\s+\) 8>"\$STATUS_HISTORY_FILE\.lock"/);
+  const write = BACKUP_SCRIPT.slice(BACKUP_SCRIPT.indexOf("status_fallback() {"), BACKUP_SCRIPT.indexOf("\nfail() {"));
+  assert.match(write, /\(\n\s+if command -v flock >\/dev\/null 2>&1; then\n\s+flock -w 30 8 \|\| exit 1\n\s+fi\n/);
+  assert.match(write, /mv -f -T "\$tmp" "\$STATUS_HISTORY_FILE" \|\| \{ rm -f "\$tmp"; exit 1; \}\n\s+\) 8<"\$\(dirname "\$STATUS_HISTORY_FILE"\)"/);
+  // Jamais `>` ni `>>` sur l'historique ou le statut eux-mêmes : un lien posé à leur place serait suivi.
+  assert.doesNotMatch(write, />>? "\$STATUS_HISTORY_FILE"/);
+  // Seules écritures directes du statut, sans temporaire possible : recréé en exclusif
+  // (`set -C`) dans un dossier ouvert à ce compte, réécrit en place dans un dossier fermé.
+  assert.deepEqual(write.match(/[^\n]*> "\$STATUS_FILE"[^\n]*/g), ['    ( set -C; cat > "$STATUS_FILE" )', '    cat > "$STATUS_FILE"']);
+});
+
+/** Fonction `sibling_tmp` du script, nécessaire à `write_status` jouée seule. */
+function siblingTmpFunction(): string {
+  const start = BACKUP_SCRIPT.indexOf("sibling_tmp() {");
+  const end = BACKUP_SCRIPT.indexOf("\n}\n", start);
+  assert.ok(start > 0 && end > start, "sibling_tmp introuvable");
+  return BACKUP_SCRIPT.slice(start, end + 2);
+}
+
+/** Joue `write_status` seule (`count` fois de suite) dans `dir` ; rend le statut de bash. */
+function runWriteStatus(dir: string, count: number, lines = 100, siblingTmp = siblingTmpFunction(), prelude = ""): { status: number | null; stderr: string } {
+  const write = BACKUP_SCRIPT.slice(BACKUP_SCRIPT.indexOf("status_fallback() {"), BACKUP_SCRIPT.indexOf("\nfail() {"));
+  const script = [
+    `STATUS_FILE="${dir}/status.json"`,
+    `STATUS_HISTORY_FILE="${dir}/status-history.jsonl"`,
+    `STATUS_HISTORY_LINES=${lines} STATUS_OK=false STATUS_ERROR=boom STATUS_SIZE=0 STATUS_PARTS= RCLONE_REMOTE=r REMOTE_DIR=d STAMP=s STATUS_HISTORY_JSON=`,
+    prelude,
+    siblingTmp,
+    write,
+    `for i in $(seq 1 ${count}); do write_status; done`,
+  ].join("\n");
+  const result = spawnSync("bash", ["-c", script], { encoding: "utf8", timeout: 30_000 });
+  return { status: result.status, stderr: result.stderr };
+}
+
+const BASH_PRESENT = spawnSync("bash", ["-c", "true"]).status === 0;
+
+test("backupScript_writeStatus_historyPrunedToLimit_noTempLeft", { skip: !BASH_PRESENT && "bash absent" }, () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bluegenji-history-prune-")).split(path.sep).join("/");
+  try {
+    const { status, stderr } = runWriteStatus(dir, 5, 3);
+    assert.equal(status, 0, stderr);
+    const lines = fs.readFileSync(path.join(dir, "status-history.jsonl"), "utf8").trim().split("\n");
+    assert.equal(lines.length, 3);
+    assert.equal((JSON.parse(fs.readFileSync(path.join(dir, "status.json"), "utf8")) as { error: string }).error, "boom");
+    assert.deepEqual(fs.readdirSync(dir).sort(), ["status-history.jsonl", "status.json"]);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("backupScript_writeStatus_symlinkedHistory_replacedNotFollowed", { skip: !BASH_PRESENT && "bash absent" }, (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bluegenji-history-link-")).split(path.sep).join("/");
+  try {
+    const victim = path.join(dir, "victim.txt");
+    fs.writeFileSync(victim, "intact\n");
+    try {
+      fs.symlinkSync(victim, path.join(dir, "status-history.jsonl"));
+    } catch {
+      t.skip("liens symboliques indisponibles");
+      return;
+    }
+    const { status, stderr } = runWriteStatus(dir, 1);
+    assert.equal(status, 0, stderr);
+    assert.equal(fs.readFileSync(victim, "utf8"), "intact\n");
+    assert.equal(fs.lstatSync(path.join(dir, "status-history.jsonl")).isSymbolicLink(), false);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("backupScript_writeStatus_noTempPossibleAndSymlinkedStatus_linkNotFollowed", { skip: !BASH_PRESENT && "bash absent" }, (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bluegenji-status-link-")).split(path.sep).join("/");
+  try {
+    const victim = path.join(dir, "victim.txt");
+    fs.writeFileSync(victim, "intact\n");
+    try {
+      fs.symlinkSync(victim, path.join(dir, "status.json"));
+    } catch {
+      t.skip("liens symboliques indisponibles");
+      return;
+    }
+
+    // Dossier plein : aucun temporaire possible.
+    const { status, stderr } = runWriteStatus(dir, 1, 100, "sibling_tmp() { return 1; }");
+
+    assert.equal(status, 0, stderr);
+    assert.equal(fs.readFileSync(victim, "utf8"), "intact\n");
+    assert.equal(fs.lstatSync(path.join(dir, "status.json")).isSymbolicLink(), false);
+    assert.equal((JSON.parse(fs.readFileSync(path.join(dir, "status.json"), "utf8")) as { error: string }).error, "boom");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("backupScript_writeStatus_existingStatusMode_keptOnReplacement", { skip: (!BASH_PRESENT || process.platform === "win32") && "bash absent ou droits POSIX indisponibles" }, () => {
+  // L'exploitant a ouvert le statut au groupe du bot (640) : le remplacement garde ces droits.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bluegenji-status-mode-"));
+  try {
+    const statusFile = path.join(dir, "status.json");
+    fs.writeFileSync(statusFile, "{}");
+    fs.chmodSync(statusFile, 0o640);
+
+    const { status, stderr } = runWriteStatus(dir, 1);
+
+    assert.equal(status, 0, stderr);
+    assert.equal(fs.statSync(statusFile).mode & 0o777, 0o640);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+const POSIX_BASH = BASH_PRESENT && process.platform !== "win32";
+
+test("siblingTmp_symlinkTarget_umaskModeNotLinkTarget", { skip: !POSIX_BASH && "bash ou droits POSIX indisponibles" }, () => {
+  // Un lien posé à la place du statut ne lui prête pas les droits de sa cible.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bluegenji-status-linkmode-"));
+  try {
+    const victim = path.join(dir, "victim.txt");
+    fs.writeFileSync(victim, "intact\n");
+    // eslint-disable-next-line sonarjs/file-permissions -- cible ouverte à tous à dessein : le statut ne doit pas en hériter
+    fs.chmodSync(victim, 0o666);
+    fs.symlinkSync(victim, path.join(dir, "status.json"));
+
+    const { status, stderr } = runWriteStatus(dir, 1, 100, siblingTmpFunction(), "umask 022");
+
+    assert.equal(status, 0, stderr);
+    assert.equal(fs.lstatSync(path.join(dir, "status.json")).mode & 0o777, 0o644);
+    assert.equal(fs.readFileSync(victim, "utf8"), "intact\n");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("siblingTmp_chgrpFails_defaultModeAndWarning", { skip: !POSIX_BASH && "bash ou droits POSIX indisponibles" }, () => {
+  // Groupe non repris : des droits 640 au groupe de ce compte cacheraient le statut au bot.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bluegenji-status-chgrp-"));
+  try {
+    const statusFile = path.join(dir, "status.json");
+    fs.writeFileSync(statusFile, "{}");
+    fs.chmodSync(statusFile, 0o640);
+
+    const { status, stderr } = runWriteStatus(dir, 1, 100, siblingTmpFunction(), "umask 022\nchgrp() { return 1; }");
+
+    assert.equal(status, 0, stderr);
+    assert.equal(fs.statSync(statusFile).mode & 0o777, 0o644);
+    assert.match(stderr, /groupe de status\.json non repris/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("writeStatus_noTempGroupWritableDir_notWritten", { skip: !POSIX_BASH && "bash ou droits POSIX indisponibles" }, () => {
+  // Dossier ouvert à d'autres comptes : un lien pourrait y être posé entre le retrait et l'écriture.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bluegenji-status-shared-"));
+  try {
+    // eslint-disable-next-line sonarjs/file-permissions -- dossier ouvert au groupe à dessein : le repli doit refuser d'y écrire
+    fs.chmodSync(dir, 0o775);
+
+    const { status, stderr } = runWriteStatus(dir, 1, 100, "sibling_tmp() { return 1; }");
+
+    assert.equal(status, 0, stderr);
+    assert.equal(fs.existsSync(path.join(dir, "status.json")), false);
+    assert.match(stderr, /statut non écrit/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("writeStatus_noTempClosedDir_regularStatusRewrittenInPlace", {
+  skip: (!POSIX_BASH || process.getuid?.() === 0) && "bash, droits POSIX ou compte non root indisponibles",
+}, () => {
+  // Dossier fermé à ce compte : le statut existant, ordinaire, est réécrit en place.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bluegenji-status-closed-"));
+  const statusFile = path.join(dir, "status.json");
+  try {
+    fs.writeFileSync(statusFile, "{}");
+    fs.chmodSync(dir, 0o500);
+
+    const { status, stderr } = runWriteStatus(dir, 1, 100, "sibling_tmp() { return 1; }");
+
+    assert.equal(status, 0, stderr);
+    assert.equal((JSON.parse(fs.readFileSync(statusFile, "utf8")) as { error: string }).error, "boom");
+  } finally {
+    fs.chmodSync(dir, 0o700);
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("fail_causeLoggedBeforeStatus", () => {
+  // Un statut impossible à écrire ne tait pas la cause de l'échec.
+  const start = BACKUP_SCRIPT.indexOf("\nfail() {");
+  const failBody = BACKUP_SCRIPT.slice(start, BACKUP_SCRIPT.indexOf("\n}\n", start));
+  const echo = failBody.indexOf('echo "[backup] ÉCHEC : $1" >&2');
+  const write = failBody.indexOf("write_status || true");
+  assert.ok(echo > 0 && write > echo, failBody);
 });
 
 test("backupScript_writeStatus_overlappingRuns_noLineLost", { skip: !hasBashWithFlock() && "bash ou flock absent" }, () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bluegenji-history-lock-"));
   try {
-    const write = BACKUP_SCRIPT.slice(BACKUP_SCRIPT.indexOf("write_status() {"), BACKUP_SCRIPT.indexOf("\nfail() {"));
+    const write = BACKUP_SCRIPT.slice(BACKUP_SCRIPT.indexOf("status_fallback() {"), BACKUP_SCRIPT.indexOf("\nfail() {"));
     const script = [
       `STATUS_FILE="${dir}/status.json"`,
       `STATUS_HISTORY_FILE="${dir}/status-history.jsonl"`,
       "STATUS_HISTORY_LINES=100 STATUS_OK=true STATUS_ERROR= STATUS_SIZE=0 STATUS_PARTS= RCLONE_REMOTE=r REMOTE_DIR=d STAMP=s",
+      siblingTmpFunction(),
       write,
       "for i in 1 2 3 4 5 6 7 8 9 10; do write_status & done; wait",
     ].join("\n");
@@ -139,4 +332,138 @@ test("backupScript_fail_controlCharactersStrippedFromError", { skip: spawnSync("
   const result = spawnSync("bash", ["-c", script], { encoding: "utf8", timeout: 30_000 });
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(JSON.parse(result.stdout), { error: "a b c dehfg" });
+});
+
+/**
+ * Fonctions du marqueur de sauvegarde en cours, tirées du script et jouées sous
+ * `bash` dans un dossier temporaire (sans `flock` sous Git Bash : le verrou est
+ * alors sauté, le reste est le même).
+ */
+function runMarkerSteps(steps: string): { status: number | null; marker: string | null; files: string[] } {
+  const start = BACKUP_SCRIPT.indexOf('RUNNING_FILE="$STATUS_FILE.running"');
+  const end = BACKUP_SCRIPT.indexOf("trap '", start);
+  assert.ok(start > 0 && end > start, "fonctions du marqueur introuvables");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bg-running-"));
+  try {
+    const statusFile = path.join(dir, "status.json").split(path.sep).join("/");
+    const script = `set -euo pipefail\nSTATUS_FILE='${statusFile}'\n${BACKUP_SCRIPT.slice(start, end)}\n${steps}\n`;
+    const result = spawnSync("bash", ["-c", script], { encoding: "utf8" });
+    const markerPath = path.join(dir, "status.json.running");
+    return {
+      status: result.status,
+      marker: fs.existsSync(markerPath) ? fs.readFileSync(markerPath, "utf8") : null,
+      files: fs.readdirSync(dir),
+    };
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+const HAS_BASH = spawnSync("bash", ["-c", "command -v grep"], { encoding: "utf8" }).status === 0;
+
+test("backupRunningMarker_laterRunEndsFirst_keepsTheEarlierRunLine", { skip: !HAS_BASH && "bash absent" }, () => {
+  // Cron parti à 23 h 49, lancement manuel à 23 h 55 fini avant lui : la ligne du cron reste.
+  const { status, marker } = runMarkerSteps([
+    'RUNNING_LINE="2026-11-08T23:49:00+01:00 $$"; add_running_line',
+    'RUNNING_LINE="2026-11-08T23:55:00+01:00 $$"; add_running_line',
+    "release_running_marker",
+  ].join("\n"));
+
+  assert.equal(status, 0);
+  assert.match(marker ?? "", /^2026-11-08T23:49:00\+01:00 \d+\n$/);
+});
+
+test("backupRunningMarker_earlierRunEndsFirst_keepsTheLaterRunLine", { skip: !HAS_BASH && "bash absent" }, () => {
+  const { status, marker } = runMarkerSteps([
+    'RUNNING_LINE="2026-11-08T23:40:00+01:00 $$"; add_running_line',
+    'RUNNING_LINE="2026-11-08T23:49:00+01:00 $$"; add_running_line',
+    'RUNNING_LINE="2026-11-08T23:40:00+01:00 $$"; release_running_marker',
+  ].join("\n"));
+
+  assert.equal(status, 0);
+  assert.match(marker ?? "", /^2026-11-08T23:49:00\+01:00 \d+\n$/);
+});
+
+test("backupRunningMarker_lastRunEnds_removesTheMarker", { skip: !HAS_BASH && "bash absent" }, () => {
+  const { status, marker } = runMarkerSteps("add_running_line\nrelease_running_marker");
+
+  assert.equal(status, 0);
+  assert.equal(marker, null);
+});
+
+test("backupRunningMarker_releaseWithoutMarker_succeeds", { skip: !HAS_BASH && "bash absent" }, () => {
+  const { status, marker } = runMarkerSteps("release_running_marker");
+
+  assert.equal(status, 0);
+  assert.equal(marker, null);
+});
+
+test("backupRunningMarker_deadPidLine_prunedOnAdd", { skip: !HAS_BASH && "bash absent" }, () => {
+  // Cron tué (manque de mémoire) sans repasser par sa sortie : la ligne de son PID mort part
+  // au lancement suivant, qui n'efface jamais la ligne d'une exécution vivante.
+  const { status, marker } = runMarkerSteps([
+    `printf '2026-11-08T23:49:00+01:00 2147483646\n2026-11-08T23:50:00+01:00 %s\n' "$$" > "$RUNNING_FILE"`,
+    'RUNNING_LINE="2026-11-09T01:00:00+01:00 $$"; add_running_line',
+  ].join("\n"));
+
+  assert.equal(status, 0);
+  assert.match(marker ?? "", /^2026-11-08T23:50:00\+01:00 \d+\n2026-11-09T01:00:00\+01:00 \d+\n$/);
+});
+
+test("backupRunningMarker_recentLineWithoutPid_keptOnAdd", { skip: !HAS_BASH && "bash absent" }, () => {
+  // Ligne d'un script antérieur (date seule) encore récente : elle reste.
+  const { status, marker } = runMarkerSteps([
+    `RECENT="$(date --iso-8601=seconds)"; printf '%s\n' "$RECENT" > "$RUNNING_FILE"`,
+    'RUNNING_LINE="2026-11-09T01:00:00+01:00 $$"; add_running_line',
+  ].join("\n"));
+
+  assert.equal(status, 0);
+  assert.match(marker ?? "", /^\d{4}-\d\d-\d\dT[^ \n]+\n2026-11-09T01:00:00\+01:00 \d+\n$/);
+});
+
+test("backupRunningMarker_oldOrMalformedLine_prunedOnAdd", { skip: !HAS_BASH && "bash absent" }, () => {
+  // Une ligne sans PID de plus de douze heures, ou illisible, ne reste pas pour toujours.
+  const { status, marker } = runMarkerSteps([
+    `printf '2020-01-01T00:00:00+01:00\npas une date\n2026-11-08T23:49:00+01:00 abc\n' > "$RUNNING_FILE"`,
+    'RUNNING_LINE="2026-11-09T01:00:00+01:00 $$"; add_running_line',
+  ].join("\n"));
+
+  assert.equal(status, 0);
+  assert.match(marker ?? "", /^2026-11-09T01:00:00\+01:00 \d+\n$/);
+});
+
+test("backupRunningMarker_symlinkedMarker_replacedNotFollowed", { skip: !HAS_BASH && "bash absent" }, () => {
+  // Un lien posé à la place du marqueur n'est jamais suivi : sa cible reste intacte.
+  const { status, marker, files } = runMarkerSteps([
+    `printf 'intact\n' > "$RUNNING_FILE.victim"`,
+    `ln -s "$RUNNING_FILE.victim" "$RUNNING_FILE" 2>/dev/null || cp "$RUNNING_FILE.victim" "$RUNNING_FILE"`,
+    'RUNNING_LINE="2026-11-09T01:00:00+01:00 $$"; add_running_line',
+    `[[ "$(cat "$RUNNING_FILE.victim")" == intact ]]`,
+  ].join("\n"));
+
+  assert.equal(status, 0);
+  assert.match(marker ?? "", /2026-11-09T01:00:00\+01:00 \d+\n$/);
+  assert.deepEqual(files.filter((name) => name.includes(".tmp.")), []);
+});
+
+test("backupRunningMarker_release_leavesNoLockFile", { skip: !HAS_BASH && "bash absent" }, () => {
+  const { status, files } = runMarkerSteps("add_running_line\nrelease_running_marker");
+
+  assert.equal(status, 0);
+  assert.deepEqual(files, []);
+});
+
+test("backupRunningMarker_releaseWithSymlinkedMarker_removesLinkKeepsTarget", { skip: !HAS_BASH && "bash absent" }, (t) => {
+  const { status, marker, files } = runMarkerSteps([
+    `printf 'intact' > "$RUNNING_FILE.victim"`,
+    // Git Bash copie au lieu de lier : sans vrai lien, rien à prouver ici.
+    `ln -s "$RUNNING_FILE.victim" "$RUNNING_FILE" && [[ -L "$RUNNING_FILE" ]] || exit 3`,
+    "release_running_marker",
+    `[[ "$(cat "$RUNNING_FILE.victim")" == intact ]]`,
+  ].join(String.fromCharCode(10)));
+  if (status === 3) { t.skip("liens symboliques indisponibles"); return; }
+
+  assert.equal(status, 0);
+  assert.equal(marker, null);
+  assert.deepEqual(files, ["status.json.running.victim"]);
 });

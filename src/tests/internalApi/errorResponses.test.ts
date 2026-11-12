@@ -42,11 +42,31 @@ test("chaque reponse 500 porte un code stable en majuscules", () => {
   }
 });
 
-test("le detail de l'erreur part au journal Discord", () => {
-  // Le message n'est pas perdu, il change de destinataire : l'exploitant le
-  // lit dans le salon de logs, l'appelant recoit un code.
-  const logged = [...SOURCE.matchAll(/sendLog\(client, `\/internal\/[^`]*error: \$\{\(error as Error\)\.message\}`\)/g)];
+test("le detail de l'erreur part au journal Discord, filtre", () => {
+  // L'exploitant lit le type, le code et le statut dans le salon de logs ; l'appelant
+  // recoit un code. Jamais le message, qui peut recopier un pseudo cherche.
+  const logged = [...SOURCE.matchAll(/reportRouteFailure\(client, "\/internal\/[^"]*error", safeErrorDetail\(error\)\)/g)];
   assert.ok(logged.length >= 8, `trop peu de journalisations (${logged.length})`);
+});
+
+test("reportRouteFailure ne reçoit jamais qu'un détail filtré", () => {
+  // Chaque appel passe le détail par `safeErrorDetail` : ni message ni texte libre.
+  const calls = [...SOURCE.matchAll(/await reportRouteFailure\(client, ([^;]+)\);/g)].map((m) => m[1]);
+  assert.ok(calls.length >= 10, `trop peu d'appels (${calls.length})`);
+  for (const args of calls) {
+    assert.match(args, /^"[^"$`]+", safeErrorDetail\(error\)(, \{[^}]*\})?$/, args);
+  }
+});
+
+test("aucun catch ne journalise le message de l'exception", () => {
+  assert.equal(SOURCE.includes("as Error).message"), false);
+});
+
+test("chaque route asynchrone passe par asyncRoute", () => {
+  // Express 4 ignore la promesse rejetee : sans l'adaptateur, la requete du site
+  // resterait sans reponse jusqu'a son delai.
+  const bare = SOURCE.split("\n").filter((line) => /app\.(get|post|put|delete)\("[^"]+", async /.test(line));
+  assert.deepEqual(bare, []);
 });
 
 test("le flux SSE ne repond plus une fois les en-tetes envoyes", () => {

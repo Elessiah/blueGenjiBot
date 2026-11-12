@@ -9,6 +9,7 @@ import {
   isTransientNetworkError,
   MAX_CAUSE_DEPTH,
   safeErrorCode,
+  safeErrorDetail,
   safeErrorKind,
   safeErrorStatus,
 } from "../../safe/errorGuards.js";
@@ -218,4 +219,61 @@ test("safeErrorStatus_outOfRangeOrThrowing_returnsNull", () => {
   assert.equal(safeErrorStatus({ status: 99 }), null);
   assert.equal(safeErrorStatus({ status: "500" }), null);
   assert.equal(safeErrorStatus({ get status(): number { throw new Error("revoked"); } }), null);
+});
+
+test("safeErrorCode_knownFamilies_returnsCode", () => {
+  for (const code of ["SQLITE_BUSY", "ECONNRESET", "ETIMEDOUT", "ENOTFOUND", "EPIPE", "EAI_AGAIN", "ERR_HTTP_HEADERS_SENT", "ERR_ASSERTION", "UND_ERR_SOCKET", "ABORT_ERR", "50035"]) {
+    assert.equal(safeErrorCode(Object.assign(new Error("x"), { code })), code);
+  }
+});
+
+test("safeErrorCode_singleWordFromInput_returnsNull", () => {
+  // Un mot isolé a la forme d'un identifiant, sans en être un : il peut recopier une valeur reçue.
+  for (const code of ["EquipeBleue", "auth/invalid-token", "CanalBleuNonCache", "pseudo.joueur", "EVIL", "ESPORTX", "EQUIPE_BLEUE", "ERR_"]) {
+    assert.equal(safeErrorCode(Object.assign(new Error("x"), { code })), null);
+  }
+});
+
+test("safeErrorCode_nonFiniteNumber_returnsNull", () => {
+  assert.equal(safeErrorCode(Object.assign(new Error("x"), { code: Number.NaN })), null);
+});
+
+test("safeErrorKind_wordThatIsNotAnErrorClass_returnsError", () => {
+  assert.equal(safeErrorKind(Object.assign(new Error("x"), { name: "EquipeBleue" })), "Error");
+});
+
+test("safeErrorKind_domException_keepsName", () => {
+  assert.equal(safeErrorKind(Object.assign(new Error("x"), { name: "DOMException" })), "DOMException");
+});
+
+test("safeErrorDetail_errorWithCodeAndStatus_returnsKindCodeStatusWithoutMessage", () => {
+  const error = Object.assign(new Error("Missing Permissions pour Equipe Bleue"), {
+    name: "DiscordAPIError[50013]", code: 50013, status: 403,
+  });
+
+  assert.equal(safeErrorDetail(error), "DiscordAPIError, code 50013, statut 403");
+});
+
+test("safeErrorDetail_nullRejection_returnsTypeWithUnknownCode", () => {
+  assert.equal(safeErrorDetail(null), "object, code inconnu");
+  assert.equal(safeErrorDetail(undefined), "undefined, code inconnu");
+});
+
+test("safeErrorCode_discordjsEnumCode_returnsIt", () => {
+  const error = Object.assign(new Error("x"), { code: "GuildMembersTimeout" });
+
+  assert.equal(safeErrorCode(error), "GuildMembersTimeout");
+});
+
+test("safeErrorCode_wordOutsideDiscordjsEnum_returnsNull", () => {
+  const error = Object.assign(new Error("x"), { code: "GuildMembersTimeoutX" });
+
+  assert.equal(safeErrorCode(error), null);
+});
+
+test("safeErrorDetail_transientNetworkCode_kept", () => {
+  // Les codes réseau passagers sont toujours journalisables (liste fermée des codes système).
+  const error = Object.assign(new Error("getaddrinfo EAI_FAIL discord.com"), { code: "EAI_FAIL" });
+
+  assert.equal(safeErrorDetail(error), "Error, code EAI_FAIL");
 });

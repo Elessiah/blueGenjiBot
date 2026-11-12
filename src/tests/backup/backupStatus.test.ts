@@ -8,9 +8,21 @@ import {
   formatBackupFailures,
   formatBackupStatus,
   isBackupFresh,
+  HISTORY_MAX_BYTES,
+  readFileTail,
+  readSmallFile,
+  isHistoryFilePath,
+  STATUS_MAX_BYTES,
+  RUNNING_MAX_BYTES,
   readBackupFailures,
   FAILURE_CAUSE_MAX_LENGTH,
   readBackupStatus,
+  isProcessAlive,
+  readRunningSince,
+  runningMarkerPath,
+  RUNNING_GRACE_MS,
+  RUNNING_MAX_AGE_MS,
+  RUNNING_MAX_LINES,
   STALE_AFTER_MS,
   type BackupStatus,
 } from "../../backup/backupStatus.js";
@@ -32,6 +44,7 @@ const OK_STATUS: BackupStatus = {
   sizeBytes: 12 * 1024 * 1024,
   parts: "sqlite+mysql",
   error: "",
+  historyFile: "",
 };
 
 test("readBackupStatus renvoie null si le fichier n'existe pas", async () => {
@@ -187,4 +200,296 @@ test("formatBackupFailures_longCause_shortened", () => {
     formatBackupFailures([{ date: "2026-09-01T23:49:00+02:00", ok: false, error: cause }]),
     `❌ Échec depuis le rapport précédent : 2026-09-01 — ${"x".repeat(FAILURE_CAUSE_MAX_LENGTH)}….`,
   );
+});
+
+test("readBackupStatus_absoluteHistoryFileBesideStatus_returnsIt", async () => {
+  const file = await writeStatusFile("{}");
+  const historyFile = path.join(path.dirname(file), "history.jsonl");
+  await fs.promises.writeFile(file, JSON.stringify({ ...OK_STATUS, historyFile }));
+
+  assert.equal((await readBackupStatus(file))?.historyFile, historyFile);
+});
+
+test("readBackupStatus_historyFileInAnotherDirectory_returnsEmpty", async () => {
+  // Le journal d'une autre application ne devient pas l'historique relu par le rapport.
+  const historyFile = path.join(os.tmpdir(), "autre-appli", "journal.jsonl");
+  const file = await writeStatusFile(JSON.stringify({ ...OK_STATUS, historyFile }));
+
+  assert.equal((await readBackupStatus(file))?.historyFile, "");
+});
+
+test("readBackupStatus_historyOutsideDir_flagsIgnored", async () => {
+  // Refusé, l'historique n'est pas tu : le rapport saura qu'il n'a pas relu les échecs.
+  const historyFile = path.join(os.tmpdir(), "autre-appli", "journal.jsonl");
+  const file = await writeStatusFile(JSON.stringify({ ...OK_STATUS, historyFile }));
+
+  assert.equal((await readBackupStatus(file))?.historyFileIgnored, true);
+});
+
+test("readBackupStatus_historyInDir_notFlagged", async () => {
+  const file = await writeStatusFile("{}");
+  const historyFile = path.join(path.dirname(file), "history.jsonl");
+  await fs.promises.writeFile(file, JSON.stringify({ ...OK_STATUS, historyFile }));
+
+  assert.equal((await readBackupStatus(file))?.historyFileIgnored, undefined);
+});
+
+test("readSmallFile_symlink_returnsNull", { skip: process.platform === "win32" && "O_NOFOLLOW indisponible" }, async () => {
+  // Un lien posé au chemin du statut n'est jamais suivi.
+  const target = await writeStatusFile(JSON.stringify(OK_STATUS));
+  const link = path.join(path.dirname(target), "lien.json");
+  await fs.promises.symlink(target, link);
+
+  assert.equal(await readSmallFile(link, 16 * 1024), null);
+});
+
+test("isHistoryFilePath_otherDirectoryDeclaredToTheBot_accepted", () => {
+  const declared = path.join(os.tmpdir(), "historiques", "backup-history.jsonl");
+  const previous = process.env.BACKUP_STATUS_HISTORY_PATH;
+  process.env.BACKUP_STATUS_HISTORY_PATH = declared;
+  try {
+    assert.equal(isHistoryFilePath(declared, path.join(os.tmpdir(), "statut", "backup-status.json")), true);
+  } finally {
+    if (previous === undefined) { delete process.env.BACKUP_STATUS_HISTORY_PATH; } else { process.env.BACKUP_STATUS_HISTORY_PATH = previous; }
+  }
+});
+
+test("readBackupStatus_nonStringFields_emptied", async () => {
+  const file = await writeStatusFile(JSON.stringify({ ...OK_STATUS, remote: { x: 1 }, parts: 3, error: ["a"] }));
+
+  const status = await readBackupStatus(file);
+
+  assert.deepEqual([status?.remote, status?.parts, status?.error], ["", "", ""]);
+});
+
+test("readBackupStatus_largerThanBound_returnsNull", async () => {
+  const file = await writeStatusFile(JSON.stringify({ ...OK_STATUS, error: "x".repeat(STATUS_MAX_BYTES) }));
+
+  assert.equal(await readBackupStatus(file), null);
+});
+
+test("readBackupStatus_directoryInsteadOfFile_returnsNull", async () => {
+  const file = await writeStatusFile("{}");
+
+  assert.equal(await readBackupStatus(path.dirname(file)), null);
+});
+
+test("readSmallFile_exactlyAtBound_returnsText", async () => {
+  const file = await writeStatusFile("abcd");
+
+  assert.equal(await readSmallFile(file, 4), "abcd");
+  assert.equal(await readSmallFile(file, 3), null);
+});
+
+test("readBackupStatus_relativeHistoryFile_returnsEmpty", async () => {
+  const file = await writeStatusFile(JSON.stringify({ ...OK_STATUS, historyFile: "history.jsonl" }));
+
+  assert.equal((await readBackupStatus(file))?.historyFile, "");
+});
+
+test("readBackupStatus_historyFileNotJsonlOrWithDotDot_returnsEmpty", async () => {
+  // Un statut réécrit ou détourné ne désigne jamais un fichier quelconque (`/dev/zero`, un gros journal).
+  for (const historyFile of ["/dev/zero", "/var/log/syslog", "/var/lib/bluegenji/../../etc/x.jsonl"]) {
+    const file = await writeStatusFile(JSON.stringify({ ...OK_STATUS, historyFile }));
+    assert.equal((await readBackupStatus(file))?.historyFile, "", historyFile);
+  }
+});
+
+test("readFileTail_smallFile_returnsWholeText", async () => {
+  const file = await writeStatusFile("a\nb\n");
+
+  assert.equal(await readFileTail(file, 1024), "a\nb\n");
+});
+
+test("readFileTail_largerThanBound_readsOnlyTheEndWithoutCutLine", async () => {
+  const file = await writeStatusFile(`${"x".repeat(100)}\nfin1\nfin2\n`);
+
+  assert.equal(await readFileTail(file, 12), "fin1\nfin2\n");
+  // Borne au milieu d'une ligne : la ligne coupée est écartée.
+  assert.equal(await readFileTail(file, 8), "fin2\n");
+});
+
+test("readFileTail_windowStartsOnLineBoundary_keepsFirstLine", async () => {
+  // L'octet avant la fenêtre est un saut de ligne : « fin1 » est entière, gardée.
+  const file = await writeStatusFile("debut\nfin1\nfin2\n");
+
+  assert.equal(await readFileTail(file, 10), "fin1\nfin2\n");
+});
+
+test("readFileTail_windowCutsALine_dropsThePartialLine", async () => {
+  const file = await writeStatusFile("debut\nfin1\nfin2\n");
+
+  assert.equal(await readFileTail(file, 9), "fin2\n");
+});
+
+test("readFileTail_directoryOrMissing_returnsNull", async () => {
+  const file = await writeStatusFile("{}");
+
+  assert.equal(await readFileTail(path.dirname(file), 1024), null);
+  assert.equal(await readFileTail(path.join(path.dirname(file), "absent"), 1024), null);
+});
+
+test("readBackupFailures_hugeHistory_readsOnlyTheBoundedTail", async () => {
+  // Un historique enflé n'est pas chargé en entier : seule sa fin compte, l'échec récent y est.
+  const failedAt = new Date(NOW - 60 * 60 * 1000).toISOString();
+  const filler = `${JSON.stringify({ date: failedAt, ok: true, error: "" })}\n`.repeat(Math.ceil((HISTORY_MAX_BYTES * 2) / 60));
+  const file = await writeStatusFile(`${filler}${JSON.stringify({ date: failedAt, ok: false, error: "fin" })}\n`);
+
+  const failures = await readBackupFailures(file, NOW);
+
+  assert.deepEqual(failures.map((failure) => failure.error), ["fin"]);
+});
+
+test("readRunningSince_markerBeyondByteBound_readsOnlyTheEnd", async () => {
+  const garbage = "x".repeat(RUNNING_MAX_BYTES * 4);
+  const file = await withRunningMarker(`${garbage}\n2026-11-08T22:49:00+00:00 222\n`);
+
+  assert.equal(await readRunningSince(file, REPORT_AT, ALIVE), Date.parse("2026-11-08T22:49:00Z"));
+});
+
+/** Statut temporaire accompagné d'un marqueur de sauvegarde en cours. */
+async function withRunningMarker(content: string): Promise<string> {
+  const file = await writeStatusFile("{}");
+  await fs.promises.writeFile(runningMarkerPath(file), content, "utf8");
+  return file;
+}
+
+const REPORT_AT = Date.parse("2026-11-09T03:00:00Z");
+/** Test de vie d'un PID : tous vivants (les PID des marqueurs de test sont fictifs). */
+const ALIVE = (): boolean => true;
+
+test("readRunningSince_recentMarker_returnsStart", async () => {
+  const file = await withRunningMarker("2026-11-08T22:49:00+00:00\n");
+
+  assert.equal(await readRunningSince(file, REPORT_AT), Date.parse("2026-11-08T22:49:00Z"));
+});
+
+test("readRunningSince_swollenMarker_readsOnlyTheLastLines", async () => {
+  // Les lignes anciennes (au-delà du plafond) ne sont ni lues ni sondées.
+  const old = Array.from({ length: RUNNING_MAX_LINES }, () => "2026-11-08T20:00:00+00:00 111").join("\n");
+  const file = await withRunningMarker(`${old}\n2026-11-08T22:49:00+00:00 222\n`);
+  const probed: number[] = [];
+
+  const since = await readRunningSince(file, REPORT_AT, (pid) => { probed.push(pid); return pid !== 111; });
+
+  assert.equal(since, Date.parse("2026-11-08T22:49:00Z"));
+  assert.ok(probed.length <= RUNNING_MAX_LINES, `${probed.length} sondes`);
+  assert.ok(probed.includes(222));
+});
+
+test("readRunningSince_noMarker_returnsNull", async () => {
+  const file = await writeStatusFile("{}");
+
+  assert.equal(await readRunningSince(file, REPORT_AT), null);
+});
+
+test("readRunningSince_markerOlderThanMaxAge_returnsNull", async () => {
+  const file = await withRunningMarker(new Date(REPORT_AT - RUNNING_MAX_AGE_MS).toISOString());
+
+  assert.equal(await readRunningSince(file, REPORT_AT), null);
+});
+
+test("readRunningSince_markerJustUnderMaxAge_returnsStart", async () => {
+  const start = REPORT_AT - RUNNING_MAX_AGE_MS + 1000;
+  const file = await withRunningMarker(new Date(start).toISOString());
+
+  assert.equal(await readRunningSince(file, REPORT_AT), start);
+});
+
+test("readRunningSince_futureMarker_returnsNull", async () => {
+  const file = await withRunningMarker("2026-11-10T00:00:00Z");
+
+  assert.equal(await readRunningSince(file, REPORT_AT), null);
+});
+
+test("readRunningSince_lineWithPid_returnsStart", async () => {
+  const file = await withRunningMarker("2026-11-08T22:49:00+00:00 4242\n");
+
+  assert.equal(await readRunningSince(file, REPORT_AT, ALIVE), Date.parse("2026-11-08T22:49:00Z"));
+});
+
+test("readRunningSince_twoOverlappingRuns_returnsEarliestStart", async () => {
+  const file = await withRunningMarker("2026-11-08T23:10:00+00:00 5151\n2026-11-08T22:49:00+00:00 4242\n");
+
+  assert.equal(await readRunningSince(file, REPORT_AT, ALIVE), Date.parse("2026-11-08T22:49:00Z"));
+});
+
+test("readRunningSince_staleAndRecentLines_ignoresTheStaleOne", async () => {
+  const stale = new Date(REPORT_AT - RUNNING_MAX_AGE_MS).toISOString();
+  const file = await withRunningMarker(`${stale} 1\ndemain 2\n2026-11-08T22:49:00+00:00 4242\n`);
+
+  assert.equal(await readRunningSince(file, REPORT_AT, ALIVE), Date.parse("2026-11-08T22:49:00Z"));
+});
+
+test("readRunningSince_emptyMarker_returnsNull", async () => {
+  const file = await withRunningMarker("");
+
+  assert.equal(await readRunningSince(file, REPORT_AT), null);
+});
+
+test("readRunningSince_unreadableDate_returnsNull", async () => {
+  const file = await withRunningMarker("demain");
+
+  assert.equal(await readRunningSince(file, REPORT_AT), null);
+});
+
+/** Statut réussi daté de `ageMs` avant le rapport. */
+const okStatusAged = (ageMs: number): BackupStatus => ({ ...OK_STATUS, date: new Date(REPORT_AT - ageMs).toISOString() });
+const HOUR = 60 * 60 * 1000;
+
+/** Statut du mardi 23 h 49 (heure de Paris), relu au rapport du lundi 4 h : 5 jours 4 h 11. */
+const TUESDAY_STATUS: BackupStatus = { ...OK_STATUS, date: "2026-11-03T22:49:00.000Z" };
+
+test("isBackupFresh_runningAndTuesdayStatus_returnsTrue", () => {
+  assert.equal(isBackupFresh(TUESDAY_STATUS, REPORT_AT, true), true);
+});
+
+test("isBackupFresh_notRunningAndTuesdayStatus_returnsFalse", () => {
+  assert.equal(isBackupFresh(TUESDAY_STATUS, REPORT_AT, false), false);
+});
+
+test("isBackupFresh_runningTuesdayStatus_olderThanATwoDayGrace", () => {
+  // Le délai de grâce doit dépasser l'écart réel : deux jours (5 j au total) ne suffiraient pas.
+  assert.ok(REPORT_AT - Date.parse(TUESDAY_STATUS.date) > STALE_AFTER_MS + 2 * 24 * HOUR);
+  assert.ok(RUNNING_GRACE_MS >= 3 * 24 * HOUR);
+});
+
+test("isBackupFresh_runningBeyondGrace_returnsFalse", () => {
+  assert.equal(isBackupFresh(okStatusAged(STALE_AFTER_MS + RUNNING_GRACE_MS), REPORT_AT, true), false);
+});
+
+test("formatBackupStatus_freshOnlyThanksToRunning_mentionsRunningBackup", () => {
+  const line = formatBackupStatus(TUESDAY_STATUS, REPORT_AT, Date.parse("2026-11-08T22:49:00Z"));
+
+  assert.match(line, /^☁️ /);
+  assert.match(line, /Sauvegarde suivante en cours depuis le 2026-11-08 à 22:49 \(UTC\)\./);
+});
+
+test("formatBackupStatus_freshWithoutNeedOfRunning_noRunningMention", () => {
+  const line = formatBackupStatus(okStatusAged(HOUR), REPORT_AT, Date.parse("2026-11-09T02:00:00Z"));
+
+  assert.doesNotMatch(line, /en cours/);
+});
+
+test("readRunningSince_lineWithDeadPid_returnsNull", async () => {
+  // Exécution tuée sans repasser par sa sortie : sa ligne reste, son PID ne tourne plus.
+  const file = await withRunningMarker("2026-11-08T22:49:00+00:00 4242\n");
+
+  assert.equal(await readRunningSince(file, REPORT_AT, () => false), null);
+});
+
+test("readRunningSince_deadAndAliveLines_returnsAliveStart", async () => {
+  const file = await withRunningMarker("2026-11-08T22:49:00+00:00 4242\n2026-11-09T00:30:00+00:00 5151\n");
+
+  const since = await readRunningSince(file, REPORT_AT, (pid) => pid === 5151);
+
+  assert.equal(since, Date.parse("2026-11-09T00:30:00Z"));
+});
+
+test("isProcessAlive_currentProcess_returnsTrue", () => {
+  assert.equal(isProcessAlive(process.pid), true);
+});
+
+test("isProcessAlive_unknownPid_returnsFalse", () => {
+  assert.equal(isProcessAlive(2_147_483_646), false);
 });

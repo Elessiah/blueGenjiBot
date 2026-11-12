@@ -19,6 +19,10 @@
  */
 
 
+import { DiscordjsErrorCodes } from "discord.js";
+import { constants as osConstants } from "node:os";
+import * as dns from "node:dns";
+
 /** Codes système/undici signalant une indisponibilité réseau passagère. */
 const TRANSIENT_NETWORK_CODES: ReadonlySet<string> = new Set([
     "EAI_AGAIN",
@@ -203,18 +207,63 @@ const DISCORD_UNKNOWN_USER = 10013;
 /** Code Discord d'un salon inconnu : la conversation n'existe plus. */
 const DISCORD_UNKNOWN_CHANNEL = 10003;
 
-/** Code d'erreur assez court et sans espace pour être un identifiant (`SQLITE_BUSY`, 50035). */
-const SAFE_ERROR_CODE = /^[\w.-]{1,40}$/;
+/**
+ * Codes d'erreur journalisables, par famille connue — jamais par la seule forme :
+ * un mot isolé recopié d'une valeur reçue (« EquipeBleue », un sigle « EVIL ») a la
+ * forme d'un identifiant. Numérique (Discord `50035`, statut), SQLite (`SQLITE_BUSY`),
+ * Node (`ERR_HTTP_HEADERS_SENT`), undici (`UND_ERR_SOCKET`), abandon (`ABORT_ERR`) ;
+ * les codes système (`ECONNRESET`, `EAI_AGAIN`) sont, eux, lus dans une liste fermée
+ * ({@link SYSTEM_ERROR_CODES}).
+ */
+const SAFE_ERROR_CODES: readonly RegExp[] = [
+    /^\d{1,10}$/,
+    /^SQLITE_[A-Z_]{1,40}$/,
+    /^ERR_[A-Z0-9_]{3,60}$/,
+    /^UND_ERR_[A-Z_]{1,40}$/,
+    /^ABORT_ERR$/,
+];
 
 /**
- * Code d'une erreur sûr à journaliser : son `code` s'il a la forme d'un
- * identifiant — jamais une phrase qui recopierait une valeur reçue.
+ * Codes système journalisables : ceux du système (`os.constants.errno` :
+ * `ECONNRESET`, `ETIMEDOUT`…), ceux de la résolution DNS (`EAI_*` de getaddrinfo,
+ * `dns` : `ENOTFOUND`, `ECONNREFUSED`…) — une liste fermée, jamais toute
+ * majuscule commençant par `E`.
+ */
+const SYSTEM_ERROR_CODES: ReadonlySet<string> = new Set([
+    ...Object.keys(osConstants.errno),
+    ...(Object.values(dns) as unknown[]).filter((value): value is string => typeof value === "string" && /^E[A-Z]+$/.test(value)),
+    "EAI_ADDRFAMILY", "EAI_AGAIN", "EAI_BADFLAGS", "EAI_BADHINTS", "EAI_CANCELED", "EAI_FAIL",
+    "EAI_FAMILY", "EAI_MEMORY", "EAI_NODATA", "EAI_NONAME", "EAI_OVERFLOW", "EAI_PROTOCOL",
+    "EAI_SERVICE", "EAI_SOCKTYPE", "EAI_SYSTEM",
+    // Les codes réseau passagers suivent toujours : un code ajouté là est journalisable ici.
+    ...TRANSIENT_NETWORK_CODES,
+]);
+
+/**
+ * Codes de discord.js (`TokenInvalid`, `GuildMembersTimeout`…) : valeurs fixes de
+ * son énumération, jamais recopiées d'une valeur reçue.
+ */
+const DISCORDJS_ERROR_CODES: ReadonlySet<string> = new Set(Object.values(DiscordjsErrorCodes) as string[]);
+
+/**
+ * Type d'une `Error` journalisable : un nom de classe d'erreur (`TypeError`,
+ * `DiscordAPIError`, `DOMException`), jamais un mot quelconque.
+ */
+const SAFE_ERROR_NAME = /^[A-Z][A-Za-z]{0,38}(Error|Exception)$/;
+
+/**
+ * Code d'une erreur sûr à journaliser : son `code` s'il appartient à une famille
+ * connue ({@link SAFE_ERROR_CODES}) — jamais une phrase ni un mot qui recopierait
+ * une valeur reçue.
  * @param error Valeur capturée.
  * @returns Le code, ou `null`.
  */
 function safeErrorCode(error: unknown): string | number | null {
     const code = errorCode(error);
-    return code !== null && SAFE_ERROR_CODE.test(String(code)) ? code : null;
+    if (code === null) return null;
+    if (typeof code === "number") return Number.isFinite(code) ? code : null;
+    if (DISCORDJS_ERROR_CODES.has(code) || SYSTEM_ERROR_CODES.has(code)) return code;
+    return SAFE_ERROR_CODES.some((pattern) => pattern.test(code)) ? code : null;
 }
 
 /**
@@ -228,7 +277,7 @@ function safeErrorKind(error: unknown): string {
         if (!isNativeError(error)) return typeof error;
         // discord.js suffixe le code au nom (`DiscordAPIError[50035]`) : le code se journalise à part.
         const name = String(error.name).replace(/\[\d{1,10}\]$/, "");
-        return SAFE_ERROR_CODE.test(name) ? name : "Error";
+        return SAFE_ERROR_NAME.test(name) ? name : "Error";
     } catch {
         return "Error";
     }
@@ -249,6 +298,21 @@ function safeErrorStatus(error: unknown): number | null {
     }
 }
 
+/**
+ * Désigne une erreur pour un journal (salon de logs, alerte, pm2) par son type,
+ * son code et son statut HTTP filtrés — jamais par son message, qui peut recopier
+ * un pseudo cherché, un nom d'équipe ou du SQL. Ne lève jamais (un rejet `null`
+ * compris) : forme commune des `catch` des routes de l'API interne.
+ * @param error Valeur capturée.
+ * @returns `<type>, code <code>[, statut <n>]`.
+ */
+function safeErrorDetail(error: unknown): string {
+    const code = safeErrorCode(error);
+    const status = safeErrorStatus(error);
+    const shownStatus = status === null ? "" : `, statut ${status}`;
+    return `${safeErrorKind(error)}, code ${code ?? "inconnu"}${shownStatus}`;
+}
+
 /** Codes Discord d'un accès refusé : une nouvelle tentative n'y changera rien. */
 const DISCORD_MISSING_ACCESS = 50001;
 const DISCORD_MISSING_PERMISSIONS = 50013;
@@ -265,6 +329,7 @@ export {
     describeError,
     errorCode,
     safeErrorCode,
+    safeErrorDetail,
     safeErrorKind,
     safeErrorStatus,
     isIgnorableDiscordError,

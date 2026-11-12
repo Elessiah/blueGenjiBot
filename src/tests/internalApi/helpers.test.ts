@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import type { Request, Response } from "express";
+import express, { type Request, type Response } from "express";
 import {
   absDelta,
   deterministicColor,
@@ -9,10 +9,21 @@ import {
   relayStatus,
   sparklineFromBuckets,
   SPARKLINE_POINTS,
+  asyncRoute,
   internalErrorHandler,
   internalErrorLogLine,
   internalErrorReply,
+  unwrappedRoutes,
+  wrapUnwrappedRoutes,
+  ROUTER_STACK_NOT_FOUND,
+  resetProcessLogThrottle,
+  createLineThrottle,
+  LINE_THROTTLE_MEMORY,
+  logProcessError,
 } from "../../internalApi/helpers.js";
+import type { AddressInfo } from "node:net";
+
+test.beforeEach(() => resetProcessLogThrottle());
 
 test("absDelta formate le signe correctement", () => {
   assert.equal(absDelta(15, 12), "+3");
@@ -161,24 +172,25 @@ test("internalErrorLogLine_bodyParserRefusal_returnsCodeOnly", () => {
 test("internalErrorLogLine_unexpectedError_returnsNameAndCodeWithoutMessage", () => {
   const error = Object.assign(new Error("UNIQUE constraint failed: Team.name 'Equipe Bleue'"), { code: "SQLITE_CONSTRAINT" });
 
-  assert.equal(internalErrorLogLine(error), "[internalApi] INTERNAL_ERROR (Error SQLITE_CONSTRAINT)");
+  assert.equal(internalErrorLogLine(error), "[internalApi] INTERNAL_ERROR (Error, code SQLITE_CONSTRAINT)");
 });
 
 test("internalErrorLogLine_codeWithSpaces_dropsCode", () => {
   const error = Object.assign(new TypeError("x"), { code: "texte libre d'un joueur" });
 
-  assert.equal(internalErrorLogLine(error), "[internalApi] INTERNAL_ERROR (TypeError)");
+  assert.equal(internalErrorLogLine(error), "[internalApi] INTERNAL_ERROR (TypeError, code inconnu)");
 });
 
 test("internalErrorLogLine_nonError_returnsItsType", () => {
-  assert.equal(internalErrorLogLine("Equipe Bleue"), "[internalApi] INTERNAL_ERROR (string)");
+  assert.equal(internalErrorLogLine("Equipe Bleue"), "[internalApi] INTERNAL_ERROR (string, code inconnu)");
 });
 
 /** Réponse Express factice : retient ce qui lui est écrit. */
-function fakeResponse(headersSent: boolean) {
+function fakeResponse(headersSent: boolean, writableEnded = false) {
   const written = { status: 0, json: undefined as unknown, destroyed: false };
   const res = {
     headersSent,
+    writableEnded,
     status(code: number) { written.status = code; return res; },
     json(body: unknown) { written.json = body; return res; },
     destroy() { written.destroyed = true; return res; },
@@ -190,10 +202,10 @@ test("internalErrorHandler_unexpectedError_replies500AndLogs", () => {
   const lines: string[] = [];
   const { res, written } = fakeResponse(false);
 
-  internalErrorHandler((line) => lines.push(line))(new Error("secret"), {} as Request, res, () => undefined);
+  internalErrorHandler({ error: (line) => lines.push(line) })(new Error("secret"), {} as Request, res, () => undefined);
 
   assert.deepEqual(written, { status: 500, json: { error: "INTERNAL_ERROR" }, destroyed: false });
-  assert.deepEqual(lines, ["[internalApi] INTERNAL_ERROR (Error)"]);
+  assert.deepEqual(lines, ["[internalApi] INTERNAL_ERROR (Error, code inconnu)"]);
 });
 
 test("internalErrorHandler_headersAlreadySent_destroysSocketWithoutBodyNorNext", () => {
@@ -201,28 +213,517 @@ test("internalErrorHandler_headersAlreadySent_destroysSocketWithoutBodyNorNext",
   const { res, written } = fakeResponse(true);
   let nextCalled = false;
 
-  internalErrorHandler((line) => lines.push(line))(new Error("x"), {} as Request, res, () => { nextCalled = true; });
+  internalErrorHandler({ error: (line) => lines.push(line) })(new Error("x"), {} as Request, res, () => { nextCalled = true; });
 
   // Connexion coupée : le lecteur voit une réponse tronquée, jamais une fin normale.
   assert.deepEqual(written, { status: 0, json: undefined, destroyed: true });
   assert.equal(nextCalled, false);
-  assert.deepEqual(lines, ["[internalApi] INTERNAL_ERROR (Error)"]);
+  assert.deepEqual(lines, ["[internalApi] INTERNAL_ERROR (Error, code inconnu)"]);
 });
 
 test("internalErrorLogLine_freeTextName_fallsBackToError", () => {
   const error = Object.assign(new Error("x"), { name: "Equipe Bleue a triché" });
 
-  assert.equal(internalErrorLogLine(error), "[internalApi] INTERNAL_ERROR (Error)");
+  assert.equal(internalErrorLogLine(error), "[internalApi] INTERNAL_ERROR (Error, code inconnu)");
 });
 
 test("internalErrorHandler_destroyThrowsAfterHeadersSent_swallowsIt", () => {
   const res = { headersSent: true, destroy() { throw new Error("socket closed"); } } as unknown as Response;
 
-  assert.doesNotThrow(() => internalErrorHandler(() => undefined)(new Error("x"), {} as Request, res, () => undefined));
+  assert.doesNotThrow(() => internalErrorHandler({ error: () => undefined })(new Error("x"), {} as Request, res, () => undefined));
 });
 
 test("internalErrorReply_throwingTypeGetter_returns500", () => {
   const error = { get type(): string { throw new Error("revoked"); } };
 
   assert.deepEqual(internalErrorReply(error), { code: "INTERNAL_ERROR", status: 500 });
+});
+
+test("internalErrorReply_exposedZlibErrorWithoutType_returnsInvalidBody", () => {
+  // Flux gzip corrompu : body-parser lève un 400 exposé, sans `type` listé, code de zlib gardé.
+  assert.deepEqual(internalErrorReply({ expose: true, status: 400, code: "Z_DATA_ERROR" }), { code: "INVALID_BODY", status: 400 });
+});
+
+test("internalErrorReply_exposedHttpErrorFromRoute_returns500", () => {
+  // Un `http-errors` 4xx levé par une route n'est pas un refus du corps : défaut du serveur.
+  assert.deepEqual(internalErrorReply({ expose: true, status: 400 }), { code: "INTERNAL_ERROR", status: 500 });
+  assert.deepEqual(internalErrorReply({ expose: true, status: 404, code: "Z_DATA_ERROR" }), { code: "INTERNAL_ERROR", status: 500 });
+  assert.deepEqual(internalErrorReply({ expose: true, status: 409, code: "ECONFLICT" }), { code: "INTERNAL_ERROR", status: 500 });
+});
+
+test("internalErrorReply_zlibCodeWithoutExpose_returns500", () => {
+  assert.deepEqual(internalErrorReply({ status: 400, code: "Z_DATA_ERROR" }), { code: "INTERNAL_ERROR", status: 500 });
+});
+
+test("internalErrorReply_exposedWith5xx_returns500", () => {
+  assert.deepEqual(internalErrorReply({ expose: true, status: 502 }), { code: "INTERNAL_ERROR", status: 500 });
+});
+
+test("internalErrorReply_exposedFlagNotTrue_returns500", () => {
+  assert.deepEqual(internalErrorReply({ expose: "true", status: 400 }), { code: "INTERNAL_ERROR", status: 500 });
+});
+
+test("internalErrorHandler_clientRefusal_warnsWithoutErrorNorReport", () => {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const reports: string[] = [];
+  const { res, written } = fakeResponse(false);
+
+  internalErrorHandler({ error: (l) => errors.push(l), warn: (l) => warnings.push(l), report: (l) => reports.push(l) })(
+    { type: "request.aborted", status: 400 }, {} as Request, res, () => undefined,
+  );
+
+  assert.deepEqual(written, { status: 400, json: { error: "REQUEST_ABORTED" }, destroyed: false });
+  assert.deepEqual(warnings, ["[internalApi] REQUEST_ABORTED"]);
+  assert.deepEqual(errors, []);
+  assert.deepEqual(reports, []);
+});
+
+test("internalErrorHandler_unexpectedError_reportsSameLine", () => {
+  const reports: string[] = [];
+  const { res } = fakeResponse(false);
+
+  internalErrorHandler({ error: () => undefined, report: (l) => reports.push(l) })(
+    Object.assign(new Error("secret Equipe Bleue"), { code: "SQLITE_BUSY" }), {} as Request, res, () => undefined,
+  );
+
+  assert.deepEqual(reports, ["[internalApi] INTERNAL_ERROR (Error, code SQLITE_BUSY)"]);
+});
+
+test("internalErrorHandler_throwingReport_stillReplies", () => {
+  const { res, written } = fakeResponse(false);
+
+  internalErrorHandler({ error: () => undefined, report: () => { throw new Error("salon injoignable"); } })(
+    new Error("x"), {} as Request, res, () => undefined,
+  );
+
+  assert.deepEqual(written, { status: 500, json: { error: "INTERNAL_ERROR" }, destroyed: false });
+});
+
+/** Appelle une route enveloppée et rend ce qu'elle a passé à `next`. */
+async function nextOf(handler: Parameters<typeof asyncRoute>[0]): Promise<unknown[]> {
+  const calls: unknown[] = [];
+  asyncRoute(handler)({} as Request, {} as Response, (error?: unknown) => { calls.push(error); });
+  await new Promise((resolve) => setImmediate(resolve));
+  return calls;
+}
+
+test("asyncRoute_rejectedHandler_forwardsErrorToNext", async () => {
+  const error = new Error("boom");
+
+  assert.deepEqual(await nextOf(async () => { throw error; }), [error]);
+});
+
+test("asyncRoute_nullRejection_forwardsAnError", async () => {
+  const calls = await nextOf(() => Promise.reject(null)); // NOSONAR : rejet sans valeur, le cas éprouvé
+
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0] instanceof Error);
+});
+
+test("asyncRoute_synchronousThrow_forwardsError", async () => {
+  const error = new Error("sync");
+
+  assert.deepEqual(await nextOf(() => { throw error; }), [error]);
+});
+
+test("asyncRoute_resolvedHandler_doesNotCallNext", async () => {
+  assert.deepEqual(await nextOf(async () => undefined), []);
+});
+
+test("asyncRoute_zeroRejection_forwardsAnError", async () => {
+  const calls = await nextOf(() => Promise.reject(0)); // NOSONAR : rejet falsy, le cas éprouvé
+
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0] instanceof Error);
+});
+
+test("asyncRoute_emptyStringRejection_forwardsAnError", async () => {
+  const calls = await nextOf(() => Promise.reject("")); // NOSONAR : rejet falsy, le cas éprouvé
+
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0] instanceof Error);
+});
+
+test("asyncRoute_falseRejection_forwardsAnError", async () => {
+  const calls = await nextOf(() => Promise.reject(false)); // NOSONAR : rejet falsy, le cas éprouvé
+
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0] instanceof Error);
+});
+
+test("asyncRoute_routeStringRejection_forwardsAnError", async () => {
+  // `next("route")` passerait à la route suivante au lieu du gestionnaire d'erreur.
+  const calls = await nextOf(() => Promise.reject("route")); // NOSONAR : chaîne spéciale d'Express
+
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0] instanceof Error);
+});
+
+test("asyncRoute_routerStringRejection_forwardsAnError", async () => {
+  const calls = await nextOf(() => Promise.reject("router")); // NOSONAR : chaîne spéciale d'Express
+
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0] instanceof Error);
+});
+
+test("asyncRoute_truthyNonErrorRejection_forwardsItUnchanged", async () => {
+  const rejection = { code: 1 };
+
+  assert.deepEqual(await nextOf(() => Promise.reject(rejection)), [rejection]); // NOSONAR : rejet non-Error, le cas éprouvé
+});
+
+test("internalErrorHandler_responseAlreadyEnded_neitherDestroysNorWritesButLogsAndReports", () => {
+  const lines: string[] = [];
+  const reports: string[] = [];
+  const { res, written } = fakeResponse(true, true);
+
+  internalErrorHandler({ error: (line) => lines.push(line), report: (line) => reports.push(line) })(
+    new Error("x"), {} as Request, res, () => undefined,
+  );
+
+  // Réponse déjà partie en entier : la couper la ferait perdre au site.
+  assert.deepEqual(written, { status: 0, json: undefined, destroyed: false });
+  assert.deepEqual(lines, ["[internalApi] INTERNAL_ERROR (Error, code inconnu)"]);
+  assert.deepEqual(reports, ["[internalApi] INTERNAL_ERROR (Error, code inconnu)"]);
+});
+
+test("unwrappedRoutes_everyHandlerWrapped_returnsEmpty", () => {
+  const app = express();
+  app.get("/a", asyncRoute(async () => undefined));
+  app.post("/b", asyncRoute(() => undefined));
+
+  assert.deepEqual(unwrappedRoutes(app), []);
+});
+
+test("unwrappedRoutes_plainAsyncHandler_listsMethodAndPath", () => {
+  const app = express();
+  app.get("/a", asyncRoute(async () => undefined));
+  app.post("/b", async () => undefined);
+
+  assert.deepEqual(unwrappedRoutes(app), ["POST /b"]);
+});
+
+test("unwrappedRoutes_middlewareOnly_returnsEmpty", () => {
+  const app = express();
+  app.use((_req, _res, next) => { next(); });
+
+  assert.deepEqual(unwrappedRoutes(app), []);
+});
+
+test("unwrappedRoutes_syncMiddlewareBeforeWrappedHandler_returnsEmpty", () => {
+  const app = express();
+  app.post("/a", express.json({ limit: "1kb" }), asyncRoute(async () => undefined));
+
+  assert.deepEqual(unwrappedRoutes(app), []);
+});
+
+test("unwrappedRoutes_bareAsyncMiddleware_listsTheRoute", () => {
+  const app = express();
+  app.post("/a", async (_req, _res, next) => { next(); }, asyncRoute(async () => undefined));
+
+  assert.deepEqual(unwrappedRoutes(app), ["POST /a"]);
+});
+
+test("unwrappedRoutes_plainHandlerOnMountedRouter_listsIt", () => {
+  const app = express();
+  const router = express.Router();
+  router.get("/b", async () => undefined);
+  app.use("/internal/x", router);
+
+  // Le chemin de montage est repris : la ligne de démarrage désigne la vraie route.
+  assert.deepEqual(unwrappedRoutes(app), ["GET /internal/x/b"]);
+});
+
+test("unwrappedRoutes_noRouterStack_returnsNotFoundMarker", () => {
+  // Pile absente (autre version d'Express) : jamais une liste vide qui ferait croire tout enveloppé.
+  assert.deepEqual(unwrappedRoutes({} as Parameters<typeof unwrappedRoutes>[0]), [ROUTER_STACK_NOT_FOUND]);
+});
+
+test("wrapUnwrappedRoutes_noRouterStack_returnsNotFoundMarker", () => {
+  assert.deepEqual(wrapUnwrappedRoutes({} as Parameters<typeof wrapUnwrappedRoutes>[0]), [ROUTER_STACK_NOT_FOUND]);
+});
+
+/** Démarre `app` sur un port libre, appelle `route`, rend le statut et le corps, puis ferme. */
+async function callOnce(app: ReturnType<typeof express>, route: string): Promise<{ status: number; body: string }> {
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise<void>((resolve) => server.once("listening", () => resolve()));
+  try {
+    const { port } = server.address() as AddressInfo;
+    const response = await fetch(`http://127.0.0.1:${port}${route}`, { signal: AbortSignal.timeout(5_000) });
+    return { status: response.status, body: await response.text() };
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+}
+
+test("wrapUnwrappedRoutes_rejectingPlainRoute_answers500AndListsIt", async () => {
+  const app = express();
+  app.get("/a", async () => { throw new Error("secret"); });
+  app.use(internalErrorHandler({ error: () => undefined }));
+
+  const wrapped = wrapUnwrappedRoutes(app);
+  const { status, body } = await callOnce(app, "/a");
+
+  assert.deepEqual(wrapped, ["GET /a"]);
+  assert.equal(status, 500);
+  assert.deepEqual(JSON.parse(body), { error: "INTERNAL_ERROR" });
+  assert.deepEqual(unwrappedRoutes(app), []);
+});
+
+test("wrapUnwrappedRoutes_wrappedAsyncMiddleware_stillCallsNext", async () => {
+  const app = express();
+  app.get("/a", async (_req, _res, next) => { next(); }, asyncRoute((_req, res) => { res.json({ ok: true }); }));
+
+  const wrapped = wrapUnwrappedRoutes(app);
+  const { status, body } = await callOnce(app, "/a");
+
+  assert.deepEqual(wrapped, ["GET /a"]);
+  assert.equal(status, 200);
+  assert.deepEqual(JSON.parse(body), { ok: true });
+});
+
+test("wrapUnwrappedRoutes_everyRouteWrapped_changesNothing", () => {
+  const app = express();
+  app.get("/a", asyncRoute(async () => undefined));
+
+  assert.deepEqual(wrapUnwrappedRoutes(app), []);
+});
+
+test("wrapUnwrappedRoutes_middlewareRejectsAfterNext_answersOnceAndLogs", async () => {
+  const logged: string[] = [];
+  const app = express();
+  app.get(
+    "/a",
+    async (_req, _res, next) => {
+      next();
+      throw new TypeError("pseudo secret");
+    },
+    asyncRoute(async (_req, res) => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      res.json({ ok: true });
+    }),
+  );
+  app.use(internalErrorHandler({ error: () => undefined }));
+  wrapUnwrappedRoutes(app);
+
+  const consoleError = console.error;
+  console.error = (...args: unknown[]) => { logged.push(args.map(String).join(" ")); };
+  let answer: { status: number; body: string };
+  try {
+    answer = await callOnce(app, "/a");
+  } finally {
+    console.error = consoleError;
+  }
+
+  // La suite de la chaîne répond : pas de second `next(err)` (500) par-dessus sa réponse.
+  assert.equal(answer.status, 200);
+  assert.deepEqual(JSON.parse(answer.body), { ok: true });
+  assert.deepEqual(logged, ["[internalApi] INTERNAL_ERROR (TypeError, code inconnu)"]);
+});
+
+test("unwrappedRoutes_asyncAppUseMiddleware_listsUsePath", () => {
+  const app = express();
+  app.use("/internal", async (_req, _res, next) => { next(); });
+  app.get("/internal/a", asyncRoute(async () => undefined));
+
+  assert.deepEqual(unwrappedRoutes(app), ["USE /internal"]);
+});
+
+test("unwrappedRoutes_routerMountedWithParam_listsPlaceholderPrefix", () => {
+  const app = express();
+  const router = express.Router();
+  router.get("/b", async () => undefined);
+  app.use("/i/:id", router);
+
+  assert.deepEqual(unwrappedRoutes(app), ["GET /(?)/b"]);
+});
+
+test("unwrappedRoutes_routerMountedAtRoot_listsRoutePath", () => {
+  const app = express();
+  const router = express.Router();
+  router.get("/b", async () => undefined);
+  app.use(router);
+
+  assert.deepEqual(unwrappedRoutes(app), ["GET /b"]);
+});
+
+test("wrapUnwrappedRoutes_promiseReturningNonAsyncMiddleware_answers500", async () => {
+  // Rend une promesse sans être déclaré `async` : invisible sans l'appeler, enveloppé quand même.
+  const app = express();
+  app.get(
+    "/a",
+    () => Promise.reject(new Error("secret")),
+    asyncRoute((_req, res) => { res.json({ ok: true }); }),
+  );
+  app.use(internalErrorHandler({ error: () => undefined }));
+
+  const wrapped = wrapUnwrappedRoutes(app);
+  const { status, body } = await callOnce(app, "/a");
+
+  assert.deepEqual(wrapped, []);
+  assert.equal(status, 500);
+  assert.deepEqual(JSON.parse(body), { error: "INTERNAL_ERROR" });
+});
+
+test("wrapUnwrappedRoutes_asyncAppUseMiddlewareRejects_answers500", async () => {
+  const app = express();
+  app.use(async () => { throw new Error("secret"); });
+  app.get("/a", asyncRoute((_req, res) => { res.json({ ok: true }); }));
+  app.use(internalErrorHandler({ error: () => undefined }));
+
+  const wrapped = wrapUnwrappedRoutes(app);
+  const { status, body } = await callOnce(app, "/a");
+
+  assert.deepEqual(wrapped, ["USE /"]);
+  assert.equal(status, 500);
+  assert.deepEqual(JSON.parse(body), { error: "INTERNAL_ERROR" });
+});
+
+test("createLineThrottle_sameLineWithinCooldown_suppressedThenCountedOnNextEmit", () => {
+  const throttle = createLineThrottle(1_000);
+
+  assert.deepEqual(throttle.check("a", 0), { emit: true, suppressed: 0 });
+  assert.deepEqual(throttle.check("a", 999), { emit: false, suppressed: 0 });
+  assert.deepEqual(throttle.check("a", 999), { emit: false, suppressed: 0 });
+  assert.deepEqual(throttle.check("a", 1_000), { emit: true, suppressed: 2 });
+});
+
+test("createLineThrottle_memoryFull_evictsExpiredThenOldestNeverAll", () => {
+  const throttle = createLineThrottle(1_000, 3);
+  throttle.check("a", 0);
+  throttle.check("b", 500);
+  throttle.check("c", 600);
+
+  // « a » est échue : elle seule part ; « b » et « c » gardent leur délai.
+  assert.equal(throttle.check("d", 1_000).emit, true);
+  assert.equal(throttle.check("b", 1_001).emit, false);
+  assert.equal(throttle.check("c", 1_001).emit, false);
+  // Rien d'échu : la plus ancienne (« b ») part, « c » et « d » restent étranglées.
+  assert.equal(throttle.check("e", 1_002).emit, true);
+  assert.equal(throttle.check("c", 1_003).emit, false);
+  assert.equal(throttle.check("d", 1_003).emit, false);
+});
+
+test("createLineThrottle_defaultMemory_isBounded", () => {
+  assert.equal(LINE_THROTTLE_MEMORY, 100);
+  const throttle = createLineThrottle(10_000);
+  for (let i = 0; i < 300; i++) throttle.check(`l${i}`, i);
+  // La dernière ligne est encore étranglée : la mémoire ne s'est pas vidée d'un coup.
+  assert.equal(throttle.check("l299", 300).emit, false);
+});
+
+test("internalErrorHandler_sameClientRefusalRepeated_warnsOncePerMinuteWithCount", () => {
+  const warnings: string[] = [];
+  let clock = 0;
+  const handler = internalErrorHandler({ warn: (l) => warnings.push(l), now: () => clock });
+  const res = () => ({ headersSent: false, writableEnded: false, status() { return this; }, json() { return this; } }) as unknown as Response;
+  const refusal = () => Object.assign(new Error("x"), { type: "entity.parse.failed", status: 400 });
+
+  for (let i = 0; i < 3; i++) handler(refusal(), {} as Request, res(), () => undefined);
+  clock = 60_000;
+  handler(refusal(), {} as Request, res(), () => undefined);
+
+  assert.deepEqual(warnings, ["[internalApi] INVALID_JSON", "[internalApi] INVALID_JSON (+2 identiques tues)"]);
+});
+
+test("internalErrorHandler_repeatedServerError_reportsEveryTimeToSinkOnly", () => {
+  const errors: string[] = [];
+  const reports: string[] = [];
+  const handler = internalErrorHandler({ error: (l) => errors.push(l), report: (l) => reports.push(l), now: () => 0 });
+  const res = () => ({ headersSent: false, writableEnded: false, status() { return this; }, json() { return this; } }) as unknown as Response;
+
+  handler(new Error("x"), {} as Request, res(), () => undefined);
+  handler(new Error("x"), {} as Request, res(), () => undefined);
+
+  assert.equal(errors.length, 1);
+  // Le salon a son propre étranglement : la ligne lui est toujours transmise.
+  assert.equal(reports.length, 2);
+});
+
+test("wrapUnwrappedRoutes_syncMiddleware_noPromiseAndStillRuns", async () => {
+  const app = express();
+  app.use((_req, res, next) => { res.setHeader("x-test", "1"); next(); });
+  app.get("/a", (_req, res) => { res.json({ ok: true }); });
+
+  wrapUnwrappedRoutes(app);
+  const { status } = await callOnce(app, "/a");
+
+  assert.equal(status, 200);
+});
+
+test("wrapUnwrappedRoutes_nonAsyncMiddlewareReturningRejectedPromise_answers500", async () => {
+  const app = express();
+  app.use((): Promise<void> => Promise.reject(new Error("secret")));
+  app.get("/a", (_req, res) => { res.json({ ok: true }); });
+  app.use(internalErrorHandler({ error: () => undefined }));
+
+  wrapUnwrappedRoutes(app);
+  const { status, body } = await callOnce(app, "/a");
+
+  assert.equal(status, 500);
+  assert.deepEqual(JSON.parse(body), { error: "INTERNAL_ERROR" });
+});
+
+test("forwardRejections_lateRejectionRepeated_loggedOncePerMinute", async (t) => {
+  const logged = t.mock.method(console, "error", () => undefined);
+  const app = express();
+  app.get("/a", async (_req, _res, next) => { next(); throw new Error("late"); }, asyncRoute((_req, res) => { res.json({ ok: true }); }));
+  wrapUnwrappedRoutes(app);
+
+  await callOnce(app, "/a");
+  await callOnce(app, "/a");
+
+  assert.equal(logged.mock.calls.length, 1);
+});
+
+test("logProcessError_sameLineWithinCooldown_writesOnceThenCountsSuppressed", (t) => {
+  resetProcessLogThrottle();
+  const written: string[] = [];
+  t.mock.method(console, "error", (line: unknown) => { written.push(String(line)); });
+
+  logProcessError("[internalApi] x", { now: 0 });
+  logProcessError("[internalApi] x", { now: 1_000 });
+  logProcessError("[internalApi] x", { now: 61_000 });
+
+  assert.deepEqual(written, ["[internalApi] x", "[internalApi] x (+1 identiques tues)"]);
+  resetProcessLogThrottle();
+});
+
+test("logProcessError_suppressedNote_usedInCount", (t) => {
+  // Clé qui ignore l'étiquette : les lignes tues ne sont pas dites « identiques ».
+  resetProcessLogThrottle();
+  const written: string[] = [];
+  t.mock.method(console, "error", (line: unknown) => { written.push(String(line)); });
+
+  logProcessError("[internalApi] x (match-1)", { key: "k", now: 0, suppressedNote: "du même type" });
+  logProcessError("[internalApi] x (match-2)", { key: "k", now: 1_000, suppressedNote: "du même type" });
+  logProcessError("[internalApi] x (match-3)", { key: "k", now: 61_000, suppressedNote: "du même type" });
+
+  assert.deepEqual(written, ["[internalApi] x (match-1)", "[internalApi] x (match-3) (+1 du même type tues)"]);
+  resetProcessLogThrottle();
+});
+
+test("logProcessError_sameKeyDifferentLines_throttledTogether", (t) => {
+  // Une étiquette du site qui change à chaque appel ne contourne pas l'étranglement.
+  resetProcessLogThrottle();
+  const written: string[] = [];
+  t.mock.method(console, "error", (line: unknown) => { written.push(String(line)); });
+
+  logProcessError("[internalApi] notify/dm error (match-1): 500", { key: "notify/dm error: 500", now: 0 });
+  logProcessError("[internalApi] notify/dm error (match-2): 500", { key: "notify/dm error: 500", now: 1_000 });
+
+  assert.deepEqual(written, ["[internalApi] notify/dm error (match-1): 500"]);
+  resetProcessLogThrottle();
+});
+
+test("logProcessError_customWrite_receivesTheLine", () => {
+  resetProcessLogThrottle();
+  const warned: string[] = [];
+
+  logProcessError("[internalApi] refus", { write: (line) => warned.push(line), now: 0 });
+
+  assert.deepEqual(warned, ["[internalApi] refus"]);
+  resetProcessLogThrottle();
 });

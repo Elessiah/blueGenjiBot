@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { PermissionFlagsBits, type Client } from "discord.js";
-import { DISCORD_UNKNOWN_MESSAGE, discordJsonCode } from "../safe/errorGuards.js";
+import { DISCORD_UNKNOWN_MESSAGE, discordJsonCode, safeErrorDetail } from "../safe/errorGuards.js";
+import { MAX_SITE_CONTEXT_LENGTH, sanitizeSiteContext } from "./siteContext.js";
+import { cutText } from "../utils/cutText.js";
 
 /**
  * Annonce d'un live dans le salon #live du serveur BlueGenji, poussée par l'app
@@ -42,7 +44,7 @@ const DISCORD_MAX_CONTENT_LENGTH = 2000;
 export const MAX_LIVE_MESSAGE_LENGTH = 1800;
 
 /** Longueur maximale de l'étiquette `context` (journaux pm2 et canal de logs). */
-export const MAX_LIVE_CONTEXT_LENGTH = 200;
+export const MAX_LIVE_CONTEXT_LENGTH = MAX_SITE_CONTEXT_LENGTH;
 
 /** Longueur maximale du texte d'erreur brut cité dans un signalement. */
 export const MAX_LIVE_DETAIL_LENGTH = 300;
@@ -83,7 +85,7 @@ function discordCode(error: unknown): number | undefined {
  * @returns L'erreur à lever.
  */
 function sendFailure(error: unknown): LiveChannelUnavailableError {
-  const detail = (error as Error).message;
+  const detail = safeErrorDetail(error);
   const code = discordCode(error);
   if (code === UNKNOWN_CHANNEL) {
     // Salon supprimé ou recréé alors que le cache le gardait.
@@ -99,20 +101,6 @@ function sendFailure(error: unknown): LiveChannelUnavailableError {
     return new LiveChannelUnavailableError("send-rejected", `envoi refusé par Discord (${detail})`, detail);
   }
   return new LiveChannelUnavailableError("discord-down", `envoi sans réponse claire de Discord (${detail})`, detail);
-}
-
-/**
- * Coupe un texte à `max` unités au plus, terminé par « … », sans jamais
- * couper un caractère en deux (émoji, lettre hors du plan de base) : un « � »
- * sous `@everyone` aurait l'air d'une panne.
- */
-export function cutText(text: string, max: number): string {
-  if (text.length <= max) { return text; }
-  let end = max - 1;
-  const last = text.charCodeAt(end - 1);
-  // Moitié haute d'une paire de substitution laissée seule : on la retire.
-  if (last >= 0xd800 && last <= 0xdbff) { end -= 1; }
-  return `${text.slice(0, end)}…`;
 }
 
 /**
@@ -691,9 +679,6 @@ export function isAllowedStreamUrl(value: string): boolean {
   return publishableStreamUrl(value) !== null;
 }
 
-/** Caractères d'une étiquette `context` du site (`live-announce tournoi-7 match-12,13,…+4`). */
-const CONTEXT_UNSAFE = /[^A-Za-z0-9 ,+…_-]/gu;
-
 /**
  * Désamorce la syntaxe de mention Discord (`<@id>`, `<@!id>`, `<@&id>`,
  * `<#id>`) : même sans notification (`allowedMentions`), le client la rend
@@ -737,8 +722,7 @@ export function parseLiveAnnouncement(payload: unknown): LiveAnnouncementRequest
   // Écrite telle quelle dans pm2 et au canal de logs : hors des caractères
   // du site, rien ne passe (ni saut de ligne qui forgerait une ligne de
   // journal, ni balisage qui ferait un lien masqué).
-  const rawContext = typeof raw.context === "string" ? raw.context.trim().replace(CONTEXT_UNSAFE, "_") : "";
-  const context = rawContext ? cutText(rawContext, MAX_LIVE_CONTEXT_LENGTH) : "live-announce";
+  const context = sanitizeSiteContext(raw.context, "live-announce");
   const request: LiveAnnouncementRequest = { message: normalizeLiveText(message), streamUrl, context };
   if (hasLogMessage) { request.logMessage = normalizeLiveText(logMessage); }
   return withEveningFields(request, raw);
@@ -924,7 +908,7 @@ async function editEveningMessage(
     const code = discordCode(error);
     if (code !== undefined && NOT_EDITABLE.has(code)) { return null; }
     if (code === UNKNOWN_MESSAGE) {
-      const detail = (error as Error).message;
+      const detail = safeErrorDetail(error);
       throw new LiveChannelUnavailableError(MESSAGE_DELETED, `message de la soirée supprimé (${detail})`, detail);
     }
     throw sendFailure(error);
@@ -956,7 +940,7 @@ export async function announceLive(client: Client, request: LiveAnnouncementRequ
   try {
     channel = await client.channels.fetch(LIVE_ANNOUNCE_CHANNEL_ID) as unknown as SendableChannel | null;
   } catch (error) {
-    const detail = (error as Error).message;
+    const detail = safeErrorDetail(error);
     // Seuls un salon inconnu ou un accès refusé désignent le salon ; le reste
     // est une panne passagère de Discord (réseau, 5xx, limite de débit).
     const code = discordCode(error);

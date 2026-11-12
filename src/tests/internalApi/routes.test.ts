@@ -5,7 +5,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { once } from "node:events";
 import type { AddressInfo } from "node:net";
-import type { Server } from "node:http";
+import http, { type Server } from "node:http";
 import { randomUUID } from "node:crypto";
 
 /**
@@ -32,7 +32,7 @@ process.env.GUILD_ID = "700000000000000001";
 process.env.CLIENT_ID = "600000000000000001";
 
 import { MessageFlags, type Client } from "discord.js";
-import { startInternalApi } from "../../internalApi.js";
+import { internalErrorThrottleKey, resetInternalErrorReports, shouldReportInternalError, startInternalApi, startupUnwrappedRoutes } from "../../internalApi.js";
 import { getBddInstance, resetBddInstance } from "../../bdd/Bdd.js";
 import { recordEvent } from "../../feed/feedBus.js";
 import { readSiteVisitStats } from "../../siteVisits/siteVisits.js";
@@ -180,8 +180,17 @@ const fakeClient = {
 let server: Server;
 let baseUrl: string;
 
+/** Lignes d'erreur écrites au démarrage de l'API (routes enveloppées d'office). */
+const startupErrors: string[] = [];
+
 test.before(async () => {
-  server = startInternalApi(fakeClient);
+  const consoleError = console.error;
+  console.error = (...args: unknown[]) => { startupErrors.push(args.map(String).join(" ")); };
+  try {
+    server = startInternalApi(fakeClient);
+  } finally {
+    console.error = consoleError;
+  }
   await once(server, "listening");
   baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
@@ -202,6 +211,7 @@ test.beforeEach(() => {
   state.liveSendError = null;
   state.logSendFailures = 0;
   resetLiveLogThrottle();
+  resetInternalErrorReports();
   process.env.INTERNAL_API_TOKEN = TOKEN;
   process.env.INTERNAL_API_HOST = "127.0.0.1";
   process.env.CLIENT_ID = "600000000000000001";
@@ -215,18 +225,51 @@ test.after(async () => {
 
 type CallOptions = { method?: string; body?: unknown; token?: string | null; headers?: Record<string, string> };
 
-async function call(route: string, options: CallOptions = {}): Promise<{ status: number; body: Record<string, unknown>; headers: Headers }> {
+/** Méthode, en-têtes et corps d'un appel : une seule construction pour les deux transports. */
+function buildRequest(options: CallOptions): { method: string; headers: Record<string, string>; payload: string | undefined } {
   const headers: Record<string, string> = { ...options.headers };
   const token = options.token === undefined ? TOKEN : options.token;
   if (token !== null) { headers["x-internal-token"] = token; }
-  if (options.body !== undefined) { headers["content-type"] = "application/json"; }
-  const response = await fetch(baseUrl + route, {
-    method: options.method ?? (options.body === undefined ? "GET" : "POST"),
-    headers,
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
-  });
+  const payload = options.body === undefined ? undefined : JSON.stringify(options.body);
+  if (payload !== undefined) { headers["content-type"] = "application/json"; }
+  return { method: options.method ?? (payload === undefined ? "GET" : "POST"), headers, payload };
+}
+
+async function call(route: string, options: CallOptions = {}): Promise<{ status: number; body: Record<string, unknown>; headers: Headers }> {
+  const { method, headers, payload } = buildRequest(options);
+  const response = await fetch(baseUrl + route, { method, headers, body: payload });
   const text = await response.text();
   return { status: response.status, body: text ? JSON.parse(text) : {}, headers: response.headers };
+}
+
+/**
+ * Appel sous horloge simulée, par `node:http` sans connexion gardée plutôt que `fetch` :
+ * undici arme ses minuteries internes au premier appel, et un `setTimeout` simulé
+ * à ce moment-là déréglait les délais d'en-têtes des appels suivants
+ * (`UND_ERR_HEADERS_TIMEOUT` intermittent). Les sockets de `node:http` ne lisent
+ * pas l'horloge simulée.
+ */
+function callUnderMockedClock(route: string, options: CallOptions = {}): Promise<{ status: number; body: Record<string, unknown> }> {
+  const { method, headers, payload } = buildRequest(options);
+  return new Promise((resolve, reject) => {
+    const req = http.request(baseUrl + route, { method, headers, agent: false }, (res) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (chunk: Buffer) => chunks.push(chunk));
+      res.on("end", () => {
+        const text = Buffer.concat(chunks).toString("utf8");
+        // Un corps qui n'est pas du JSON (page d'erreur, réponse tronquée) rejette
+        // l'appel au lieu de lever dans l'écouteur, hors du test.
+        try {
+          resolve({ status: res.statusCode ?? 0, body: text ? JSON.parse(text) : {} });
+        } catch (error) {
+          reject(new Error(`réponse ${res.statusCode ?? 0} illisible : ${String(error)}`));
+        }
+      });
+      res.on("error", reject);
+    });
+    req.on("error", reject);
+    req.end(payload);
+  });
 }
 
 async function sql(query: string, values: unknown[] = []): Promise<void> {
@@ -334,11 +377,11 @@ test("/internal/health : latence négative bornée à 0, client en panne signal�
  * `/internal/status` mesure le CPU sur 100 ms (`setTimeout`) : l'horloge est
  * simulée et avancée jusqu'à la réponse, plutôt que d'attendre en vrai.
  */
-async function callStatus(t: test.TestContext): Promise<Awaited<ReturnType<typeof call>>> {
+async function callStatus(t: test.TestContext): Promise<Awaited<ReturnType<typeof callUnderMockedClock>>> {
   t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: Date.now() });
   try {
     let settled = false;
-    const pending = call("/internal/status").finally(() => { settled = true; });
+    const pending = callUnderMockedClock("/internal/status").finally(() => { settled = true; });
     for (let i = 0; i < 1000 && !settled; i++) {
       t.mock.timers.tick(10);
       await new Promise((r) => setImmediate(r));
@@ -375,7 +418,9 @@ test("/internal/status : client en panne, 500 INTERNAL_STATUS_ERROR et détail a
   const res = await callStatus(t);
   assert.equal(res.status, 500);
   assert.deepEqual(res.body, { error: "INTERNAL_STATUS_ERROR" });
-  assert.ok(state.logs.some((l) => l.startsWith("/internal/status error: client détruit")));
+  // Type et code seuls : le message de l'exception ne part pas au journal.
+  assert.ok(state.logs.some((l) => l.startsWith("/internal/status error: Error, code")), JSON.stringify(state.logs));
+  assert.ok(state.logs.every((l) => !l.includes("client détruit")));
 });
 
 test("/internal/invite : lien d'autorisation OAuth2 du bot", async () => {
@@ -669,7 +714,7 @@ test("/internal/auth/resolve : serveurs muets, 504 BOT_RESOLVE_TIMEOUT sans jour
   let searched = 0;
   state.searchHangs = true;
   state.onSearch = () => { searched++; };
-  const pending = call("/internal/auth/resolve", { body: { handle: "lent" } });
+  const pending = callUnderMockedClock("/internal/auth/resolve", { body: { handle: "lent" } });
   for (let i = 0; i < 1000 && searched < joined.size; i++) { await new Promise((r) => setImmediate(r)); }
   assert.equal(searched, joined.size, "chaque serveur rejoint interrogé");
   t.mock.timers.tick(RESOLVE_BUDGET_MS);
@@ -763,7 +808,7 @@ test("sendCode_discordErrorWithCode_logsCodeOnly", async () => {
   try {
     const res = await call("/internal/auth/send-code", { body: { discordId: "123456789012345678", code: "111111" } });
     assert.equal(res.status, 500);
-    assert.ok(state.logs.includes("Failed to send auth code to a player: code 50035"), JSON.stringify(state.logs));
+    assert.ok(state.logs.includes("Failed to send auth code to a player: Error, code 50035"), JSON.stringify(state.logs));
     assert.ok(state.logs.every((l) => !l.includes("snowflake")), "le texte de Discord ne part pas au journal");
   } finally {
     users.fetch = savedFetch;
@@ -773,7 +818,7 @@ test("sendCode_discordErrorWithCode_logsCodeOnly", async () => {
 test("sendCode_errorWithoutCode_logsUnknownCode", async () => {
   state.closedDms.add("123456789012345678");
   await call("/internal/auth/send-code", { body: { discordId: "123456789012345678", code: "111111" } });
-  assert.ok(state.logs.includes("Failed to send auth code to a player: code inconnu"), JSON.stringify(state.logs));
+  assert.ok(state.logs.includes("Failed to send auth code to a player: Error, code inconnu"), JSON.stringify(state.logs));
 });
 
 test("/internal/auth/send-code : MP fermés, 500 DISCORD_DM_FAILED", async () => {
@@ -856,6 +901,61 @@ test("notifyReferees_deliveryFails_failureLogNotifies", async (t) => {
   } finally {
     state.cacheThrows = false;
   }
+});
+
+test("notifyReferees_failsWithAnotherContextEachCall_discordAndPm2EachWrittenOnce", async (t) => {
+  // Une étiquette `context` différente à chaque appel ne fait repartir ni l'alerte ni la
+  // ligne pm2 : la première part avec son étiquette, les suivantes sont comptées.
+  resetInternalErrorReports();
+  const errors: string[] = [];
+  t.mock.method(console, "error", (line: unknown) => { errors.push(String(line)); });
+  t.mock.method(console, "log", () => {});
+  state.cacheThrows = true;
+  try {
+    for (const context of ["match-1", "match-2", "match-3"]) {
+      const res = await call("/internal/notify/referees", { body: { message: "x", context } });
+      assert.equal(res.status, 500);
+    }
+
+    assert.equal(state.logs.filter((line) => line.startsWith("notify/referees error")).length, 1, JSON.stringify(state.logs));
+    const pm2Lines = errors.filter((line) => line.includes("notify/referees error"));
+    assert.equal(pm2Lines.length, 1, JSON.stringify(errors));
+    assert.ok(pm2Lines[0].includes("notify/referees error (match-1)"), pm2Lines[0]);
+  } finally {
+    state.cacheThrows = false;
+    resetInternalErrorReports();
+  }
+});
+
+test("notifyReferees_contextWithMarkdownOrMention_sanitizedInLog", async (t) => {
+  resetInternalErrorReports();
+  t.mock.method(console, "error", () => {});
+  t.mock.method(console, "log", () => {});
+  state.cacheThrows = true;
+  try {
+    await call("/internal/notify/referees", { body: { message: "x", context: `<@123>**${"y".repeat(500)}` } });
+
+    const line = state.logs.find((entry) => entry.startsWith("notify/referees error")) ?? "";
+    assert.ok(!line.includes("<@") && !line.includes("**"), line);
+    assert.ok(line.length < 400, `${line.length} caractères`);
+  } finally {
+    state.cacheThrows = false;
+    resetInternalErrorReports();
+  }
+});
+
+test("internalErrorThrottleKey_routeLineOrHandlerLine_dropsTheFinalStatus", () => {
+  assert.equal(internalErrorThrottleKey("/internal/stats error: DiscordAPIError, code 0, statut 503"), "/internal/stats error: DiscordAPIError, code 0");
+  assert.equal(internalErrorThrottleKey("[internalApi] INTERNAL_ERROR (DiscordAPIError, code 0, statut 429)"), "[internalApi] INTERNAL_ERROR (DiscordAPIError, code 0)");
+  assert.equal(internalErrorThrottleKey("/internal/stats error: Error, code inconnu"), "/internal/stats error: Error, code inconnu");
+});
+
+test("shouldReportInternalError_routeLineOtherHttpStatus_returnsFalse", () => {
+  resetInternalErrorReports();
+  shouldReportInternalError("/internal/stats error: DiscordAPIError, code 0, statut 429", 1_000);
+
+  assert.equal(shouldReportInternalError("/internal/stats error: DiscordAPIError, code 0, statut 503", 1_001), false);
+  resetInternalErrorReports();
 });
 
 test("/internal/site-visits : corps inexploitable, 400 INVALID_SITE_VISIT_STATS", async () => {
@@ -1023,7 +1123,7 @@ test("/internal/announce/live : envoi refusé → 503, puis un seul signalement 
   assert.equal(
     state.logs[0],
     "[AppBlueGenji] Annonce de live non publiée (live-announce match-2) : Discord a refusé l'envoi faute de " +
-    "permission (Missing Permissions) — vérifier les permissions du bot dans #live. Le site la réessaie seul " +
+    "permission (Error, code 50013) — vérifier les permissions du bot dans #live. Le site la réessaie seul " +
     "pendant les deux heures qui suivent le début du direct : ne pas la reposter à la main avant. Signalé au " +
     "plus une fois par heure, d'autres annonces peuvent échouer pour la même raison. Annonce concernée :" +
     "\n> Alpha contre Beta — Coupe\n<https://twitch.tv/bluegenji>",
@@ -1323,4 +1423,50 @@ test("base injoignable : chaque route répond son code d'erreur stable", async (
 
   // Aucun message d'exception (chemin, SQL) ne part à l'appelant.
   assert.ok(state.logs.some((l) => l.startsWith("/internal/stats error:")));
+});
+
+test("shouldReportInternalError_sameLineWithinCooldown_returnsFalse", () => {
+  resetInternalErrorReports();
+  const line = "[internalApi] INTERNAL_ERROR (Error)";
+
+  assert.equal(shouldReportInternalError(line, 1_000), true);
+  assert.equal(shouldReportInternalError(line, 1_000 + 10 * 60 * 1000 - 1), false);
+});
+
+test("shouldReportInternalError_afterCooldown_returnsTrue", () => {
+  resetInternalErrorReports();
+  const line = "[internalApi] INTERNAL_ERROR (Error)";
+  shouldReportInternalError(line, 1_000);
+
+  assert.equal(shouldReportInternalError(line, 1_000 + 10 * 60 * 1000), true);
+});
+
+test("shouldReportInternalError_otherLine_returnsTrue", () => {
+  resetInternalErrorReports();
+  shouldReportInternalError("[internalApi] INTERNAL_ERROR (Error)", 1_000);
+
+  assert.equal(shouldReportInternalError("[internalApi] INTERNAL_ERROR (TypeError)", 1_001), true);
+});
+
+test("startInternalApi_everyRoute_wrappedInAsyncRoute", () => {
+  // Express 4 laisse un rejet sans réponse : chaque route passe par `asyncRoute` dans
+  // le code, sans compter sur l'enveloppe posée d'office au démarrage.
+  // `startupUnwrappedRoutes` est la liste relevée **avant** l'enveloppe d'office : relire la
+  // pile après le démarrage ne prouverait rien, tout y est déjà enveloppé.
+  assert.deepEqual(startupUnwrappedRoutes, []);
+  assert.deepEqual(startupErrors, []);
+});
+
+test("shouldReportInternalError_sameFailureOtherHttpStatus_returnsFalse", () => {
+  resetInternalErrorReports();
+  shouldReportInternalError("[internalApi] INTERNAL_ERROR (DiscordAPIError, code 0, statut 429)", 1_000);
+
+  assert.equal(shouldReportInternalError("[internalApi] INTERNAL_ERROR (DiscordAPIError, code 0, statut 503)", 1_001), false);
+});
+
+test("shouldReportInternalError_otherCodeSameStatus_returnsTrue", () => {
+  resetInternalErrorReports();
+  shouldReportInternalError("[internalApi] INTERNAL_ERROR (DiscordAPIError, code 0, statut 500)", 1_000);
+
+  assert.equal(shouldReportInternalError("[internalApi] INTERNAL_ERROR (DiscordAPIError, code 50013, statut 500)", 1_001), true);
 });

@@ -320,10 +320,13 @@ export function parseChannelId(raw: unknown): string | null {
  * est repris ailleurs. Espaces resserrés, coupe à 100 caractères (points de
  * code, pour ne pas couper un emoji en deux).
  *
+ * Une chaîne vide dit qu'il ne reste aucun caractère affichable : la route
+ * donne alors le nom de repli ({@link voiceChannelName}).
+ *
  * @param raw Valeur brute du corps.
- * @returns Le nom nettoyé (`FALLBACK_VOICE_NAME` s'il ne reste rien), ou `null` pour une valeur inexploitable.
+ * @returns Le nom nettoyé (vide s'il ne reste rien), ou `null` pour une valeur inexploitable.
  */
-export function sanitizeVoiceChannelName(raw: unknown): string | null {
+export function cleanVoiceChannelName(raw: unknown): string | null {
   if (typeof raw !== "string" || raw.trim() === "" || raw.length > MAX_RAW_NAME_LENGTH) { return null; }
   const cleaned = raw
     .normalize("NFC")
@@ -332,20 +335,35 @@ export function sanitizeVoiceChannelName(raw: unknown): string | null {
     .replace(/[@<>`*_~|\\#]/g, "")
     .replace(/\s+/g, " ")
     .trim();
-  const cut = Array.from(cleaned).slice(0, MAX_VOICE_NAME_LENGTH).join("").trim();
-  return cut === "" ? FALLBACK_VOICE_NAME : cut;
+  return Array.from(cleaned).slice(0, MAX_VOICE_NAME_LENGTH).join("").trim();
 }
 
 /**
- * Nom donné au salon : le nom nettoyé, sauf le repli (`FALLBACK_VOICE_NAME`), rendu
- * bilingue et suivi du numéro d'équipe de la clé — les deux équipes d'un match
- * n'ont jamais le même salon de repli. Un numéro d'équipe n'est pas un pseudo.
+ * Drapeau `fallback` du corps de `POST /internal/voice/channels` : `true` quand le
+ * site envoie son nom de repli (le bot a refusé celui de l'équipe), `false` pour un
+ * vrai nom d'équipe. Absent (site antérieur) ou d'un autre type : `undefined`, et le
+ * repli se reconnaît alors à l'égalité du nom.
+ * @param raw Valeur brute du corps.
+ * @returns Le drapeau, ou `undefined`.
+ */
+export function parseVoiceFallback(raw: unknown): boolean | undefined {
+  return typeof raw === "boolean" ? raw : undefined;
+}
+
+/**
+ * Nom donné au salon : le nom nettoyé, sauf le repli, rendu bilingue et suivi du
+ * numéro d'équipe de la clé — les deux équipes d'un match n'ont jamais le même
+ * salon de repli. Un numéro d'équipe n'est pas un pseudo. Le repli est dit par le
+ * site (`fallback`) : une équipe nommée « Salon d'équipe » garde son nom. Sans le
+ * drapeau (site antérieur), il se reconnaît à l'égalité avec `FALLBACK_VOICE_NAME`.
  * @param key Clé d'idempotence validée.
- * @param name Nom nettoyé (`sanitizeVoiceChannelName`).
+ * @param name Nom nettoyé (`cleanVoiceChannelName`).
+ * @param fallback Drapeau du site (`parseVoiceFallback`), `undefined` s'il est absent.
  * @returns Le nom du salon.
  */
-export function voiceChannelName(key: string, name: string): string {
-  if (name !== FALLBACK_VOICE_NAME) { return name; }
+export function voiceChannelName(key: string, name: string, fallback?: boolean): string {
+  const isFallback = fallback ?? name === FALLBACK_VOICE_NAME;
+  if (!isFallback) { return name; }
   const team = KEY_TEAM_PATTERN.exec(key)?.[1];
   return team === undefined ? FALLBACK_VOICE_LABEL : `${FALLBACK_VOICE_LABEL} ${team}`;
 }

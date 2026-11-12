@@ -1,6 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
-import type { ErrorRequestHandler } from "express";
-import { safeErrorCode, safeErrorKind } from "../safe/errorGuards.js";
+import type { ErrorRequestHandler, Express, NextFunction, Request, Response } from "express";
+import { safeErrorDetail } from "../safe/errorGuards.js";
 
 /** Adresses d'ecoute sur lesquelles seul un process de la machine peut se connecter. */
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
@@ -127,18 +127,45 @@ export type InternalErrorReply = { code: string; status: number };
 /** Réponse à une erreur que rien n'identifie (dont `stream.*`, défaut du serveur). */
 const UNEXPECTED_ERROR: InternalErrorReply = { code: "INTERNAL_ERROR", status: 500 };
 
+/** Code générique d'un corps refusé par body-parser sans `type` connu (gzip corrompu…). */
+const INVALID_BODY = "INVALID_BODY";
+
+/** Codes d'erreur de zlib (`Z_DATA_ERROR`, `Z_BUF_ERROR`…) : un corps compressé illisible. */
+const ZLIB_ERROR_CODE = /^Z_[A-Z_]{1,30}$/;
+
+/**
+ * Refus de lecture du corps que body-parser lève sans `type` listé : un flux gzip
+ * ou deflate corrompu, que body-parser rend en `400` exposé (`http-errors`) en gardant
+ * le `code` de zlib. Seule cette forme est reconnue : une autre erreur `expose` 4xx
+ * (un `http-errors` levé par une route ou une bibliothèque) reste un défaut du
+ * serveur (`500`, journalisé et signalé), et une erreur Discord porte un `status`
+ * 4xx mais jamais `expose`.
+ * @param expose Champ `expose` de l'erreur.
+ * @param status Champ `status` de l'erreur.
+ * @param code Champ `code` de l'erreur.
+ * @returns La réponse, ou `null`.
+ */
+function exposedClientRefusal(expose: unknown, status: unknown, code: unknown): InternalErrorReply | null {
+  return expose === true && status === 400 && typeof code === "string" && ZLIB_ERROR_CODE.test(code)
+    ? { code: INVALID_BODY, status: 400 }
+    : null;
+}
+
 /**
  * Code et statut d'une erreur levée hors d'une route : ceux du refus de lecture
- * du corps, sinon `500 INTERNAL_ERROR` — le `status` d'une autre erreur (une
- * erreur Discord en porte un) n'est jamais repris.
+ * du corps, `INVALID_BODY` pour un corps compressé illisible (code zlib), sinon
+ * `500 INTERNAL_ERROR` — le `status` d'une autre erreur (une erreur Discord en
+ * porte un, sans `expose`) n'est jamais repris.
  *
  * @param error Erreur transmise par Express.
  * @returns Code et statut de la réponse.
  */
 export function internalErrorReply(error: unknown): InternalErrorReply {
   try {
-    const { type, status } = (error ?? {}) as { type?: unknown; status?: unknown };
-    if (typeof type !== "string" || !Object.hasOwn(BODY_PARSER_REFUSALS, type)) return UNEXPECTED_ERROR;
+    const { type, status, expose, code } = (error ?? {}) as { type?: unknown; status?: unknown; expose?: unknown; code?: unknown };
+    if (typeof type !== "string" || !Object.hasOwn(BODY_PARSER_REFUSALS, type)) {
+      return exposedClientRefusal(expose, status, code) ?? UNEXPECTED_ERROR;
+    }
     // Le statut que body-parser pose avec son `type` : une autre erreur qui reprendrait
     // ce `type` reste une erreur du serveur.
     const refusal = BODY_PARSER_REFUSALS[type];
@@ -160,30 +187,384 @@ export function internalErrorReply(error: unknown): InternalErrorReply {
 export function internalErrorLogLine(error: unknown): string {
   const reply = internalErrorReply(error);
   if (reply !== UNEXPECTED_ERROR) { return `[internalApi] ${reply.code}`; }
-  // Type et code filtrés (`safe/errorGuards.ts`), lus sans jamais lever.
-  const code = safeErrorCode(error);
-  const shown = code === null ? "" : " " + String(code);
-  return `[internalApi] ${reply.code} (${safeErrorKind(error)}${shown})`;
+  // Type, code et statut filtrés (`safe/errorGuards.ts`), lus sans jamais lever : même
+  // forme que les lignes des `catch` des routes.
+  return `[internalApi] ${reply.code} (${safeErrorDetail(error)})`;
 }
+
+/** Délai entre deux écritures d'une même ligne d'erreur au journal du processus (pm2). */
+const PROCESS_LOG_COOLDOWN_MS = 60 * 1000;
+/** Lignes distinctes retenues par un étranglement : au-delà, la plus ancienne est oubliée. */
+export const LINE_THROTTLE_MEMORY = 100;
+
+/** Verdict d'un étranglement pour une ligne. */
+export type LineVerdict = {
+  /** `true` si la ligne doit partir. */
+  emit: boolean;
+  /** Occurrences identiques tues depuis la dernière ligne partie (0 si aucune). */
+  suppressed: number;
+};
+
+/** Étranglement par ligne : une ligne identique ne part qu'une fois par délai. */
+export type LineThrottle = {
+  check(line: string, now?: number): LineVerdict;
+  reset(): void;
+};
+
+/**
+ * Étranglement par ligne, pour qu'une panne répétée (chaque appel du site, un client
+ * qui renvoie le même corps illisible) n'écrive pas une ligne par requête, au journal
+ * du processus ou au salon de logs. La mémoire est bornée : à la limite, les lignes
+ * échues sont oubliées d'abord, puis la plus ancienne — jamais toutes d'un coup, ce qui
+ * rendrait leur tour, tout de suite, aux lignes qui répètent à ce moment.
+ *
+ * @param cooldownMs Délai entre deux lignes identiques (ms).
+ * @param memory Lignes distinctes retenues, au plus.
+ * @returns L'étranglement.
+ */
+export function createLineThrottle(cooldownMs: number, memory: number = LINE_THROTTLE_MEMORY): LineThrottle {
+  const seen = new Map<string, { at: number; suppressed: number }>();
+  return {
+    check(line, now = Date.now()) {
+      const last = seen.get(line);
+      if (last !== undefined && now - last.at < cooldownMs) {
+        last.suppressed += 1;
+        return { emit: false, suppressed: 0 };
+      }
+      seen.delete(line);
+      if (seen.size >= memory) {
+        for (const [key, value] of seen) {
+          if (now - value.at >= cooldownMs) { seen.delete(key); }
+        }
+        const oldest = seen.keys().next();
+        if (seen.size >= memory && !oldest.done) { seen.delete(oldest.value); }
+      }
+      seen.set(line, { at: now, suppressed: 0 });
+      return { emit: true, suppressed: last?.suppressed ?? 0 };
+    },
+    reset() {
+      seen.clear();
+    },
+  };
+}
+
+/** Ligne avec le compte des occurrences tues depuis sa dernière écriture. */
+function withSuppressed(line: string, suppressed: number, note: string = "identiques"): string {
+  return suppressed > 0 ? `${line} (+${suppressed} ${note} tues)` : line;
+}
+
+/** Étranglement des lignes du journal du processus : gestionnaire d'erreur et rejets tardifs. */
+const processLogThrottle = createLineThrottle(PROCESS_LOG_COOLDOWN_MS);
+
+/** Vide la mémoire de l'étranglement du journal du processus (tests). */
+export function resetProcessLogThrottle(): void {
+  processLogThrottle.reset();
+}
+
+/** Options de {@link logProcessError}. */
+export type ProcessLogOptions = {
+  /** Clé d'étranglement, la ligne elle-même par défaut (une étiquette variable en est exclue). */
+  key?: string;
+  /** Écriture de la ligne : `console.error` par défaut. */
+  write?: (line: string) => void;
+  /** Horloge injectable, pour les tests. */
+  now?: number;
+  /**
+   * Qualificatif du compte des lignes tues (`identiques` par défaut) : quand la clé ignore
+   * une partie de la ligne (étiquette du site, statut HTTP), les lignes tues n'avaient pas
+   * forcément cette partie-là, et le compte ne doit pas la leur prêter.
+   */
+  suppressedNote?: string;
+};
+
+/**
+ * Écrit une ligne au journal du processus (pm2), au plus une fois par
+ * {@link PROCESS_LOG_COOLDOWN_MS} pour une même clé, le compte des suivantes tues
+ * s'ajoutant à la prochaine qui part. Seul chemin d'écriture étranglée du journal du
+ * processus : gestionnaire d'erreur, rejets tardifs, échecs de route.
+ * @param line Ligne (code et type seuls).
+ * @param options Clé, destination et horloge.
+ * @returns `true` si la ligne est partie.
+ */
+export function logProcessError(line: string, options: ProcessLogOptions = {}): boolean {
+  const { key = line, write = (text: string) => console.error(text), now = Date.now(), suppressedNote } = options;
+  const verdict = processLogThrottle.check(key, now);
+  if (verdict.emit) { write(withSuppressed(line, verdict.suppressed, suppressedNote)); }
+  return verdict.emit;
+}
+
+/**
+ * Écrit au journal du processus le rejet d'un gestionnaire arrivé trop tard pour
+ * répondre : niveau erreur pour un défaut du serveur, avertissement pour un refus du
+ * client, une ligne identique par {@link PROCESS_LOG_COOLDOWN_MS} au plus.
+ * @param error Rejet.
+ */
+function logLateRejection(error: unknown): void {
+  const write = internalErrorReply(error).status >= 500
+    ? (text: string) => console.error(text)
+    : (text: string) => console.warn(text);
+  logProcessError(internalErrorLogLine(error), { write });
+}
+
+/** Destinations des lignes du gestionnaire d'erreur. */
+export type InternalErrorSinks = {
+  /** Défaut du serveur (500) : journal d'erreurs du processus. */
+  error?: (line: string) => void;
+  /** Refus du client (4xx : corps illisible, requête annulée) : niveau avertissement. */
+  warn?: (line: string) => void;
+  /** Défaut du serveur (500), aussi au salon de logs (`sendLog`) : même ligne, code et type seuls. */
+  report?: (line: string) => void;
+  /** Horloge de l'étranglement des lignes du processus, injectable pour les tests. */
+  now?: () => number;
+};
 
 /**
  * Gestionnaire d'erreur Express de l'API interne : un code, jamais la page
  * d'Express ; si la réponse est déjà partie (flux), sa connexion est coupée sans repasser
- * par le gestionnaire d'Express, qui écrirait la pile au journal.
+ * par le gestionnaire d'Express, qui écrirait la pile au journal. Un refus du client
+ * (4xx) va au niveau avertissement — un appel annulé par le site n'encombre pas le
+ * journal d'erreurs relu après déploiement ; un défaut du serveur (500) va au journal
+ * d'erreurs **et** au salon de logs. Une ligne identique n'est écrite qu'une fois par
+ * minute au journal du processus (le compte des suivantes tues s'ajoute à la suivante
+ * qui part) : un client qui répète une requête refusée n'y écrit pas une ligne par appel.
+ * Le salon de logs a son propre étranglement (`reportInternalError`).
  *
- * @param log Écrit une ligne au journal du processus.
+ * @param sinks Destinations des lignes (console par défaut, aucun salon de logs).
  * @returns Gestionnaire à monter après toutes les routes.
  */
-export function internalErrorHandler(log: (line: string) => void = (line) => console.error(line)): ErrorRequestHandler {
+export function internalErrorHandler(sinks: InternalErrorSinks = {}): ErrorRequestHandler {
+  const { error: logError = (line) => console.error(line), warn = (line) => console.warn(line), report, now } = sinks;
   return (error, _req, res, _next) => {
-    log(internalErrorLogLine(error));
+    const reply = internalErrorReply(error);
+    const line = internalErrorLogLine(error);
+    const serverFault = reply.status >= 500;
+    logProcessError(line, { write: serverFault ? logError : warn, now: now?.() });
+    if (serverFault) {
+      // Au mieux : un salon de logs injoignable ne doit pas faire lever le gestionnaire.
+      // Le salon a son propre étranglement : la ligne lui est transmise sans le compte.
+      try { report?.(line); } catch { /* journal Discord indisponible */ }
+    }
+    if (res.writableEnded) {
+      // Réponse déjà envoyée en entier (un geste après `res.json` a levé) : le site a
+      // sa réponse ; couper la connexion la perdrait si elle attend encore dans le
+      // tampon de la socket.
+      return;
+    }
     if (res.headersSent) {
       // Réponse commencée (flux) : la connexion est coupée, pour que le lecteur voie
       // une réponse tronquée et non une fin normale ; rien ne repart vers Express.
       try { res.destroy(); } catch { /* connexion déjà close */ }
       return;
     }
-    const reply = internalErrorReply(error);
     res.status(reply.status).json({ error: reply.code });
   };
+}
+
+/** Gestionnaire de route, synchrone ou asynchrone. */
+type RouteHandler = (req: Request, res: Response) => unknown;
+
+/** Gestionnaire Express quelconque (route ou intergiciel), synchrone ou asynchrone. */
+type AnyHandler = (req: Request, res: Response, next: NextFunction) => unknown;
+
+/** Gestionnaires rendus par {@link asyncRoute}, relus par {@link unwrappedRoutes}. */
+const WRAPPED_ROUTES = new WeakSet<object>();
+
+/**
+ * Enveloppe de {@link asyncRoute}, `next` transmis (un intergiciel l'appelle). Un
+ * rejet **après** que le gestionnaire a passé la main (`next()` déjà appelé) ne
+ * repasse pas par `next` : la suite de la chaîne répond, un second `next(err)`
+ * enverrait un 500 par-dessus sa réponse. Il est seulement journalisé (code et type).
+ */
+function forwardRejections(handler: AnyHandler): (req: Request, res: Response, next: NextFunction) => void {
+  const wrapped = (req: Request, res: Response, next: NextFunction): void => {
+    let passed = false;
+    const guardedNext: NextFunction = (...args: Parameters<NextFunction>) => {
+      passed = true;
+      next(...args);
+    };
+    const forward = (error: unknown): void => {
+      if (passed) {
+        logLateRejection(error);
+        return;
+      }
+      passed = true;
+      // `next()` sans valeur passe à la route suivante, `next("route")` / `next("router")`
+      // aussi : un rejet falsy ou l'une de ces chaînes devient une vraie erreur.
+      const usable = Boolean(error) && error !== "route" && error !== "router";
+      next(usable ? error : new Error("rejet sans valeur exploitable"));
+    };
+    try {
+      Promise.resolve(handler(req, res, guardedNext)).catch(forward);
+    } catch (error) {
+      forward(error);
+    }
+  };
+  WRAPPED_ROUTES.add(wrapped);
+  return wrapped;
+}
+
+/**
+ * Enveloppe légère d'un intergiciel qui n'est ni déclaré `async` ni le gestionnaire
+ * final : aucune fermeture ni promesse de plus par requête quand il répond de façon
+ * synchrone (le cas de tous ceux d'Express). Ce qu'il lève, Express le rattrape ; la
+ * promesse qu'il rendrait, si elle est rejetée, repart à `next(err)` — ou au seul
+ * journal quand la réponse est déjà partie.
+ */
+function forwardLateRejections(handler: AnyHandler): (req: Request, res: Response, next: NextFunction) => void {
+  const wrapped = (req: Request, res: Response, next: NextFunction): void => {
+    const result = handler(req, res, next) as { then?: unknown } | null | undefined;
+    if (result === null || result === undefined || typeof result.then !== "function") { return; }
+    (result as PromiseLike<unknown>).then(undefined, (error: unknown) => {
+      if (res.headersSent || res.writableEnded) {
+        logLateRejection(error);
+        return;
+      }
+      next(Boolean(error) && error !== "route" && error !== "router" ? error : new Error("rejet sans valeur exploitable"));
+    });
+  };
+  WRAPPED_ROUTES.add(wrapped);
+  return wrapped;
+}
+
+/**
+ * Enveloppe une route asynchrone pour Express 4, qui ignore la promesse rejetée
+ * d'un gestionnaire : le rejet part à `next(err)`, et `internalErrorHandler`
+ * répond toujours un code au lieu de laisser la requête du site sans réponse
+ * jusqu'à son délai. Un rejet falsy (`null`, `undefined`, `0`, `""`, `false`) ou
+ * `"route"` / `"router"` devient une `Error` : `next()` les prendrait pour « route
+ * suivante » (404).
+ *
+ * @param handler Gestionnaire de la route.
+ * @returns Gestionnaire Express.
+ */
+export function asyncRoute(handler: RouteHandler): (req: Request, res: Response, next: NextFunction) => void {
+  return forwardRejections(handler);
+}
+
+/** Entrée de la pile d'une route d'Express 4. */
+type RouteEntry = { handle?: unknown };
+
+/** Couche de la pile interne d'Express 4 (`app._router.stack`), lue sans dépendre de ses types. */
+type RouterLayer = {
+  route?: { path?: unknown; methods?: Record<string, boolean>; stack?: RouteEntry[] };
+  handle?: unknown;
+  regexp?: unknown;
+};
+
+/** Signalé quand la pile des routes n'est pas où Express 4 la range (autre version). */
+export const ROUTER_STACK_NOT_FOUND = "(pile des routes d'Express introuvable)";
+
+/** Pile d'un routeur (application ou `express.Router` monté), `null` si absente. */
+function routerStack(router: unknown): RouterLayer[] | null {
+  if (router === null || (typeof router !== "object" && typeof router !== "function")) { return null; }
+  const stack = (router as { stack?: unknown }).stack;
+  return Array.isArray(stack) ? (stack as RouterLayer[]) : null;
+}
+
+/** Gestionnaire d'Express qui peut être enveloppé : ni déjà enveloppé, ni gestionnaire d'erreur. */
+function isWrappable(handle: unknown): handle is AnyHandler {
+  return typeof handle === "function" && !WRAPPED_ROUTES.has(handle) && handle.length <= 3;
+}
+
+/** Fonction déclarée `async` (seule promesse repérable sans l'appeler). */
+function isAsyncFunction(handle: AnyHandler): boolean {
+  return handle.constructor?.name === "AsyncFunction";
+}
+
+/**
+ * Préfixe de montage d'un `express.Router` (`app.use("/x", router)`), relu dans
+ * l'expression qu'Express 4 en tire : `""` à la racine, `"/…"` sinon, ou `"/(?)"`
+ * quand le chemin a des paramètres (illisible tel quel).
+ */
+function mountPrefix(layer: RouterLayer): string {
+  const regexp = layer.regexp as { fast_slash?: boolean; source?: unknown } | undefined;
+  if (!regexp || regexp.fast_slash || typeof regexp.source !== "string") { return ""; }
+  const body = regexp.source.replace(/^\^/, "").replace(/\\\/\?\(\?=\\\/\|\$\)$/, "");
+  const path = body.replace(/\\\//g, "/");
+  return /^\/[\w\-./]*$/.test(path) ? path : "/(?)";
+}
+
+/**
+ * Parcourt une pile, routeurs montés compris, et rend `MÉTHODE chemin` de chaque
+ * route fautive — gestionnaire final qui n'est pas passé par {@link asyncRoute}, ou
+ * intergiciel déclaré `async` nu — et `USE chemin` de chaque intergiciel `async` nu
+ * monté par `app.use`. Avec `fix`, **tout** gestionnaire non enveloppé l'est en
+ * place, signalé ou non : un intergiciel qui rend une promesse sans être déclaré
+ * `async` ne se repère pas sans l'appeler, l'enveloppe légère le couvre quand même
+ * (`forwardLateRejections` : sans coût pour un intergiciel synchrone, dont Express
+ * rattrapait déjà ce qu'il lève ; l'enveloppe complète est réservée aux `async` et
+ * au gestionnaire final). Un
+ * gestionnaire d'erreur (quatre paramètres) n'est jamais touché.
+ */
+function scanRoutes(stack: RouterLayer[], prefix: string, fix: boolean, found: string[]): void {
+  for (const layer of stack) {
+    if (layer.route) {
+      scanRoute(layer.route, prefix, fix, found);
+      continue;
+    }
+    const nested = routerStack(layer.handle);
+    if (nested) {
+      scanRoutes(nested, prefix + mountPrefix(layer), fix, found);
+      continue;
+    }
+    const handle = layer.handle;
+    if (!isWrappable(handle)) { continue; }
+    const isAsync = isAsyncFunction(handle);
+    if (isAsync) { found.push(`USE ${prefix + mountPrefix(layer) || "/"}`); }
+    if (fix) { layer.handle = isAsync ? forwardRejections(handle) : forwardLateRejections(handle); }
+  }
+}
+
+/** Une route de {@link scanRoutes} : ses entrées enveloppées avec `fix`, elle notée si fautive. */
+function scanRoute(route: NonNullable<RouterLayer["route"]>, prefix: string, fix: boolean, found: string[]): void {
+  const entries = route.stack ?? [];
+  let faulty = false;
+  entries.forEach((entry, index) => {
+    const handle = entry.handle;
+    if (!isWrappable(handle)) { return; }
+    const full = index === entries.length - 1 || isAsyncFunction(handle);
+    if (full) { faulty = true; }
+    if (fix) { entry.handle = full ? forwardRejections(handle) : forwardLateRejections(handle); }
+  });
+  if (!faulty) { return; }
+  const methods = Object.keys(route.methods ?? {}).map((method) => method.toUpperCase()).join(",");
+  found.push(`${methods} ${prefix}${String(route.path)}`);
+}
+
+/** Pile de l'application (Express 4 : `app._router.stack`). */
+function appStack(app: Express): RouterLayer[] | null {
+  return routerStack((app as unknown as { _router?: unknown })._router);
+}
+
+/**
+ * Routes dont un gestionnaire n'est pas passé par {@link asyncRoute} : Express 4 y
+ * laisserait un rejet sans réponse jusqu'au délai du site. Les tests des routes
+ * exigent une liste vide. Une pile introuvable (autre version d'Express) rend
+ * {@link ROUTER_STACK_NOT_FOUND} plutôt qu'une liste vide trompeuse.
+ *
+ * @param app Application Express, routes montées.
+ * @returns `MÉTHODE chemin` de chaque route fautive.
+ */
+export function unwrappedRoutes(app: Express): string[] {
+  const stack = appStack(app);
+  if (!stack) { return [ROUTER_STACK_NOT_FOUND]; }
+  const found: string[] = [];
+  scanRoutes(stack, "", false, found);
+  return found;
+}
+
+/**
+ * Enveloppe d'office les routes oubliées ({@link unwrappedRoutes}) : un rejet y
+ * reçoit tout de même une réponse au lieu de laisser le site attendre. Appelé par
+ * `startInternalApi` une fois les routes montées, qui journalise la liste rendue.
+ *
+ * @param app Application Express, routes montées.
+ * @returns `MÉTHODE chemin` de chaque route enveloppée (ou {@link ROUTER_STACK_NOT_FOUND}).
+ */
+export function wrapUnwrappedRoutes(app: Express): string[] {
+  const stack = appStack(app);
+  if (!stack) { return [ROUTER_STACK_NOT_FOUND]; }
+  const found: string[] = [];
+  scanRoutes(stack, "", true, found);
+  return found;
 }

@@ -5,7 +5,7 @@ import { getBddInstance} from "../bdd/Bdd.js";
 import {sendLog} from "../safe/sendLog.js";
 import {withdrawBanNotice} from "../privacy/staffLogRetention.js";
 import {banNoticeMessage} from "../notifications/dmLanguage.js";
-import {errorCode} from "../safe/errorGuards.js";
+import {safeErrorDetail} from "../safe/errorGuards.js";
 
 
 import type {BanInfo, BanVerdict} from "./types.js";
@@ -261,7 +261,7 @@ async function notifyBannedUser(client: Client, banInfo: BanInfo, now: number): 
                 // Réservation gardée : l'avis attendra un jour après le redémarrage.
                 // Journal local seulement : un envoi à Discord ne tiendrait pas
                 // dans la fenêtre d'arrêt, que le client ferme aussitôt.
-                console.error(`Ban notice reservation not released: code ${errorCode(error) ?? "inconnu"}`);
+                console.error(`Ban notice reservation not released: ${safeErrorDetail(error)}`);
                 return 0;
             });
         if (released > 0) {
@@ -276,7 +276,7 @@ async function notifyBannedUser(client: Client, banInfo: BanInfo, now: number): 
     try {
         sent = await user.send({content: banReason});
     } catch (error) {
-        await sendLog(client, `Ban notice not delivered: code ${errorCode(error) ?? "inconnu"}`);
+        await sendLog(client, `Ban notice not delivered: ${safeErrorDetail(error)}`);
         return;
     }
     let stored: number;
@@ -344,7 +344,7 @@ async function checkBan(client: Client,
     try {
         banInfo = await readBan(id_author);
     } catch (e) {
-        await sendLog(client, "Failed to check ban : " + (e as Error).message);
+        await sendLog(client, `Failed to check ban : ${safeErrorDetail(e)}`);
         return "UNKNOWN";
     }
     if (!banInfo) {
@@ -382,7 +382,7 @@ function startBanNotice(client: Client, banInfo: BanInfo, now: number): void {
     const notice: Promise<unknown> = noticeQueue
         .then(() => notifyBannedUser(client, banInfo, now))
         // Le code seul : le texte d'une erreur Discord peut citer un identifiant.
-        .catch((error: unknown) => sendLog(client, `Failed to notify banned user: code ${errorCode(error) ?? "inconnu"}`))
+        .catch((error: unknown) => sendLog(client, `Failed to notify banned user: ${safeErrorDetail(error)}`))
         .catch(() => undefined)
         .finally(() => noticesInFlight.delete(idUser));
     noticeQueue = notice;

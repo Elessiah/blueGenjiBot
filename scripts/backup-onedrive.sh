@@ -51,7 +51,101 @@ source "$SCRIPT_DIR/rclone-backend.sh"
 STAMP="$(date +%Y-%m-%d)"
 WORK_DIR="$(mktemp -d)"
 ARCHIVE="$WORK_DIR/bluegenji-$STAMP.tar"
-trap 'rm -rf "$WORK_DIR"' EXIT
+# Marqueur de sauvegarde en cours, à côté du statut (`runningMarkerPath` du bot) :
+# le rapport du lundi 4 h ne prend pas une sauvegarde du dimanche soir encore en
+# cours pour une sauvegarde manquée. Une ligne par exécution en cours (date ISO de
+# son départ, puis son PID), ajoutée au départ et retirée à la sortie, quelle
+# qu'elle soit, sous verrou : deux exécutions qui se chevauchent (lancement manuel
+# pendant le cron), dans un ordre ou dans l'autre, ne retirent jamais que leur
+# propre ligne — le fichier disparaît avec la dernière. Une exécution tuée sans
+# repasser par sa sortie (manque de mémoire, redémarrage) laisse sa ligne : la
+# suivante l'efface en ajoutant la sienne, et le bot l'ignore (PID mort). Le verrou
+# est pris sur le dossier du marqueur, sans fichier de verrou à côté ; sans `flock`
+# (machine incomplète), l'écriture reste tentée.
+RUNNING_FILE="$STATUS_FILE.running"
+RUNNING_LINE="$(date --iso-8601=seconds) $$"
+with_running_lock() {
+  (
+    if command -v flock >/dev/null 2>&1; then
+      flock -w 10 9 || exit 1
+    fi
+    "$@"
+  ) 9<"$(dirname "$RUNNING_FILE")"
+}
+# Une ligne dont le PID ne tourne plus (ni `/proc/<pid>`, ni `kill -0`) est effacée ;
+# une ligne sans PID (script antérieur) ne vit que douze heures (`RUNNING_MAX_AGE_MS`
+# du bot), une ligne illisible est effacée.
+RUNNING_MAX_AGE_S=$((12 * 60 * 60))
+running_line_alive() {
+  local pid="${1##* }"
+  if [[ "$pid" == "$1" ]]; then
+    local started
+    started="$(date -d "$1" +%s 2>/dev/null)" || return 1
+    (( $(date +%s) - started < RUNNING_MAX_AGE_S ))
+    return
+  fi
+  [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+  [[ -d "/proc/$pid" ]] || kill -0 "$pid" 2>/dev/null
+}
+# Fichier temporaire à côté de `$1`, créé par `mktemp` (nom imprévisible, jamais un
+# lien suivi). Il reprend les droits et le groupe du fichier qu'il remplacera (réglés
+# par l'exploitant pour que le bot, sous un autre compte, le lise), lus d'un seul
+# `stat` qui ne suit pas les liens : un lien posé entre-temps n'en prête pas les siens.
+# Sans fichier ordinaire existant, ou si son groupe ne peut pas être repris (le bot ne
+# le lirait plus), ceux que l'umask lui donnerait. Le bot le relit après le `mv`.
+sibling_tmp() {
+  local tmp kind mode group
+  tmp="$(mktemp "$1.tmp.XXXXXXXX")" || return 1
+  IFS='|' read -r kind mode group < <(stat -c '%F|%a|%g' -- "$1" 2>/dev/null || true) || true
+  if [[ "$kind" == "regular file" || "$kind" == "regular empty file" ]]     && chgrp "$group" "$tmp" 2>/dev/null; then
+    chmod "$mode" "$tmp" || { rm -f "$tmp"; return 1; }
+  else
+    if [[ "$kind" == regular* ]]; then
+      echo "[backup] groupe de $(basename "$1") non repris : droits par défaut." >&2
+    fi
+    chmod "$(printf '%o' $(( 0666 & ~0$(umask) )))" "$tmp" || { rm -f "$tmp"; return 1; }
+  fi
+  printf '%s' "$tmp"
+}
+# Le marqueur est toujours réécrit en entier dans un temporaire puis renommé : aucun
+# `>` ni `>>` sur le marqueur lui-même, qui suivrait un lien posé à sa place.
+add_running_line() {
+  local tmp line
+  tmp="$(sibling_tmp "$RUNNING_FILE")" || return 1
+  if [[ -f "$RUNNING_FILE" && ! -L "$RUNNING_FILE" ]]; then
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      [[ -z "$line" ]] && continue
+      if running_line_alive "$line"; then printf '%s\n' "$line" >> "$tmp"; fi
+    done < "$RUNNING_FILE"
+  fi
+  printf '%s\n' "$RUNNING_LINE" >> "$tmp"
+  mv -f -T "$tmp" "$RUNNING_FILE"
+}
+remove_running_line() {
+  if [[ ! -f "$RUNNING_FILE" || -L "$RUNNING_FILE" ]]; then rm -f "$RUNNING_FILE"; return 0; fi
+  local tmp
+  tmp="$(sibling_tmp "$RUNNING_FILE")" || return 1
+  grep -vxF -- "$RUNNING_LINE" "$RUNNING_FILE" >> "$tmp" || true
+  if [[ -s "$tmp" ]]; then
+    mv -f -T "$tmp" "$RUNNING_FILE"
+  else
+    rm -f "$tmp" "$RUNNING_FILE"
+  fi
+}
+release_running_marker() {
+  with_running_lock remove_running_line 2>/dev/null || true
+}
+trap 'rm -rf "$WORK_DIR"; release_running_marker' EXIT
+{ mkdir -p "$(dirname "$RUNNING_FILE")" && with_running_lock add_running_line; } 2>/dev/null \
+  || echo "[backup] marqueur de sauvegarde en cours non écrit." >&2
+
+# Chemin de l'historique écrit dans le statut : le bot relit celui-là au lieu de le
+# recalculer. Un chemin qui casserait le JSON (guillemet, antislash, contrôle) n'y
+# figure pas : le bot retombe alors sur son propre calcul, comme avant.
+STATUS_HISTORY_JSON="$STATUS_HISTORY_FILE"
+if [[ "$(printf '%s' "$STATUS_HISTORY_JSON" | tr -d '\000-\037\\"')" != "$STATUS_HISTORY_JSON" ]]; then
+  STATUS_HISTORY_JSON=""
+fi
 
 # Le statut est écrit quoi qu'il arrive : une panne silencieuse est pire qu'une
 # panne signalée, et c'est la seule trace que le bot saura relire.
@@ -63,22 +157,59 @@ STATUS_SIZE=0
 # Lignes gardées dans l'historique : un peu plus de deux mois.
 STATUS_HISTORY_LINES=20
 
+# Statut écrit sans temporaire (dossier plein, ou fermé à ce compte), seulement si aucun
+# autre compte ne peut écrire dans son dossier (ni groupe ni autres, `-perm /022`) : nul
+# ne peut alors y poser un lien (vers une FIFO, un périphérique) entre la vérification
+# et l'écriture. Dossier ouvert à ce compte : statut retiré puis recréé en exclusif
+# (`set -C`). Dossier fermé : statut existant, ordinaire, réécrit en place. Sinon rien
+# n'est écrit (et le dit). Jamais d'arrêt du script (`set -e`) : tout échec rend 1.
+status_fallback() {
+  local dir
+  dir="$(dirname "$STATUS_FILE")"
+  if [[ ! -d "$dir" || -L "$dir" ]] || [[ -n "$(find "$dir" -maxdepth 0 -perm /022 2>/dev/null)" ]]; then
+    cat > /dev/null
+    return 1
+  fi
+  if [[ -w "$dir" ]]; then
+    rm -f -- "$STATUS_FILE" 2>/dev/null || { cat > /dev/null; return 1; }
+    ( set -C; cat > "$STATUS_FILE" )
+  elif [[ -f "$STATUS_FILE" && ! -L "$STATUS_FILE" && -w "$STATUS_FILE" ]]; then
+    cat > "$STATUS_FILE"
+  else
+    cat > /dev/null
+    return 1
+  fi
+}
+
 write_status() {
-  mkdir -p "$(dirname "$STATUS_FILE")" "$(dirname "$STATUS_HISTORY_FILE")"
+  mkdir -p "$(dirname "$STATUS_FILE")" "$(dirname "$STATUS_HISTORY_FILE")" 2>/dev/null || true
   local now
   now="$(date --iso-8601=seconds)"
-  cat > "$STATUS_FILE" <<JSON
+  # Écrit dans un temporaire `mktemp` puis renommé : jamais `>` sur le statut, qui
+  # suivrait un lien posé à sa place, et le bot ne lit jamais un statut à moitié écrit.
+  # Sans temporaire (dossier plein ou fermé) : `status_fallback`.
+  local status_tmp
+  status_tmp="$(sibling_tmp "$STATUS_FILE")" || status_tmp=""
+  {
+    cat <<JSON
 {
   "date": "$now",
   "ok": $STATUS_OK,
   "remote": "$RCLONE_REMOTE:$REMOTE_DIR/bluegenji-$STAMP.tar.age",
   "sizeBytes": $STATUS_SIZE,
   "parts": "$STATUS_PARTS",
-  "error": "$STATUS_ERROR"
+  "error": "$STATUS_ERROR",
+  "historyFile": "$STATUS_HISTORY_JSON"
 }
 JSON
+  } | if [[ -n "$status_tmp" ]]; then
+    cat > "$status_tmp" && mv -f -T "$status_tmp" "$STATUS_FILE" || { rm -f "$status_tmp"; false; }
+  else
+    status_fallback
+  fi || echo "[backup] statut non écrit." >&2
   # Au mieux : un historique qui ne s'écrit pas ne fait pas échouer la sauvegarde.
-  # L'ajout et l'élagage forment un tout sous verrou : deux exécutions qui se
+  # L'ajout et l'élagage forment un tout sous verrou (pris sur le dossier de
+  # l'historique, sans fichier de verrou à côté) : deux exécutions qui se
   # chevauchent (lancement manuel pendant le cron) ne perdent aucune ligne
   # d'échec. Sans `flock` (machine incomplète), l'écriture reste tentée.
   {
@@ -86,10 +217,15 @@ JSON
       if command -v flock >/dev/null 2>&1; then
         flock -w 30 8 || exit 1
       fi
-      printf '{"date":"%s","ok":%s,"error":"%s"}\n' "$now" "$STATUS_OK" "$STATUS_ERROR" >> "$STATUS_HISTORY_FILE" \
-        && tail -n "$STATUS_HISTORY_LINES" "$STATUS_HISTORY_FILE" > "$STATUS_HISTORY_FILE.tmp.$$" \
-        && mv "$STATUS_HISTORY_FILE.tmp.$$" "$STATUS_HISTORY_FILE"
-    ) 8>"$STATUS_HISTORY_FILE.lock"
+      # Réécrit dans un temporaire `mktemp` puis renommé : jamais `>>` sur l'historique,
+      # qui suivrait un lien posé à sa place.
+      tmp="$(sibling_tmp "$STATUS_HISTORY_FILE")" || exit 1
+      { if [[ -f "$STATUS_HISTORY_FILE" && ! -L "$STATUS_HISTORY_FILE" ]]; then
+          tail -n "$((STATUS_HISTORY_LINES - 1))" "$STATUS_HISTORY_FILE"
+        fi
+        printf '{"date":"%s","ok":%s,"error":"%s"}\n' "$now" "$STATUS_OK" "$STATUS_ERROR"
+      } >> "$tmp" && mv -f -T "$tmp" "$STATUS_HISTORY_FILE" || { rm -f "$tmp"; exit 1; }
+    ) 8<"$(dirname "$STATUS_HISTORY_FILE")"
   } || echo "[backup] historique des statuts non écrit." >&2
 }
 
@@ -99,8 +235,9 @@ fail() {
   # afficher au bot « aucune sauvegarde » au lieu de la vraie cause de l'échec
   # — ou retirerait l'échec de l'historique relu par le rapport du lundi.
   STATUS_ERROR="$(printf '%s' "$1" | tr '\n\r\t' '   ' | tr -d '\000-\037\\"')"
-  write_status
+  # La cause part au journal d'abord : un statut impossible à écrire ne la tait pas.
   echo "[backup] ÉCHEC : $1" >&2
+  write_status || true
   exit 1
 }
 

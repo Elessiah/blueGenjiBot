@@ -691,7 +691,7 @@ test("checkBan_sendFails_noRetryAndCodeLogged", async () => {
 
   assert.equal(sends, 1);
   assert.deepEqual(trace.dms, []);
-  assert.match(trace.logs.join("\n"), /Ban notice not delivered: code 50007/);
+  assert.match(trace.logs.join("\n"), /Ban notice not delivered: Error, code 50007/);
   assert.deepEqual(await banRow("once-1"), { id_notice_user: null, notice_user_at: T0 });
 });
 
@@ -751,7 +751,7 @@ test("checkBan_storeWriteThrowsAndDeleteFails_withdrawalQueuedAndCodeLogged", as
   assert.equal(trace.dms.length, 1);
   assert.match(trace.logs.join("\n"), /Ban notice withdrawal postponed to the nightly purge/);
   // Le code seul, jamais le texte de l'erreur (il peut citer un identifiant).
-  assert.match(trace.logs.join("\n"), /Failed to notify banned user: code inconnu/);
+  assert.match(trace.logs.join("\n"), /Failed to notify banned user: Error, code inconnu/);
   assert.doesNotMatch(trace.logs.join("\n"), /SQLITE_BUSY/);
 });
 

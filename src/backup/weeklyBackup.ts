@@ -1,8 +1,22 @@
 import { MessageFlags, type Client, type User } from "discord.js";
 import { formatDiskUsage, getDiskUsage } from "./diskSpace.js";
-import { formatBackupFailures, formatBackupStatus, isBackupFresh, readBackupFailures, readBackupStatus } from "./backupStatus.js";
+import { IGNORED_HISTORY_LINE, formatBackupFailures, formatBackupStatus, isBackupFresh, readBackupFailures, readBackupStatus, readRunningSince, type BackupStatus } from "./backupStatus.js";
 import { resolveBddPath } from "../bdd/Bdd.js";
 import { backupChecksPassed, formatBackupChecks, runBackupChecks, type BackupCheckReport } from "./backupCheck.js";
+
+/**
+ * Chemin de l'historique des statuts : celui que le script a écrit dans le statut
+ * (`historyFile`), sinon `BACKUP_STATUS_HISTORY_PATH`, sinon le défaut du script
+ * (à côté du statut). Lu dans le statut, il ne peut plus diverger du script quand
+ * une seule des deux variables est surchargée.
+ * @param statusPath Chemin du fichier de statut.
+ * @param status Statut lu, ou `null`.
+ * @returns Chemin de l'historique.
+ */
+export function backupHistoryPath(statusPath: string, status: BackupStatus | null): string {
+  if (status?.historyFile) { return status.historyFile; }
+  return process.env.BACKUP_STATUS_HISTORY_PATH || statusPath.replace(/\.json$/, "") + "-history.jsonl";
+}
 
 /**
  * Envoie au propriétaire (OWNER_ID) le rapport hebdomadaire de sauvegarde.
@@ -30,19 +44,29 @@ export async function sendDatabaseBackup(
 
   const dbPath = resolveBddPath();
   const statusPath = process.env.BACKUP_STATUS_PATH || "/var/lib/bluegenji/backup-status.json";
-  // Même défaut que le script (`STATUS_HISTORY_FILE`) : à côté du statut.
-  const historyPath = process.env.BACKUP_STATUS_HISTORY_PATH || statusPath.replace(/\.json$/, "") + "-history.jsonl";
   const stamp = new Date().toISOString().slice(0, 10);
 
   try {
-    // Deux lectures indépendantes : le statut et l'historique des échecs.
-    const [status, history] = await Promise.all([readBackupStatus(statusPath), readBackupFailures(historyPath)]);
+    // Le marqueur d'une sauvegarde en cours se lit pendant le statut, puis avec l'historique,
+    // lu au chemin que le script a écrit dans le statut (`backupHistoryPath`) : au plus
+    // deux tours de lecture, pas trois.
+    const runningRead = readRunningSince(statusPath);
+    const status = await readBackupStatus(statusPath);
+    const [runningSince, history] = await Promise.all([
+      runningRead,
+      readBackupFailures(backupHistoryPath(statusPath, status)),
+    ]);
     // Deux sauvegardes par semaine : un échec du mardi ne doit pas disparaître
     // derrière le succès du dimanche.
     // Le dernier passage figure déjà dans la ligne du statut : pas deux ❌ pour un incident.
     const failures = history.filter((failure) => failure.date !== status?.date);
     const failuresLine = formatBackupFailures(failures);
-    const cloudLine = failuresLine === null ? formatBackupStatus(status) : `${formatBackupStatus(status)}\n${failuresLine}`;
+    const statusLine = formatBackupStatus(status, Date.now(), runningSince);
+    // Un historique refusé tairait les échecs passés : le rapport le dit et passe en alerte.
+    const historyIgnored = status?.historyFileIgnored === true;
+    if (historyIgnored) { console.warn("[backup] historique désigné par le statut ignoré (hors du dossier du statut)."); }
+    const cloudLine = [statusLine, failuresLine, historyIgnored ? IGNORED_HISTORY_LINE : null]
+      .filter((line): line is string => line !== null).join("\n");
     // L'état du disque intéresse surtout quand la place manque : on le joint dans les deux cas.
     const diskLine = formatDiskUsage(await getDiskUsage(dbPath));
     // Une archive présente mais illisible ne vaut pas mieux qu'une absente.
@@ -50,7 +74,7 @@ export async function sendDatabaseBackup(
 
     // Une sauvegarde absente ou périmée est la seule situation qui demande une
     // action : elle mérite d'être annoncée dès la première ligne du message.
-    const healthy = isBackupFresh(status) && failuresLine === null && backupChecksPassed(checks);
+    const healthy = isBackupFresh(status, Date.now(), runningSince !== null) && failuresLine === null && !historyIgnored && backupChecksPassed(checks);
     const header = healthy
       ? `🗄️ Rapport de sauvegarde BlueGenji — ${stamp}`
       : `🚨 Sauvegarde BlueGenji à vérifier — ${stamp}`;

@@ -6,7 +6,7 @@ import {Ban} from "../../bdd/types.js";
 import {deleteBanMessages} from "../../privacy/staffLogRetention.js";
 import {forgetBanVerdict} from "../../check/checkBan.js";
 import {sendLog} from "../../safe/sendLog.js";
-import {errorCode} from "../../safe/errorGuards.js";
+import {safeErrorDetail} from "../../safe/errorGuards.js";
 
 /**
  * Retire un utilisateur de la liste de bannissement.
@@ -45,7 +45,7 @@ async function unban(client: Client,
     // en échec) n'empêche jamais la levée — le staff en est averti.
     await bdd.write("INSERT OR IGNORE INTO BanNoticeWithdrawal (id_user, id_message, queued_at) "
         + "SELECT id_user, id_notice_user, ? FROM Ban WHERE id_user = ? AND id_notice_user IS NOT NULL", [Date.now(), target])
-        .catch((error: unknown) => sendLog(client, `Ban notice not queued before unban: code ${errorCode(error) ?? "inconnu"}`));
+        .catch((error: unknown) => sendLog(client, `Ban notice not queued before unban: ${safeErrorDetail(error)}`));
     let removed: Ban[];
     try {
         // La ligne effacée est rendue par la même instruction : un avis remis
@@ -57,7 +57,7 @@ async function unban(client: Client,
         // `Ban` l'oubliera, ce qui ne fait que retirer un rappel à l'exclu
         // (l'avis du jour suivant le remplace) — le retirer de la file, au
         // contraire, pouvait perdre un avis qu'un retrait concurrent y croyait gardé.
-        await sendLog(client, `Failed to unban: code ${errorCode(error) ?? "inconnu"}`);
+        await sendLog(client, `Failed to unban: ${safeErrorDetail(error)}`);
         await safeReply(interaction, "The database is unavailable. Please try again in a few minutes.");
         return true;
     }

@@ -10,7 +10,8 @@
  * ni à Discord ni à la base. La distribution vit dans `deliver.ts`.
  */
 
-import { sliceWithoutSplittingPair } from "./dmLanguage.js";
+import { sliceWithoutSplittingPair } from "../utils/cutText.js";
+import { MAX_SITE_CONTEXT_LENGTH, sanitizeSiteContext } from "./siteContext.js";
 
 /** Destinataire d'un message privé, tel que l'app le connaît. */
 export interface DirectMessageRecipient {
@@ -94,6 +95,20 @@ function toTrimmedString(value: unknown): string | null {
   if (typeof value !== "string") { return null; }
   const trimmed = value.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+/** Longueur maximale de l'étiquette `context` du site (journaux pm2 et salon de logs). */
+export const MAX_CONTEXT_LENGTH = MAX_SITE_CONTEXT_LENGTH;
+
+/**
+ * Étiquette `context` du site, réduite à des caractères sûrs et bornée
+ * ({@link sanitizeSiteContext}) : elle part au salon de logs et au journal du
+ * processus, jamais une mention, une mise en forme Discord ni un texte sans limite.
+ * @param value Valeur reçue.
+ * @returns L'étiquette, ou `site` à défaut.
+ */
+export function parseContext(value: unknown): string {
+  return sanitizeSiteContext(value, "site");
 }
 
 /**
@@ -183,7 +198,7 @@ export function parseDirectMessageRequest(payload: unknown): DirectMessageReques
   return {
     message: truncateMessage(message),
     recipients,
-    context: toTrimmedString(raw.context) ?? "site",
+    context: parseContext(raw.context),
   };
 }
 
@@ -204,7 +219,7 @@ export function parseRefereeAlert(payload: unknown): RefereeAlertRequest | null 
   return {
     message: truncateMessage(message),
     dmMessage: dmMessage === null ? null : truncateMessage(dmMessage),
-    context: toTrimmedString(raw.context) ?? "site",
+    context: parseContext(raw.context),
   };
 }
 
