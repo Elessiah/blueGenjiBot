@@ -10,6 +10,7 @@
 
 import type { Express, Request, Response } from "express";
 import type { Client } from "discord.js";
+import { asyncRoute } from "../internalApi/helpers.js";
 import {
   voiceErrorDetail,
   VoiceChannelError,
@@ -19,7 +20,9 @@ import {
   parseVoiceKey,
   releaseVoiceChannel,
   releaseVoiceChannelByKey,
-  sanitizeVoiceChannelName,
+  cleanVoiceChannelName,
+  FALLBACK_VOICE_NAME,
+  parseVoiceFallback,
   logVoiceFailure,
   voiceChannelName,
 } from "./matchVoice.js";
@@ -67,27 +70,31 @@ function refuseNotReady(client: Client, res: Response): boolean {
  * @param client Client Discord.
  */
 export function registerVoiceRoutes(app: Express, client: Client): void {
-  app.post("/internal/voice/channels", async (req: Request, res: Response) => {
+  app.post("/internal/voice/channels", asyncRoute(async (req: Request, res: Response) => {
     const key = parseVoiceKey(req.body?.key);
     if (!key) {
       res.status(400).json({ error: "INVALID_VOICE_KEY" });
       return;
     }
-    const name = sanitizeVoiceChannelName(req.body?.name);
-    if (!name) {
+    const cleaned = cleanVoiceChannelName(req.body?.name);
+    if (cleaned === null) {
       res.status(400).json({ error: "INVALID_VOICE_CHANNEL_NAME" });
       return;
     }
+    // Rien d'affichable : le repli, quel que soit le drapeau du site.
+    const name = cleaned === ""
+      ? voiceChannelName(key, FALLBACK_VOICE_NAME, true)
+      : voiceChannelName(key, cleaned, parseVoiceFallback(req.body?.fallback));
     if (refuseNotReady(client, res)) { return; }
     try {
-      const { channelId, created } = await ensureTeamVoiceChannel(client, key, voiceChannelName(key, name));
+      const { channelId, created } = await ensureTeamVoiceChannel(client, key, name);
       res.status(created ? 201 : 200).json({ channelId });
     } catch (error) {
       await replyVoiceError(client, res, "POST /internal/voice/channels", error);
     }
-  });
+  }));
 
-  app.post("/internal/voice/channels/:channelId/release", async (req: Request, res: Response) => {
+  app.post("/internal/voice/channels/:channelId/release", asyncRoute(async (req: Request, res: Response) => {
     const channelId = parseChannelId(req.params.channelId);
     if (!channelId) {
       res.status(400).json({ error: "INVALID_CHANNEL_ID" });
@@ -101,9 +108,9 @@ export function registerVoiceRoutes(app: Express, client: Client): void {
     } catch (error) {
       await replyVoiceError(client, res, "POST /internal/voice/channels/:id/release", error);
     }
-  });
+  }));
 
-  app.post("/internal/voice/channels/:channelId/clear", async (req: Request, res: Response) => {
+  app.post("/internal/voice/channels/:channelId/clear", asyncRoute(async (req: Request, res: Response) => {
     const channelId = parseChannelId(req.params.channelId);
     if (!channelId) {
       res.status(400).json({ error: "INVALID_CHANNEL_ID" });
@@ -120,9 +127,9 @@ export function registerVoiceRoutes(app: Express, client: Client): void {
     } catch (error) {
       await replyVoiceError(client, res, "POST /internal/voice/channels/:id/clear", error);
     }
-  });
+  }));
 
-  app.post("/internal/voice/keys/release", async (req: Request, res: Response) => {
+  app.post("/internal/voice/keys/release", asyncRoute(async (req: Request, res: Response) => {
     const key = parseVoiceKey(req.body?.key);
     if (!key) {
       res.status(400).json({ error: "INVALID_VOICE_KEY" });
@@ -135,5 +142,5 @@ export function registerVoiceRoutes(app: Express, client: Client): void {
     } catch (error) {
       await replyVoiceError(client, res, "POST /internal/voice/keys/release", error);
     }
-  });
+  }));
 }

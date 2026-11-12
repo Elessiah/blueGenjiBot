@@ -220,6 +220,6 @@ test("unban_queueInsertFails_staffWarned", async () => {
     bdd.write = original;
   }
 
-  assert.ok(logs.some((log) => log.includes("Ban notice not queued before unban: code inconnu")), JSON.stringify(logs));
+  assert.ok(logs.some((log) => log.includes("Ban notice not queued before unban: Error, code inconnu")), JSON.stringify(logs));
   assert.deepEqual(await bdd.raw("SELECT id_user FROM Ban WHERE id_user = ?", [target]), []);
 });

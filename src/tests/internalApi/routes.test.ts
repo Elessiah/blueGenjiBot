@@ -32,7 +32,7 @@ process.env.GUILD_ID = "700000000000000001";
 process.env.CLIENT_ID = "600000000000000001";
 
 import { MessageFlags, type Client } from "discord.js";
-import { startInternalApi } from "../../internalApi.js";
+import { resetInternalErrorReports, shouldReportInternalError, startInternalApi } from "../../internalApi.js";
 import { getBddInstance, resetBddInstance } from "../../bdd/Bdd.js";
 import { recordEvent } from "../../feed/feedBus.js";
 import { readSiteVisitStats } from "../../siteVisits/siteVisits.js";
@@ -375,7 +375,9 @@ test("/internal/status : client en panne, 500 INTERNAL_STATUS_ERROR et détail a
   const res = await callStatus(t);
   assert.equal(res.status, 500);
   assert.deepEqual(res.body, { error: "INTERNAL_STATUS_ERROR" });
-  assert.ok(state.logs.some((l) => l.startsWith("/internal/status error: client détruit")));
+  // Type et code seuls : le message de l'exception ne part pas au journal.
+  assert.ok(state.logs.some((l) => l.startsWith("/internal/status error: Error, code")), JSON.stringify(state.logs));
+  assert.ok(state.logs.every((l) => !l.includes("client détruit")));
 });
 
 test("/internal/invite : lien d'autorisation OAuth2 du bot", async () => {
@@ -763,7 +765,7 @@ test("sendCode_discordErrorWithCode_logsCodeOnly", async () => {
   try {
     const res = await call("/internal/auth/send-code", { body: { discordId: "123456789012345678", code: "111111" } });
     assert.equal(res.status, 500);
-    assert.ok(state.logs.includes("Failed to send auth code to a player: code 50035"), JSON.stringify(state.logs));
+    assert.ok(state.logs.includes("Failed to send auth code to a player: Error, code 50035"), JSON.stringify(state.logs));
     assert.ok(state.logs.every((l) => !l.includes("snowflake")), "le texte de Discord ne part pas au journal");
   } finally {
     users.fetch = savedFetch;
@@ -773,7 +775,7 @@ test("sendCode_discordErrorWithCode_logsCodeOnly", async () => {
 test("sendCode_errorWithoutCode_logsUnknownCode", async () => {
   state.closedDms.add("123456789012345678");
   await call("/internal/auth/send-code", { body: { discordId: "123456789012345678", code: "111111" } });
-  assert.ok(state.logs.includes("Failed to send auth code to a player: code inconnu"), JSON.stringify(state.logs));
+  assert.ok(state.logs.includes("Failed to send auth code to a player: Error, code inconnu"), JSON.stringify(state.logs));
 });
 
 test("/internal/auth/send-code : MP fermés, 500 DISCORD_DM_FAILED", async () => {
@@ -1323,4 +1325,27 @@ test("base injoignable : chaque route répond son code d'erreur stable", async (
 
   // Aucun message d'exception (chemin, SQL) ne part à l'appelant.
   assert.ok(state.logs.some((l) => l.startsWith("/internal/stats error:")));
+});
+
+test("shouldReportInternalError_sameLineWithinCooldown_returnsFalse", () => {
+  resetInternalErrorReports();
+  const line = "[internalApi] INTERNAL_ERROR (Error)";
+
+  assert.equal(shouldReportInternalError(line, 1_000), true);
+  assert.equal(shouldReportInternalError(line, 1_000 + 10 * 60 * 1000 - 1), false);
+});
+
+test("shouldReportInternalError_afterCooldown_returnsTrue", () => {
+  resetInternalErrorReports();
+  const line = "[internalApi] INTERNAL_ERROR (Error)";
+  shouldReportInternalError(line, 1_000);
+
+  assert.equal(shouldReportInternalError(line, 1_000 + 10 * 60 * 1000), true);
+});
+
+test("shouldReportInternalError_otherLine_returnsTrue", () => {
+  resetInternalErrorReports();
+  shouldReportInternalError("[internalApi] INTERNAL_ERROR (Error)", 1_000);
+
+  assert.equal(shouldReportInternalError("[internalApi] INTERNAL_ERROR (TypeError)", 1_001), true);
 });

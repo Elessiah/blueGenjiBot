@@ -28,6 +28,8 @@ import {
   BOT_WIDE_LOG_COOLDOWN_MS,
   resetVoiceState,
   sanitizeVoiceChannelName,
+  cleanVoiceChannelName,
+  parseVoiceFallback,
   logVoiceFailure,
   shouldLogVoiceError,
   shouldSweep,
@@ -988,4 +990,30 @@ test("voiceDurations_abandonedMaxAge_matchesSiteDeclared96Hours", () => {
 
 test("voiceDurations_sweepCron_matchesSiteDeclared30Minutes", () => {
   assert.equal(VOICE_SWEEP_CRON, "*/30 * * * *");
+});
+
+test("cleanVoiceChannelName_nothingDisplayable_returnsEmpty", () => {
+  assert.equal(cleanVoiceChannelName("@@ ** ##"), "");
+});
+
+test("cleanVoiceChannelName_notAString_returnsNull", () => {
+  assert.equal(cleanVoiceChannelName(42), null);
+});
+
+test("parseVoiceFallback_boolean_returnsIt", () => {
+  assert.equal(parseVoiceFallback(true), true);
+  assert.equal(parseVoiceFallback(false), false);
+});
+
+test("parseVoiceFallback_notABoolean_returnsUndefined", () => {
+  assert.equal(parseVoiceFallback("true"), undefined);
+  assert.equal(parseVoiceFallback(undefined), undefined);
+});
+
+test("voiceChannelName_fallbackFalseWithFallbackLikeName_keepsName", () => {
+  assert.equal(voiceChannelName("match:1:team:7", "Salon d'équipe", false), "Salon d'équipe");
+});
+
+test("voiceChannelName_fallbackTrueWithOtherName_returnsNumberedLabel", () => {
+  assert.equal(voiceChannelName("match:1:team:7", "Les Genji", true), "Salon d'équipe / Team channel 7");
 });

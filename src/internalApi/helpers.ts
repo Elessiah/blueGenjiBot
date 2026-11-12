@@ -1,5 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
-import type { ErrorRequestHandler } from "express";
+import type { ErrorRequestHandler, NextFunction, Request, Response } from "express";
 import { safeErrorCode, safeErrorKind } from "../safe/errorGuards.js";
 
 /** Adresses d'ecoute sur lesquelles seul un process de la machine peut se connecter. */
@@ -127,18 +127,39 @@ export type InternalErrorReply = { code: string; status: number };
 /** Réponse à une erreur que rien n'identifie (dont `stream.*`, défaut du serveur). */
 const UNEXPECTED_ERROR: InternalErrorReply = { code: "INTERNAL_ERROR", status: 500 };
 
+/** Code générique d'un corps refusé par body-parser sans `type` connu (gzip corrompu…). */
+const INVALID_BODY = "INVALID_BODY";
+
+/**
+ * Refus de lecture du corps que body-parser lève sans `type` listé : une erreur
+ * `http-errors` marquée `expose` (faute du client) au statut 4xx — un flux gzip
+ * ou deflate corrompu, par exemple. Une erreur Discord porte un `status` 4xx
+ * mais jamais `expose` : elle reste une erreur du serveur.
+ * @param expose Champ `expose` de l'erreur.
+ * @param status Champ `status` de l'erreur.
+ * @returns La réponse, ou `null`.
+ */
+function exposedClientRefusal(expose: unknown, status: unknown): InternalErrorReply | null {
+  return expose === true && typeof status === "number" && Number.isInteger(status) && status >= 400 && status <= 499
+    ? { code: INVALID_BODY, status }
+    : null;
+}
+
 /**
  * Code et statut d'une erreur levée hors d'une route : ceux du refus de lecture
- * du corps, sinon `500 INTERNAL_ERROR` — le `status` d'une autre erreur (une
- * erreur Discord en porte un) n'est jamais repris.
+ * du corps, `INVALID_BODY` pour un autre refus 4xx exposé de body-parser, sinon
+ * `500 INTERNAL_ERROR` — le `status` d'une autre erreur (une erreur Discord en
+ * porte un, sans `expose`) n'est jamais repris.
  *
  * @param error Erreur transmise par Express.
  * @returns Code et statut de la réponse.
  */
 export function internalErrorReply(error: unknown): InternalErrorReply {
   try {
-    const { type, status } = (error ?? {}) as { type?: unknown; status?: unknown };
-    if (typeof type !== "string" || !Object.hasOwn(BODY_PARSER_REFUSALS, type)) return UNEXPECTED_ERROR;
+    const { type, status, expose } = (error ?? {}) as { type?: unknown; status?: unknown; expose?: unknown };
+    if (typeof type !== "string" || !Object.hasOwn(BODY_PARSER_REFUSALS, type)) {
+      return exposedClientRefusal(expose, status) ?? UNEXPECTED_ERROR;
+    }
     // Le statut que body-parser pose avec son `type` : une autre erreur qui reprendrait
     // ce `type` reste une erreur du serveur.
     const refusal = BODY_PARSER_REFUSALS[type];
@@ -166,24 +187,71 @@ export function internalErrorLogLine(error: unknown): string {
   return `[internalApi] ${reply.code} (${safeErrorKind(error)}${shown})`;
 }
 
+/** Destinations des lignes du gestionnaire d'erreur. */
+export type InternalErrorSinks = {
+  /** Défaut du serveur (500) : journal d'erreurs du processus. */
+  error?: (line: string) => void;
+  /** Refus du client (4xx : corps illisible, requête annulée) : niveau avertissement. */
+  warn?: (line: string) => void;
+  /** Défaut du serveur (500), aussi au salon de logs (`sendLog`) : même ligne, code et type seuls. */
+  report?: (line: string) => void;
+};
+
 /**
  * Gestionnaire d'erreur Express de l'API interne : un code, jamais la page
  * d'Express ; si la réponse est déjà partie (flux), sa connexion est coupée sans repasser
- * par le gestionnaire d'Express, qui écrirait la pile au journal.
+ * par le gestionnaire d'Express, qui écrirait la pile au journal. Un refus du client
+ * (4xx) va au niveau avertissement — un appel annulé par le site n'encombre pas le
+ * journal d'erreurs relu après déploiement ; un défaut du serveur (500) va au journal
+ * d'erreurs **et** au salon de logs.
  *
- * @param log Écrit une ligne au journal du processus.
+ * @param sinks Destinations des lignes (console par défaut, aucun salon de logs).
  * @returns Gestionnaire à monter après toutes les routes.
  */
-export function internalErrorHandler(log: (line: string) => void = (line) => console.error(line)): ErrorRequestHandler {
+export function internalErrorHandler(sinks: InternalErrorSinks = {}): ErrorRequestHandler {
+  const { error: logError = (line) => console.error(line), warn = (line) => console.warn(line), report } = sinks;
   return (error, _req, res, _next) => {
-    log(internalErrorLogLine(error));
+    const reply = internalErrorReply(error);
+    const line = internalErrorLogLine(error);
+    if (reply.status >= 500) {
+      logError(line);
+      // Au mieux : un salon de logs injoignable ne doit pas faire lever le gestionnaire.
+      try { report?.(line); } catch { /* journal Discord indisponible */ }
+    } else {
+      warn(line);
+    }
     if (res.headersSent) {
       // Réponse commencée (flux) : la connexion est coupée, pour que le lecteur voie
       // une réponse tronquée et non une fin normale ; rien ne repart vers Express.
       try { res.destroy(); } catch { /* connexion déjà close */ }
       return;
     }
-    const reply = internalErrorReply(error);
     res.status(reply.status).json({ error: reply.code });
+  };
+}
+
+/** Gestionnaire de route, synchrone ou asynchrone. */
+type RouteHandler = (req: Request, res: Response) => unknown;
+
+/**
+ * Enveloppe une route asynchrone pour Express 4, qui ignore la promesse rejetée
+ * d'un gestionnaire : le rejet part à `next(err)`, et `internalErrorHandler`
+ * répond toujours un code au lieu de laisser la requête du site sans réponse
+ * jusqu'à son délai. Un rejet sans valeur (`null`, `undefined`) devient une
+ * `Error` : `next()` sans argument passerait à la route suivante (404).
+ *
+ * @param handler Gestionnaire de la route.
+ * @returns Gestionnaire Express.
+ */
+export function asyncRoute(handler: RouteHandler): (req: Request, res: Response, next: NextFunction) => void {
+  return (req, res, next) => {
+    const forward = (error: unknown): void => {
+      next(error ?? new Error("rejet sans valeur"));
+    };
+    try {
+      Promise.resolve(handler(req, res)).catch(forward);
+    } catch (error) {
+      forward(error);
+    }
   };
 }

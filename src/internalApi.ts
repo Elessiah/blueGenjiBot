@@ -17,7 +17,7 @@ import express, { type Request, type Response, type NextFunction } from "express
 import type { Client } from "discord.js";
 import { getBddInstance } from "./bdd/Bdd.js";
 import { sendAlert, sendLog, sendLogConfirmed, type LogKind } from "./safe/sendLog.js";
-import { describeError, errorCode } from "./safe/errorGuards.js";
+import { describeError, safeErrorDetail } from "./safe/errorGuards.js";
 import { recordEvent, getBacklog, subscribe } from "./feed/feedBus.js";
 import { getSnapshotsBetween } from "./snapshots/dailySnapshot.js";
 import { listModules, isValidModule, setModuleEnabled, MODULE_KEYS, type ModuleKey } from "./modules/moduleGuard.js";
@@ -30,6 +30,7 @@ import {
   sparklineFromBuckets,
   SPARKLINE_POINTS,
   internalErrorHandler,
+  asyncRoute,
   type RelayStatus,
 } from "./internalApi/helpers.js";
 import { parseSiteVisitStats, saveSiteVisitStats } from "./siteVisits/siteVisits.js";
@@ -179,6 +180,44 @@ function queryInteger(value: unknown, fallback: number): number {
   return Number.isFinite(parsed) ? Math.trunc(parsed) : fallback;
 }
 
+/** Délai entre deux envois au salon de logs d'une même ligne d'erreur hors route. */
+const INTERNAL_ERROR_REPORT_COOLDOWN_MS = 10 * 60 * 1000;
+/** Lignes retenues pour l'étranglement : au-delà, la mémoire repart à vide. */
+const INTERNAL_ERROR_REPORT_MEMORY = 100;
+/** Dernier envoi au salon de logs de chaque ligne d'erreur hors route. */
+const internalErrorReportedAt = new Map<string, number>();
+
+/**
+ * Dit si une ligne d'erreur hors route part au salon de logs : une fois par ligne et
+ * par {@link INTERNAL_ERROR_REPORT_COOLDOWN_MS}, pour qu'une panne répétée (chaque
+ * appel du site) n'inonde pas le salon. Une ligne refusée part quand même à pm2.
+ * @param line Ligne d'erreur (code et type seuls).
+ * @param now Horloge injectable, pour les tests.
+ * @returns `true` si la ligne doit partir.
+ */
+export function shouldReportInternalError(line: string, now: number = Date.now()): boolean {
+  const last = internalErrorReportedAt.get(line);
+  if (last !== undefined && now - last < INTERNAL_ERROR_REPORT_COOLDOWN_MS) { return false; }
+  if (internalErrorReportedAt.size >= INTERNAL_ERROR_REPORT_MEMORY) { internalErrorReportedAt.clear(); }
+  internalErrorReportedAt.set(line, now);
+  return true;
+}
+
+/** Vide la mémoire de l'étranglement (tests). */
+export function resetInternalErrorReports(): void {
+  internalErrorReportedAt.clear();
+}
+
+/**
+ * Envoie au salon de logs la ligne d'une erreur levée hors d'une route (500) ; au mieux.
+ * @param client Client Discord.
+ * @param line Ligne d'erreur, sans message ni pile (`internalErrorLogLine`).
+ */
+function reportInternalError(client: Client, line: string): void {
+  if (!shouldReportInternalError(line)) { return; }
+  void sendLog(client, line).catch(() => undefined);
+}
+
 /**
  * Construit, monte et demarre le serveur Express de l'API interne.
  *
@@ -202,7 +241,7 @@ export function startInternalApi(client: Client) {
   // `req.body` doit donc vivre sous `/internal` (ailleurs, `req.body` reste vide).
   app.use("/internal", authorize, express.json());
 
-  app.get("/internal/feed/stream", async (req: Request, res: Response) => {
+  app.get("/internal/feed/stream", asyncRoute(async (req: Request, res: Response) => {
     try {
       res.setHeader("Content-Type", "text/event-stream");
       res.setHeader("Cache-Control", "no-cache, no-transform");
@@ -238,7 +277,7 @@ export function startInternalApi(client: Client) {
         try { res.end(); } catch { /* noop */ }
       });
     } catch (error) {
-      await sendLog(client, `/internal/feed/stream error: ${(error as Error).message}`);
+      await sendLog(client, `/internal/feed/stream error: ${safeErrorDetail(error)}`);
       // `flushHeaders()` a deja repondu : `res.status().json()` leverait ici
       // ERR_HTTP_HEADERS_SENT, dans un `catch` -- donc un rejet non gere qu'
       // Express 4 ne rattrape pas. Un flux deja ouvert se ferme, il ne se
@@ -252,9 +291,9 @@ export function startInternalApi(client: Client) {
       }
       res.status(500).json({ error: "INTERNAL_FEED_ERROR" });
     }
-  });
+  }));
 
-  app.get("/internal/health", async (_req: Request, res: Response) => {
+  app.get("/internal/health", asyncRoute(async (_req: Request, res: Response) => {
     const checks: Record<string, string | number> = {};
     let allOk = true;
     try {
@@ -269,7 +308,7 @@ export function startInternalApi(client: Client) {
       checks.database = probe ? "ok" : "error";
     } catch { checks.database = "error"; allOk = false; }
     res.status(allOk ? 200 : 503).json({ status: allOk ? "healthy" : "unhealthy", checks });
-  });
+  }));
 
   app.get("/internal/invite", (_req: Request, res: Response) => {
     const clientId = process.env.CLIENT_ID ?? "";
@@ -283,7 +322,7 @@ export function startInternalApi(client: Client) {
     res.json({ url, permissions, scopes });
   });
 
-  app.get("/internal/status", async (_req: Request, res: Response) => {
+  app.get("/internal/status", asyncRoute(async (_req: Request, res: Response) => {
     try {
       const uptimeMs = Date.now() - STARTUP_TS;
       const gatewayLatency = Math.max(0, Math.round(client.ws.ping));
@@ -311,12 +350,12 @@ export function startInternalApi(client: Client) {
         status,
       });
     } catch (error) {
-      await sendLog(client, `/internal/status error: ${(error as Error).message}`);
+      await sendLog(client, `/internal/status error: ${safeErrorDetail(error)}`);
       res.status(500).json({ error: "INTERNAL_STATUS_ERROR" });
     }
-  });
+  }));
 
-  app.get("/internal/stats", async (_req: Request, res: Response) => {
+  app.get("/internal/stats", asyncRoute(async (_req: Request, res: Response) => {
     try {
       const bdd = await getBddInstance();
 
@@ -364,12 +403,12 @@ export function startInternalApi(client: Client) {
         windowDays: MESSAGE_WINDOW_DAYS,
       });
     } catch (error) {
-      await sendLog(client, `/internal/stats error: ${(error as Error).message}`);
+      await sendLog(client, `/internal/stats error: ${safeErrorDetail(error)}`);
       res.status(500).json({ error: "INTERNAL_STATS_ERROR" });
     }
-  });
+  }));
 
-  app.post("/internal/auth/resolve", async (req: Request, res: Response) => {
+  app.post("/internal/auth/resolve", asyncRoute(async (req: Request, res: Response) => {
     const handle = String(req.body?.handle || "").trim();
     if (!handle) {
       res.status(400).json({ error: "INVALID_PAYLOAD" });
@@ -396,12 +435,12 @@ export function startInternalApi(client: Client) {
         return;
       }
       // Le tag cherché est le pseudo d'une personne : il ne part pas au journal.
-      await sendLog(client, `Failed to resolve a discord handle: ${(error as Error).message}`);
+      await sendLog(client, `Failed to resolve a discord handle: ${safeErrorDetail(error)}`);
       res.status(500).json({ error: "INTERNAL_RESOLVE_ERROR" });
     }
-  });
+  }));
 
-  app.post("/internal/auth/send-code", async (req: Request, res: Response) => {
+  app.post("/internal/auth/send-code", asyncRoute(async (req: Request, res: Response) => {
     const discordId = String(req.body?.discordId || "").trim();
     const code = String(req.body?.code || "").trim();
 
@@ -424,10 +463,10 @@ export function startInternalApi(client: Client) {
       // Jamais l'identifiant Discord du joueur ni le code : le salon de logs est
       // un message Discord (« un joueur », RGPD_LOGS_AND_VISITS du site). Seul
       // le code d'erreur part, le texte de Discord pouvant citer la valeur reçue.
-      await sendLog(client, `Failed to send auth code to a player: code ${errorCode(error) ?? "inconnu"}`);
+      await sendLog(client, `Failed to send auth code to a player: ${safeErrorDetail(error)}`);
       res.status(500).json({ error: "DISCORD_DM_FAILED" });
     }
-  });
+  }));
 
   /**
    * Ligne de journal poussee par le site. Seul `kind: "log"` part en
@@ -435,7 +474,7 @@ export function startInternalApi(client: Client) {
    * valeur notifie : un site qui n'envoie pas encore `kind`, ou une valeur
    * inattendue, ne perd ni la ligne ni l'alerte.
    */
-  app.post("/internal/log", async (req: Request, res: Response) => {
+  app.post("/internal/log", asyncRoute(async (req: Request, res: Response) => {
     const message = String(req.body?.message || "").trim();
     if (!message) {
       res.status(400).json({ error: "MISSING_MESSAGE" });
@@ -445,13 +484,13 @@ export function startInternalApi(client: Client) {
 
     await sendLog(client, `[AppBlueGenji] ${message}`, undefined, false, kind);
     res.json({ success: true });
-  });
+  }));
 
   /**
    * Frequentation du site, poussee par l'app web (elle seule mesure les visites).
    * Le bot conserve le dernier instantane et le sert a la commande /stats-site.
    */
-  app.post("/internal/site-visits", async (req: Request, res: Response) => {
+  app.post("/internal/site-visits", asyncRoute(async (req: Request, res: Response) => {
     const stats = parseSiteVisitStats(req.body);
     if (!stats) {
       res.status(400).json({ error: "INVALID_SITE_VISIT_STATS" });
@@ -462,10 +501,10 @@ export function startInternalApi(client: Client) {
       await saveSiteVisitStats(stats);
       res.json({ success: true });
     } catch (error) {
-      await sendLog(client, `site-visits save error: ${(error as Error).message}`);
+      await sendLog(client, `site-visits save error: ${safeErrorDetail(error)}`);
       res.status(500).json({ error: "SITE_VISIT_STATS_SAVE_FAILED" });
     }
-  });
+  }));
 
   /**
    * Messages prives pousses par l'app web (rappels de match).
@@ -474,7 +513,7 @@ export function startInternalApi(client: Client) {
    * equipes. Le bot ne sait que joindre les comptes Discord, par ID quand
    * l'app le connait, par tag sinon.
    */
-  app.post("/internal/notify/dm", async (req: Request, res: Response) => {
+  app.post("/internal/notify/dm", asyncRoute(async (req: Request, res: Response) => {
     const request = parseDirectMessageRequest(req.body);
     if (!request) {
       res.status(400).json({ error: "INVALID_NOTIFICATION_PAYLOAD" });
@@ -499,16 +538,16 @@ export function startInternalApi(client: Client) {
         return;
       }
       // Aucun message n'est parti : l'échec notifie.
-      await sendAlert(client, `notify/dm error (${request.context}): ${(error as Error).message}`);
+      await sendAlert(client, `notify/dm error (${request.context}): ${safeErrorDetail(error)}`);
       res.status(500).json({ error: "NOTIFICATION_DELIVERY_FAILED" });
     }
-  });
+  }));
 
   /**
    * Signalement d'un probleme depuis le site : canal de logs **et** message
    * prive a chaque membre du role arbitre configure par /set-referee-role.
    */
-  app.post("/internal/notify/referees", async (req: Request, res: Response) => {
+  app.post("/internal/notify/referees", asyncRoute(async (req: Request, res: Response) => {
     const request = parseRefereeAlert(req.body);
     if (!request) {
       res.status(400).json({ error: "INVALID_NOTIFICATION_PAYLOAD" });
@@ -520,17 +559,17 @@ export function startInternalApi(client: Client) {
       res.json(report);
     } catch (error) {
       // L'alerte n'est pas partie : l'échec notifie, lui.
-      await sendAlert(client, `notify/referees error (${request.context}): ${(error as Error).message}`);
+      await sendAlert(client, `notify/referees error (${request.context}): ${safeErrorDetail(error)}`);
       res.status(500).json({ error: "NOTIFICATION_DELIVERY_FAILED" });
     }
-  });
+  }));
 
   /**
    * Signalement ou contestation reçu par le site : canal de logs **et** message
    * prive au proprietaire (OWNER_ID) et au president (PRESIDENT). Meme corps
    * que l'alerte des arbitres ; l'app n'y met aucune donnee nominative.
    */
-  app.post("/internal/notify/leadership", async (req: Request, res: Response) => {
+  app.post("/internal/notify/leadership", asyncRoute(async (req: Request, res: Response) => {
     const request = parseRefereeAlert(req.body);
     if (!request) {
       res.status(400).json({ error: "INVALID_NOTIFICATION_PAYLOAD" });
@@ -542,10 +581,10 @@ export function startInternalApi(client: Client) {
       res.json(report);
     } catch (error) {
       // L'alerte n'est pas partie : l'échec notifie, lui.
-      await sendAlert(client, `notify/leadership error (${request.context}): ${(error as Error).message}`);
+      await sendAlert(client, `notify/leadership error (${request.context}): ${safeErrorDetail(error)}`);
       res.status(500).json({ error: "NOTIFICATION_DELIVERY_FAILED" });
     }
-  });
+  }));
 
   /**
    * Annonce d'un live au debut d'un match diffuse : message `@everyone` dans le
@@ -558,7 +597,7 @@ export function startInternalApi(client: Client) {
    * reponse part donc **avant** les signalements au staff : un canal de logs
    * lent ne doit pas faire depasser le delai du site.
    */
-  app.post("/internal/announce/live", async (req: Request, res: Response) => {
+  app.post("/internal/announce/live", asyncRoute(async (req: Request, res: Response) => {
     // La seule route qui notifie tout le serveur exige le jeton, même sur la
     // boucle locale : un processus de la machine, ou une requête que le site
     // se laisserait forger vers 127.0.0.1, ne doit pas suffire à réveiller
@@ -615,14 +654,14 @@ export function startInternalApi(client: Client) {
       const siteGaveUp = req.socket.destroyed;
       const unavailable = error instanceof LiveChannelUnavailableError;
       const key = unavailable ? error.key : "failed";
-      console.warn(`[live-announce] annonce ${liveFailureVerdict(key)} (${request.context}) : ${(error as Error).message}`);
+      console.warn(`[live-announce] annonce ${liveFailureVerdict(key)} (${request.context}) : ${safeErrorDetail(error)}`);
       if (unavailable) {
         // `reason` : la nature de l'incident, pour que le site la dise dans ses journaux.
         res.status(503).json({ error: "LIVE_CHANNEL_UNAVAILABLE", reason: error.key });
       } else {
         res.status(500).json({ error: "LIVE_ANNOUNCEMENT_FAILED" });
       }
-      const detail = unavailable ? error.detail : (error as Error).message;
+      const detail = unavailable ? error.detail : safeErrorDetail(error);
       // Le site a coupé la requête (délai dépassé) : il garde sa réservation et
       // ne réessaiera pas, quelle que soit la cause.
       // Une annonce que le site ne réessaie pas est signalée à part (clé
@@ -631,9 +670,9 @@ export function startInternalApi(client: Client) {
       const throttleKey = final ? `${key} ${request.context}` : key;
       reportLiveIssue(throttleKey, liveFailureReport(request, key, detail, { siteGaveUp }));
     }
-  });
+  }));
 
-  app.get("/internal/kpis", async (_req: Request, res: Response) => {
+  app.get("/internal/kpis", asyncRoute(async (_req: Request, res: Response) => {
     try {
       const bdd = await getBddInstance();
 
@@ -695,12 +734,12 @@ export function startInternalApi(client: Client) {
         windowDays: MESSAGE_WINDOW_DAYS,
       });
     } catch (error) {
-      await sendLog(client, `/internal/kpis error: ${(error as Error).message}`);
+      await sendLog(client, `/internal/kpis error: ${safeErrorDetail(error)}`);
       res.status(500).json({ error: "INTERNAL_KPIS_ERROR" });
     }
-  });
+  }));
 
-  app.get("/internal/servers", async (req: Request, res: Response) => {
+  app.get("/internal/servers", asyncRoute(async (req: Request, res: Response) => {
     try {
       const limit = Math.max(1, Math.min(100, queryInteger(req.query.limit, 8)));
       const offset = Math.max(0, queryInteger(req.query.offset, 0));
@@ -754,10 +793,10 @@ export function startInternalApi(client: Client) {
       const paged = enriched.slice(offset, offset + limit);
       res.json({ servers: paged, total: enriched.length, limit, offset, windowDays: MESSAGE_WINDOW_DAYS });
     } catch (error) {
-      await sendLog(client, `/internal/servers error: ${(error as Error).message}`);
+      await sendLog(client, `/internal/servers error: ${safeErrorDetail(error)}`);
       res.status(500).json({ error: "INTERNAL_SERVERS_ERROR" });
     }
-  });
+  }));
 
   // Le site n'offre plus que `7j` : les relais (`DPMsg`) sont purgés à
   // `MESSAGE_RETENTION_DAYS` et aucun compteur journalier ne les prolonge
@@ -765,7 +804,7 @@ export function startInternalApi(client: Client) {
   // restent acceptées le temps qu'un site plus ancien les demande encore :
   // leurs relais au-delà de la fenêtre valent 0, et la moyenne ne se divise
   // que par les jours effectivement conservés.
-  app.get("/internal/activity", async (req: Request, res: Response) => {
+  app.get("/internal/activity", asyncRoute(async (req: Request, res: Response) => {
     try {
       const range = String(req.query.range ?? "7j");
       const daysMap: Record<string, number> = { "7j": 7, "30j": 30, "90j": 90 };
@@ -811,12 +850,12 @@ export function startInternalApi(client: Client) {
       const avgPerDay = Number((sumRelays / relayDays).toFixed(2));
       res.json({ range, labels, relays, scrims, avgPerDay, windowDays: MESSAGE_WINDOW_DAYS });
     } catch (error) {
-      await sendLog(client, `/internal/activity error: ${(error as Error).message}`);
+      await sendLog(client, `/internal/activity error: ${safeErrorDetail(error)}`);
       res.status(500).json({ error: "INTERNAL_ACTIVITY_ERROR" });
     }
-  });
+  }));
 
-  app.get("/internal/servers/:id/modules", async (req: Request, res: Response) => {
+  app.get("/internal/servers/:id/modules", asyncRoute(async (req: Request, res: Response) => {
     try {
       const guildId = String(req.params.id || "").trim();
       if (!/^\d{5,32}$/.test(guildId)) {
@@ -848,12 +887,12 @@ export function startInternalApi(client: Client) {
       const enriched = modules.map((m) => ({ key: m.key, enabled: m.enabled, count30j: counters[m.key] }));
       res.json({ guildId, modules: enriched });
     } catch (error) {
-      await sendLog(client, `/internal/servers/:id/modules error: ${(error as Error).message}`);
+      await sendLog(client, `/internal/servers/:id/modules error: ${safeErrorDetail(error)}`);
       res.status(500).json({ error: "INTERNAL_MODULES_ERROR" });
     }
-  });
+  }));
 
-  app.put("/internal/servers/:id/modules/:moduleKey", async (req: Request, res: Response) => {
+  app.put("/internal/servers/:id/modules/:moduleKey", asyncRoute(async (req: Request, res: Response) => {
     try {
       const guildId = String(req.params.id || "").trim();
       const moduleKey = String(req.params.moduleKey || "").trim();
@@ -870,10 +909,10 @@ export function startInternalApi(client: Client) {
       await setModuleEnabled(guildId, moduleKey as ModuleKey, enabled);
       res.json({ guildId, module: moduleKey, enabled });
     } catch (error) {
-      await sendLog(client, `/internal/servers/:id/modules/:moduleKey error: ${(error as Error).message}`);
+      await sendLog(client, `/internal/servers/:id/modules/:moduleKey error: ${safeErrorDetail(error)}`);
       res.status(500).json({ error: "INTERNAL_MODULE_TOGGLE_ERROR" });
     }
-  });
+  }));
 
   // Salons vocaux d'équipe des matchs (MATCH-VOICE) : `voice/voiceRoutes.ts`.
   registerVoiceRoutes(app, client);
@@ -888,7 +927,8 @@ export function startInternalApi(client: Client) {
     res.status(404).json({ error: "NOT_FOUND" });
   });
   // Erreur levée hors d'une route (corps illisible, trop gros…) : `internalApi/helpers.ts`.
-  app.use(internalErrorHandler());
+  // Un défaut du serveur part aussi au salon de logs, une fois par ligne et par délai.
+  app.use(internalErrorHandler({ report: (line) => reportInternalError(client, line) }));
 
   const port = Number(process.env.INTERNAL_API_PORT || 4400);
   const host = process.env.INTERNAL_API_HOST || "127.0.0.1";

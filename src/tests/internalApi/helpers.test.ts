@@ -9,6 +9,7 @@ import {
   relayStatus,
   sparklineFromBuckets,
   SPARKLINE_POINTS,
+  asyncRoute,
   internalErrorHandler,
   internalErrorLogLine,
   internalErrorReply,
@@ -190,7 +191,7 @@ test("internalErrorHandler_unexpectedError_replies500AndLogs", () => {
   const lines: string[] = [];
   const { res, written } = fakeResponse(false);
 
-  internalErrorHandler((line) => lines.push(line))(new Error("secret"), {} as Request, res, () => undefined);
+  internalErrorHandler({ error: (line) => lines.push(line) })(new Error("secret"), {} as Request, res, () => undefined);
 
   assert.deepEqual(written, { status: 500, json: { error: "INTERNAL_ERROR" }, destroyed: false });
   assert.deepEqual(lines, ["[internalApi] INTERNAL_ERROR (Error)"]);
@@ -201,7 +202,7 @@ test("internalErrorHandler_headersAlreadySent_destroysSocketWithoutBodyNorNext",
   const { res, written } = fakeResponse(true);
   let nextCalled = false;
 
-  internalErrorHandler((line) => lines.push(line))(new Error("x"), {} as Request, res, () => { nextCalled = true; });
+  internalErrorHandler({ error: (line) => lines.push(line) })(new Error("x"), {} as Request, res, () => { nextCalled = true; });
 
   // Connexion coupée : le lecteur voit une réponse tronquée, jamais une fin normale.
   assert.deepEqual(written, { status: 0, json: undefined, destroyed: true });
@@ -218,11 +219,92 @@ test("internalErrorLogLine_freeTextName_fallsBackToError", () => {
 test("internalErrorHandler_destroyThrowsAfterHeadersSent_swallowsIt", () => {
   const res = { headersSent: true, destroy() { throw new Error("socket closed"); } } as unknown as Response;
 
-  assert.doesNotThrow(() => internalErrorHandler(() => undefined)(new Error("x"), {} as Request, res, () => undefined));
+  assert.doesNotThrow(() => internalErrorHandler({ error: () => undefined })(new Error("x"), {} as Request, res, () => undefined));
 });
 
 test("internalErrorReply_throwingTypeGetter_returns500", () => {
   const error = { get type(): string { throw new Error("revoked"); } };
 
   assert.deepEqual(internalErrorReply(error), { code: "INTERNAL_ERROR", status: 500 });
+});
+
+test("internalErrorReply_exposedClientErrorWithoutType_returnsInvalidBody", () => {
+  // Flux gzip corrompu : body-parser lève un 400 exposé, sans `type` listé.
+  assert.deepEqual(internalErrorReply({ expose: true, status: 400 }), { code: "INVALID_BODY", status: 400 });
+});
+
+test("internalErrorReply_exposedWith5xx_returns500", () => {
+  assert.deepEqual(internalErrorReply({ expose: true, status: 502 }), { code: "INTERNAL_ERROR", status: 500 });
+});
+
+test("internalErrorReply_exposedFlagNotTrue_returns500", () => {
+  assert.deepEqual(internalErrorReply({ expose: "true", status: 400 }), { code: "INTERNAL_ERROR", status: 500 });
+});
+
+test("internalErrorHandler_clientRefusal_warnsWithoutErrorNorReport", () => {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const reports: string[] = [];
+  const { res, written } = fakeResponse(false);
+
+  internalErrorHandler({ error: (l) => errors.push(l), warn: (l) => warnings.push(l), report: (l) => reports.push(l) })(
+    { type: "request.aborted", status: 400 }, {} as Request, res, () => undefined,
+  );
+
+  assert.deepEqual(written, { status: 400, json: { error: "REQUEST_ABORTED" }, destroyed: false });
+  assert.deepEqual(warnings, ["[internalApi] REQUEST_ABORTED"]);
+  assert.deepEqual(errors, []);
+  assert.deepEqual(reports, []);
+});
+
+test("internalErrorHandler_unexpectedError_reportsSameLine", () => {
+  const reports: string[] = [];
+  const { res } = fakeResponse(false);
+
+  internalErrorHandler({ error: () => undefined, report: (l) => reports.push(l) })(
+    Object.assign(new Error("secret Equipe Bleue"), { code: "SQLITE_BUSY" }), {} as Request, res, () => undefined,
+  );
+
+  assert.deepEqual(reports, ["[internalApi] INTERNAL_ERROR (Error SQLITE_BUSY)"]);
+});
+
+test("internalErrorHandler_throwingReport_stillReplies", () => {
+  const { res, written } = fakeResponse(false);
+
+  internalErrorHandler({ error: () => undefined, report: () => { throw new Error("salon injoignable"); } })(
+    new Error("x"), {} as Request, res, () => undefined,
+  );
+
+  assert.deepEqual(written, { status: 500, json: { error: "INTERNAL_ERROR" }, destroyed: false });
+});
+
+/** Appelle une route enveloppée et rend ce qu'elle a passé à `next`. */
+async function nextOf(handler: Parameters<typeof asyncRoute>[0]): Promise<unknown[]> {
+  const calls: unknown[] = [];
+  asyncRoute(handler)({} as Request, {} as Response, (error?: unknown) => { calls.push(error); });
+  await new Promise((resolve) => setImmediate(resolve));
+  return calls;
+}
+
+test("asyncRoute_rejectedHandler_forwardsErrorToNext", async () => {
+  const error = new Error("boom");
+
+  assert.deepEqual(await nextOf(async () => { throw error; }), [error]);
+});
+
+test("asyncRoute_nullRejection_forwardsAnError", async () => {
+  const calls = await nextOf(() => Promise.reject(null)); // NOSONAR : rejet sans valeur, le cas éprouvé
+
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0] instanceof Error);
+});
+
+test("asyncRoute_synchronousThrow_forwardsError", async () => {
+  const error = new Error("sync");
+
+  assert.deepEqual(await nextOf(() => { throw error; }), [error]);
+});
+
+test("asyncRoute_resolvedHandler_doesNotCallNext", async () => {
+  assert.deepEqual(await nextOf(async () => undefined), []);
 });

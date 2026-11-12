@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import path from "node:path";
 
 import { sliceWithoutSplittingPair } from "../notifications/dmLanguage.js";
 
@@ -16,6 +17,11 @@ export interface BackupStatus {
   parts: string;
   /** Message d'erreur, vide si la sauvegarde a réussi. */
   error: string;
+  /**
+   * Chemin de l'historique que le script a écrit (`STATUS_HISTORY_FILE`), vide pour un
+   * script antérieur : le bot relit celui-là, jamais un chemin recalculé de son côté.
+   */
+  historyFile: string;
 }
 
 /**
@@ -27,6 +33,19 @@ export interface BackupStatus {
  * réussie serait alors celle du mardi, six jours plus tôt).
  */
 export const STALE_AFTER_MS = 3 * 24 * 60 * 60 * 1000;
+
+/**
+ * Sauvegarde en cours au moment du rapport : le script pose `<statut>.running`
+ * (date ISO de son départ) et le retire en sortant. Une sauvegarde du dimanche
+ * 23 h 49 encore en cours au rapport du lundi 4 h laisse lire le statut du mardi
+ * précédent (~4 jours) : tant que le marqueur a moins de {@link RUNNING_MAX_AGE_MS},
+ * le statut réussi garde {@link RUNNING_GRACE_MS} de plus avant d'être périmé.
+ * Un marqueur plus vieux (script tué sans nettoyer) ne compte pas.
+ */
+export const RUNNING_MAX_AGE_MS = 12 * 60 * 60 * 1000;
+
+/** Délai ajouté à {@link STALE_AFTER_MS} pendant une sauvegarde en cours. */
+export const RUNNING_GRACE_MS = 2 * 24 * 60 * 60 * 1000;
 
 /** Fenêtre relue dans l'historique : depuis le rapport précédent, une semaine plus tôt. */
 export const HISTORY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -66,10 +85,38 @@ export async function readBackupStatus(statusPath: string): Promise<BackupStatus
       sizeBytes: typeof parsed.sizeBytes === "number" ? parsed.sizeBytes : 0,
       parts: parsed.parts ?? "",
       error: parsed.error ?? "",
+      historyFile: typeof parsed.historyFile === "string" && path.isAbsolute(parsed.historyFile) ? parsed.historyFile : "",
     };
   } catch {
     return null;
   }
+}
+
+/**
+ * Chemin du marqueur de sauvegarde en cours, à côté du statut (même règle que le script).
+ * @param statusPath Chemin du fichier de statut.
+ * @returns Chemin du marqueur.
+ */
+export function runningMarkerPath(statusPath: string): string {
+  return `${statusPath}.running`;
+}
+
+/**
+ * Lit le départ d'une sauvegarde en cours (marqueur posé par le script).
+ * @param statusPath Chemin du fichier de statut.
+ * @param now Horloge injectable, pour les tests.
+ * @returns L'instant du départ (ms) si le marqueur est présent, lisible et récent, sinon `null`.
+ */
+export async function readRunningSince(statusPath: string, now: number = Date.now()): Promise<number | null> {
+  let raw: string;
+  try {
+    raw = await fs.promises.readFile(runningMarkerPath(statusPath), "utf8");
+  } catch {
+    return null;
+  }
+  const startedAt = Date.parse(raw.trim());
+  if (!Number.isFinite(startedAt) || startedAt > now || now - startedAt >= RUNNING_MAX_AGE_MS) { return null; }
+  return startedAt;
 }
 
 /**
@@ -78,15 +125,18 @@ export async function readBackupStatus(statusPath: string): Promise<BackupStatus
  * Sinon, le rapport du lundi passe en alerte (« Sauvegarde à vérifier »).
  * @param status Statut lu, ou `null`.
  * @param now Horloge injectable, pour les tests.
- * @returns `true` si la dernière sauvegarde a réussi il y a moins de {@link STALE_AFTER_MS}.
+ * @param running `true` si une sauvegarde est en cours (`readRunningSince`).
+ * @returns `true` si la dernière sauvegarde a réussi il y a moins de {@link STALE_AFTER_MS}
+ * ({@link RUNNING_GRACE_MS} de plus pendant une sauvegarde en cours).
  */
-export function isBackupFresh(status: BackupStatus | null, now: number = Date.now()): boolean {
+export function isBackupFresh(status: BackupStatus | null, now: number = Date.now(), running: boolean = false): boolean {
   if (!status?.ok) {
     return false;
   }
 
   const date = Date.parse(status.date);
-  return Number.isFinite(date) && now - date < STALE_AFTER_MS;
+  const limit = running ? STALE_AFTER_MS + RUNNING_GRACE_MS : STALE_AFTER_MS;
+  return Number.isFinite(date) && now - date < limit;
 }
 
 /**
@@ -164,9 +214,10 @@ function shortCause(error: string): string {
  * Met en forme la ligne du stockage distant jointe au rapport du lundi.
  * @param status Statut lu, ou `null` si le script n'a jamais tourné.
  * @param now Horloge injectable, pour les tests.
+ * @param runningSince Départ d'une sauvegarde en cours (`readRunningSince`), ou `null`.
  * @returns Une ligne prête à être envoyée en message privé.
  */
-export function formatBackupStatus(status: BackupStatus | null, now: number = Date.now()): string {
+export function formatBackupStatus(status: BackupStatus | null, now: number = Date.now(), runningSince: number | null = null): string {
   if (!status) {
     return "☁️ Stockage distant : aucune sauvegarde enregistrée (script non installé ?).";
   }
@@ -180,5 +231,12 @@ export function formatBackupStatus(status: BackupStatus | null, now: number = Da
   const size = `${(status.sizeBytes / 1024 / 1024).toFixed(1).replace(".", ",")} Mo`;
   const line = `Stockage distant : ${status.parts || "base"} sauvegardée le ${day} (${size}).`;
 
-  return isBackupFresh(status, now) ? `☁️ ${line}` : `⚠️ ${line} Sauvegarde périmée.`;
+  const running = runningSince !== null;
+  if (!isBackupFresh(status, now, running)) { return `⚠️ ${line} Sauvegarde périmée.`; }
+  // Le statut ne tient que par la sauvegarde en cours : le rapport le dit.
+  if (running && !isBackupFresh(status, now)) {
+    const since = new Date(runningSince).toISOString().slice(0, 16).replace("T", " à ");
+    return `☁️ ${line} Sauvegarde suivante en cours depuis le ${since} (UTC).`;
+  }
+  return `☁️ ${line}`;
 }

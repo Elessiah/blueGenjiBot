@@ -404,17 +404,21 @@ suivi d'un salon supprimé à la main (`channelDelete`), comptés à part des ro
 d'une route ne tait pas l'échec d'un événement, qui nomme le salon laissé au balayage.
 
 - `POST /internal/voice/channels`
-  - Body: `{ "key": "match:12:team:34", "name": "Nom de l'équipe" }`
+  - Body: `{ "key": "match:12:team:34", "name": "Nom de l'équipe", "fallback": false }`
   - `key` : clé d'idempotence, `[A-Za-z0-9:_-]`, 100 caractères au plus. Même
     clé, même salon : `201 { "channelId" }` à la création, `200 { "channelId" }`
     ensuite. Un salon supprimé à la main est recréé (nouvel identifiant) ; un
     salon libéré mais encore présent est repris et n'est plus libéré.
   - `name` : nom d'équipe (200 caractères au plus) ; caractères de contrôle,
     `@`, `<`, `>`, `*`, `_`, `~`, `|`, `\`, `#` et l'accent grave retirés, coupé à 100 caractères ;
-    s'il ne reste rien — ou si le site envoie ce repli, « Salon d'équipe », après
-    un refus du nom —, le salon s'appelle « Salon d'équipe / Team channel <n> »,
-    `<n>` étant le numéro d'équipe de la clé : les deux équipes d'un match ne
-    partagent jamais le même nom de repli.
+    s'il ne reste rien — ou si le site envoie son repli après un refus du nom —, le
+    salon s'appelle « Salon d'équipe / Team channel <n> », `<n>` étant le numéro
+    d'équipe de la clé : les deux équipes d'un match ne partagent jamais le même nom
+    de repli.
+  - `fallback` (booléen, facultatif) : `true` quand `name` est le repli du site,
+    `false` pour un vrai nom d'équipe — une équipe nommée « Salon d'équipe » garde
+    alors son nom. Absent (site antérieur), le repli se reconnaît à l'égalité de
+    `name` avec « Salon d'équipe ».
   - Erreurs : `400 INVALID_VOICE_KEY`, `400 INVALID_VOICE_CHANNEL_NAME`,
     `503 DISCORD_NOT_READY`, `503 VOICE_CATEGORY_UNAVAILABLE` (catégorie
     introuvable), `503 VOICE_MISSING_PERMISSIONS` (permission refusée : une
@@ -508,9 +512,17 @@ répond `404 INTERNAL_ROUTE_NOT_FOUND` — hors de `/internal`, `404 NOT_FOUND`,
 ne désigne pas l'API —, jamais la page HTML d'Express qui recopie le chemin ; un corps JSON illisible `400 INVALID_JSON`, trop gros
 `413 PAYLOAD_TOO_LARGE`, d'encodage ou de jeu de caractères inconnu
 `415 UNSUPPORTED_ENCODING`, interrompu `400 REQUEST_ABORTED`, de longueur contraire à
-son `Content-Length` `400 INVALID_CONTENT_LENGTH`, toute autre erreur hors route
-`500 INTERNAL_ERROR` (le statut porté par une erreur Discord n'est jamais repris ;
-un refus n'est reconnu que si son type et son statut sont ceux que pose body-parser).
+son `Content-Length` `400 INVALID_CONTENT_LENGTH`, un autre refus du client que
+body-parser marque exposé (flux gzip ou deflate corrompu) `400 INVALID_BODY`, toute
+autre erreur hors route `500 INTERNAL_ERROR` (le statut porté par une erreur Discord
+n'est jamais repris ; un refus n'est reconnu que si son type et son statut sont ceux
+que pose body-parser). Un refus du client se journalise au niveau avertissement ; une
+erreur `500` va au journal d'erreurs **et** au salon de logs (code et type seuls, une
+fois par ligne et par dix minutes). Une route asynchrone qui rejette (même sans
+valeur) passe par ce même gestionnaire : le site reçoit toujours un code, jamais un
+délai dépassé. Le détail d'un échec de route au salon de logs se limite au type, au
+code (familles connues : numérique, `SQLITE_*`, `E*`, `UND_ERR_*`) et au statut
+HTTP de l'erreur — jamais son message, qui peut recopier un pseudo cherché.
 Une réponse déjà commencée (flux) voit sa connexion coupée : le lecteur voit une
 réponse tronquée, jamais une fin normale. Toute route qui lit un corps vit sous
 `/internal` (ailleurs, le corps n'est pas lu). Le

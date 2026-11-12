@@ -51,7 +51,21 @@ source "$SCRIPT_DIR/rclone-backend.sh"
 STAMP="$(date +%Y-%m-%d)"
 WORK_DIR="$(mktemp -d)"
 ARCHIVE="$WORK_DIR/bluegenji-$STAMP.tar"
-trap 'rm -rf "$WORK_DIR"' EXIT
+# Marqueur de sauvegarde en cours, à côté du statut (`runningMarkerPath` du bot) :
+# le rapport du lundi 4 h ne prend pas une sauvegarde du dimanche soir encore en
+# cours pour une sauvegarde manquée. Retiré à la sortie, quelle qu'elle soit.
+RUNNING_FILE="$STATUS_FILE.running"
+trap 'rm -rf "$WORK_DIR"; rm -f "$RUNNING_FILE"' EXIT
+{ mkdir -p "$(dirname "$RUNNING_FILE")" && date --iso-8601=seconds > "$RUNNING_FILE"; } 2>/dev/null \
+  || echo "[backup] marqueur de sauvegarde en cours non écrit." >&2
+
+# Chemin de l'historique écrit dans le statut : le bot relit celui-là au lieu de le
+# recalculer. Un chemin qui casserait le JSON (guillemet, antislash, contrôle) n'y
+# figure pas : le bot retombe alors sur son propre calcul, comme avant.
+STATUS_HISTORY_JSON="$STATUS_HISTORY_FILE"
+if [[ "$(printf '%s' "$STATUS_HISTORY_JSON" | tr -d '\000-\037\\"')" != "$STATUS_HISTORY_JSON" ]]; then
+  STATUS_HISTORY_JSON=""
+fi
 
 # Le statut est écrit quoi qu'il arrive : une panne silencieuse est pire qu'une
 # panne signalée, et c'est la seule trace que le bot saura relire.
@@ -74,7 +88,8 @@ write_status() {
   "remote": "$RCLONE_REMOTE:$REMOTE_DIR/bluegenji-$STAMP.tar.age",
   "sizeBytes": $STATUS_SIZE,
   "parts": "$STATUS_PARTS",
-  "error": "$STATUS_ERROR"
+  "error": "$STATUS_ERROR",
+  "historyFile": "$STATUS_HISTORY_JSON"
 }
 JSON
   # Au mieux : un historique qui ne s'écrit pas ne fait pas échouer la sauvegarde.

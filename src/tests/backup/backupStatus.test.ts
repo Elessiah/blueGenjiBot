@@ -11,6 +11,10 @@ import {
   readBackupFailures,
   FAILURE_CAUSE_MAX_LENGTH,
   readBackupStatus,
+  readRunningSince,
+  runningMarkerPath,
+  RUNNING_GRACE_MS,
+  RUNNING_MAX_AGE_MS,
   STALE_AFTER_MS,
   type BackupStatus,
 } from "../../backup/backupStatus.js";
@@ -32,6 +36,7 @@ const OK_STATUS: BackupStatus = {
   sizeBytes: 12 * 1024 * 1024,
   parts: "sqlite+mysql",
   error: "",
+  historyFile: "",
 };
 
 test("readBackupStatus renvoie null si le fichier n'existe pas", async () => {
@@ -187,4 +192,93 @@ test("formatBackupFailures_longCause_shortened", () => {
     formatBackupFailures([{ date: "2026-09-01T23:49:00+02:00", ok: false, error: cause }]),
     `❌ Échec depuis le rapport précédent : 2026-09-01 — ${"x".repeat(FAILURE_CAUSE_MAX_LENGTH)}….`,
   );
+});
+
+test("readBackupStatus_absoluteHistoryFile_returnsIt", async () => {
+  const historyFile = path.join(os.tmpdir(), "ailleurs", "history.jsonl");
+  const file = await writeStatusFile(JSON.stringify({ ...OK_STATUS, historyFile }));
+
+  assert.equal((await readBackupStatus(file))?.historyFile, historyFile);
+});
+
+test("readBackupStatus_relativeHistoryFile_returnsEmpty", async () => {
+  const file = await writeStatusFile(JSON.stringify({ ...OK_STATUS, historyFile: "history.jsonl" }));
+
+  assert.equal((await readBackupStatus(file))?.historyFile, "");
+});
+
+/** Statut temporaire accompagné d'un marqueur de sauvegarde en cours. */
+async function withRunningMarker(content: string): Promise<string> {
+  const file = await writeStatusFile("{}");
+  await fs.promises.writeFile(runningMarkerPath(file), content, "utf8");
+  return file;
+}
+
+const REPORT_AT = Date.parse("2026-11-09T03:00:00Z");
+
+test("readRunningSince_recentMarker_returnsStart", async () => {
+  const file = await withRunningMarker("2026-11-08T22:49:00+00:00\n");
+
+  assert.equal(await readRunningSince(file, REPORT_AT), Date.parse("2026-11-08T22:49:00Z"));
+});
+
+test("readRunningSince_noMarker_returnsNull", async () => {
+  const file = await writeStatusFile("{}");
+
+  assert.equal(await readRunningSince(file, REPORT_AT), null);
+});
+
+test("readRunningSince_markerOlderThanMaxAge_returnsNull", async () => {
+  const file = await withRunningMarker(new Date(REPORT_AT - RUNNING_MAX_AGE_MS).toISOString());
+
+  assert.equal(await readRunningSince(file, REPORT_AT), null);
+});
+
+test("readRunningSince_markerJustUnderMaxAge_returnsStart", async () => {
+  const start = REPORT_AT - RUNNING_MAX_AGE_MS + 1000;
+  const file = await withRunningMarker(new Date(start).toISOString());
+
+  assert.equal(await readRunningSince(file, REPORT_AT), start);
+});
+
+test("readRunningSince_futureMarker_returnsNull", async () => {
+  const file = await withRunningMarker("2026-11-10T00:00:00Z");
+
+  assert.equal(await readRunningSince(file, REPORT_AT), null);
+});
+
+test("readRunningSince_unreadableDate_returnsNull", async () => {
+  const file = await withRunningMarker("demain");
+
+  assert.equal(await readRunningSince(file, REPORT_AT), null);
+});
+
+/** Statut réussi daté de `ageMs` avant le rapport. */
+const okStatusAged = (ageMs: number): BackupStatus => ({ ...OK_STATUS, date: new Date(REPORT_AT - ageMs).toISOString() });
+const HOUR = 60 * 60 * 1000;
+
+test("isBackupFresh_runningAndTuesdayStatus_returnsTrue", () => {
+  // Statut du mardi 23 h 49, rapport du lundi 4 h : ~4 jours 4 h.
+  assert.equal(isBackupFresh(okStatusAged(100 * HOUR), REPORT_AT, true), true);
+});
+
+test("isBackupFresh_notRunningAndTuesdayStatus_returnsFalse", () => {
+  assert.equal(isBackupFresh(okStatusAged(100 * HOUR), REPORT_AT, false), false);
+});
+
+test("isBackupFresh_runningBeyondGrace_returnsFalse", () => {
+  assert.equal(isBackupFresh(okStatusAged(STALE_AFTER_MS + RUNNING_GRACE_MS), REPORT_AT, true), false);
+});
+
+test("formatBackupStatus_freshOnlyThanksToRunning_mentionsRunningBackup", () => {
+  const line = formatBackupStatus(okStatusAged(100 * HOUR), REPORT_AT, Date.parse("2026-11-08T22:49:00Z"));
+
+  assert.match(line, /^☁️ /);
+  assert.match(line, /Sauvegarde suivante en cours depuis le 2026-11-08 à 22:49 \(UTC\)\./);
+});
+
+test("formatBackupStatus_freshWithoutNeedOfRunning_noRunningMention", () => {
+  const line = formatBackupStatus(okStatusAged(HOUR), REPORT_AT, Date.parse("2026-11-09T02:00:00Z"));
+
+  assert.doesNotMatch(line, /en cours/);
 });

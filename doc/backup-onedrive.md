@@ -26,7 +26,11 @@ limite au statut de la dernière sauvegarde, aux échecs survenus depuis le
 rapport précédent (relus dans l'historique des statuts : un échec du mardi
 n'est pas effacé par le succès du dimanche) et à l'espace disque restant, et
 passe en alerte dès qu'aucune sauvegarde réussie n'a moins de trois jours ou
-qu'une exécution a échoué depuis le rapport précédent.
+qu'une exécution a échoué depuis le rapport précédent. Une sauvegarde encore en
+cours au moment du rapport (marqueur `<statut>.running`, posé au départ du script,
+retiré à sa sortie, ignoré au-delà de 12 h) accorde deux jours de plus au statut
+réussi précédent, et le rapport le dit : le dimanche 23 h 49 qui déborde sur le
+lundi 4 h ne lève plus de fausse alerte.
 
 **Tout part chiffré depuis le Raspberry** : `age` pour les archives, un remote
 `rclone crypt` pour les images, les logos masqués et le journal des
@@ -508,7 +512,7 @@ mettent dans `rclone.conf`, ou dans des variables `RCLONE_CONFIG_<REMOTE>_*`.
 | Variable | Défaut | Rôle |
 | --- | --- | --- |
 | `BACKUP_STATUS_PATH` | `/var/lib/bluegenji/backup-status.json` | Fichier de statut relu pour le rapport hebdomadaire. |
-| `BACKUP_STATUS_HISTORY_PATH` | `BACKUP_STATUS_PATH` sans `.json`, suivi de `-history.jsonl` (même défaut que `STATUS_HISTORY_FILE` du script) | Historique des statuts (une ligne JSON par exécution, 20 dernières gardées) : le rapport y relit les échecs des sept derniers jours. Le script l'écrit sous verrou `flock` (fichier voisin `.lock`) : deux exécutions qui se chevauchent n'y perdent aucune ligne. |
+| `BACKUP_STATUS_HISTORY_PATH` | `BACKUP_STATUS_PATH` sans `.json`, suivi de `-history.jsonl` (même défaut que `STATUS_HISTORY_FILE` du script) | Repli seulement : le script écrit le chemin de son historique dans le statut (`historyFile`), et le bot relit celui-là — surcharger `STATUS_HISTORY_FILE` seul ne lui fait plus lire un fichier absent. Historique des statuts (une ligne JSON par exécution, 20 dernières gardées) : le rapport y relit les échecs des sept derniers jours. Le script l'écrit sous verrou `flock` (fichier voisin `.lock`) : deux exécutions qui se chevauchent n'y perdent aucune ligne. |
 | `BACKUP_UPLOADS_REMOTE` | `UPLOADS_RCLONE_REMOTE:UPLOADS_REMOTE_DIR` de `scripts/backup-onedrive.env` (défauts du script compris) ; sans objet si `UPLOADS_DIR` est vide | Remote `crypt` et dossier des images, lu par la vérification. |
 | `BACKUP_RECIPIENTS_FILE` | `AGE_RECIPIENTS_FILE` du même fichier (chemin absolu, `$SCRIPT_DIR`, `~` ou `$HOME` en tête — un chemin relatif n'est pas deviné, régler alors cette variable), sinon `scripts/backup-recipients.txt` (`$SCRIPT_DIR` est le dossier du script, même si sa configuration vit ailleurs) | Clés publiques autorisées, comparées à la clé du bot. |
 | `BACKUP_ONEDRIVE_ENV` (ou `BACKUP_CONFIG`) | `scripts/backup-onedrive.env` | Fichier de configuration du script, relu (jamais exécuté) pour les défauts ci-dessus. |

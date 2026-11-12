@@ -212,8 +212,9 @@ test("createVoiceChannel_malformedJson_returns400InvalidJson", async () => {
   assert.deepEqual(world.creations, []);
 });
 
-test("createVoiceChannel_malformedJson_logsCodeOnly", async (t) => {
-  const logged = t.mock.method(console, "error", () => undefined);
+test("createVoiceChannel_malformedJson_logsCodeOnlyAsWarning", async (t) => {
+  // Refus du client : niveau avertissement, le journal d'erreurs relu après déploiement reste propre.
+  const logged = t.mock.method(console, "warn", () => undefined);
 
   await postMalformed(TOKEN);
 
@@ -368,3 +369,33 @@ test("createVoiceChannel_nameWithoutDisplayableChar_bilingualFallbackWithTeamNum
   assert.equal(world.creations[0]?.name, "Salon d'équipe / Team channel 2");
 });
 
+
+test("createVoiceChannel_corruptGzipBody_returns400InvalidBody", async (t) => {
+  t.mock.method(console, "warn", () => undefined);
+  const headers = { "content-type": "application/json", "content-encoding": "gzip", "x-internal-token": TOKEN };
+
+  const response = await fetch(`${baseUrl}/internal/voice/channels`, { method: "POST", headers, body: "pas du gzip" });
+
+  assert.deepEqual({ status: response.status, body: JSON.parse(await response.text()) }, { status: 400, body: { error: "INVALID_BODY" } });
+});
+
+test("createVoiceChannel_fallbackFalseWithFallbackLikeName_keepsTeamName", async () => {
+  const reply = await create({ key: "match:1:team:2", name: "Salon d'équipe", fallback: false });
+
+  assert.equal(reply.status, 201);
+  assert.equal(world.creations[0].name, "Salon d'équipe");
+});
+
+test("createVoiceChannel_fallbackTrue_returnsNumberedLabel", async () => {
+  const reply = await create({ key: "match:1:team:2", name: "Salon d'équipe", fallback: true });
+
+  assert.equal(reply.status, 201);
+  assert.equal(world.creations[0].name, "Salon d'équipe / Team channel 2");
+});
+
+test("createVoiceChannel_nothingDisplayableWithFallbackFalse_returnsNumberedLabel", async () => {
+  const reply = await create({ key: "match:1:team:2", name: "@@@", fallback: false });
+
+  assert.equal(reply.status, 201);
+  assert.equal(world.creations[0].name, "Salon d'équipe / Team channel 2");
+});
