@@ -203,7 +203,8 @@ const replacedIds = new Map<string, string>();
 
 /**
  * Salons que le bot supprime lui-même (rendus vides, balayage) : leur `channelDelete` ne les
- * recrée jamais, même si leur retrait du suivi a échoué. Retiré à la réception de l'événement.
+ * recrée jamais, même si leur retrait du suivi a échoué. Retiré à la réception de l'événement ;
+ * borné à `REPLACED_ALIAS_MAX` (un événement manqué ne laisse pas grossir l'ensemble).
  */
 const botDeletedIds = new Set<string>();
 
@@ -584,12 +585,17 @@ function forgetAliasesTo(channelId: string): void {
  * @param channel Salon à supprimer.
  */
 async function deleteTracked(client: Client, channel: VoiceHandle): Promise<void> {
+  if (botDeletedIds.size >= REPLACED_ALIAS_MAX) {
+    const oldest = botDeletedIds.values().next();
+    if (!oldest.done) { botDeletedIds.delete(oldest.value); }
+  }
   botDeletedIds.add(channel.id);
   try {
     await channel.delete(DELETE_REASON);
   } catch (error) {
+    // Déjà disparu (aucun événement à attendre de notre fait) ou refus : l'identifiant n'est pas gardé.
+    botDeletedIds.delete(channel.id);
     if (discordJsonCode(error) !== UNKNOWN_CHANNEL) {
-      botDeletedIds.delete(channel.id);
       throw await toVoiceError(client, error, "suppression du salon");
     }
   }

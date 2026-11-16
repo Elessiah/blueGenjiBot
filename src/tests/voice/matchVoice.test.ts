@@ -972,6 +972,38 @@ test("handleVoiceChannelDeleted_botDeletedChannelStillTracked_untrackedNotRecrea
   assert.deepEqual(await tracked(), []);
 });
 
+test("handleVoiceChannelDeleted_deleteFoundChannelAlreadyGone_idNotKeptAsBotDeleted", async () => {
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  world.deleteError = discordError(10003, "Unknown Channel");
+  assert.deepEqual(await releaseVoiceChannel(client, channelId, T0), { deleted: true });
+  world.deleteError = null;
+  // Aucun événement n'a suivi : l'identifiant ne doit pas rester marqué « supprimé par le bot ».
+  await track(channelId, KEY, T0, null);
+
+  await handleVoiceChannelDeleted(client, { id: channelId, type: ChannelType.GuildVoice, parentId: CATEGORY, name: "Les Genji" });
+
+  assert.equal(world.creations.length, 2);
+});
+
+test("handleVoiceChannelDeleted_manyBotDeletionsWithoutEvents_oldestForgotten", async () => {
+  const ids: string[] = [];
+  for (let n = 0; n <= REPLACED_ALIAS_MAX; n++) {
+    const { channelId } = await ensureTeamVoiceChannel(client, `match:${n + 1}:team:1`, "Les Genji", T0);
+    ids.push(channelId);
+    await releaseVoiceChannel(client, channelId, T0);
+  }
+  const first = ids[0];
+  const last = ids[ids.length - 1];
+  await track(first, KEY, T0, null);
+  await track(last, "match:9999:team:1", T0, null);
+  const before = world.creations.length;
+
+  await handleVoiceChannelDeleted(client, { id: last, type: ChannelType.GuildVoice, parentId: CATEGORY, name: "x" });
+  assert.equal(world.creations.length, before);
+  await handleVoiceChannelDeleted(client, { id: first, type: ChannelType.GuildVoice, parentId: CATEGORY, name: "x" });
+  assert.equal(world.creations.length, before + 1);
+});
+
 test("handleVoiceChannelDeleted_storageFailsBeforeRecreation_logsReadStep", async () => {
   const bdd = await getBddInstance();
   await bdd.raw("ALTER TABLE MatchVoiceChannel RENAME TO MatchVoiceChannelAway");
