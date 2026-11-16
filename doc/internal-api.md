@@ -399,9 +399,22 @@ tous les salons (`VOICE_DISCORD_UNAVAILABLE`, `VOICE_MISSING_PERMISSIONS`,
 même délai (un refus qui touche chaque salon, comme la limite de salons du serveur,
 n'inonde pas le salon) ; les suivants ne vont qu'à pm2 (`[voice] <route> : <code>`), pour
 ne pas ajouter d'appels à Discord pendant sa limite de débit. La même règle vaut pour les
-échecs de suppression d'un salon rendu qui se vide (`voiceStateUpdate`) et du retrait du
-suivi d'un salon supprimé à la main (`channelDelete`), comptés à part des routes : un refus
+échecs de suppression d'un salon rendu qui se vide (`voiceStateUpdate`) et de la recréation
+ou du retrait du suivi d'un salon supprimé à la main (`channelDelete`), comptés à part des routes : un refus
 d'une route ne tait pas l'échec d'un événement, qui nomme le salon laissé au balayage.
+
+**Salon supprimé à la main** (modération) : s'il n'était pas libéré, le bot le **recrée
+aussitôt** dans la catégorie, sous la même clé et le nom que portait le salon (nettoyé ; vide,
+le nom de repli numéroté), sans attendre le site (décision D97 : le site ne redemande plus ses salons ouverts
+que toutes les 5 minutes, par `POST /internal/voice/channels`, qui lui rend alors le nouvel
+identifiant). L'ancien identifiant désigne encore le salon neuf pour `…/release` et `…/clear`,
+même si le site tarde à le revérifier (mémoire seule du bot, 200 alias au plus — le plus ancien
+oublié au-delà —, retirés quand le salon neuf cesse d'être suivi, perdue à son redémarrage). Un salon déjà libéré
+cesse simplement d'être suivi ; un salon supprimé par le bot lui-même n'est jamais recréé. Pas
+de recréation non plus pour un salon jamais rendu de plus de 48 heures, ni au-delà de 3
+recréations d'une même clé en 10 minutes (suppressions en boucle) : le salon cesse alors d'être
+suivi. Si la recréation échoue ou n'a pas lieu, la revérification suivante du site en ouvre un
+neuf, à ses propres conditions.
 
 - `POST /internal/voice/channels`
   - Body: `{ "key": "match:12:team:34", "name": "Nom de l'équipe", "fallback": false }`
