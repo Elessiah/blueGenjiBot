@@ -404,11 +404,12 @@ ou du retrait du suivi d'un salon supprimé à la main (`channelDelete`), compt�
 d'une route ne tait pas l'échec d'un événement, qui nomme le salon laissé au balayage.
 
 **Salon supprimé à la main** (modération) : s'il n'était pas libéré, le bot le **recrée
-aussitôt** dans la catégorie, sous la même clé et le même nom (nettoyé ; vide, le nom de repli
-numéroté), sans attendre le site (décision D97 : le site ne redemande plus ses salons ouverts
+aussitôt** dans la catégorie, sous la même clé et le nom que portait le salon (nettoyé ; vide,
+le nom de repli numéroté), sans attendre le site (décision D97 : le site ne redemande plus ses salons ouverts
 que toutes les 5 minutes, par `POST /internal/voice/channels`, qui lui rend alors le nouvel
-identifiant). Pendant 15 minutes, l'ancien identifiant désigne encore le salon neuf pour
-`…/release` et `…/clear` (mémoire seule du bot, perdue à son redémarrage). Un salon déjà libéré
+identifiant). L'ancien identifiant désigne encore le salon neuf pour `…/release` et `…/clear`,
+même si le site tarde à le revérifier (mémoire seule du bot, 200 alias au plus, perdue à son
+redémarrage). Un salon déjà libéré
 cesse simplement d'être suivi ; un salon supprimé par le bot lui-même n'est jamais recréé. Si
 la recréation échoue, le salon cesse d'être suivi et la revérification suivante du site en
 ouvre un neuf.

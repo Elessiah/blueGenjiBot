@@ -13,7 +13,7 @@ import {
   FALLBACK_VOICE_LABEL,
   FALLBACK_VOICE_NAME,
   RELEASED_MAX_AGE_MS,
-  REPLACED_ALIAS_MAX_AGE_MS,
+  REPLACED_ALIAS_MAX,
   UNRELEASED_MAX_AGE_MS,
   VOICE_SWEEP_CRON,
   VOICE_USER_LIMIT,
@@ -842,28 +842,106 @@ test("clearVoiceChannel_oldIdAfterRecreation_disconnectsOccupantsOfNewChannel", 
   assert.equal(world.voices.get(newId)!.members.size, 0);
 });
 
-test("releaseVoiceChannel_oldIdAfterAliasExpiry_newChannelUntouched", async (t) => {
+/** Attend que la recréation d'un salon supprimé à la main ait créé le salon neuf (verrou de la clé tenu). */
+async function recreationStarted(): Promise<void> {
+  while (world.creations.length < 2) { await new Promise((resolve) => setImmediate(resolve)); }
+}
+
+test("releaseVoiceChannel_oldIdWhileRecreationInProgress_releasesNewChannel", async () => {
   const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
-  await deleteByHand(channelId, "Les Genji", T0);
-  const [{ channel_id: newId }] = await tracked();
-  t.mock.method(Date, "now", () => T0 + REPLACED_ALIAS_MAX_AGE_MS + 1);
+  world.voices.delete(channelId);
 
-  const released = await releaseVoiceChannel(client, channelId, T0 + REPLACED_ALIAS_MAX_AGE_MS + 1);
+  const recreation = handleVoiceChannelDeleted(client, { id: channelId, type: ChannelType.GuildVoice, parentId: CATEGORY, name: "Les Genji" });
+  await recreationStarted();
+  const released = releaseVoiceChannel(client, channelId);
+  await recreation;
 
-  assert.deepEqual(released, { deleted: true });
-  assert.deepEqual(world.deletions, []);
-  assert.deepEqual((await tracked()).map((row) => [row.channel_id, row.released_at]), [[newId, null]]);
+  assert.deepEqual(await released, { deleted: true });
+  assert.equal(world.creations.length, 2);
+  assert.equal(world.deletions.length, 1);
+  assert.equal(world.voices.size, 0);
+  assert.deepEqual(await tracked(), []);
 });
 
-test("releaseVoiceChannel_oldIdAtAliasMaxAge_stillResolved", async (t) => {
+test("clearVoiceChannel_oldIdWhileRecreationInProgress_clearsNewChannel", async () => {
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  world.voices.delete(channelId);
+
+  const recreation = handleVoiceChannelDeleted(client, { id: channelId, type: ChannelType.GuildVoice, parentId: CATEGORY, name: "Les Genji" });
+  await recreationStarted();
+  const cleared = clearVoiceChannel(client, channelId);
+  await recreation;
+
+  assert.equal(await cleared, true);
+  assert.equal(world.voices.size, 1);
+});
+
+test("releaseVoiceChannel_oldIdHoursAfterRecreation_stillReleasesNewChannel", async () => {
   const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
   await deleteByHand(channelId, "Les Genji", T0);
   const [{ channel_id: newId }] = await tracked();
-  t.mock.method(Date, "now", () => T0 + REPLACED_ALIAS_MAX_AGE_MS);
 
-  await releaseVoiceChannel(client, channelId, T0 + REPLACED_ALIAS_MAX_AGE_MS);
+  const released = await releaseVoiceChannel(client, channelId, T0 + 10 * HOUR);
 
+  assert.deepEqual(released, { deleted: true });
   assert.deepEqual(world.deletions, [newId]);
+});
+
+test("releaseVoiceChannel_oldIdAfterTwoRecreations_releasesLatestChannel", async () => {
+  const { channelId: first } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  await deleteByHand(first, "Les Genji");
+  const [{ channel_id: second }] = await tracked();
+  await deleteByHand(second, "Les Genji");
+  const [{ channel_id: third }] = await tracked();
+
+  await releaseVoiceChannel(client, first);
+
+  assert.deepEqual(world.deletions, [third]);
+  assert.deepEqual(await tracked(), []);
+});
+
+test("releaseVoiceChannel_aliasesBeyondMax_oldestForgottenNextStillResolved", async () => {
+  const { channelId: first } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  const oldIds: string[] = [first];
+  for (let n = 0; n <= REPLACED_ALIAS_MAX; n++) {
+    await deleteByHand(oldIds.at(-1)!, "Les Genji");
+    oldIds.push((await tracked())[0].channel_id);
+  }
+  const latest = oldIds.at(-1)!;
+
+  await releaseVoiceChannel(client, oldIds[0]);
+  assert.deepEqual(world.deletions, []);
+
+  await releaseVoiceChannel(client, oldIds[1]);
+  assert.deepEqual(world.deletions, [latest]);
+});
+
+test("handleVoiceChannelDeleted_botDeletedChannelStillTracked_untrackedNotRecreated", async () => {
+  await track("500", KEY, T0, null);
+  addVoice("500", 0, CATEGORY);
+  await sweepVoiceChannels(client, T0 + UNRELEASED_MAX_AGE_MS + 1);
+  assert.deepEqual(world.deletions, ["500"]);
+  // Retrait du suivi échoué après la suppression : la ligne est encore là quand l'événement arrive.
+  await track("500", KEY, T0, null);
+
+  await handleVoiceChannelDeleted(client, { id: "500", type: ChannelType.GuildVoice, parentId: CATEGORY, name: "Les Genji" });
+
+  assert.equal(world.creations.length, 0);
+  assert.deepEqual(await tracked(), []);
+});
+
+test("handleVoiceChannelDeleted_storageFailsBeforeRecreation_logsTrackingFailure", async () => {
+  const bdd = await getBddInstance();
+  await bdd.raw("ALTER TABLE MatchVoiceChannel RENAME TO MatchVoiceChannelAway");
+  try {
+    await handleVoiceChannelDeleted(client, { id: "501", type: ChannelType.GuildVoice, parentId: CATEGORY, name: "Les Genji" });
+  } finally {
+    await bdd.raw("ALTER TABLE MatchVoiceChannelAway RENAME TO MatchVoiceChannel");
+  }
+
+  assert.equal(world.logs.length, 1);
+  assert.match(world.logs[0], /retrait du suivi vocal 501 échoué/);
+  assert.doesNotMatch(world.logs[0], /non recréé/);
 });
 
 test("handleVoiceChannelDeleted_channelOutsideCategory_rowKeptForSweep", async () => {
