@@ -13,6 +13,7 @@ import {
   FALLBACK_VOICE_LABEL,
   FALLBACK_VOICE_NAME,
   RELEASED_MAX_AGE_MS,
+  REPLACED_ALIAS_MAX_AGE_MS,
   UNRELEASED_MAX_AGE_MS,
   VOICE_SWEEP_CRON,
   VOICE_USER_LIMIT,
@@ -749,12 +750,120 @@ test("handleVoiceStateUpdate_deleteFailsRepeatedly_loggedOnceOnDiscord", async (
   assert.equal((await tracked()).length, 1);
 });
 
-test("handleVoiceChannelDeleted_trackedChannel_untracked", async () => {
+/** Suppression d'un salon par la modération : il disparaît du monde simulé, puis l'événement arrive. */
+async function deleteByHand(channelId: string, name: string | null, now: number = Date.now()): Promise<void> {
+  world.voices.delete(channelId);
+  await handleVoiceChannelDeleted(client, { id: channelId, type: ChannelType.GuildVoice, parentId: CATEGORY, name }, now);
+}
+
+test("handleVoiceChannelDeleted_unreleasedTrackedChannelDeletedByHand_recreatedUnderSameKeyWithSameName", async () => {
   const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
 
-  await handleVoiceChannelDeleted(client, { id: channelId, type: ChannelType.GuildVoice, parentId: CATEGORY });
+  await deleteByHand(channelId, "Les Genji", T0 + HOUR);
+
+  assert.equal(world.creations.length, 2);
+  assert.equal(world.creations[1].name, "Les Genji");
+  assert.equal(world.creations[1].parent, CATEGORY);
+  assert.equal(world.creations[1].userLimit, VOICE_USER_LIMIT);
+  const rows = await tracked();
+  assert.equal(rows.length, 1);
+  assert.notEqual(rows[0].channel_id, channelId);
+  assert.equal(rows[0].voice_key, KEY);
+  assert.equal(rows[0].released_at, null);
+  assert.ok(world.voices.has(rows[0].channel_id));
+  const bdd = await getBddInstance();
+  const [{ created_at: createdAt }] = await bdd.raw<{ created_at: number }>("SELECT created_at FROM MatchVoiceChannel");
+  assert.equal(Number(createdAt), T0 + HOUR);
+});
+
+test("handleVoiceChannelDeleted_releasedTrackedChannel_untrackedWithoutRecreation", async () => {
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  world.voices.get(channelId)!.members.size = 2;
+  await releaseVoiceChannel(client, channelId, T0);
+
+  await deleteByHand(channelId, "Les Genji");
 
   assert.deepEqual(await tracked(), []);
+  assert.equal(world.creations.length, 1);
+});
+
+test("handleVoiceChannelDeleted_channelAlreadyDeletedByBot_nothingRecreated", async () => {
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  await releaseVoiceChannel(client, channelId, T0);
+
+  await handleVoiceChannelDeleted(client, { id: channelId, type: ChannelType.GuildVoice, parentId: CATEGORY, name: "Les Genji" });
+
+  assert.deepEqual(world.deletions, [channelId]);
+  assert.equal(world.creations.length, 1);
+  assert.deepEqual(await tracked(), []);
+});
+
+test("handleVoiceChannelDeleted_nameEmptyAfterCleanup_fallbackLabelWithTeamNumber", async () => {
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+
+  await deleteByHand(channelId, "@@");
+
+  assert.equal(world.creations[1].name, `${FALLBACK_VOICE_LABEL} 34`);
+});
+
+test("handleVoiceChannelDeleted_recreationFails_oldRowUntrackedAndFailureLogged", async () => {
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  world.createError = discordError(50035, "Invalid Form Body");
+
+  await deleteByHand(channelId, "Les Genji");
+
+  assert.deepEqual(await tracked(), []);
+  assert.equal(world.logs.length, 1);
+  assert.match(world.logs[0], new RegExp(`salon vocal ${channelId} non recréé`));
+});
+
+test("releaseVoiceChannel_oldIdAfterRecreation_releasesNewChannel", async () => {
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  await deleteByHand(channelId, "Les Genji");
+  const [{ channel_id: newId }] = await tracked();
+
+  const released = await releaseVoiceChannel(client, channelId);
+
+  assert.deepEqual(released, { deleted: true });
+  assert.deepEqual(world.deletions, [newId]);
+  assert.deepEqual(await tracked(), []);
+});
+
+test("clearVoiceChannel_oldIdAfterRecreation_disconnectsOccupantsOfNewChannel", async () => {
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  await deleteByHand(channelId, "Les Genji");
+  const [{ channel_id: newId }] = await tracked();
+  world.voices.get(newId)!.members.size = 2;
+
+  const cleared = await clearVoiceChannel(client, channelId);
+
+  assert.equal(cleared, true);
+  assert.equal(world.disconnects.length, 2);
+  assert.equal(world.voices.get(newId)!.members.size, 0);
+});
+
+test("releaseVoiceChannel_oldIdAfterAliasExpiry_newChannelUntouched", async (t) => {
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  await deleteByHand(channelId, "Les Genji", T0);
+  const [{ channel_id: newId }] = await tracked();
+  t.mock.method(Date, "now", () => T0 + REPLACED_ALIAS_MAX_AGE_MS + 1);
+
+  const released = await releaseVoiceChannel(client, channelId, T0 + REPLACED_ALIAS_MAX_AGE_MS + 1);
+
+  assert.deepEqual(released, { deleted: true });
+  assert.deepEqual(world.deletions, []);
+  assert.deepEqual((await tracked()).map((row) => [row.channel_id, row.released_at]), [[newId, null]]);
+});
+
+test("releaseVoiceChannel_oldIdAtAliasMaxAge_stillResolved", async (t) => {
+  const { channelId } = await ensureTeamVoiceChannel(client, KEY, "Les Genji", T0);
+  await deleteByHand(channelId, "Les Genji", T0);
+  const [{ channel_id: newId }] = await tracked();
+  t.mock.method(Date, "now", () => T0 + REPLACED_ALIAS_MAX_AGE_MS);
+
+  await releaseVoiceChannel(client, channelId, T0 + REPLACED_ALIAS_MAX_AGE_MS);
+
+  assert.deepEqual(world.deletions, [newId]);
 });
 
 test("handleVoiceChannelDeleted_channelOutsideCategory_rowKeptForSweep", async () => {

@@ -399,9 +399,19 @@ tous les salons (`VOICE_DISCORD_UNAVAILABLE`, `VOICE_MISSING_PERMISSIONS`,
 même délai (un refus qui touche chaque salon, comme la limite de salons du serveur,
 n'inonde pas le salon) ; les suivants ne vont qu'à pm2 (`[voice] <route> : <code>`), pour
 ne pas ajouter d'appels à Discord pendant sa limite de débit. La même règle vaut pour les
-échecs de suppression d'un salon rendu qui se vide (`voiceStateUpdate`) et du retrait du
-suivi d'un salon supprimé à la main (`channelDelete`), comptés à part des routes : un refus
+échecs de suppression d'un salon rendu qui se vide (`voiceStateUpdate`) et de la recréation
+ou du retrait du suivi d'un salon supprimé à la main (`channelDelete`), comptés à part des routes : un refus
 d'une route ne tait pas l'échec d'un événement, qui nomme le salon laissé au balayage.
+
+**Salon supprimé à la main** (modération) : s'il n'était pas libéré, le bot le **recrée
+aussitôt** dans la catégorie, sous la même clé et le même nom (nettoyé ; vide, le nom de repli
+numéroté), sans attendre le site (décision D97 : le site ne redemande plus ses salons ouverts
+que toutes les 5 minutes, par `POST /internal/voice/channels`, qui lui rend alors le nouvel
+identifiant). Pendant 15 minutes, l'ancien identifiant désigne encore le salon neuf pour
+`…/release` et `…/clear` (mémoire seule du bot, perdue à son redémarrage). Un salon déjà libéré
+cesse simplement d'être suivi ; un salon supprimé par le bot lui-même n'est jamais recréé. Si
+la recréation échoue, le salon cesse d'être suivi et la revérification suivante du site en
+ouvre un neuf.
 
 - `POST /internal/voice/channels`
   - Body: `{ "key": "match:12:team:34", "name": "Nom de l'équipe", "fallback": false }`

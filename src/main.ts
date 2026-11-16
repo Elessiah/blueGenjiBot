@@ -335,7 +335,7 @@ client.on("voiceStateUpdate", async (oldState) => {
 });
 
 client.on("channelDelete", async (channel) => {
-  // Un salon vocal de match supprimé à la main cesse d'être suivi ; ne lève jamais.
+  // Un salon vocal de match supprimé à la main est recréé s'il n'était pas libéré (D97), sinon oublié ; ne lève jamais.
   await handleVoiceChannelDeleted(client, channel);
   try {
     const ret = await _resetChannel(client, channel.id, "guild" in channel ? channel.guild.name : undefined);
