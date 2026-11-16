@@ -562,6 +562,18 @@ async function trackedById(channelId: string): Promise<TrackedRow | null> {
 async function untrack(channelId: string): Promise<void> {
   releasedIds.delete(channelId);
   await db("DELETE FROM MatchVoiceChannel WHERE channel_id = ?", [channelId]);
+  forgetAliasesTo(channelId);
+}
+
+/**
+ * Oublie les alias qui mènent à un salon que le bot cesse de suivre : ils ne désigneraient plus
+ * rien, et la place reste aux alias vivants (`REPLACED_ALIAS_MAX`).
+ * @param channelId Salon qui n'est plus suivi.
+ */
+function forgetAliasesTo(channelId: string): void {
+  for (const [id, target] of replacedIds) {
+    if (target === channelId) { replacedIds.delete(id); }
+  }
 }
 
 /**
@@ -650,8 +662,11 @@ function currentChannelId(channelId: string): string {
  * @param to Salon neuf.
  */
 function rememberReplacement(from: string, to: string): void {
-  for (const [id, target] of replacedIds) {
-    if (target === from) { replacedIds.set(id, to); }
+  // Réinsérés en fin de file : un alias encore vivant n'est pas le premier oublié.
+  const chained = [...replacedIds].filter(([, target]) => target === from).map(([id]) => id);
+  for (const id of chained) {
+    replacedIds.delete(id);
+    replacedIds.set(id, to);
   }
   replacedIds.delete(from);
   if (replacedIds.size >= REPLACED_ALIAS_MAX) {
@@ -938,21 +953,21 @@ export async function handleVoiceChannelDeleted(
   // Supprimé par le bot lui-même : jamais recréé, même si son retrait du suivi a échoué
   // (le balayage suivant l'oublie).
   const byBot = botDeletedIds.delete(channelId);
-  let recreating = false;
+  let step = "lecture du suivi";
   try {
     await withChannelLock(channelId, async (row) => {
       // Relu sous le verrou : supprimé par le bot (déjà retiré du suivi), ou libéré.
       if (row?.channel_id !== channelId) { return; }
       if (byBot || row.released_at !== null) {
+        step = "retrait du suivi";
         await untrack(channelId);
         return;
       }
-      recreating = true;
+      step = "recréation";
       await recreateDeleted(client, row, channel.name, now);
     });
   } catch (error) {
-    const what = recreating ? `salon vocal ${channelId} non recréé` : `retrait du suivi vocal ${channelId} échoué`;
-    await logVoiceFailure(client, error, `channelDelete : ${what} (${voiceErrorDetail(error)}).`, "event");
+    await logVoiceFailure(client, error, `channelDelete (${step}) : salon vocal ${channelId} en échec (${voiceErrorDetail(error)}).`, "event");
   }
 }
 

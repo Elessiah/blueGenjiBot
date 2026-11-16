@@ -814,7 +814,7 @@ test("handleVoiceChannelDeleted_recreationFails_oldRowUntrackedAndFailureLogged"
 
   assert.deepEqual(await tracked(), []);
   assert.equal(world.logs.length, 1);
-  assert.match(world.logs[0], new RegExp(`salon vocal ${channelId} non recréé`));
+  assert.ok(world.logs[0].includes(`channelDelete (recréation) : salon vocal ${channelId} en échec`));
 });
 
 test("releaseVoiceChannel_oldIdAfterRecreation_releasesNewChannel", async () => {
@@ -916,6 +916,48 @@ test("releaseVoiceChannel_aliasesBeyondMax_oldestForgottenNextStillResolved", as
   assert.deepEqual(world.deletions, [latest]);
 });
 
+/** Identifiant du salon suivi d'une clé. */
+async function trackedIdOf(key: string): Promise<string> {
+  const rows = await tracked();
+  return rows.find((row) => row.voice_key === key)!.channel_id;
+}
+
+test("releaseVoiceChannel_aliasesOfUntrackedChannelForgotten_otherLiveAliasKeptAtMax", async () => {
+  const otherKey = "match:20:team:1";
+  const lastKey = "match:21:team:1";
+  const { channelId: kept } = await ensureTeamVoiceChannel(client, otherKey, "Les Genji", T0);
+  await deleteByHand(kept, "Les Genji");
+  const keptNew = await trackedIdOf(otherKey);
+  const { channelId: firstOfChain } = await ensureTeamVoiceChannel(client, KEY, "Les Tracer", T0);
+  let latest = firstOfChain;
+  for (let n = 1; n < REPLACED_ALIAS_MAX; n++) {
+    await deleteByHand(latest, "Les Tracer");
+    latest = await trackedIdOf(KEY);
+  }
+  await releaseVoiceChannel(client, latest);
+  const { channelId: last } = await ensureTeamVoiceChannel(client, lastKey, "Les Mercy", T0);
+  await deleteByHand(last, "Les Mercy");
+
+  await releaseVoiceChannel(client, kept);
+
+  assert.equal(world.deletions.at(-1), keptNew);
+});
+
+test("handleVoiceChannelDeleted_untrackFailsOnReleasedRow_logsRemovalStep", async () => {
+  await track("600", KEY, T0, T0 + 1);
+  const bdd = await getBddInstance();
+  await bdd.raw("CREATE TRIGGER keep_voice_rows BEFORE DELETE ON MatchVoiceChannel BEGIN SELECT RAISE(ABORT, 'kept'); END");
+  try {
+    await handleVoiceChannelDeleted(client, { id: "600", type: ChannelType.GuildVoice, parentId: CATEGORY, name: "Les Genji" });
+  } finally {
+    await bdd.raw("DROP TRIGGER keep_voice_rows");
+  }
+
+  assert.equal(world.creations.length, 0);
+  assert.equal(world.logs.length, 1);
+  assert.match(world.logs[0], /channelDelete \(retrait du suivi\) : salon vocal 600 en échec/);
+});
+
 test("handleVoiceChannelDeleted_botDeletedChannelStillTracked_untrackedNotRecreated", async () => {
   await track("500", KEY, T0, null);
   addVoice("500", 0, CATEGORY);
@@ -930,7 +972,7 @@ test("handleVoiceChannelDeleted_botDeletedChannelStillTracked_untrackedNotRecrea
   assert.deepEqual(await tracked(), []);
 });
 
-test("handleVoiceChannelDeleted_storageFailsBeforeRecreation_logsTrackingFailure", async () => {
+test("handleVoiceChannelDeleted_storageFailsBeforeRecreation_logsReadStep", async () => {
   const bdd = await getBddInstance();
   await bdd.raw("ALTER TABLE MatchVoiceChannel RENAME TO MatchVoiceChannelAway");
   try {
@@ -940,8 +982,8 @@ test("handleVoiceChannelDeleted_storageFailsBeforeRecreation_logsTrackingFailure
   }
 
   assert.equal(world.logs.length, 1);
-  assert.match(world.logs[0], /retrait du suivi vocal 501 échoué/);
-  assert.doesNotMatch(world.logs[0], /non recréé/);
+  assert.match(world.logs[0], /channelDelete \(lecture du suivi\) : salon vocal 501 en échec/);
+  assert.doesNotMatch(world.logs[0], /recréation/);
 });
 
 test("handleVoiceChannelDeleted_channelOutsideCategory_rowKeptForSweep", async () => {

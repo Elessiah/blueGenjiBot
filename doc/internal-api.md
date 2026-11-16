@@ -408,8 +408,8 @@ aussitôt** dans la catégorie, sous la même clé et le nom que portait le salo
 le nom de repli numéroté), sans attendre le site (décision D97 : le site ne redemande plus ses salons ouverts
 que toutes les 5 minutes, par `POST /internal/voice/channels`, qui lui rend alors le nouvel
 identifiant). L'ancien identifiant désigne encore le salon neuf pour `…/release` et `…/clear`,
-même si le site tarde à le revérifier (mémoire seule du bot, 200 alias au plus, perdue à son
-redémarrage). Un salon déjà libéré
+même si le site tarde à le revérifier (mémoire seule du bot, 200 alias au plus — le plus ancien
+oublié au-delà —, retirés quand le salon neuf cesse d'être suivi, perdue à son redémarrage). Un salon déjà libéré
 cesse simplement d'être suivi ; un salon supprimé par le bot lui-même n'est jamais recréé. Si
 la recréation échoue, le salon cesse d'être suivi et la revérification suivante du site en
 ouvre un neuf.
