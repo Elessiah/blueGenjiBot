@@ -410,9 +410,11 @@ que toutes les 5 minutes, par `POST /internal/voice/channels`, qui lui rend alor
 identifiant). L'ancien identifiant désigne encore le salon neuf pour `…/release` et `…/clear`,
 même si le site tarde à le revérifier (mémoire seule du bot, 200 alias au plus — le plus ancien
 oublié au-delà —, retirés quand le salon neuf cesse d'être suivi, perdue à son redémarrage). Un salon déjà libéré
-cesse simplement d'être suivi ; un salon supprimé par le bot lui-même n'est jamais recréé. Si
-la recréation échoue, le salon cesse d'être suivi et la revérification suivante du site en
-ouvre un neuf.
+cesse simplement d'être suivi ; un salon supprimé par le bot lui-même n'est jamais recréé. Pas
+de recréation non plus pour un salon jamais rendu de plus de 48 heures, ni au-delà de 3
+recréations d'une même clé en 10 minutes (suppressions en boucle) : le salon cesse alors d'être
+suivi. Si la recréation échoue ou n'a pas lieu, la revérification suivante du site en ouvre un
+neuf, à ses propres conditions.
 
 - `POST /internal/voice/channels`
   - Body: `{ "key": "match:12:team:34", "name": "Nom de l'équipe", "fallback": false }`

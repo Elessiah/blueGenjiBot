@@ -13,7 +13,8 @@
  *   est recréé aussitôt par le bot (`channelDelete`, décision D97), sous la
  *   même clé ; l'ancien identifiant, que le site garde jusqu'à sa revérification
  *   suivante (5 min), désigne encore le salon neuf tant que le bot tourne
- *   (`REPLACED_ALIAS_MAX` alias au plus) ;
+ *   (`REPLACED_ALIAS_MAX` alias au plus) ; pas de recréation au-delà de
+ *   `RECREATE_MAX` par clé en 10 minutes, ni pour un salon de plus de 48 h ;
  * - **seul un salon suivi** (table `MatchVoiceChannel`) peut être rendu ou
  *   supprimé : un identifiant quelconque envoyé par le site n'y donne accès à
  *   rien ;
@@ -189,6 +190,29 @@ function inVoiceCategory(channel: Pick<VoiceHandle, "parentId">): boolean {
  */
 export const REPLACED_ALIAS_MAX = 200;
 
+/**
+ * Recréations au plus d'une même clé par `RECREATE_WINDOW_MS` : au-delà (suppressions en boucle
+ * par la modération ou un autre bot), le salon supprimé cesse d'être suivi au lieu d'être recréé,
+ * et la revérification du site en rouvre un, au plus une fois par 5 min. Aucune boucle
+ * suppression/recréation ne peut épuiser la limite de débit de Discord ni la mémoire des alias.
+ */
+export const RECREATE_MAX = 3;
+
+/** Fenêtre du plafond de recréations d'une clé (`RECREATE_MAX`). */
+export const RECREATE_WINDOW_MS = 10 * 60 * 1000;
+
+/**
+ * Fait de la place dans une mémoire bornée : au plafond atteint, la plus ancienne entrée (ordre
+ * d'insertion) est oubliée.
+ * @param collection Ensemble ou table à borner.
+ * @param max Taille maximale.
+ */
+function makeRoom<K>(collection: Map<K, unknown> | Set<K>, max: number): void {
+  if (collection.size < max) { return; }
+  const oldest = collection.keys().next();
+  if (!oldest.done) { collection.delete(oldest.value); }
+}
+
 /** Bilan d'un balayage. */
 export type SweepReport = { deleted: number; untracked: number; kept: number; failed: number };
 
@@ -207,6 +231,9 @@ const replacedIds = new Map<string, string>();
  * borné à `REPLACED_ALIAS_MAX` (un événement manqué ne laisse pas grossir l'ensemble).
  */
 const botDeletedIds = new Set<string>();
+
+/** Instants des recréations récentes par clé (`RECREATE_MAX`), bornés à `REPLACED_ALIAS_MAX` clés. */
+const recreatedAt = new Map<string, number[]>();
 
 /** Créations en cours par clé : deux demandes simultanées ne créent qu'un salon. */
 const pendingByKey = new Map<string, Promise<unknown>>();
@@ -266,10 +293,7 @@ export function shouldLogVoiceError(
   const last = botWideLoggedAt.get(key);
   if (last !== undefined && now - last < BOT_WIDE_LOG_COOLDOWN_MS) { return false; }
   botWideLoggedAt.delete(key);
-  if (botWideLoggedAt.size >= LOGGED_REFUSALS_MAX) {
-    const oldest = botWideLoggedAt.keys().next();
-    if (!oldest.done) { botWideLoggedAt.delete(oldest.value); }
-  }
+  makeRoom(botWideLoggedAt, LOGGED_REFUSALS_MAX);
   botWideLoggedAt.set(key, now);
   return true;
 }
@@ -307,6 +331,7 @@ export function resetVoiceState(): void {
   pendingByKey.clear();
   replacedIds.clear();
   botDeletedIds.clear();
+  recreatedAt.clear();
 }
 
 /**
@@ -585,16 +610,16 @@ function forgetAliasesTo(channelId: string): void {
  * @param channel Salon à supprimer.
  */
 async function deleteTracked(client: Client, channel: VoiceHandle): Promise<void> {
-  if (botDeletedIds.size >= REPLACED_ALIAS_MAX) {
-    const oldest = botDeletedIds.values().next();
-    if (!oldest.done) { botDeletedIds.delete(oldest.value); }
-  }
+  botDeletedIds.delete(channel.id);
+  makeRoom(botDeletedIds, REPLACED_ALIAS_MAX);
   botDeletedIds.add(channel.id);
   try {
     await channel.delete(DELETE_REASON);
   } catch (error) {
-    // Déjà disparu (aucun événement à attendre de notre fait) ou refus : l'identifiant n'est pas gardé.
-    botDeletedIds.delete(channel.id);
+    // Réponse de Discord (déjà disparu, refus) : aucun événement à attendre de notre fait,
+    // l'identifiant n'est pas gardé. Sans réponse (réseau, délai dépassé), Discord a pu supprimer
+    // le salon : l'identifiant reste, son événement ne doit pas le recréer.
+    if (discordJsonCode(error) !== null) { botDeletedIds.delete(channel.id); }
     if (discordJsonCode(error) !== UNKNOWN_CHANNEL) {
       throw await toVoiceError(client, error, "suppression du salon");
     }
@@ -675,10 +700,7 @@ function rememberReplacement(from: string, to: string): void {
     replacedIds.set(id, to);
   }
   replacedIds.delete(from);
-  if (replacedIds.size >= REPLACED_ALIAS_MAX) {
-    const oldest = replacedIds.keys().next();
-    if (!oldest.done) { replacedIds.delete(oldest.value); }
-  }
+  makeRoom(replacedIds, REPLACED_ALIAS_MAX);
   replacedIds.set(from, to);
 }
 
@@ -938,7 +960,9 @@ export async function handleVoiceStateUpdate(client: Client, oldState: Pick<Voic
 /**
  * `channelDelete` : un salon suivi supprimé à la main (modération) est **recréé aussitôt**
  * sous la même clé s'il n'était pas libéré — le match peut encore se jouer (décision D97 :
- * le site ne le revérifie plus que toutes les 5 minutes) ; libéré, il cesse d'être suivi.
+ * le site ne le revérifie plus que toutes les 5 minutes) ; libéré, il cesse d'être suivi — de
+ * même s'il a passé 48 h sans être rendu ou si sa clé a déjà été recréée `RECREATE_MAX` fois en
+ * 10 minutes (`mayRecreate` : aucune boucle suppression/recréation).
  * Un salon que le bot a supprimé lui-même n'est plus suivi quand l'événement arrive (sa
  * suppression et son retrait du suivi se font sous le verrou de la clé) : rien n'est recréé.
  * Seul un salon vocal de la catégorie est regardé — aucune lecture en base pour les salons
@@ -964,7 +988,7 @@ export async function handleVoiceChannelDeleted(
     await withChannelLock(channelId, async (row) => {
       // Relu sous le verrou : supprimé par le bot (déjà retiré du suivi), ou libéré.
       if (row?.channel_id !== channelId) { return; }
-      if (byBot || row.released_at !== null) {
+      if (byBot || row.released_at !== null || !mayRecreate(row, now)) {
         step = "retrait du suivi";
         await untrack(channelId);
         return;
@@ -975,6 +999,28 @@ export async function handleVoiceChannelDeleted(
   } catch (error) {
     await logVoiceFailure(client, error, `channelDelete (${step}) : salon vocal ${channelId} en échec (${voiceErrorDetail(error)}).`, "event");
   }
+}
+
+/**
+ * Un salon supprimé par la modération peut-il être recréé ? Non s'il a passé le délai d'un salon
+ * jamais rendu (`UNRELEASED_MAX_AGE_MS` : le site l'a perdu de vue, il serait supprimé vide de
+ * toute façon), ni si sa clé a déjà été recréée `RECREATE_MAX` fois dans `RECREATE_WINDOW_MS`
+ * (suppressions en boucle). Une recréation permise est comptée.
+ * @param row Ligne du salon supprimé.
+ * @param now Instant courant (ms).
+ * @returns `true` s'il faut le recréer.
+ */
+function mayRecreate(row: TrackedRow, now: number): boolean {
+  if (now - Number(row.created_at) > UNRELEASED_MAX_AGE_MS) { return false; }
+  const recent = (recreatedAt.get(row.voice_key) ?? []).filter((at) => now - at < RECREATE_WINDOW_MS);
+  recreatedAt.delete(row.voice_key);
+  if (recent.length >= RECREATE_MAX) {
+    recreatedAt.set(row.voice_key, recent);
+    return false;
+  }
+  makeRoom(recreatedAt, REPLACED_ALIAS_MAX);
+  recreatedAt.set(row.voice_key, [...recent, now]);
+  return true;
 }
 
 /**
