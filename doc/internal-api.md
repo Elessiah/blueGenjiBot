@@ -115,8 +115,10 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     (`INTERNAL_API_TOKEN_NOT_CONFIGURED`) même en boucle locale ; jeton faux ou
     absent : **401** ; corps invalide : **400** (`INVALID_PAYLOAD`).
   - Retour : **200** `{ "success": true }`, ou **502** `{ "success": false }` si
-    le message privé n'a pas pu partir (propriétaire injoignable). Un 502 peut
-    suivre l'envoi d'une partie des morceaux : un nouvel essai les renvoie.
+    le premier message privé n'a pas pu partir (propriétaire injoignable) : un
+    nouvel essai est alors sans risque de doublon. Dès que le premier morceau
+    est parti, la réponse est **200** même si un morceau suivant échoue (le bot
+    le consigne) : un nouvel essai renverrait les morceaux déjà livrés.
 
 - `POST /internal/notify/dm`
   - Body: `{ "message": "...", "recipients": [{ "discordId": "123...", "handle":

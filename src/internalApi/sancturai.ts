@@ -8,6 +8,8 @@
  */
 
 import type { Client, User } from "discord.js";
+import { sliceWithoutSplittingPair } from "../utils/cutText.js";
+import { splitForDiscord } from "../utils/splitForDiscord.js";
 
 export type SancturaiNotify = {
   kind: "log" | "agent_message";
@@ -64,7 +66,12 @@ export function quoteBlock(text: string): string {
       out.push(">");
       continue;
     }
-    for (let i = 0; i < line.length; i += QUOTED_LINE_MAX) out.push(`> ${line.slice(i, i + QUOTED_LINE_MAX)}`);
+    let rest = line;
+    while (rest) {
+      const piece = sliceWithoutSplittingPair(rest, QUOTED_LINE_MAX);
+      out.push(`> ${piece}`);
+      rest = rest.slice(piece.length);
+    }
   }
   return out.join("\n");
 }
@@ -76,30 +83,6 @@ export function formatNotify(n: SancturaiNotify): string {
       + `${quoteBlock(n.text)}\n\n→ /sancturai-reply id:${n.short_id} texte:...`;
   }
   return `[SancturAI] journal :\n${quoteBlock(n.text)}`;
-}
-
-/**
- * Découpe en morceaux ≤ `size` caractères (2000 : limite Discord) sur les fins de ligne, sans rien perdre :
- * une ligne citée n'est jamais coupée, donc chaque DM ne contient que l'en-tête du bot ou des lignes "> ".
- */
-export function chunkDiscord(text: string, size: number = MAX_DISCORD): string[] {
-  const parts: string[] = [];
-  let current = "";
-  for (const line of text.split("\n")) {
-    const pieces: string[] = [];
-    for (let i = 0; i < line.length; i += size) pieces.push(line.slice(i, i + size));
-    for (const piece of pieces.length ? pieces : [""]) {
-      const next = current ? `${current}\n${piece}` : piece;
-      if (next.length <= size) {
-        current = next;
-        continue;
-      }
-      parts.push(current);
-      current = piece;
-    }
-  }
-  parts.push(current);
-  return parts;
 }
 
 /** Valide les arguments de `/sancturai-reply` (identifiant à 4 hexa, éventuellement précédé de `#`). */
@@ -137,7 +120,18 @@ export async function sendOwnerDm(client: Client, text: string): Promise<boolean
   try {
     const owner: User = await client.users.fetch(ownerId);
     // aucune mention résolue (ni @everyone, ni rôle, ni utilisateur), même si l'échappement était contourné
-    for (const part of chunkDiscord(text)) await owner.send({ content: part, allowedMentions: { parse: [] } });
+    // Les lignes citées font ≤ 1902 caractères : splitForDiscord ne coupe donc jamais une ligne (le "> " resterait en tête).
+    let sent = 0;
+    try {
+      for (const part of splitForDiscord(text, MAX_DISCORD)) {
+        await owner.send({ content: part, allowedMentions: { parse: [] } });
+        sent += 1;
+      }
+    } catch (err) {
+      // Un nouvel essai renverrait les morceaux déjà partis : une fois le premier livré, on ne signale plus d'échec.
+      if (sent === 0) throw err;
+      console.error(`[sancturai] DM owner partial: ${sent} morceau(x) envoyé(s), le reste a échoué:`, (err as Error).message);
+    }
     return true;
   } catch (err) {
     console.error("[sancturai] DM owner failed:", (err as Error).message);
