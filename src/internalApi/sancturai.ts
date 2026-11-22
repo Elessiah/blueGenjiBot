@@ -19,7 +19,7 @@ export type SancturaiNotify = {
 };
 
 const MAX_DISCORD = 2000;
-const SHORT_ID = /^[0-9a-f]{4}$/;
+const SHORT_ID = /^[0-9a-f]{4,6}$/;
 const QUOTED_LINE_MAX = 1900; // + "> " : une ligne citée tient toujours dans un DM
 // Bornes du contrat SancturAI (outbox : 1 800 pour un journal, 4 000 pour un message d'agent ; agent_id VARCHAR(64), pseudo ≤ 32).
 // Un corps plus gros ferait des dizaines de DM ; un en-tête plus long que 2 000 serait coupé hors citation.
@@ -109,7 +109,7 @@ export function formatNotify(n: SancturaiNotify): string {
   return `[SancturAI] journal :\n${quoteBlock(n.text)}`;
 }
 
-/** Valide les arguments de `/sancturai-reply` (identifiant à 4 hexa, éventuellement précédé de `#`). */
+/** Valide les arguments de `/sancturai-reply` (identifiant de 4 à 6 hexa, éventuellement précédé de `#`). */
 export function parseReplyArgs(id: string, text: string): { shortId: string; text: string } | null {
   const shortId = id.trim().replace(/^#/, "").toLowerCase();
   const body = text.trim();
