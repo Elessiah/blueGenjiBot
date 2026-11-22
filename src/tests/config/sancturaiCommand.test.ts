@@ -9,4 +9,6 @@ test("/sancturai-reply : masquée aux non-administrateurs, texte borné à 4 000
   };
   assert.equal(params.default_member_permissions, "0");
   assert.equal(params.options.find((o) => o.name === "texte")?.max_length, 4000);
+  // « #ab12cd » : 6 hexa + le « # » optionnel
+  assert.equal(params.options.find((o) => o.name === "id")?.max_length, 7);
 });

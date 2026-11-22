@@ -107,6 +107,16 @@ test("parseReplyArgs accepte #ab12 et ab12", () => {
   assert.equal(parseReplyArgs("ab12", "x".repeat(4001)), null);
 });
 
+test("short_id : 4 à 6 hexa acceptés, au-delà rejetés", () => {
+  const agent = { handle: "bob", agent_id: "Xyz" };
+  assert.deepEqual(parseReplyArgs("#AB12CD", "ok"), { shortId: "ab12cd", text: "ok" });
+  assert.deepEqual(parseReplyArgs("ab123", "ok"), { shortId: "ab123", text: "ok" });
+  assert.equal(parseReplyArgs("ab12cde", "ok"), null);
+  assert.equal(parseReplyArgs("abc", "ok"), null);
+  assert.equal(parseNotify({ kind: "agent_message", text: "x", short_id: "ab12cd", agent })?.short_id, "ab12cd");
+  assert.equal(parseNotify({ kind: "agent_message", text: "x", short_id: "ab12cde", agent })?.short_id, undefined);
+});
+
 test("postReply envoie le token et le body", async () => {
   let seen: { url: string; init: RequestInit } | undefined;
   const fakeFetch = (async (url: string, init: RequestInit) => {
