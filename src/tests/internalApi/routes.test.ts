@@ -1476,6 +1476,7 @@ test("POST /internal/sancturai/notify : DM au propriétaire, jeton exigé, corps
   assert.equal((await call("/internal/sancturai/notify", { body, token: null })).status, 401);
   assert.equal((await call("/internal/sancturai/notify", { body, token: "faux" })).status, 401);
   assert.equal((await call("/internal/sancturai/notify", { body: { kind: "evil", text: "x" } })).status, 400);
+  assert.equal((await call("/internal/sancturai/notify", { body: { kind: "agent_message", text: "x", short_id: "nope" } })).status, 400);
   assert.deepEqual(state.dms, []);
 
   const ok = await call("/internal/sancturai/notify", { body });

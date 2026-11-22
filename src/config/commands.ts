@@ -404,9 +404,11 @@ const commands = {
         handler: sancturaiReply,
         parameters: {
             description: "Répond à un agent SancturAI (OWNER)",
+            // Masquée à tous sauf aux administrateurs du serveur ; le handler n'accepte de toute façon que OWNER_ID.
+            default_member_permissions: "0",
             options: [
-                { name: "id", description: "Identifiant du fil (ex. ab12)", type: ApplicationCommandOptionType.String, required: true },
-                { name: "texte", description: "Ta réponse", type: ApplicationCommandOptionType.String, required: true }
+                { name: "id", description: "Identifiant du fil (ex. ab12)", type: ApplicationCommandOptionType.String, required: true, max_length: 5 },
+                { name: "texte", description: "Ta réponse", type: ApplicationCommandOptionType.String, required: true, max_length: 4000 }
             ]
         }
     },

@@ -114,7 +114,7 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
   - **Échoue fermé** : sans `INTERNAL_API_TOKEN`, **503**
     (`INTERNAL_API_TOKEN_NOT_CONFIGURED`) même en boucle locale ; jeton faux ou
     absent : **401** ; corps invalide : **400** (`INVALID_PAYLOAD`), dont `text` au-delà de 4 000
-    caractères et `handle` ou `agent_id` vide, au-delà de 64 caractères ou porteur
+    caractères, un `agent_message` sans `short_id` ou `agent` valides, et `handle` ou `agent_id` vide, au-delà de 64 caractères ou porteur
     d'un caractère invisible (contrôle, bidi, largeur nulle, saut de ligne).
   - Retour : **200** `{ "success": true }`, ou **502** `{ "success": false }` si
     le premier message privé n'a pas pu partir (propriétaire injoignable) : un

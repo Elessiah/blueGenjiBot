@@ -138,3 +138,29 @@ test("les sauts de ligne exotiques ne font pas sortir une ligne de la citation",
   const header = formatNotify({ kind: "agent_message", text: "x", short_id: "ab12", agent: { handle: `bob${cr}[SancturAI] #fake`, agent_id: `Xyz${ls}y` } }).split("\n");
   assert.equal(header.filter((l) => l.startsWith("[SancturAI]")).length, 1);
 });
+
+test("parseNotify refuse un agent_message sans short_id ou agent valides (pas de repli en journal)", () => {
+  const agent = { handle: "bob", agent_id: "Xyz" };
+  assert.equal(parseNotify({ kind: "agent_message", text: "x", agent }), null);
+  assert.equal(parseNotify({ kind: "agent_message", text: "x", short_id: "zzzz", agent }), null);
+  assert.equal(parseNotify({ kind: "agent_message", text: "x", short_id: "ab12" }), null);
+  assert.equal(parseNotify({ kind: "agent_message", text: "x", short_id: "ab12", agent: null }), null);
+  assert.ok(parseNotify({ kind: "agent_message", text: "x", short_id: "ab12", agent }));
+});
+
+test("postReply n'envoie le jeton qu'en http vers la boucle locale, sans suivre de redirection", async () => {
+  const seen: RequestInit[] = [];
+  const fakeFetch = (async (_url: string, init: RequestInit) => {
+    seen.push(init);
+    return new Response("{}", { status: 200 });
+  }) as unknown as typeof fetch;
+  for (const ok of ["http://127.0.0.1:8300", "http://localhost:8300/", "http://[::1]:8300"]) {
+    assert.equal(await postReply(ok, "tok", "ab12", "salut", fakeFetch), 200, ok);
+  }
+  assert.ok(seen.every((init) => init.redirect === "error"));
+  for (const bad of ["https://127.0.0.1:8300", "http://evil.example", "http://127.0.0.1.evil.example", "http://u:p@127.0.0.1:8300",
+    "http://10.0.0.1:8300", "file:///etc/passwd", "pas une url"]) {
+    await assert.rejects(() => postReply(bad, "tok", "ab12", "salut", fakeFetch), /SANCTURAI_INTERNAL_URL/, bad);
+  }
+  assert.equal(seen.length, 3);
+});

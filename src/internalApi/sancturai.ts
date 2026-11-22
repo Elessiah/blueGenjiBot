@@ -59,6 +59,8 @@ export function parseNotify(body: unknown): SancturaiNotify | null {
     if (typeof agent !== "object" || !isHeaderField(agent.handle) || !isHeaderField(agent.agent_id)) return null;
     out.agent = { handle: agent.handle, agent_id: agent.agent_id };
   }
+  // Un message d'agent sans fil ni auteur valides ne doit pas se déguiser en journal : refus explicite.
+  if (out.kind === "agent_message" && (!out.short_id || !out.agent)) return null;
   return out;
 }
 
@@ -115,18 +117,33 @@ export function parseReplyArgs(id: string, text: string): { shortId: string; tex
   return { shortId, text: body };
 }
 
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
+
+/** `SANCTURAI_INTERNAL_URL` doit viser SancturAI en boucle locale (http) : le jeton ne quitte jamais la machine. */
+function isLoopbackHttp(baseUrl: string): boolean {
+  try {
+    const url = new URL(baseUrl);
+    return url.protocol === "http:" && LOOPBACK_HOSTS.has(url.hostname) && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Transmet la réponse de l'administrateur à SancturAI.
  * @returns Le statut HTTP de SancturAI.
- * @throws Si le jeton est vide (jamais d'appel non authentifié).
+ * @throws Si le jeton est vide (jamais d'appel non authentifié), si l'URL n'est pas du http en boucle
+ *   locale (127.0.0.1, localhost, ::1), ou si SancturAI répond par une redirection (jeton jamais renvoyé ailleurs).
  */
 export async function postReply(baseUrl: string, token: string, shortId: string, text: string,
                                 fetchImpl: typeof fetch = fetch): Promise<number> {
   if (!token) throw new Error("SANCTURAI_INTERNAL_TOKEN manquant");
+  if (!isLoopbackHttp(baseUrl)) throw new Error("SANCTURAI_INTERNAL_URL doit être en http vers 127.0.0.1, localhost ou [::1]");
   const res = await fetchImpl(`${baseUrl.replace(/\/$/, "")}/internal/admin-replies`, {
     method: "POST",
     headers: { "content-type": "application/json", "x-internal-token": token },
     body: JSON.stringify({ short_id: shortId, text }),
+    redirect: "error",
     signal: AbortSignal.timeout(10_000),
   });
   return res.status;
