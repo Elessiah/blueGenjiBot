@@ -43,6 +43,7 @@ import { loginCodeMessage, parseCodePurpose, parseDmLocale } from "./notificatio
 import { deliverDirectMessages, alertLeadership, alertReferees, HomeGuildUnavailableError } from "./notifications/deliver.js";
 import { HandleResolutionTimeoutError, resolveDiscordHandle } from "./notifications/resolveHandle.js";
 import { MESSAGE_RETENTION_DAYS } from "./privacy/retentionPeriods.js";
+import { formatNotify, parseNotify, sendOwnerDm, tokenAllows } from "./internalApi/sancturai.js";
 import { registerVoiceRoutes } from "./voice/voiceRoutes.js";
 import {
   announceLive,
@@ -534,6 +535,30 @@ export function startInternalApi(client: Client) {
 
     await sendLog(client, `[AppBlueGenji] ${message}`, undefined, false, kind);
     res.json({ success: true });
+  }));
+
+  /**
+   * Notification du relais SancturAI : DM au proprietaire uniquement. Echoue
+   * ferme : sans INTERNAL_API_TOKEN configure, la route est refusee meme en
+   * boucle locale (contrairement a authorize).
+   */
+  app.post("/internal/sancturai/notify", asyncRoute(async (req: Request, res: Response) => {
+    const expected = process.env.INTERNAL_API_TOKEN;
+    if (!expected) {
+      res.status(503).json({ error: "INTERNAL_API_TOKEN_NOT_CONFIGURED" });
+      return;
+    }
+    if (!tokenAllows(expected, req.header("x-internal-token"))) {
+      res.status(401).json({ error: "UNAUTHORIZED" });
+      return;
+    }
+    const notify = parseNotify(req.body);
+    if (!notify) {
+      res.status(400).json({ error: "INVALID_PAYLOAD" });
+      return;
+    }
+    const ok = await sendOwnerDm(client, formatNotify(notify));
+    res.status(ok ? 200 : 502).json({ success: ok });
   }));
 
   /**
