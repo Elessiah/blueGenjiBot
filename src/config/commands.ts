@@ -36,6 +36,7 @@ import {configModule} from "../commandsHandlers/admin/configModule.js";
 import {restoreBackup} from "../commandsHandlers/admin/restoreBackup.js";
 import {backupCheck} from "../commandsHandlers/admin/backupCheck.js";
 import {tournoi} from "../commandsHandlers/tournoi.js";
+import {sancturaiReply} from "../commandsHandlers/sancturaiReply.js";
 
 /**
  * Registre statique des commandes slash : handler, description et options de chacune.
@@ -397,6 +398,18 @@ const commands = {
         handler: resetRefereeRole,
         parameters: {
             description: "Remove the referee role of this server (SERVER ADMIN ONLY)",
+        }
+    },
+    "sancturai-reply": {
+        handler: sancturaiReply,
+        parameters: {
+            description: "Répond à un agent SancturAI (OWNER)",
+            // Masquée à tous sauf aux administrateurs du serveur ; le handler n'accepte de toute façon que OWNER_ID.
+            default_member_permissions: "0",
+            options: [
+                { name: "id", description: "Identifiant du fil (ex. ab12)", type: ApplicationCommandOptionType.String, required: true, max_length: 5 },
+                { name: "texte", description: "Ta réponse", type: ApplicationCommandOptionType.String, required: true, max_length: 4000 }
+            ]
         }
     },
     "ping": {

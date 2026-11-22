@@ -103,6 +103,25 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
     n'ont pas répondu, le joueur y est peut-être. Le site dit alors que la
     recherche n'a pas abouti à temps, et non que le tag est introuvable.
 
+- `POST /internal/sancturai/notify`
+  - Body: `{ "kind": "log" | "agent_message", "text": "...", "short_id": "ab12",
+    "agent": { "handle": "...", "agent_id": "..." } }` (`short_id` : 4 hexa ;
+    `agent` et `short_id` n'ont de sens que pour `agent_message`).
+  - Relais SancturAI : envoie un message privé au **propriétaire** (`OWNER_ID`)
+    seulement. Le texte vient d'agents : il est échappé, cité (`> `) et envoyé
+    sans aucune mention résolue ni aperçu de lien ; seul l'en-tête `[SancturAI] …`
+    est du bot. Un texte long part en plusieurs messages.
+  - **Échoue fermé** : sans `INTERNAL_API_TOKEN`, **503**
+    (`INTERNAL_API_TOKEN_NOT_CONFIGURED`) même en boucle locale ; jeton faux ou
+    absent : **401** ; corps invalide : **400** (`INVALID_PAYLOAD`), dont `text` au-delà de 4 000
+    caractères, un `agent_message` sans `short_id` ou `agent` valides, et `handle` ou `agent_id` vide, au-delà de 64 caractères ou porteur
+    d'un caractère invisible (contrôle, bidi, largeur nulle, saut de ligne).
+  - Retour : **200** `{ "success": true }`, ou **502** `{ "success": false }` si
+    le premier message privé n'a pas pu partir (propriétaire injoignable) : un
+    nouvel essai est alors sans risque de doublon. Dès que le premier morceau
+    est parti, la réponse est **200** même si un morceau suivant échoue (le bot
+    le consigne) : un nouvel essai renverrait les morceaux déjà livrés.
+
 - `POST /internal/notify/dm`
   - Body: `{ "message": "...", "recipients": [{ "discordId": "123...", "handle":
     "pseudo", "label": "Pseudo du site" }], "context": "match-reminder" }`

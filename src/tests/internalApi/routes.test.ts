@@ -1470,3 +1470,27 @@ test("shouldReportInternalError_otherCodeSameStatus_returnsTrue", () => {
 
   assert.equal(shouldReportInternalError("[internalApi] INTERNAL_ERROR (DiscordAPIError, code 50013, statut 500)", 1_001), true);
 });
+
+test("POST /internal/sancturai/notify : DM au propriétaire, jeton exigé, corps validé", async () => {
+  const body = { kind: "log", text: "boot @everyone" };
+  assert.equal((await call("/internal/sancturai/notify", { body, token: null })).status, 401);
+  assert.equal((await call("/internal/sancturai/notify", { body, token: "faux" })).status, 401);
+  assert.equal((await call("/internal/sancturai/notify", { body: { kind: "evil", text: "x" } })).status, 400);
+  assert.equal((await call("/internal/sancturai/notify", { body: { kind: "agent_message", text: "x", short_id: "nope" } })).status, 400);
+  assert.deepEqual(state.dms, []);
+
+  const ok = await call("/internal/sancturai/notify", { body });
+  assert.equal(ok.status, 200);
+  assert.deepEqual(state.dms, [`${OWNER}: [SancturAI] journal :\n> boot \\@everyone`]);
+
+  state.closedDms.add(OWNER);
+  assert.equal((await call("/internal/sancturai/notify", { body })).status, 502);
+});
+
+test("POST /internal/sancturai/notify refuse sans INTERNAL_API_TOKEN, même en boucle locale", async () => {
+  delete process.env.INTERNAL_API_TOKEN;
+  const res = await call("/internal/sancturai/notify", { body: { kind: "log", text: "x" }, token: null });
+  assert.equal(res.status, 503);
+  assert.equal(res.body.error, "INTERNAL_API_TOKEN_NOT_CONFIGURED");
+  assert.deepEqual(state.dms, []);
+});
