@@ -1,4 +1,4 @@
-﻿import {ApplicationCommandOptionType} from "discord.js";
+﻿import {ApplicationCommandOptionType, ApplicationIntegrationType, InteractionContextType} from "discord.js";
 
 import {ban_id} from "../commandsHandlers/ban/ban_id.js";
 import {ban_username} from "../commandsHandlers/ban/ban_username.js";
@@ -400,18 +400,6 @@ const commands = {
             description: "Remove the referee role of this server (SERVER ADMIN ONLY)",
         }
     },
-    "sancturai-reply": {
-        handler: sancturaiReply,
-        parameters: {
-            description: "Répond à un agent SancturAI (OWNER)",
-            // Masquée à tous sauf aux administrateurs du serveur ; le handler n'accepte de toute façon que OWNER_ID.
-            default_member_permissions: "0",
-            options: [
-                { name: "id", description: "Identifiant du fil (ex. ab12cd)", type: ApplicationCommandOptionType.String, required: true, max_length: 7 },
-                { name: "texte", description: "Ta réponse", type: ApplicationCommandOptionType.String, required: true, max_length: 4000 }
-            ]
-        }
-    },
     "ping": {
         handler: ping,
         parameters: {
@@ -528,4 +516,28 @@ const commands = {
     }
 }
 
-export {commands};
+/**
+ * Registre des commandes slash **globales**, enregistrées une seule fois au
+ * démarrage par `updateGlobalCommands()` (et non par serveur). Un `PUT` global
+ * remplace tout l'ensemble : toute commande globale doit figurer ici.
+ * `interactionCreate` (`main.ts`) y cherche aussi le handler d'une commande reçue.
+ */
+const globalCommands = {
+    "sancturai-reply": {
+        handler: sancturaiReply,
+        parameters: {
+            description: "Répond à un agent SancturAI (OWNER)",
+            // Les notifications SancturAI arrivent en MP : la commande n'existe que là, et seulement pour
+            // les comptes qui ont installé l'app sur leur profil (installation utilisateur : le propriétaire).
+            // En MP, `default_member_permissions` ne masque rien : le handler n'accepte que OWNER_ID.
+            contexts: [InteractionContextType.BotDM],
+            integration_types: [ApplicationIntegrationType.UserInstall],
+            options: [
+                { name: "id", description: "Identifiant du fil (ex. ab12cd)", type: ApplicationCommandOptionType.String, required: true, max_length: 7 },
+                { name: "texte", description: "Ta réponse", type: ApplicationCommandOptionType.String, required: true, max_length: 4000 }
+            ]
+        }
+    },
+};
+
+export {commands, globalCommands};

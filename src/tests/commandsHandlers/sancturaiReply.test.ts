@@ -69,3 +69,17 @@ test("/sancturai-reply répond même quand SancturAI est injoignable ou refuse",
     assert.match(calls[1].content ?? "", /invalides/);
   });
 });
+
+test("/sancturai-reply en MP : refuse un autre que le propriétaire, accepte le propriétaire sans serveur ni membre", async () => {
+  await withEnv(async () => {
+    globalThis.fetch = (async () => new Response("{}", { status: 200 })) as unknown as typeof fetch;
+    const dm = (userId: string, calls: Call[]) => Object.assign(fakeInteraction(userId, "ab12", "ok", calls), { guildId: null, guild: null, member: null });
+    const refused: Call[] = [];
+    await sancturaiReply(client, dm("7", refused));
+    assert.deepEqual(refused.map((c) => c.kind), ["reply"]);
+    assert.match(refused[0].content ?? "", /propriétaire/);
+    const accepted: Call[] = [];
+    await sancturaiReply(client, dm("42", accepted));
+    assert.deepEqual(accepted.map((c) => c.kind), ["defer", "edit"]);
+  });
+});

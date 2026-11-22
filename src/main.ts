@@ -12,7 +12,7 @@ import { deleteDPMsgs } from "./bdd/deleteDPMsgs.js";
 import { checkBan, settleBanNotices, stopBanNotices } from "./check/checkBan.js";
 import { _resetChannel } from "./commandsHandlers/services/resetChannel.js";
 import { buildClientOptions } from "./config/clientOptions.js";
-import { commands } from "./config/commands.js";
+import { commands, globalCommands } from "./config/commands.js";
 import { fillBlueCommands } from "./config/fillBlueCommands.js";
 import { checkIntervalleAdhesion } from "./adhesion/checkIntervalleAdhesion.js";
 import { buildServiceMessage } from "./messages/buildServiceMessage.js";
@@ -22,6 +22,7 @@ import { installProcessGuards, reportError } from "./safe/processGuards.js";
 import { safeReact } from "./safe/safeReact.js";
 import { safeReply } from "./safe/safeReply.js";
 import { updateCommands } from "./utils/updateCommands.js";
+import { updateGlobalCommands } from "./utils/updateGlobalCommands.js";
 import { startInternalApi } from "./internalApi.js";
 import { purgeFeedIdentifiers } from "./feed/feedBus.js";
 import { eraseLeftGuild, runDataRetention } from "./privacy/dataRetention.js";
@@ -81,7 +82,7 @@ client.on("interactionCreate", async (interaction) => {
       return;
     }
 
-    let command = commands[commandName];
+    let command = commands[commandName] ?? globalCommands[commandName];
     if (!command) {
       command = (await fillBlueCommands(client))[commandName];
       if (!command) {
@@ -203,6 +204,10 @@ client.on("clientReady", async () => {
     // l'enregistrement des commandes ni la pose des tâches cron, et leur
     // échec ne peut pas le priver de passer.
     void runDataRetention(client);
+
+    // Commandes globales (MP du bot, dont `/sancturai-reply`) : une seule fois,
+    // au démarrage. Ne lève pas, comme `updateCommands`.
+    await updateGlobalCommands(client);
 
     // `updateCommands` ne lève pas : un serveur en échec ne bloque ni les
     // suivants ni la pose des tâches cron plus bas.
