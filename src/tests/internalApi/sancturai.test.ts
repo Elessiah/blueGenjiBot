@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { Client } from "discord.js";
-import { chunkDiscord, formatNotify, parseNotify, parseReplyArgs, postReply, sendOwnerDm, tokenAllows } from "../../internalApi/sancturai.js";
+import { chunkDiscord, formatNotify, parseNotify, parseReplyArgs, postReply, sendOwnerDm } from "../../internalApi/sancturai.js";
 
 test("parseNotify valide et rejette", () => {
   assert.deepEqual(parseNotify({ kind: "log", text: "hello" }), { kind: "log", text: "hello" });
@@ -54,17 +54,6 @@ test("sendOwnerDm refuse sans OWNER_ID", async () => {
   } finally {
     process.env.OWNER_ID = previous;
   }
-});
-
-test("tokenAllows échoue fermé : jeton absent, vide ou différent refusés", () => {
-  assert.equal(tokenAllows("secret", "secret"), true);
-  assert.equal(tokenAllows("secret", "secreT"), false);
-  assert.equal(tokenAllows("secret", "secret-plus-long"), false);
-  assert.equal(tokenAllows("secret", undefined), false);
-  assert.equal(tokenAllows("secret", ""), false);
-  assert.equal(tokenAllows(undefined, undefined), false);
-  assert.equal(tokenAllows(undefined, "x"), false);
-  assert.equal(tokenAllows("", ""), false);
 });
 
 test("parseReplyArgs accepte #ab12 et ab12", () => {

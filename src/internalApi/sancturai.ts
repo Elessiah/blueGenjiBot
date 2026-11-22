@@ -7,7 +7,6 @@
  * partent sans aucune mention résolue.
  */
 
-import { timingSafeEqual } from "node:crypto";
 import type { Client, User } from "discord.js";
 
 export type SancturaiNotify = {
@@ -37,19 +36,6 @@ export function parseNotify(body: unknown): SancturaiNotify | null {
     out.agent = { handle: agent.handle, agent_id: agent.agent_id };
   }
   return out;
-}
-
-/**
- * Compare un jeton reçu au jeton attendu, en échouant fermé : un jeton attendu
- * absent ou vide refuse tout (contrairement au middleware `authorize` historique).
- * @param expected Jeton configuré côté bot.
- * @param provided Valeur de l'en-tête `x-internal-token`.
- */
-export function tokenAllows(expected: string | undefined, provided: string | undefined): boolean {
-  if (!expected || !provided) return false;
-  const a = Buffer.from(expected);
-  const b = Buffer.from(provided);
-  return a.length === b.length && timingSafeEqual(a, b);
 }
 
 // CR, U+2028, U+2029, NEL (U+0085) : séparateurs de ligne que Discord peut rendre comme un saut.

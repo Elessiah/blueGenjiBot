@@ -43,7 +43,7 @@ import { loginCodeMessage, parseCodePurpose, parseDmLocale } from "./notificatio
 import { deliverDirectMessages, alertLeadership, alertReferees, HomeGuildUnavailableError } from "./notifications/deliver.js";
 import { HandleResolutionTimeoutError, resolveDiscordHandle } from "./notifications/resolveHandle.js";
 import { MESSAGE_RETENTION_DAYS } from "./privacy/retentionPeriods.js";
-import { formatNotify, parseNotify, sendOwnerDm, tokenAllows } from "./internalApi/sancturai.js";
+import { formatNotify, parseNotify, sendOwnerDm } from "./internalApi/sancturai.js";
 import { registerVoiceRoutes } from "./voice/voiceRoutes.js";
 import {
   announceLive,
@@ -548,7 +548,7 @@ export function startInternalApi(client: Client) {
       res.status(503).json({ error: "INTERNAL_API_TOKEN_NOT_CONFIGURED" });
       return;
     }
-    if (!tokenAllows(expected, req.header("x-internal-token"))) {
+    if (!matchesToken(req.header("x-internal-token"), expected)) {
       res.status(401).json({ error: "UNAUTHORIZED" });
       return;
     }
