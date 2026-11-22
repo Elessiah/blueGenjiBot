@@ -51,6 +51,17 @@ test("parseNotify borne le texte et refuse un en-tête trop long ou invisible", 
   assert.deepEqual(parseNotify({ kind: "log", text: "x", agent: null }), { kind: "log", text: "x" });
 });
 
+test("les bornes comptent les points de code, comme SancturAI (Python len)", () => {
+  const emoji = String.fromCodePoint(0x1F600);  // 2 unités UTF-16, 1 point de code
+  const agent = { handle: "bob", agent_id: "Xyz" };
+  assert.ok(parseNotify({ kind: "agent_message", text: emoji.repeat(4000), short_id: "ab12", agent }));
+  assert.equal(parseNotify({ kind: "agent_message", text: emoji.repeat(4001), short_id: "ab12", agent }), null);
+  assert.equal(parseNotify({ kind: "log", text: "x".repeat(8001) }), null);
+  assert.ok(parseNotify({ kind: "agent_message", text: "x", short_id: "ab12", agent: { handle: emoji.repeat(64), agent_id: "Xyz" } }));
+  assert.deepEqual(parseReplyArgs("ab12", emoji.repeat(4000)), { shortId: "ab12", text: emoji.repeat(4000) });
+  assert.equal(parseReplyArgs("ab12", emoji.repeat(4001)), null);
+});
+
 test("sendOwnerDm désactive toutes les mentions", async () => {
   process.env.OWNER_ID = "42";
   const sent: unknown[] = [];

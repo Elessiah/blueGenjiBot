@@ -28,9 +28,18 @@ const MAX_HEADER_FIELD = 64;
 // Contrôles, formats (bidi, largeur nulle) et séparateurs de ligne : rien de tout cela dans l'en-tête du bot.
 const UNSAFE_HEADER_CHAR = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
 
+/**
+ * Longueur en points de code, comme `len()` côté SancturAI (Python) : `.length` compte les unités UTF-16,
+ * si bien qu'un message légitime de 4 000 émojis (8 000 unités) serait refusé. Coût borné : au-delà de
+ * deux unités par point de code, la limite est forcément dépassée.
+ */
+function withinCodePoints(text: string, max: number): boolean {
+  return text.length <= max || (text.length <= 2 * max && [...text].length <= max);
+}
+
 /** Pseudo ou identifiant d'agent affiché dans l'en-tête : court, sans caractère invisible ni saut de ligne. */
 function isHeaderField(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0 && value.length <= MAX_HEADER_FIELD && !UNSAFE_HEADER_CHAR.test(value);
+  return typeof value === "string" && value.length > 0 && withinCodePoints(value, MAX_HEADER_FIELD) && !UNSAFE_HEADER_CHAR.test(value);
 }
 
 /**
@@ -42,7 +51,7 @@ export function parseNotify(body: unknown): SancturaiNotify | null {
   if (typeof body !== "object" || body === null) return null;
   const b = body as Record<string, unknown>;
   if ((b.kind !== "log" && b.kind !== "agent_message") || typeof b.text !== "string" || !b.text.trim()) return null;
-  if (b.text.length > MAX_TEXT) return null;
+  if (!withinCodePoints(b.text, MAX_TEXT)) return null;
   const out: SancturaiNotify = { kind: b.kind, text: b.text };
   if (typeof b.short_id === "string" && SHORT_ID.test(b.short_id)) out.short_id = b.short_id;
   if (b.agent !== undefined && b.agent !== null) {
@@ -102,7 +111,7 @@ export function formatNotify(n: SancturaiNotify): string {
 export function parseReplyArgs(id: string, text: string): { shortId: string; text: string } | null {
   const shortId = id.trim().replace(/^#/, "").toLowerCase();
   const body = text.trim();
-  if (!SHORT_ID.test(shortId) || !body || body.length > 4000) return null;
+  if (!SHORT_ID.test(shortId) || !body || !withinCodePoints(body, MAX_TEXT)) return null;
   return { shortId, text: body };
 }
 
