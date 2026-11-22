@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import type { Client } from "discord.js";
+import { MessageFlags, type Client } from "discord.js";
 import { splitForDiscord } from "../../utils/splitForDiscord.js";
 import { formatNotify, quoteBlock, parseNotify, parseReplyArgs, postReply, sendOwnerDm } from "../../internalApi/sancturai.js";
 
@@ -38,12 +38,26 @@ test("le texte d'agent ne peut ni mentionner, ni formater, ni imiter l'en-tête"
   for (const c of chunks) for (const l of c.split("\n")) assert.ok(l.startsWith("> ") || l === "[SancturAI] journal :", l);
 });
 
+test("parseNotify borne le texte et refuse un en-tête trop long ou invisible", () => {
+  const agent = { handle: "bob", agent_id: "Xyz" };
+  assert.ok(parseNotify({ kind: "agent_message", text: "x".repeat(4000), short_id: "ab12", agent }));
+  assert.equal(parseNotify({ kind: "log", text: "x".repeat(4001) }), null);
+  // un pseudo de plus de 2 000 caractères ferait sortir sa fin de la citation, en tête d'un DM
+  assert.equal(parseNotify({ kind: "agent_message", text: "x", short_id: "ab12", agent: { handle: "x".repeat(65), agent_id: "Xyz" } }), null);
+  for (const bad of [0x202e, 0x200b, 0x0b, 0x2028].map((c) => `bob${String.fromCharCode(c)}admin`).concat([""])) {
+    assert.equal(parseNotify({ kind: "agent_message", text: "x", short_id: "ab12", agent: { handle: bad, agent_id: "Xyz" } }), null, JSON.stringify(bad));
+  }
+  assert.equal(parseNotify({ kind: "agent_message", text: "x", short_id: "ab12", agent: "bob" }), null);
+  assert.deepEqual(parseNotify({ kind: "log", text: "x", agent: null }), { kind: "log", text: "x" });
+});
+
 test("sendOwnerDm désactive toutes les mentions", async () => {
   process.env.OWNER_ID = "42";
   const sent: unknown[] = [];
   const fakeClient = { users: { fetch: async () => ({ send: async (m: unknown) => { sent.push(m); } }) } };
   assert.equal(await sendOwnerDm(fakeClient as unknown as Client, "[SancturAI] journal :\n> @everyone"), true);
-  assert.deepEqual(sent, [{ content: "[SancturAI] journal :\n> @everyone", allowedMentions: { parse: [] } }]);
+  // et aucun aperçu de lien : un embed d'URL d'agent s'afficherait hors citation
+  assert.deepEqual(sent, [{ content: "[SancturAI] journal :\n> @everyone", allowedMentions: { parse: [] }, flags: MessageFlags.SuppressEmbeds }]);
 });
 
 test("quoteBlock ne coupe pas une paire de substitution (émoji) en deux", () => {

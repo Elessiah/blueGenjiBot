@@ -7,7 +7,7 @@
  * partent sans aucune mention résolue.
  */
 
-import type { Client, User } from "discord.js";
+import { MessageFlags, type Client, type User } from "discord.js";
 import { sliceWithoutSplittingPair } from "../utils/cutText.js";
 import { splitForDiscord } from "../utils/splitForDiscord.js";
 
@@ -21,6 +21,17 @@ export type SancturaiNotify = {
 const MAX_DISCORD = 2000;
 const SHORT_ID = /^[0-9a-f]{4}$/;
 const QUOTED_LINE_MAX = 1900; // + "> " : une ligne citée tient toujours dans un DM
+// Bornes du contrat SancturAI (outbox : 1 800 pour un journal, 4 000 pour un message d'agent ; agent_id VARCHAR(64), pseudo ≤ 32).
+// Un corps plus gros ferait des dizaines de DM ; un en-tête plus long que 2 000 serait coupé hors citation.
+const MAX_TEXT = 4000;
+const MAX_HEADER_FIELD = 64;
+// Contrôles, formats (bidi, largeur nulle) et séparateurs de ligne : rien de tout cela dans l'en-tête du bot.
+const UNSAFE_HEADER_CHAR = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u;
+
+/** Pseudo ou identifiant d'agent affiché dans l'en-tête : court, sans caractère invisible ni saut de ligne. */
+function isHeaderField(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= MAX_HEADER_FIELD && !UNSAFE_HEADER_CHAR.test(value);
+}
 
 /**
  * Valide le corps envoyé par le relais.
@@ -31,10 +42,12 @@ export function parseNotify(body: unknown): SancturaiNotify | null {
   if (typeof body !== "object" || body === null) return null;
   const b = body as Record<string, unknown>;
   if ((b.kind !== "log" && b.kind !== "agent_message") || typeof b.text !== "string" || !b.text.trim()) return null;
+  if (b.text.length > MAX_TEXT) return null;
   const out: SancturaiNotify = { kind: b.kind, text: b.text };
   if (typeof b.short_id === "string" && SHORT_ID.test(b.short_id)) out.short_id = b.short_id;
-  const agent = b.agent as Record<string, unknown> | undefined;
-  if (agent && typeof agent.handle === "string" && typeof agent.agent_id === "string") {
+  if (b.agent !== undefined && b.agent !== null) {
+    const agent = b.agent as Record<string, unknown>;
+    if (typeof agent !== "object" || !isHeaderField(agent.handle) || !isHeaderField(agent.agent_id)) return null;
     out.agent = { handle: agent.handle, agent_id: agent.agent_id };
   }
   return out;
@@ -119,12 +132,13 @@ export async function sendOwnerDm(client: Client, text: string): Promise<boolean
   }
   try {
     const owner: User = await client.users.fetch(ownerId);
-    // aucune mention résolue (ni @everyone, ni rôle, ni utilisateur), même si l'échappement était contourné
+    // aucune mention résolue (ni @everyone, ni rôle, ni utilisateur), même si l'échappement était contourné ;
+    // aucun aperçu de lien : l'embed d'une URL de l'agent s'afficherait hors citation, sous la forme qu'il choisit.
     // Les lignes citées font ≤ 1902 caractères : splitForDiscord ne coupe donc jamais une ligne (le "> " resterait en tête).
     let sent = 0;
     try {
       for (const part of splitForDiscord(text, MAX_DISCORD)) {
-        await owner.send({ content: part, allowedMentions: { parse: [] } });
+        await owner.send({ content: part, allowedMentions: { parse: [] }, flags: MessageFlags.SuppressEmbeds });
         sent += 1;
       }
     } catch (err) {
