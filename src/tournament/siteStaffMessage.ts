@@ -76,8 +76,13 @@ export type DeliveryCounts = {
   skipped: number;
   pushed: number;
   botUnreachable: boolean;
-  /** Bilan incomplet : l'envoi continue sur le site, ou un lot est resté sans réponse — ne pas relancer. */
+  /** L'envoi continue sur le site (réponse rendue avant sa fin, nombres à zéro) — ne pas relancer. */
   pending: boolean;
+  /**
+   * Messages privés d'un lot resté sans bilan du bot (peut-être remis) — ne pas
+   * relancer. `0` quand le site ne le dit pas.
+   */
+  unconfirmed: number;
 };
 
 export type StaffMessagePreview = { tournament: { id: number; name: string }; recipients: RecipientCounts };
@@ -146,7 +151,8 @@ export function parseSent(body: unknown): StaffMessageSent | null {
   if (!counts) { return null; }
   const botUnreachable = (raw as Record<string, unknown>).botUnreachable === true;
   const pending = (raw as Record<string, unknown>).pending === true;
-  return { ...preview, delivery: { ...counts, botUnreachable, pending } };
+  const unconfirmed = count((raw as Record<string, unknown>).unconfirmed) ?? 0;
+  return { ...preview, delivery: { ...counts, botUnreachable, pending, unconfirmed } };
 }
 
 /** Codes d'une connexion qui n'a pas abouti : la requête n'a jamais atteint le site. */

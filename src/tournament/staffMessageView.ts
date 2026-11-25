@@ -92,7 +92,8 @@ const TEXT = {
     botUnreachable: "⚠️ Le site n'a pas pu confirmer les messages privés : le bot ne lui a pas répondu.",
     sendingOn: (name: string) =>
       `⏳ Le message part aux participants de ${name} : l'envoi continue sur le site. Ne le relance pas ; le bilan sera noté au journal du staff.`,
-    pending: "⏳ L'envoi continue sur le site : le bilan ci-dessus n'est pas complet. Ne le relance pas ; le bilan final sera noté au journal du staff.",
+    unconfirmed: (n: number) =>
+      `⚠️ ${n} message(s) privé(s) sans bilan du bot : peut-être remis. Ne le relance pas ; vérifie le journal du staff.`,
     cancelled: "Envoi annulé : rien n'est parti.",
     expired: "Aperçu expiré : rien n'est parti. Relance la commande pour écrire aux participants.",
     notAuthor: "Seul l'auteur de la commande peut utiliser ce panneau.",
@@ -114,7 +115,8 @@ const TEXT = {
     botUnreachable: "⚠️ The site could not confirm the direct messages: the bot did not answer it.",
     sendingOn: (name: string) =>
       `⏳ The message is going out to the participants of ${name}: sending is still going on on the site. Do not run it again; the summary will be noted in the staff log.`,
-    pending: "⏳ Sending is still going on on the site: the summary above is not complete. Do not run it again; the final summary will be noted in the staff log.",
+    unconfirmed: (n: number) =>
+      `⚠️ ${n} direct message(s) without the bot's report: maybe delivered. Do not run it again; check the staff log.`,
     cancelled: "Sending cancelled: nothing was sent.",
     expired: "Preview expired: nothing was sent. Run the command again to write to the participants.",
     notAuthor: "Only the author of the command can use this panel.",
@@ -315,9 +317,9 @@ export function sentText(result: StaffMessageSent, lang: Lang): string {
   const name = escapeDiscord(cutText(result.tournament.name, 120));
   const d = result.delivery;
   // Le site a répondu avant la fin de l'envoi : aucun nombre n'est encore connu.
-  if (d.pending && d.sent + d.failed + d.pushed === 0) { return TEXT[lang].sendingOn(name); }
-  const lines = [TEXT[lang].sent(name, result.delivery)];
-  if (result.delivery.botUnreachable) { lines.push(TEXT[lang].botUnreachable); }
-  if (result.delivery.pending) { lines.push(TEXT[lang].pending); }
+  if (d.pending) { return TEXT[lang].sendingOn(name); }
+  const lines = [TEXT[lang].sent(name, d)];
+  if (d.botUnreachable) { lines.push(TEXT[lang].botUnreachable); }
+  if (d.unconfirmed > 0) { lines.push(TEXT[lang].unconfirmed(d.unconfirmed)); }
   return lines.join("\n");
 }

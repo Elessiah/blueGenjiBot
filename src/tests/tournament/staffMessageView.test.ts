@@ -109,13 +109,13 @@ test("refusalText_timeoutWhileSending_saysItMayStillBeSending", () => {
 });
 
 test("sentText_delivery_reportsCountsOnly", () => {
-  const actual = sentText({ ...preview(), delivery: { sent: 2, failed: 1, skipped: 1, pushed: 4, botUnreachable: false, pending: false } }, "fr");
+  const actual = sentText({ ...preview(), delivery: { sent: 2, failed: 1, skipped: 1, pushed: 4, botUnreachable: false, pending: false, unconfirmed: 0 } }, "fr");
 
   assert.equal(actual, "✅ Message envoyé aux participants de Coupe : 2 message(s) privé(s) remis, 1 non remis, 1 sans message privé (messages coupés ou sans Discord), 4 notification(s) push.");
 });
 
 test("sentText_botUnreachable_addsWarning", () => {
-  const actual = sentText({ ...preview(), delivery: { sent: 0, failed: 2, skipped: 1, pushed: 0, botUnreachable: true, pending: false } }, "en");
+  const actual = sentText({ ...preview(), delivery: { sent: 0, failed: 2, skipped: 1, pushed: 0, botUnreachable: true, pending: false, unconfirmed: 0 } }, "en");
 
   assert.match(actual, /\n⚠️ The site could not confirm the direct messages/);
 });
@@ -169,14 +169,26 @@ test("isTransientRefusal_forbidden_returnsFalse", () => {
 });
 
 test("sentText_pendingWithoutCounts_saysSendingGoesOn", () => {
-  const actual = sentText({ ...preview(), delivery: { sent: 0, failed: 0, skipped: 1, pushed: 0, botUnreachable: false, pending: true } }, "fr");
+  const actual = sentText({ ...preview(), delivery: { sent: 0, failed: 0, skipped: 1, pushed: 0, botUnreachable: false, pending: true, unconfirmed: 0 } }, "fr");
 
   assert.match(actual, /^⏳ Le message part aux participants de Coupe : l'envoi continue sur le site\. Ne le relance pas/);
 });
 
-test("sentText_pendingWithCounts_addsIncompleteWarning", () => {
-  const actual = sentText({ ...preview(), delivery: { sent: 1, failed: 1, skipped: 1, pushed: 0, botUnreachable: false, pending: true } }, "en");
+test("sentText_unconfirmed_addsMaybeDeliveredWarning", () => {
+  const actual = sentText({ ...preview(), delivery: { sent: 1, failed: 1, skipped: 1, pushed: 0, botUnreachable: false, pending: false, unconfirmed: 25 } }, "en");
 
   assert.match(actual, /^✅ Message sent/);
-  assert.match(actual, /\n⏳ Sending is still going on on the site/);
+  assert.match(actual, /\n⚠️ 25 direct message\(s\) without the bot's report: maybe delivered\. Do not run it again/);
+});
+
+test("sentText_unconfirmedFrench_addsMaybeDeliveredWarning", () => {
+  const actual = sentText({ ...preview(), delivery: { sent: 0, failed: 0, skipped: 1, pushed: 2, botUnreachable: false, pending: false, unconfirmed: 3 } }, "fr");
+
+  assert.match(actual, /\n⚠️ 3 message\(s\) privé\(s\) sans bilan du bot : peut-être remis\. Ne le relance pas/);
+});
+
+test("sentText_noUnconfirmed_addsNoWarning", () => {
+  const actual = sentText({ ...preview(), delivery: { sent: 2, failed: 0, skipped: 1, pushed: 0, botUnreachable: false, pending: false, unconfirmed: 0 } }, "fr");
+
+  assert.doesNotMatch(actual, /sans bilan du bot/);
 });

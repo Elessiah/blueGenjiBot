@@ -96,7 +96,7 @@ test("previewStaffMessage_malformedCounts_returnsBadResponse", async () => {
 });
 
 test("sendStaffMessage_ok_returnsDelivery", async () => {
-  const body = { ...previewBody, mode: "send", delivery: { sent: 2, failed: 0, skipped: 1, pushed: 4, botUnreachable: false, pending: false } };
+  const body = { ...previewBody, mode: "send", delivery: { sent: 2, failed: 0, skipped: 1, pushed: 4, botUnreachable: false, pending: false, unconfirmed: 0 } };
 
   const actual = await sendStaffMessage(config, call, respond(200, body));
 
@@ -159,6 +159,24 @@ test("sendStaffMessage_gatewayErrorPage_returnsOutcomeUnknown", async () => {
   const actual = await sendStaffMessage(config, call, respond(502, "<html>Bad gateway</html>"));
 
   assert.deepEqual(actual, { ok: false, code: "SITE_OUTCOME_UNKNOWN" });
+});
+
+test("parseSent_unconfirmedDelivery_readsUnconfirmed", () => {
+  const actual = parseSent({ ...sendBody, delivery: { ...sendBody.delivery, unconfirmed: 3 } });
+
+  assert.equal(actual?.delivery.unconfirmed, 3);
+});
+
+test("parseSent_noUnconfirmed_defaultsToZero", () => {
+  const actual = parseSent(sendBody);
+
+  assert.equal(actual?.delivery.unconfirmed, 0);
+});
+
+test("parseSent_negativeUnconfirmed_defaultsToZero", () => {
+  const actual = parseSent({ ...sendBody, delivery: { ...sendBody.delivery, unconfirmed: -1 } });
+
+  assert.equal(actual?.delivery.unconfirmed, 0);
 });
 
 test("parseSent_pendingDelivery_readsPending", () => {

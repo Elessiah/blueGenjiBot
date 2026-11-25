@@ -10,7 +10,7 @@ import type { SiteResult, StaffMessageCall, StaffMessagePreview, StaffMessageSen
 type Edit = { content: string; components?: unknown[] };
 
 const preview: StaffMessagePreview = { tournament: { id: 12, name: "Coupe" }, recipients: { total: 3, reachable: 2, withoutDiscord: 1, optedOut: 0 } };
-const sent: StaffMessageSent = { ...preview, delivery: { sent: 2, failed: 0, skipped: 1, pushed: 3, botUnreachable: false, pending: false } };
+const sent: StaffMessageSent = { ...preview, delivery: { sent: 2, failed: 0, skipped: 1, pushed: 3, botUnreachable: false, pending: false, unconfirmed: 0 } };
 
 class FakeCollector extends EventEmitter {
   stopped: string | null = null;
