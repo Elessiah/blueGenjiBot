@@ -11,6 +11,14 @@ import {adhesionValide} from "../commandsHandlers/adhesions/adhesionValide.js";
 import { adhesionPerimee } from "../commandsHandlers/adhesions/adhesionPerimee.js";
 import {setTournamentLink} from "../commandsHandlers/admin/setTournamentLink.js";
 import {MAX_TOURNAMENT_LINK_LENGTH, TOURNAMENT_LINK_KINDS, TOURNAMENT_LINK_LABELS} from "../tournament/tournamentLinks.js";
+import {messageTournoi} from "../commandsHandlers/messageTournoi.js";
+import {STAFF_MESSAGE_MAX_LENGTH} from "../tournament/siteStaffMessage.js";
+
+/** Langues anglaises de Discord : le nom et les descriptions anglais de `/message-tournoi`. */
+const EN_LOCALES = ["en-US", "en-GB"] as const;
+function inEnglish(text: string): Record<string, string> {
+    return Object.fromEntries(EN_LOCALES.map((locale) => [locale, text]));
+}
 
 /**
  * Construit la liste des commandes slash Blue et les enregistre côté client Discord.
@@ -204,6 +212,35 @@ async function fillBlueCommands(client: Client) {
                         type: ApplicationCommandOptionType.String,
                         required: false,
                         max_length: MAX_TOURNAMENT_LINK_LENGTH,
+                    }
+                ]
+            }
+        },
+        "message-tournoi": {
+            handler: messageTournoi,
+            parameters: {
+                // Le site vérifie lui-même le droit (permission `tournaments` du compte rattaché) :
+                // aucune permission Discord ne filtre la commande.
+                description: "Écrit aux participants d'un tournoi du site, après aperçu (STAFF DES TOURNOIS)",
+                name_localizations: inEnglish("tournament-message"),
+                description_localizations: inEnglish("Write to the participants of a site tournament, after a preview (TOURNAMENT STAFF)"),
+                options: [
+                    {
+                        name: "tournoi",
+                        name_localizations: inEnglish("tournament"),
+                        description: "Numéro du tournoi, ou lien de sa fiche sur le site",
+                        description_localizations: inEnglish("Tournament number, or link to its page on the site"),
+                        type: ApplicationCommandOptionType.String,
+                        required: true,
+                        max_length: 500,
+                    },
+                    {
+                        name: "message",
+                        description: "Texte envoyé en message privé et en notification push",
+                        description_localizations: inEnglish("Text sent by direct message and push notification"),
+                        type: ApplicationCommandOptionType.String,
+                        required: true,
+                        max_length: STAFF_MESSAGE_MAX_LENGTH,
                     }
                 ]
             }

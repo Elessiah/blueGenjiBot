@@ -12,6 +12,10 @@ Si `INTERNAL_API_TOKEN` est défini, chaque requête doit envoyer l'en-tête:
 
 - `x-internal-token: <INTERNAL_API_TOKEN>`
 
+## Appel du bot vers le site (seule exception)
+
+Le sens est toujours site → bot, **sauf** `/message-tournoi` (décision du 2026-11-25) : le droit d'écrire aux participants d'un tournoi est celui du **site** (permission `tournaments` du compte rattaché à l'identifiant Discord de l'auteur), et seul le site connaît les engagés, leurs rôles, leur langue et leurs réglages. Le bot appelle donc `POST <SITE_INTERNAL_URL>/api/internal/tournament-message` avec l'en-tête `x-internal-token: <SITE_INTERNAL_TOKEN>` (jeton propre à ce sens, distinct d'`INTERNAL_API_TOKEN`) et le corps `{ mode: "preview" | "send", discordId, tournamentId, categories, message }`. `SITE_INTERNAL_URL` doit être du http en boucle locale (`http://127.0.0.1:3000` en production) : le jeton ne quitte jamais la machine ; aucune redirection n'est suivie. Le site rend des **nombres** seulement (`recipients`, `delivery`) ou `{ error: <CODE> }` ; il envoie lui-même les messages privés par `POST /internal/notify/dm`, comme toute notification. Site injoignable : le bot le dit à l'auteur (message éphémère), sans planter. Sans `SITE_INTERNAL_URL` ni `SITE_INTERNAL_TOKEN`, la commande répond qu'elle n'est pas configurée.
+
 ## Endpoints
 
 - `GET /internal/stats`

@@ -10,6 +10,7 @@
 import { MessageFlags, type Client, type User } from "discord.js";
 import { sliceWithoutSplittingPair } from "../utils/cutText.js";
 import { splitForDiscord } from "../utils/splitForDiscord.js";
+import { isLoopbackHttp } from "../utils/loopbackUrl.js";
 
 export type SancturaiNotify = {
   kind: "log" | "agent_message";
@@ -117,17 +118,6 @@ export function parseReplyArgs(id: string, text: string): { shortId: string; tex
   return { shortId, text: body };
 }
 
-const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
-
-/** `SANCTURAI_INTERNAL_URL` doit viser SancturAI en boucle locale (http) : le jeton ne quitte jamais la machine. */
-function isLoopbackHttp(baseUrl: string): boolean {
-  try {
-    const url = new URL(baseUrl);
-    return url.protocol === "http:" && LOOPBACK_HOSTS.has(url.hostname) && !url.username && !url.password;
-  } catch {
-    return false;
-  }
-}
 
 /**
  * Transmet la réponse de l'administrateur à SancturAI.

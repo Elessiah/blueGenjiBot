@@ -30,5 +30,7 @@ BACKUP_STATUS_HISTORY_PATH=     # historique des statuts (défaut : BACKUP_STATU
 BACKUP_ARCHIVE_DIR=             # /restore-backup : dossier local d'archives .tar.age (facultatif)
 BACKUP_RCLONE_REMOTE=           # /restore-backup : remote:dossier des archives (facultatif)
 BACKUP_AGE_IDENTITY=            # /restore-backup : clé privée age (défaut ~/.bluegenji-backup.key)
+SITE_INTERNAL_URL=              # /message-tournoi : URL du site en boucle locale (http vers 127.0.0.1, localhost ou [::1]), ex. http://127.0.0.1:3000
+SITE_INTERNAL_TOKEN=            # /message-tournoi : jeton x-internal-token envoyé au site, égal à SITE_INTERNAL_TOKEN côté appbluegenji
 VOICE_CATEGORY_ID=              # catégorie des salons vocaux de match (défaut 676735851119640577, serveur BlueGenji)
 ```

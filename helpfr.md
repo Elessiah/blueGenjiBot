@@ -87,6 +87,9 @@ Admin :
 Admins BlueGenji (serveurs BlueGenji uniquement) :
 - `/set-tournoi-lien lien:<lien> [url]` : remplace un lien affiché par `/tournoi` (adresse `https`) ; sans `url`, rétablit le lien par défaut.
 
+Staff des tournois du site (serveurs BlueGenji uniquement, droit vérifié par le site) :
+- `/message-tournoi tournoi:<numéro ou lien> message:<texte>` (en anglais `/tournament-message`) : écrit aux participants d'un tournoi du site (inscriptions ouvertes ou en cours). Le bot répond d'abord par un **aperçu visible de vous seul** : le message tel qu'il partira, le nombre de destinataires (dont ceux sans Discord rattaché, qui n'ont que la notification push, et ceux qui ont coupé ces messages), un menu pour choisir les destinataires — Joueurs, Managers, Capitaines, Owners, Tous (plusieurs choix possibles ; Tous vaut tout le monde) — et les boutons **Envoyer** / **Annuler**. L'aperçu expire au bout de 5 minutes et seul l'auteur de la commande s'en sert. Le message part en message privé (dans la langue du compte de chacun) et en notification push, signé « le staff du tournoi », sans nommer son auteur ; chacun peut couper ces messages dans « Mon profil » sur le site. Votre compte Discord doit être rattaché à un compte du site qui gère les tournois ; au plus 3 envois par heure et par tournoi. Le bot n'enregistre ni le texte ni les destinataires : il les transmet au site, qui envoie.
+
 ## Durées de conservation
 - Suivi des messages relayés (identifiants, date) : 7 jours, effacé au plus tard dans la nuit qui suit. Les copies publiées dans les salons partenaires restent ensuite sur Discord (voir « Effacer un message retransmis »).
 - Scrims et recherches (`/scrim`, `/recrute`) : 30 jours avec leur auteur. Dans la nuit qui suit, ils sont repliés en simples nombres par jour, serveur et niveau (ou rôle) : ni auteur, ni heure, ni ordre ne restent.
