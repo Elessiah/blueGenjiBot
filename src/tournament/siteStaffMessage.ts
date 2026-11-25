@@ -63,7 +63,14 @@ export function siteConfig(env: NodeJS.ProcessEnv = process.env): SiteConfig | n
   const baseUrl = env.SITE_INTERNAL_URL?.trim() ?? "";
   const token = env.SITE_INTERNAL_TOKEN?.trim() ?? "";
   if (!baseUrl || !token || !isLoopbackHttp(baseUrl)) { return null; }
-  return { baseUrl: baseUrl.replace(/\/+$/, ""), token };
+  return { baseUrl: withoutTrailingSlashes(baseUrl), token };
+}
+
+/** L'adresse sans ses barres finales (boucle simple : pas d'expression régulière à retour arrière). */
+function withoutTrailingSlashes(url: string): string {
+  let end = url.length;
+  while (end > 0 && url[end - 1] === "/") { end -= 1; }
+  return url.slice(0, end);
 }
 
 /** Destinataires comptés par le site. */

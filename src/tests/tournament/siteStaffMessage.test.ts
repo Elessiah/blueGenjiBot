@@ -28,6 +28,14 @@ test("siteConfig_loopbackUrlAndToken_returnsConfigWithoutTrailingSlash", () => {
   assert.deepEqual(siteConfig({ SITE_INTERNAL_URL: "http://127.0.0.1:3000/", SITE_INTERNAL_TOKEN: "tok" }), config);
 });
 
+test("siteConfig_urlWithoutTrailingSlash_keepsUrlUnchanged", () => {
+  assert.deepEqual(siteConfig({ SITE_INTERNAL_URL: "http://127.0.0.1:3000", SITE_INTERNAL_TOKEN: "tok" }), config);
+});
+
+test("siteConfig_urlWithSeveralTrailingSlashes_stripsThemAll", () => {
+  assert.deepEqual(siteConfig({ SITE_INTERNAL_URL: "http://127.0.0.1:3000///", SITE_INTERNAL_TOKEN: "tok" }), config);
+});
+
 test("siteConfig_missingToken_returnsNull", () => {
   assert.equal(siteConfig({ SITE_INTERNAL_URL: "http://127.0.0.1:3000" }), null);
 });
