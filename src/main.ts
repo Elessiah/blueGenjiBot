@@ -54,8 +54,24 @@ installProcessGuards(client);
 
 let internalApiServer: ReturnType<typeof startInternalApi> | null = null;
 
-/** Table des commandes Blue, bâtie à la première commande Blue reçue (gestionnaires seulement). */
-let blueCommandTable: Awaited<ReturnType<typeof fillBlueCommands>> | null = null;
+/** Table des commandes Blue (promesse gardée), chauffée au démarrage ou à la première commande Blue. */
+let blueCommandTable: ReturnType<typeof fillBlueCommands> | null = null;
+
+/**
+ * La table des commandes Blue, bâtie **une seule fois** : la promesse est gardée,
+ * si bien que deux premières commandes simultanées partagent la même construction.
+ * Une construction en échec n'est pas gardée (la suivante réessaie).
+ */
+function getBlueCommandTable(client: Client): ReturnType<typeof fillBlueCommands> {
+  if (!blueCommandTable) {
+    const building = fillBlueCommands(client);
+    blueCommandTable = building;
+    building.catch(() => {
+      if (blueCommandTable === building) blueCommandTable = null;
+    });
+  }
+  return blueCommandTable;
+}
 
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isCommand()) return;
@@ -91,8 +107,7 @@ client.on("interactionCreate", async (interaction) => {
       // ne changent pas, et la rebâtir (choix des serveurs partenaires : SQLite
       // et un appel Discord par serveur) avant chaque commande mangeait les 3 s
       // que Discord laisse pour accuser l'interaction.
-      blueCommandTable ??= await fillBlueCommands(client);
-      command = blueCommandTable[commandName];
+      command = (await getBlueCommandTable(client))[commandName];
       if (!command) {
         await safeReply(interaction as ChatInputCommandInteraction, "Command not found");
         return;
@@ -216,6 +231,10 @@ client.on("clientReady", async () => {
     // Commandes globales (MP du bot, dont `/sancturai-reply`) : une seule fois,
     // au démarrage. Ne lève pas, comme `updateCommands`.
     await updateGlobalCommands(client);
+
+    // Table des commandes Blue chauffée au démarrage : la première commande Blue
+    // ne paie pas sa construction dans les 3 s de l'accusé. Un échec est réessayé à la commande.
+    void getBlueCommandTable(client).catch(() => undefined);
 
     // `updateCommands` ne lève pas : un serveur en échec ne bloque ni les
     // suivants ni la pose des tâches cron plus bas.
