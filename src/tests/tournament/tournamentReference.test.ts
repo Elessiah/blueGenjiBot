@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseTournamentReference } from "../../tournament/tournamentReference.js";
+import { linkPointsElsewhere, parseTournamentReference, tournamentReferenceHost } from "../../tournament/tournamentReference.js";
 
 // Désignation d'un tournoi dans /message-tournoi : numéro, ou lien vers sa fiche (le site n'a pas de slug).
 
@@ -62,4 +62,29 @@ test("parseTournamentReference_nonHttpScheme_returnsNull", () => {
 
 test("parseTournamentReference_empty_returnsNull", () => {
   assert.equal(parseTournamentReference("   "), null);
+});
+
+test("tournamentReferenceHost_absoluteLink_returnsLowerCaseHost", () => {
+  assert.equal(tournamentReferenceHost("https://BlueGenji-Esport.fr/tournois/12"), "bluegenji-esport.fr");
+});
+
+test("tournamentReferenceHost_bareNumberOrPath_returnsNull", () => {
+  assert.deepEqual([tournamentReferenceHost("12"), tournamentReferenceHost("/tournois/12")], [null, null]);
+});
+
+test("linkPointsElsewhere_otherHost_returnsTrue", () => {
+  assert.equal(linkPointsElsewhere("https://other-site.example/tournois/12", "https://bluegenji-esport.fr"), true);
+});
+
+test("linkPointsElsewhere_sameHostOrWww_returnsFalse", () => {
+  assert.equal(linkPointsElsewhere("https://bluegenji-esport.fr/en/tournois/12", "https://bluegenji-esport.fr"), false);
+  assert.equal(linkPointsElsewhere("www.bluegenji-esport.fr/tournois/12", "https://bluegenji-esport.fr"), false);
+});
+
+test("linkPointsElsewhere_noLinkBase_returnsFalse", () => {
+  assert.equal(linkPointsElsewhere("https://other-site.example/tournois/12", null), false);
+});
+
+test("linkPointsElsewhere_bareNumber_returnsFalse", () => {
+  assert.equal(linkPointsElsewhere("12", "https://bluegenji-esport.fr"), false);
 });

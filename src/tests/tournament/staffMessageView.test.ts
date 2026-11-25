@@ -229,3 +229,18 @@ test("refusalText_invalidRequestCodes_areExplainedInBothLanguages", () => {
     assert.doesNotMatch(refusalText(code, "en"), new RegExp(code));
   }
 });
+
+test("previewPanel_siteQuotedText_showsItVerbatim", () => {
+  const quoted = "> @​everyone rendez\\-vous";
+
+  const actual = panel({ preview: { ...preview(), quoted }, message: "@everyone rendez-vous" });
+
+  assert.ok(actual.content.split("\n").includes(quoted));
+});
+
+test("previewPanel_noSiteQuotedText_quotesTheMessageItself", () => {
+  const actual = panel({ message: "Salut" });
+
+  assert.ok(actual.content.split("\n").includes("> Salut"));
+});
+

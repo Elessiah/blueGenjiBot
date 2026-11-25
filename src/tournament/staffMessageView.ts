@@ -106,6 +106,8 @@ const TEXT = {
     expired: "Aperçu expiré : rien n'est parti. Relance la commande pour écrire aux participants.",
     notAuthor: "Seul l'auteur de la commande peut utiliser ce panneau.",
     badReference: "Tournoi non reconnu : donne son numéro ou le lien de sa fiche sur le site.",
+    foreignLink: "Ce lien ne mène pas au site BlueGenji : donne le numéro du tournoi ou le lien de sa fiche sur le site.",
+    counting: "⏳ Le site compte encore les destinataires de la nouvelle sélection : rien n'est parti. Clique de nouveau sur **Envoyer** dans un instant.",
     failed: "Une erreur est survenue : rien n'est parti.",
   },
   en: {
@@ -131,6 +133,8 @@ const TEXT = {
     expired: "Preview expired: nothing was sent. Run the command again to write to the participants.",
     notAuthor: "Only the author of the command can use this panel.",
     badReference: "Tournament not recognised: give its number or the link to its page on the site.",
+    foreignLink: "This link does not lead to the BlueGenji site: give the tournament number or the link to its page on the site.",
+    counting: "⏳ The site is still counting the recipients of the new selection: nothing was sent. Click **Send** again in a moment.",
     failed: "Something went wrong: nothing was sent.",
   },
 } as const;
@@ -240,7 +244,10 @@ export function refusalText(code: string, lang: Lang, sending = false): string {
 }
 
 /** Textes fixes (annulé, expiré, pas l'auteur…). */
-export function fixedText(key: "sending" | "cancelled" | "expired" | "notAuthor" | "badReference" | "failed", lang: Lang): string {
+export function fixedText(
+  key: "sending" | "cancelled" | "expired" | "notAuthor" | "badReference" | "foreignLink" | "counting" | "failed",
+  lang: Lang,
+): string {
   return TEXT[lang][key];
 }
 
@@ -253,7 +260,9 @@ type PanelView = { content: string; components: APIActionRowComponent<APICompone
 
 /**
  * Le panneau d'aperçu : tournoi, texte tel qu'il sera cité, comptes, menu des
- * destinataires (1 à 5, `Tous` par défaut) et boutons.
+ * destinataires (1 à 5, `Tous` par défaut) et boutons. Le texte est celui que
+ * le site a rédigé pour les participants (`preview.quoted`, déjà neutralisé) ;
+ * un site antérieur qui ne le rend pas laisse le bot le citer lui-même.
  * @param input Aperçu du site, texte du staff, catégories cochées, échéance (secondes Unix), langue et nonce.
  * @returns Le contenu et les composants du message éphémère.
  */
@@ -271,7 +280,8 @@ export function previewPanel(input: {
   const counts = input.preview.recipients;
   const header = text.header(name, input.preview.tournament.id);
   const footer = ["", text.recipients(counts), hasRecipients(counts) ? text.howTo(input.expiresAt) : text.none].join("\n");
-  const content = [header, previewQuote(input.message, DISCORD_MAX - header.length - footer.length - 2, input.lang), footer].join("\n");
+  const quoted = input.preview.quoted ?? quoteBlock(input.message);
+  const content = [header, previewQuote(quoted, DISCORD_MAX - header.length - footer.length - 2, input.lang), footer].join("\n");
   const selected = new Set(input.categories);
   return {
     content,
@@ -310,8 +320,7 @@ export function previewPanel(input: {
  * les comptes : coupée en fin de ligne si elle déborde, et dite raccourcie —
  * les comptes et l'échéance restent toujours visibles.
  */
-function previewQuote(message: string, room: number, lang: Lang): string {
-  const quoted = quoteBlock(message);
+function previewQuote(quoted: string, room: number, lang: Lang): string {
   if (quoted.length <= room) { return quoted; }
   const mark = PREVIEW_CUT_MARK[lang];
   const kept: string[] = [];

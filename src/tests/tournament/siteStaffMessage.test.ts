@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   normalizeCategories,
+  parsePreview,
   parseSent,
   previewStaffMessage,
   sendStaffMessage,
@@ -111,8 +112,30 @@ test("normalizeCategories_allAmongOthers_returnsAllOnly", () => {
   assert.deepEqual(normalizeCategories(["OWNERS", "ALL"]), ["ALL"]);
 });
 
-test("normalizeCategories_nothingKnown_returnsAll", () => {
-  assert.deepEqual(normalizeCategories(["FANS"]), ["ALL"]);
+test("normalizeCategories_nothingKnown_returnsNull", () => {
+  assert.equal(normalizeCategories(["FANS"]), null);
+});
+
+test("normalizeCategories_empty_returnsNull", () => {
+  assert.equal(normalizeCategories([]), null);
+});
+
+test("parsePreview_quotedAndLinkBase_readsThem", () => {
+  const actual = parsePreview({ ...previewBody, quoted: "> Salut", linkBase: "https://bluegenji-esport.fr" });
+
+  assert.equal(actual?.quoted, "> Salut");
+  assert.equal(actual?.linkBase, "https://bluegenji-esport.fr");
+});
+
+test("parsePreview_nullLinkBase_keepsNull", () => {
+  assert.equal(parsePreview({ ...previewBody, linkBase: null })?.linkBase, null);
+});
+
+test("parsePreview_quotedNotText_dropsIt", () => {
+  const actual = parsePreview({ ...previewBody, quoted: 5, linkBase: 7 });
+
+  assert.equal(actual !== null && "quoted" in actual, false);
+  assert.equal(actual !== null && "linkBase" in actual, false);
 });
 
 test("normalizeCategories_someKnown_returnsMenuOrder", () => {

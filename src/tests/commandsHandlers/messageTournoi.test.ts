@@ -213,19 +213,62 @@ test("messageTournoi_clickAfterSend_isIgnored", async () => {
   assert.equal(t.sends.length, 1);
 });
 
-test("messageTournoi_sendClickedWhileSelectIsAcknowledging_sendsTheNewSelection", async () => {
+test("messageTournoi_sendClickedWhileNewSelectionIsCounted_sendsNothingAndAsksToWait", async () => {
   const t = setup();
   await runMessageTournoi(client, t.interaction, t.deps);
   let release: () => void = () => undefined;
   const slowAck = new Promise<void>((resolve) => { release = resolve; });
+  const early = component("staffmsg:send:i1");
 
   t.collector.emit("collect", component("staffmsg:select:i1", { values: ["OWNERS"], deferUpdate: () => slowAck }).value);
-  t.collector.emit("collect", component("staffmsg:send:i1").value);
-  await flush();
-  release();
+  t.collector.emit("collect", early.value);
   await flush();
 
+  assert.equal(t.sends.length, 0);
+  assert.match(early.replies[0], /compte encore les destinataires/);
+  release();
+  await flush();
+  t.collector.emit("collect", component("staffmsg:send:i1").value);
+  await flush();
   assert.deepEqual(t.sends[0].categories, ["OWNERS"]);
+});
+
+test("messageTournoi_unknownMenuValues_keepsPreviousSelection", async () => {
+  const t = setup();
+  await runMessageTournoi(client, t.interaction, t.deps);
+  const odd = component("staffmsg:select:i1", { values: ["FANS"] });
+
+  t.collector.emit("collect", odd.value);
+  await flush();
+  t.collector.emit("collect", component("staffmsg:send:i1").value);
+  await flush();
+
+  assert.equal(odd.deferred(), 1);
+  assert.equal(t.previews.length, 1);
+  assert.deepEqual(t.sends[0].categories, ["ALL"]);
+});
+
+test("messageTournoi_linkToAnotherSite_refusesWithoutPanel", async () => {
+  const t = setup({
+    tournoi: "https://other-site.example/tournois/12",
+    preview: [{ ok: true, data: { ...preview, linkBase: "https://bluegenji-esport.fr" } }],
+  });
+
+  await runMessageTournoi(client, t.interaction, t.deps);
+
+  assert.match(t.edits.at(-1)?.content ?? "", /ne mène pas au site BlueGenji/);
+  assert.equal(t.collectorTime(), undefined);
+});
+
+test("messageTournoi_linkToTheSiteWithWww_opensPanel", async () => {
+  const t = setup({
+    tournoi: "www.bluegenji-esport.fr/tournois/12",
+    preview: [{ ok: true, data: { ...preview, linkBase: "https://bluegenji-esport.fr" } }],
+  });
+
+  await runMessageTournoi(client, t.interaction, t.deps);
+
+  assert.equal(t.collectorTime(), 300_000);
 });
 
 test("messageTournoi_transientPreviewFailure_keepsPanelOnPreviousSelection", async () => {

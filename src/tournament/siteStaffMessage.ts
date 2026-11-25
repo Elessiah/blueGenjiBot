@@ -85,7 +85,18 @@ export type DeliveryCounts = {
   unconfirmed: number;
 };
 
-export type StaffMessagePreview = { tournament: { id: number; name: string }; recipients: RecipientCounts };
+/**
+ * Aperçu du site. `quoted` : le texte tel que les participants le liront (la
+ * citation neutralisée du message privé, rédigée par le site) ; `linkBase` : la
+ * racine publique du site (`APP_URL`), pour refuser un lien vers un autre site.
+ * Tous deux absents d'un site antérieur.
+ */
+export type StaffMessagePreview = {
+  tournament: { id: number; name: string };
+  recipients: RecipientCounts;
+  quoted?: string;
+  linkBase?: string | null;
+};
 export type StaffMessageSent = StaffMessagePreview & { delivery: DeliveryCounts };
 
 /** Issue d'un appel : la réponse lue, ou un code (du site, ou du bot pour un site muet). */
@@ -135,7 +146,13 @@ export function parsePreview(body: unknown): StaffMessagePreview | null {
   const raw = body as Record<string, unknown>;
   const tournament = readTournament(raw.tournament);
   const recipients = readCounts(raw.recipients, ["total", "reachable", "withoutDiscord", "optedOut"] as const);
-  return tournament && recipients ? { tournament, recipients } : null;
+  if (!tournament || !recipients) { return null; }
+  return {
+    tournament,
+    recipients,
+    ...(typeof raw.quoted === "string" ? { quoted: raw.quoted } : {}),
+    ...(typeof raw.linkBase === "string" || raw.linkBase === null ? { linkBase: raw.linkBase } : {}),
+  };
 }
 
 /**
@@ -259,12 +276,14 @@ export function sendStaffMessage(config: SiteConfig, call: StaffMessageCall, fet
 
 /**
  * Catégories choisies dans le menu : connues, sans doublon, dans l'ordre du
- * menu ; `ALL` emporte le reste ; rien de connu → tout le monde.
+ * menu ; `ALL` emporte le reste. Rien de connu → `null` : une valeur inattendue
+ * ne s'élargit jamais à tout le monde, la sélection reste celle d'avant.
  * @param values Valeurs du menu déroulant.
- * @returns Les catégories à transmettre au site.
+ * @returns Les catégories à transmettre au site, ou `null`.
  */
-export function normalizeCategories(values: readonly string[]): StaffMessageCategory[] {
+export function normalizeCategories(values: readonly string[]): StaffMessageCategory[] | null {
   const picked = new Set(values.filter((value): value is StaffMessageCategory => (STAFF_MESSAGE_CATEGORIES as readonly string[]).includes(value)));
-  if (picked.size === 0 || picked.has("ALL")) { return ["ALL"]; }
+  if (picked.size === 0) { return null; }
+  if (picked.has("ALL")) { return ["ALL"]; }
   return STAFF_MESSAGE_CATEGORIES.filter((category) => picked.has(category));
 }

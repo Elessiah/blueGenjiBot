@@ -49,7 +49,7 @@ import {
   sentText,
   type Lang,
 } from "../tournament/staffMessageView.js";
-import { parseTournamentReference } from "../tournament/tournamentReference.js";
+import { linkPointsElsewhere, parseTournamentReference } from "../tournament/tournamentReference.js";
 
 /** Ce dont le handler dépend, remplacé dans les tests. */
 export type MessageTournoiDeps = {
@@ -99,7 +99,8 @@ type Panel = {
 export async function runMessageTournoi(client: Client, interaction: ChatInputCommandInteraction, deps: MessageTournoiDeps): Promise<void> {
   const lang = langOf(interaction.locale);
   try {
-    const tournamentId = parseTournamentReference(interaction.options.getString("tournoi", true));
+    const reference = interaction.options.getString("tournoi", true);
+    const tournamentId = parseTournamentReference(reference);
     if (tournamentId === null) {
       await safeReply(interaction, fixedText("badReference", lang), true, false);
       return;
@@ -120,6 +121,12 @@ export async function runMessageTournoi(client: Client, interaction: ChatInputCo
     const first = await deps.preview(config, call);
     if (!first.ok) {
       await safeReply(interaction, refusalText(first.code, lang), true, true);
+      return;
+    }
+    // Un lien vers un autre site au chemin semblable (`/tournois/12`) ne désigne
+    // pas le tournoi BlueGenji de ce numéro : refusé avant tout panneau.
+    if (linkPointsElsewhere(reference, first.data.linkBase)) {
+      await safeReply(interaction, fixedText("foreignLink", lang), true, true);
       return;
     }
     const panel: Panel = {
@@ -186,6 +193,12 @@ async function onComponent(
     return;
   }
   if (component.customId === ids.send) {
+    // L'aperçu est la confirmation : une sélection que le site n'a pas encore
+    // comptée ne part pas — ni l'ancienne, ni la nouvelle à l'aveugle.
+    if (panel.call !== panel.confirmed.call) {
+      await component.reply({ content: fixedText("counting", panel.lang), flags: MessageFlags.Ephemeral });
+      return;
+    }
     panel.done = true;
     collector.stop("send");
     await component.update({ content: fixedText("sending", panel.lang), components: [] });
@@ -218,7 +231,12 @@ async function onSelect(
   // ceux-là », pas « tous » — sans quoi le compte ne bouge pas et l'envoi part à tout le monde.
   const narrowing = panel.call.categories.includes("ALL") && component.values.length > 1;
   const picked = narrowing ? component.values.filter((value) => value !== "ALL") : component.values;
-  const categories: StaffMessageCategory[] = normalizeCategories(picked);
+  const categories: StaffMessageCategory[] | null = normalizeCategories(picked);
+  // Rien de connu dans le menu : la sélection reste celle d'avant, jamais « tous ».
+  if (categories === null) {
+    await acknowledge(component);
+    return;
+  }
   panel.call = { ...panel.call, categories };
   const call = panel.call;
   const seq = ++panel.previewSeq;
