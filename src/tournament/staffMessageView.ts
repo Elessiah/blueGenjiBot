@@ -27,6 +27,12 @@ import {
 
 export type Lang = "fr" | "en";
 
+/** Singulier ou pluriel : en français 0 et 1 sont singuliers, en anglais seul 1. */
+function plural(lang: Lang, n: number, one: string, many: string): string {
+  const singular = lang === "fr" ? n <= 1 : n === 1;
+  return singular ? one : many;
+}
+
 /** Durée de vie du panneau d'aperçu (menu et boutons). */
 export const PANEL_LIFETIME_MS = 5 * 60_000;
 
@@ -65,14 +71,14 @@ const CATEGORY_LABELS: Record<Lang, Record<StaffMessageCategory, { label: string
     MANAGERS: { label: "Managers", description: "Membres MANAGER des équipes inscrites" },
     CAPTAINS: { label: "Capitaines", description: "Membres CAPITAINE des équipes inscrites" },
     OWNERS: { label: "Propriétaires", description: "Propriétaires (OWNER) des équipes inscrites" },
-    ALL: { label: "Tous", description: "Tous les participants, quoi qu'on coche d'autre" },
+    ALL: { label: "Tous", description: "Tous les participants ; en cocher d'autres retire « Tous »" },
   },
   en: {
     PLAYERS: { label: "Players", description: "TANK, DPS or HEAL members, and players of a solo tournament" },
     MANAGERS: { label: "Managers", description: "MANAGER members of the registered teams" },
     CAPTAINS: { label: "Captains", description: "CAPTAIN members of the registered teams" },
     OWNERS: { label: "Owners", description: "Owners (OWNER) of the registered teams" },
-    ALL: { label: "Everyone", description: "All participants, whatever else is ticked" },
+    ALL: { label: "Everyone", description: "All participants; ticking others removes “Everyone”" },
   },
 };
 
@@ -88,12 +94,14 @@ const TEXT = {
     none: "Personne à prévenir pour cette sélection.",
     sending: "⏳ Envoi en cours… Le bilan s'affichera ici.",
     sent: (name: string, d: StaffMessageSent["delivery"]) =>
-      `✅ Message envoyé aux participants de ${name} : ${d.sent} message(s) privé(s) remis, ${d.failed} non remis, ${d.skipped} sans message privé (messages coupés ou sans Discord), ${d.pushed} notification(s) push.`,
+      `✅ Message envoyé aux participants de ${name} : ${d.sent} ${plural("fr", d.sent, "message privé remis", "messages privés remis")}, ${d.failed} non remis, ${d.skipped} sans message privé (messages coupés ou sans Discord), ${d.pushed} ${plural("fr", d.pushed, "notification push", "notifications push")}.`,
+    nothingDelivered: "⚠️ Aucun message n'a été remis : le bot Discord était injoignable et aucune notification push n'est partie. L'envoi ne compte pas dans ta limite : réessaie plus tard.",
+    nobodyReached: "⚠️ Aucun participant n'a pu être joint : messages privés fermés ou introuvables, aucun appareil en push. L'envoi ne compte pas dans ta limite, mais le relancer n'y changerait rien.",
     botUnreachable: "⚠️ Le site n'a pas pu confirmer les messages privés : le bot ne lui a pas répondu.",
     sendingOn: (name: string) =>
       `⏳ Le message part aux participants de ${name} : l'envoi continue sur le site. Ne le relance pas ; le bilan sera noté au journal du staff.`,
     unconfirmed: (n: number) =>
-      `⚠️ ${n} message(s) privé(s) sans bilan du bot : peut-être remis. Ne le relance pas ; vérifie le journal du staff.`,
+      `⚠️ ${n} ${plural("fr", n, "message privé sans bilan du bot", "messages privés sans bilan du bot")} : peut-être remis. Ne le relance pas ; vérifie le journal du staff.`,
     cancelled: "Envoi annulé : rien n'est parti.",
     expired: "Aperçu expiré : rien n'est parti. Relance la commande pour écrire aux participants.",
     notAuthor: "Seul l'auteur de la commande peut utiliser ce panneau.",
@@ -111,12 +119,14 @@ const TEXT = {
     none: "Nobody to notify for this selection.",
     sending: "⏳ Sending… The summary will show here.",
     sent: (name: string, d: StaffMessageSent["delivery"]) =>
-      `✅ Message sent to the participants of ${name}: ${d.sent} direct message(s) delivered, ${d.failed} not delivered, ${d.skipped} without a direct message (turned off or no Discord), ${d.pushed} push notification(s).`,
+      `✅ Message sent to the participants of ${name}: ${d.sent} ${plural("en", d.sent, "direct message delivered", "direct messages delivered")}, ${d.failed} not delivered, ${d.skipped} without a direct message (turned off or no Discord), ${d.pushed} ${plural("en", d.pushed, "push notification", "push notifications")}.`,
+    nothingDelivered: "⚠️ No message was delivered: the Discord bot was unreachable and no push notification went out. The sending does not count towards your limit: try again later.",
+    nobodyReached: "⚠️ No participant could be reached: direct messages closed or not found, no push device. The sending does not count towards your limit, but running it again would not change anything.",
     botUnreachable: "⚠️ The site could not confirm the direct messages: the bot did not answer it.",
     sendingOn: (name: string) =>
       `⏳ The message is going out to the participants of ${name}: sending is still going on on the site. Do not run it again; the summary will be noted in the staff log.`,
     unconfirmed: (n: number) =>
-      `⚠️ ${n} direct message(s) without the bot's report: maybe delivered. Do not run it again; check the staff log.`,
+      `⚠️ ${n} ${plural("en", n, "direct message", "direct messages")} without the bot's report: maybe delivered. Do not run it again; check the staff log.`,
     cancelled: "Sending cancelled: nothing was sent.",
     expired: "Preview expired: nothing was sent. Run the command again to write to the participants.",
     notAuthor: "Only the author of the command can use this panel.",
@@ -143,6 +153,10 @@ const REFUSALS: Record<Lang, Record<string, string>> = {
     UNAUTHORIZED: "La commande est mal configurée sur ce bot (jeton du site refusé).",
     SITE_INTERNAL_TOKEN_NOT_CONFIGURED: "La commande n'est pas configurée sur le site (jeton absent).",
     PAYLOAD_TOO_LARGE: "Le message est trop long : raccourcis-le.",
+    INVALID_STAFF_MESSAGE_REQUEST: "Le site a jugé la demande invalide : relance la commande.",
+    INVALID_RECIPIENT_CATEGORIES: "Catégorie de destinataires invalide : relance la commande.",
+    INVALID_TOURNAMENT_ID: "Numéro de tournoi invalide : donne son numéro ou le lien de sa fiche sur le site.",
+    INVALID_DISCORD_ID: "Ton identifiant Discord n'a pas été reconnu : relance la commande.",
     [SITE_UNREACHABLE]: "Site BlueGenji injoignable : réessaie plus tard.",
     [SITE_TIMEOUT]: "Le site BlueGenji n'a pas répondu à temps : réessaie plus tard.",
     [SITE_BAD_RESPONSE]: "Réponse illisible du site BlueGenji : réessaie plus tard.",
@@ -164,6 +178,10 @@ const REFUSALS: Record<Lang, Record<string, string>> = {
     UNAUTHORIZED: "The command is misconfigured on this bot (site token refused).",
     SITE_INTERNAL_TOKEN_NOT_CONFIGURED: "The command is not configured on the site (no token).",
     PAYLOAD_TOO_LARGE: "The message is too long: shorten it.",
+    INVALID_STAFF_MESSAGE_REQUEST: "The site found the request invalid: run the command again.",
+    INVALID_RECIPIENT_CATEGORIES: "Invalid recipient category: run the command again.",
+    INVALID_TOURNAMENT_ID: "Invalid tournament number: give its number or the link to its page on the site.",
+    INVALID_DISCORD_ID: "Your Discord identifier was not recognised: run the command again.",
     [SITE_UNREACHABLE]: "BlueGenji site unreachable: try again later.",
     [SITE_TIMEOUT]: "The BlueGenji site did not answer in time: try again later.",
     [SITE_BAD_RESPONSE]: "Unreadable answer from the BlueGenji site: try again later.",
@@ -318,6 +336,8 @@ export function sentText(result: StaffMessageSent, lang: Lang): string {
   const d = result.delivery;
   // Le site a répondu avant la fin de l'envoi : aucun nombre n'est encore connu.
   if (d.pending) { return TEXT[lang].sendingOn(name); }
+  // Rien n'est parti à coup sûr (le site a rendu l'envoi au plafond) : ni coche verte ni « envoyé ».
+  if (d.sent + d.pushed + d.unconfirmed === 0) { return d.botUnreachable ? TEXT[lang].nothingDelivered : TEXT[lang].nobodyReached; }
   const lines = [TEXT[lang].sent(name, d)];
   if (d.botUnreachable) { lines.push(TEXT[lang].botUnreachable); }
   if (d.unconfirmed > 0) { lines.push(TEXT[lang].unconfirmed(d.unconfirmed)); }

@@ -156,7 +156,29 @@ test("messageTournoi_selectThenSend_sendsSelectedCategoriesAndShowsCounts", asyn
   assert.deepEqual(t.previews[1].categories, ["PLAYERS", "OWNERS"]);
   assert.deepEqual(t.sends[0].categories, ["PLAYERS", "OWNERS"]);
   assert.deepEqual(send.updates, [{ content: "⏳ Envoi en cours… Le bilan s'affichera ici.", components: [] }]);
-  assert.match(t.edits.at(-1)?.content ?? "", /^✅ Message envoyé aux participants de Coupe : 2 message\(s\) privé\(s\) remis/);
+  assert.match(t.edits.at(-1)?.content ?? "", /^✅ Message envoyé aux participants de Coupe : 2 messages privés remis/);
+});
+
+test("messageTournoi_ticksAnotherCategoryOverEveryone_narrowsToIt", async () => {
+  const t = setup();
+  await runMessageTournoi(client, t.interaction, t.deps);
+
+  t.collector.emit("collect", component("staffmsg:select:i1", { values: ["ALL", "CAPTAINS"] }).value);
+  await flush();
+
+  assert.deepEqual(t.previews[1].categories, ["CAPTAINS"]);
+});
+
+test("messageTournoi_ticksEveryoneOverANarrowSelection_selectsEveryone", async () => {
+  const t = setup();
+  await runMessageTournoi(client, t.interaction, t.deps);
+
+  t.collector.emit("collect", component("staffmsg:select:i1", { values: ["CAPTAINS"] }).value);
+  await flush();
+  t.collector.emit("collect", component("staffmsg:select:i1", { values: ["CAPTAINS", "ALL"] }).value);
+  await flush();
+
+  assert.deepEqual(t.previews[2].categories, ["ALL"]);
 });
 
 test("messageTournoi_sendTimesOut_saysItMayStillBeSending", async () => {

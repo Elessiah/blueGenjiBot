@@ -214,7 +214,11 @@ async function onSelect(
 ): Promise<void> {
   // La sélection est prise **avant** toute attente : un « Envoyer » cliqué
   // pendant l'accusé partirait sinon vers l'ancienne sélection.
-  const categories: StaffMessageCategory[] = normalizeCategories(component.values);
+  // « Tous » est coché à l'ouverture : en cocher d'autres par-dessus veut dire « seulement
+  // ceux-là », pas « tous » — sans quoi le compte ne bouge pas et l'envoi part à tout le monde.
+  const narrowing = panel.call.categories.includes("ALL") && component.values.length > 1;
+  const picked = narrowing ? component.values.filter((value) => value !== "ALL") : component.values;
+  const categories: StaffMessageCategory[] = normalizeCategories(picked);
   panel.call = { ...panel.call, categories };
   const call = panel.call;
   const seq = ++panel.previewSeq;

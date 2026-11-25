@@ -111,11 +111,11 @@ test("refusalText_timeoutWhileSending_saysItMayStillBeSending", () => {
 test("sentText_delivery_reportsCountsOnly", () => {
   const actual = sentText({ ...preview(), delivery: { sent: 2, failed: 1, skipped: 1, pushed: 4, botUnreachable: false, pending: false, unconfirmed: 0 } }, "fr");
 
-  assert.equal(actual, "✅ Message envoyé aux participants de Coupe : 2 message(s) privé(s) remis, 1 non remis, 1 sans message privé (messages coupés ou sans Discord), 4 notification(s) push.");
+  assert.equal(actual, "✅ Message envoyé aux participants de Coupe : 2 messages privés remis, 1 non remis, 1 sans message privé (messages coupés ou sans Discord), 4 notifications push.");
 });
 
 test("sentText_botUnreachable_addsWarning", () => {
-  const actual = sentText({ ...preview(), delivery: { sent: 0, failed: 2, skipped: 1, pushed: 0, botUnreachable: true, pending: false, unconfirmed: 0 } }, "en");
+  const actual = sentText({ ...preview(), delivery: { sent: 0, failed: 2, skipped: 1, pushed: 3, botUnreachable: true, pending: false, unconfirmed: 0 } }, "en");
 
   assert.match(actual, /\n⚠️ The site could not confirm the direct messages/);
 });
@@ -178,17 +178,54 @@ test("sentText_unconfirmed_addsMaybeDeliveredWarning", () => {
   const actual = sentText({ ...preview(), delivery: { sent: 1, failed: 1, skipped: 1, pushed: 0, botUnreachable: false, pending: false, unconfirmed: 25 } }, "en");
 
   assert.match(actual, /^✅ Message sent/);
-  assert.match(actual, /\n⚠️ 25 direct message\(s\) without the bot's report: maybe delivered\. Do not run it again/);
+  assert.match(actual, /\n⚠️ 25 direct messages without the bot's report: maybe delivered\. Do not run it again/);
 });
 
 test("sentText_unconfirmedFrench_addsMaybeDeliveredWarning", () => {
   const actual = sentText({ ...preview(), delivery: { sent: 0, failed: 0, skipped: 1, pushed: 2, botUnreachable: false, pending: false, unconfirmed: 3 } }, "fr");
 
-  assert.match(actual, /\n⚠️ 3 message\(s\) privé\(s\) sans bilan du bot : peut-être remis\. Ne le relance pas/);
+  assert.match(actual, /\n⚠️ 3 messages privés sans bilan du bot : peut-être remis\. Ne le relance pas/);
 });
 
 test("sentText_noUnconfirmed_addsNoWarning", () => {
   const actual = sentText({ ...preview(), delivery: { sent: 2, failed: 0, skipped: 1, pushed: 0, botUnreachable: false, pending: false, unconfirmed: 0 } }, "fr");
 
   assert.doesNotMatch(actual, /sans bilan du bot/);
+});
+
+test("sentText_singleDelivery_usesSingularForms", () => {
+  const fr = sentText({ ...preview(), delivery: { sent: 1, failed: 0, skipped: 0, pushed: 1, botUnreachable: false, pending: false, unconfirmed: 0 } }, "fr");
+  const en = sentText({ ...preview(), delivery: { sent: 1, failed: 0, skipped: 0, pushed: 1, botUnreachable: false, pending: false, unconfirmed: 0 } }, "en");
+
+  assert.match(fr, /1 message privé remis.*1 notification push./);
+  assert.match(en, /1 direct message delivered.*1 push notification./);
+});
+
+test("sentText_nothingDeliveredBotUnreachable_isAWarningNotAGreenCheck", () => {
+  const fr = sentText({ ...preview(), delivery: { sent: 0, failed: 2, skipped: 1, pushed: 0, botUnreachable: true, pending: false, unconfirmed: 0 } }, "fr");
+  const en = sentText({ ...preview(), delivery: { sent: 0, failed: 2, skipped: 1, pushed: 0, botUnreachable: true, pending: false, unconfirmed: 0 } }, "en");
+
+  assert.match(fr, /^⚠️ Aucun message n'a été remis.*ne compte pas dans ta limite : réessaie plus tard./);
+  assert.match(en, /^⚠️ No message was delivered.*does not count towards your limit: try again later./);
+});
+
+test("sentText_nobodyReached_saysRerunningChangesNothing", () => {
+  const fr = sentText({ ...preview(), delivery: { sent: 0, failed: 2, skipped: 1, pushed: 0, botUnreachable: false, pending: false, unconfirmed: 0 } }, "fr");
+  const en = sentText({ ...preview(), delivery: { sent: 0, failed: 2, skipped: 1, pushed: 0, botUnreachable: false, pending: false, unconfirmed: 0 } }, "en");
+
+  assert.match(fr, /^⚠️ Aucun participant n'a pu être joint.*n'y changerait rien./);
+  assert.match(en, /^⚠️ No participant could be reached.*would not change anything./);
+});
+
+test("sentText_onlyPush_staysAGreenCheck", () => {
+  const actual = sentText({ ...preview(), delivery: { sent: 0, failed: 0, skipped: 1, pushed: 2, botUnreachable: false, pending: false, unconfirmed: 0 } }, "fr");
+
+  assert.match(actual, /^✅ Message envoyé/);
+});
+
+test("refusalText_invalidRequestCodes_areExplainedInBothLanguages", () => {
+  for (const code of ["INVALID_STAFF_MESSAGE_REQUEST", "INVALID_RECIPIENT_CATEGORIES", "INVALID_TOURNAMENT_ID", "INVALID_DISCORD_ID"]) {
+    assert.doesNotMatch(refusalText(code, "fr"), new RegExp(code));
+    assert.doesNotMatch(refusalText(code, "en"), new RegExp(code));
+  }
 });
