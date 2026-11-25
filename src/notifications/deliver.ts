@@ -145,7 +145,16 @@ export async function deliverDirectMessages(
   }
 
   for (const recipient of recipients) {
-    const member = await findHomeMember(guilds, recipient);
+    let member: GuildMember | null;
+    try {
+      member = await findHomeMember(guilds, recipient);
+    } catch {
+      // Recherche en panne (délai de résolution d'un tag, API Discord) : ce
+      // destinataire n'est pas joint, les suivants partent. Lever ici rendrait
+      // un `500` après des envois déjà faits, que le site ne saurait compter.
+      report.failed.push(recipient.label);
+      continue;
+    }
     if (!member) {
       report.unresolved.push(recipient.label);
       continue;

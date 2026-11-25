@@ -128,6 +128,34 @@ test("messages privés fermés : compté en échec, pas en introuvable", () =>
     assert.deepEqual(report, { sent: 0, unresolved: [], failed: ["Ferme"] });
   }));
 
+test("deliverDirectMessages_lookupThrows_countsItFailedAndKeepsSending", () =>
+  withEnv({ SERV_GENJI: GENJI }, async () => {
+    const trace: Trace = { dms: [], logs: [] };
+    const member = { id: "900000000000000001", send: async (message: string) => { trace.dms.push(message); } };
+    const client = {
+      guilds: {
+        fetch: async () => ({
+          id: GENJI,
+          members: {
+            fetch: async (query: unknown) => {
+              // Recherche par tag : un résultat illisible fait lever la recherche.
+              if (typeof query === "object") return { find: () => { throw new Error("résultat illisible"); } };
+              return member;
+            },
+          },
+        }),
+      },
+    } as unknown as Client;
+
+    const report = await deliverDirectMessages(client, "Bonjour", [
+      { discordId: null, handle: "kiro", label: "Tag" },
+      recipient("900000000000000001", "Id"),
+    ]);
+
+    assert.deepEqual(report, { sent: 1, unresolved: [], failed: ["Tag"] });
+    assert.equal(trace.dms.length, 1);
+  }));
+
 /** Faux client pour la direction : `users.fetch` rend un compte, ou lève pour un identifiant inconnu. */
 function leadershipClient(trace: Trace, reachable: string[]): Client {
   return {
