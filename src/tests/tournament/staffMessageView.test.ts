@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { ButtonStyle, ComponentType } from "discord.js";
-import { langOf, previewPanel, refusalText, sentText } from "../../tournament/staffMessageView.js";
+import { isTransientRefusal, langOf, previewPanel, refusalText, sentText } from "../../tournament/staffMessageView.js";
 import type { StaffMessagePreview } from "../../tournament/siteStaffMessage.js";
 
 // Panneau éphémère de /message-tournoi : comptes seuls, texte échappé, menu à choix multiples, FR et EN.
@@ -39,7 +39,7 @@ test("previewPanel_menu_allowsOneToFiveWithAllPreselected", () => {
     ["PLAYERS", "Joueurs", false],
     ["MANAGERS", "Managers", false],
     ["CAPTAINS", "Capitaines", false],
-    ["OWNERS", "Owners", false],
+    ["OWNERS", "Propriétaires", false],
     ["ALL", "Tous", true],
   ]);
 });
@@ -109,13 +109,74 @@ test("refusalText_timeoutWhileSending_saysItMayStillBeSending", () => {
 });
 
 test("sentText_delivery_reportsCountsOnly", () => {
-  const actual = sentText({ ...preview(), delivery: { sent: 2, failed: 1, skipped: 1, pushed: 4, botUnreachable: false } }, "fr");
+  const actual = sentText({ ...preview(), delivery: { sent: 2, failed: 1, skipped: 1, pushed: 4, botUnreachable: false, pending: false } }, "fr");
 
   assert.equal(actual, "✅ Message envoyé aux participants de Coupe : 2 message(s) privé(s) remis, 1 non remis, 1 sans message privé (messages coupés ou sans Discord), 4 notification(s) push.");
 });
 
 test("sentText_botUnreachable_addsWarning", () => {
-  const actual = sentText({ ...preview(), delivery: { sent: 0, failed: 2, skipped: 1, pushed: 0, botUnreachable: true } }, "en");
+  const actual = sentText({ ...preview(), delivery: { sent: 0, failed: 2, skipped: 1, pushed: 0, botUnreachable: true, pending: false } }, "en");
 
   assert.match(actual, /\n⚠️ The site could not confirm the direct messages/);
+});
+
+test("previewPanel_englishOwners_keepsOwners", () => {
+  assert.equal(select(panel({ lang: "en" })).options[3].label, "Owners");
+});
+
+test("previewPanel_hugeEscapedText_keepsCountsAndExpiryAndSaysShortened", () => {
+  const actual = panel({ message: "*".repeat(1200), preview: preview({}, "_".repeat(120)) });
+
+  assert.ok(actual.content.length <= 2000);
+  assert.match(actual.content, /\*\*Destinataires : 3\*\*/);
+  assert.match(actual.content, /<t:1764000000:R>/);
+  assert.match(actual.content, /aperçu raccourci : le message part en entier/);
+});
+
+test("previewPanel_manyShortLines_cutsAtALineEnd", () => {
+  const actual = panel({ message: Array.from({ length: 600 }, () => "ab").join("\n") });
+
+  assert.ok(actual.content.length <= 2000);
+  assert.match(actual.content, /\n> ab\n> \*\(aperçu raccourci/);
+});
+
+test("refusalText_outcomeUnknownWhileSending_saysItMayHaveGoneOut", () => {
+  assert.match(refusalText("SITE_OUTCOME_UNKNOWN", "fr", true), /peut-être parti/);
+});
+
+test("refusalText_internalErrorWhileSending_saysItMayHaveGoneOut", () => {
+  assert.match(refusalText("INTERNAL_ERROR", "en", true), /may have gone out/);
+});
+
+test("refusalText_internalErrorOnPreview_saysTryAgain", () => {
+  assert.equal(refusalText("INTERNAL_ERROR", "fr"), "❌ Le site BlueGenji a rencontré une erreur : réessaie dans un instant.");
+});
+
+test("refusalText_tokenRefused_saysMisconfigured", () => {
+  assert.match(refusalText("UNAUTHORIZED", "fr"), /mal configurée/);
+});
+
+test("refusalText_quotaExceeded_saysPerStaffMember", () => {
+  assert.match(refusalText("STAFF_MESSAGE_QUOTA_EXCEEDED", "fr"), /3 messages par heure et par membre du staff/);
+});
+
+test("isTransientRefusal_timeoutOrThrottle_returnsTrue", () => {
+  assert.deepEqual([isTransientRefusal("SITE_TIMEOUT"), isTransientRefusal("TOO_MANY_REQUESTS")], [true, true]);
+});
+
+test("isTransientRefusal_forbidden_returnsFalse", () => {
+  assert.equal(isTransientRefusal("FORBIDDEN"), false);
+});
+
+test("sentText_pendingWithoutCounts_saysSendingGoesOn", () => {
+  const actual = sentText({ ...preview(), delivery: { sent: 0, failed: 0, skipped: 1, pushed: 0, botUnreachable: false, pending: true } }, "fr");
+
+  assert.match(actual, /^⏳ Le message part aux participants de Coupe : l'envoi continue sur le site\. Ne le relance pas/);
+});
+
+test("sentText_pendingWithCounts_addsIncompleteWarning", () => {
+  const actual = sentText({ ...preview(), delivery: { sent: 1, failed: 1, skipped: 1, pushed: 0, botUnreachable: false, pending: true } }, "en");
+
+  assert.match(actual, /^✅ Message sent/);
+  assert.match(actual, /\n⏳ Sending is still going on on the site/);
 });

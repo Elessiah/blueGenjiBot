@@ -24,6 +24,9 @@ export type StaffMessageCategory = (typeof STAFF_MESSAGE_CATEGORIES)[number];
 /** Longueur maximale du texte (même borne que le site, `STAFF_MESSAGE_MAX_LENGTH`). */
 export const STAFF_MESSAGE_MAX_LENGTH = 1200;
 
+/** Envois admis par membre du staff et par tournoi sur une heure (même borne que le site). */
+export const STAFF_MESSAGE_SENDS_PER_WINDOW = 3;
+
 /** Chemin de la route du site. */
 export const SITE_STAFF_MESSAGE_PATH = "/api/internal/tournament-message";
 
@@ -41,6 +44,12 @@ export const SITE_UNREACHABLE = "SITE_UNREACHABLE";
 export const SITE_TIMEOUT = "SITE_TIMEOUT";
 export const SITE_BAD_RESPONSE = "SITE_BAD_RESPONSE";
 export const SITE_NOT_CONFIGURED = "SITE_NOT_CONFIGURED";
+/**
+ * Envoi seulement : la requête a atteint le site, mais sans bilan lisible
+ * (connexion coupée en route, réponse illisible ou incomplète) — le message a
+ * pu partir, il ne faut pas le relancer.
+ */
+export const SITE_OUTCOME_UNKNOWN = "SITE_OUTCOME_UNKNOWN";
 
 /** Adresse et jeton du site, lus dans l'environnement. */
 export type SiteConfig = { baseUrl: string; token: string };
@@ -61,7 +70,15 @@ export function siteConfig(env: NodeJS.ProcessEnv = process.env): SiteConfig | n
 export type RecipientCounts = { total: number; reachable: number; withoutDiscord: number; optedOut: number };
 
 /** Bilan d'un envoi, compté par le site. */
-export type DeliveryCounts = { sent: number; failed: number; skipped: number; pushed: number; botUnreachable: boolean };
+export type DeliveryCounts = {
+  sent: number;
+  failed: number;
+  skipped: number;
+  pushed: number;
+  botUnreachable: boolean;
+  /** Bilan incomplet : l'envoi continue sur le site, ou un lot est resté sans réponse — ne pas relancer. */
+  pending: boolean;
+};
 
 export type StaffMessagePreview = { tournament: { id: number; name: string }; recipients: RecipientCounts };
 export type StaffMessageSent = StaffMessagePreview & { delivery: DeliveryCounts };
@@ -128,13 +145,53 @@ export function parseSent(body: unknown): StaffMessageSent | null {
   const counts = readCounts(raw, ["sent", "failed", "skipped", "pushed"] as const);
   if (!counts) { return null; }
   const botUnreachable = (raw as Record<string, unknown>).botUnreachable === true;
-  return { ...preview, delivery: { ...counts, botUnreachable } };
+  const pending = (raw as Record<string, unknown>).pending === true;
+  return { ...preview, delivery: { ...counts, botUnreachable, pending } };
+}
+
+/** Codes d'une connexion qui n'a pas abouti : la requête n'a jamais atteint le site. */
+const NOT_CONNECTED_CODES = new Set(["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "EHOSTUNREACH", "ENETUNREACH", "UND_ERR_CONNECT_TIMEOUT"]);
+
+function errorName(error: unknown): unknown {
+  return typeof error === "object" && error !== null ? (error as { name?: unknown }).name : undefined;
+}
+
+function isTimeout(error: unknown): boolean {
+  const name = errorName(error);
+  return name === "TimeoutError" || name === "AbortError";
+}
+
+/**
+ * Vrai si `fetch` a échoué **avant** que la requête n'atteigne le site
+ * (connexion refusée, hôte inconnu, ou erreur sans code de connexion).
+ * Une connexion coupée en route (`ECONNRESET`, socket fermée) l'a atteint.
+ */
+function failedBeforeSending(error: unknown): boolean {
+  const cause = typeof error === "object" && error !== null ? (error as { cause?: unknown }).cause : undefined;
+  const code = typeof cause === "object" && cause !== null ? (cause as { code?: unknown }).code : undefined;
+  return typeof code !== "string" || NOT_CONNECTED_CODES.has(code);
+}
+
+/** Code d'un `fetch` qui a levé : délai, site jamais atteint, ou (à l'envoi) atteint sans bilan. */
+function fetchFailureCode(error: unknown, sending: boolean): string {
+  if (isTimeout(error)) { return SITE_TIMEOUT; }
+  return sending && !failedBeforeSending(error) ? SITE_OUTCOME_UNKNOWN : SITE_UNREACHABLE;
+}
+
+/** Code d'un corps coupé ou illisible : à l'envoi, le message a pu partir (bilan perdu, panne en plein envoi). */
+function unreadableBodyCode(response: Response, error: unknown, sending: boolean): string {
+  if (sending && (response.ok || response.status >= 500)) {
+    return isTimeout(error) ? SITE_TIMEOUT : SITE_OUTCOME_UNKNOWN;
+  }
+  return response.ok ? SITE_BAD_RESPONSE : SITE_UNREACHABLE;
 }
 
 /**
  * Appelle la route du site. Ne lève jamais : un site muet (connexion refusée,
  * délai dépassé, réponse illisible) devient un code, comme un refus du site.
- * Aucune redirection n'est suivie (le jeton ne part jamais ailleurs).
+ * À l'envoi, tout échec après que la requête a atteint le site devient
+ * {@link SITE_OUTCOME_UNKNOWN} (ou {@link SITE_TIMEOUT}) : le message a pu
+ * partir. Aucune redirection n'est suivie (le jeton ne part jamais ailleurs).
  */
 async function callSite<T>(
   config: SiteConfig,
@@ -154,21 +211,22 @@ async function callSite<T>(
       signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (error) {
-    const name = (error as { name?: unknown })?.name;
-    return { ok: false, code: name === "TimeoutError" || name === "AbortError" ? SITE_TIMEOUT : SITE_UNREACHABLE };
+    return { ok: false, code: fetchFailureCode(error, mode === "send") };
   }
+  const sending = mode === "send";
   let body: unknown;
   try {
     body = await response.json();
-  } catch {
-    return { ok: false, code: response.ok ? SITE_BAD_RESPONSE : SITE_UNREACHABLE };
+  } catch (error) {
+    return { ok: false, code: unreadableBodyCode(response, error, sending) };
   }
   if (!response.ok) {
     const code = (body as { error?: unknown } | null)?.error;
     return { ok: false, code: typeof code === "string" && code.length <= 64 && ERROR_CODE.test(code) ? code : SITE_BAD_RESPONSE };
   }
   const data = parse(body);
-  return data ? { ok: true, data } : { ok: false, code: SITE_BAD_RESPONSE };
+  if (data) { return { ok: true, data }; }
+  return { ok: false, code: sending ? SITE_OUTCOME_UNKNOWN : SITE_BAD_RESPONSE };
 }
 
 /**

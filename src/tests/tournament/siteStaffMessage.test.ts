@@ -96,7 +96,7 @@ test("previewStaffMessage_malformedCounts_returnsBadResponse", async () => {
 });
 
 test("sendStaffMessage_ok_returnsDelivery", async () => {
-  const body = { ...previewBody, mode: "send", delivery: { sent: 2, failed: 0, skipped: 1, pushed: 4, botUnreachable: false } };
+  const body = { ...previewBody, mode: "send", delivery: { sent: 2, failed: 0, skipped: 1, pushed: 4, botUnreachable: false, pending: false } };
 
   const actual = await sendStaffMessage(config, call, respond(200, body));
 
@@ -117,4 +117,52 @@ test("normalizeCategories_nothingKnown_returnsAll", () => {
 
 test("normalizeCategories_someKnown_returnsMenuOrder", () => {
   assert.deepEqual(normalizeCategories(["OWNERS", "PLAYERS", "FANS"]), ["PLAYERS", "OWNERS"]);
+});
+
+const sendBody = { ...previewBody, mode: "send", delivery: { sent: 2, failed: 0, skipped: 1, pushed: 4, botUnreachable: false } };
+
+function fetchFailing(code: string): typeof fetch {
+  return (async () => { throw Object.assign(new TypeError("fetch failed"), { cause: { code } }); }) as unknown as typeof fetch;
+}
+
+test("sendStaffMessage_connectionResetAfterReachingSite_returnsOutcomeUnknown", async () => {
+  const actual = await sendStaffMessage(config, call, fetchFailing("ECONNRESET"));
+
+  assert.deepEqual(actual, { ok: false, code: "SITE_OUTCOME_UNKNOWN" });
+});
+
+test("sendStaffMessage_connectionRefused_returnsUnreachable", async () => {
+  const actual = await sendStaffMessage(config, call, fetchFailing("ECONNREFUSED"));
+
+  assert.deepEqual(actual, { ok: false, code: "SITE_UNREACHABLE" });
+});
+
+test("previewStaffMessage_connectionReset_returnsUnreachable", async () => {
+  const actual = await previewStaffMessage(config, call, fetchFailing("ECONNRESET"));
+
+  assert.deepEqual(actual, { ok: false, code: "SITE_UNREACHABLE" });
+});
+
+test("sendStaffMessage_okButUnreadableBody_returnsOutcomeUnknown", async () => {
+  const actual = await sendStaffMessage(config, call, respond(200, "pas du json"));
+
+  assert.deepEqual(actual, { ok: false, code: "SITE_OUTCOME_UNKNOWN" });
+});
+
+test("sendStaffMessage_okButMalformedDelivery_returnsOutcomeUnknown", async () => {
+  const actual = await sendStaffMessage(config, call, respond(200, { ...sendBody, delivery: { sent: "2" } }));
+
+  assert.deepEqual(actual, { ok: false, code: "SITE_OUTCOME_UNKNOWN" });
+});
+
+test("sendStaffMessage_gatewayErrorPage_returnsOutcomeUnknown", async () => {
+  const actual = await sendStaffMessage(config, call, respond(502, "<html>Bad gateway</html>"));
+
+  assert.deepEqual(actual, { ok: false, code: "SITE_OUTCOME_UNKNOWN" });
+});
+
+test("parseSent_pendingDelivery_readsPending", () => {
+  const actual = parseSent({ ...sendBody, delivery: { ...sendBody.delivery, pending: true } });
+
+  assert.equal(actual?.delivery.pending, true);
 });

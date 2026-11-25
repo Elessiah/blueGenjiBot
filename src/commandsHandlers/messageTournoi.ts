@@ -1,6 +1,7 @@
 /**
  * Handler de `/message-tournoi` : le staff des tournois écrit aux participants
- * d'un tournoi du site BlueGenji (doc/tournament-staff-message.md).
+ * d'un tournoi du site BlueGenji (`doc/internal-api.md` § Appel du bot vers le
+ * site ; côté site, `docs/features/TOURNAMENT_STAFF_MESSAGE.md`).
  *
  * 1. le tournoi (numéro ou lien) est lu ici, le site le valide ;
  * 2. réponse **éphémère** : aperçu du message, destinataires comptés par le
@@ -11,7 +12,8 @@
  *
  * Seul l'auteur se sert du panneau ; il expire au bout de cinq minutes, et ses
  * composants sont retirés après l'envoi, l'annulation ou l'échéance. Un site
- * injoignable donne un message, jamais une exception.
+ * injoignable donne un message, jamais une exception ; un aperçu en échec
+ * passager garde le panneau sur la sélection précédente.
  */
 
 import {
@@ -19,6 +21,7 @@ import {
   type ChatInputCommandInteraction,
   type Client,
   type MessageComponentInteraction,
+  type StringSelectMenuInteraction,
 } from "discord.js";
 import { safeReply } from "../safe/safeReply.js";
 import { sendLog } from "../safe/sendLog.js";
@@ -38,6 +41,7 @@ import {
 import {
   customIds,
   fixedText,
+  isTransientRefusal,
   langOf,
   PANEL_LIFETIME_MS,
   previewPanel,
@@ -81,6 +85,8 @@ type Panel = {
   nonce: string;
   /** Rang du dernier aperçu demandé : une réponse plus ancienne ne l'écrase pas. */
   previewSeq: number;
+  /** Dernière sélection que le site a comptée, et son aperçu : le repli d'un aperçu en échec passager. */
+  confirmed: { call: StaffMessageCall; preview: StaffMessagePreview };
   done: boolean;
 };
 
@@ -123,6 +129,7 @@ export async function runMessageTournoi(client: Client, interaction: ChatInputCo
       expiresAt: Math.floor((deps.now() + deps.lifetimeMs) / 1000),
       nonce: interaction.id,
       previewSeq: 0,
+      confirmed: { call, preview: first.data },
       done: false,
     };
     const message = await interaction.editReply(panelView(panel, first.data));
@@ -165,7 +172,12 @@ async function onComponent(
     await component.reply({ content: fixedText("notAuthor", panel.lang), flags: MessageFlags.Ephemeral });
     return;
   }
-  if (panel.done) { return; }
+  if (panel.done) {
+    // Clic arrivé après l'envoi, l'annulation ou l'échéance : accusé sans effet,
+    // sans quoi Discord afficherait « Échec de l'interaction ».
+    await acknowledge(component);
+    return;
+  }
   const ids = customIds(panel.nonce);
   if (component.customId === ids.cancel) {
     panel.done = true;
@@ -185,23 +197,55 @@ async function onComponent(
     return;
   }
   if (component.customId === ids.select && component.isStringSelectMenu()) {
-    await component.deferUpdate();
-    const categories: StaffMessageCategory[] = normalizeCategories(component.values);
-    panel.call = { ...panel.call, categories };
-    const seq = ++panel.previewSeq;
-    const result = await deps.preview(panel.config, panel.call);
-    // Un envoi, une annulation ou un aperçu plus récent l'ont devancé : rien à réécrire.
-    if (panel.done || seq !== panel.previewSeq) { return; }
-    if (!result.ok) {
-      await interaction.editReply({ content: refusalText(result.code, panel.lang), components: [] });
-      panel.done = true;
-      collector.stop("refused");
-      return;
-    }
-    await interaction.editReply(panelView(panel, result.data));
+    await onSelect(interaction, panel, deps, collector, component);
     return;
   }
+  await acknowledge(component);
   await sendLog(client, `messageTournoi : composant inattendu ${component.customId}`);
+}
+
+/** Sélection changée : le site recompte ; un échec passager rend la sélection précédente. */
+async function onSelect(
+  interaction: ChatInputCommandInteraction,
+  panel: Panel,
+  deps: MessageTournoiDeps,
+  collector: { stop: (reason?: string) => void },
+  component: StringSelectMenuInteraction,
+): Promise<void> {
+  // La sélection est prise **avant** toute attente : un « Envoyer » cliqué
+  // pendant l'accusé partirait sinon vers l'ancienne sélection.
+  const categories: StaffMessageCategory[] = normalizeCategories(component.values);
+  panel.call = { ...panel.call, categories };
+  const call = panel.call;
+  const seq = ++panel.previewSeq;
+  await component.deferUpdate();
+  const result = await deps.preview(panel.config, call);
+  // Un envoi, une annulation ou un aperçu plus récent l'ont devancé : rien à réécrire.
+  if (panel.done || seq !== panel.previewSeq) { return; }
+  if (!result.ok && isTransientRefusal(result.code)) {
+    // Échec passager : le panneau revient à la dernière sélection comptée, et l'auteur l'apprend à part.
+    panel.call = panel.confirmed.call;
+    await interaction.editReply(panelView(panel, panel.confirmed.preview));
+    await component.followUp({ content: refusalText(result.code, panel.lang), flags: MessageFlags.Ephemeral });
+    return;
+  }
+  if (!result.ok) {
+    await interaction.editReply({ content: refusalText(result.code, panel.lang), components: [] });
+    panel.done = true;
+    collector.stop("refused");
+    return;
+  }
+  panel.confirmed = { call, preview: result.data };
+  await interaction.editReply(panelView(panel, result.data));
+}
+
+/** Accuse un composant sans rien changer ; un accusé déjà fait ou expiré n'est pas une panne. */
+async function acknowledge(component: MessageComponentInteraction): Promise<void> {
+  try {
+    await component.deferUpdate();
+  } catch {
+    // Interaction déjà accusée ou expirée : rien à faire.
+  }
 }
 
 async function onEnd(interaction: ChatInputCommandInteraction, panel: Panel, reason: string): Promise<void> {

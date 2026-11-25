@@ -10,7 +10,7 @@ import type { SiteResult, StaffMessageCall, StaffMessagePreview, StaffMessageSen
 type Edit = { content: string; components?: unknown[] };
 
 const preview: StaffMessagePreview = { tournament: { id: 12, name: "Coupe" }, recipients: { total: 3, reachable: 2, withoutDiscord: 1, optedOut: 0 } };
-const sent: StaffMessageSent = { ...preview, delivery: { sent: 2, failed: 0, skipped: 1, pushed: 3, botUnreachable: false } };
+const sent: StaffMessageSent = { ...preview, delivery: { sent: 2, failed: 0, skipped: 1, pushed: 3, botUnreachable: false, pending: false } };
 
 class FakeCollector extends EventEmitter {
   stopped: string | null = null;
@@ -54,9 +54,11 @@ function setup(options: { tournoi?: string; preview?: SiteResult<StaffMessagePre
   return { interaction, deps, replies, edits, previews, sends, collector, collectorTime: () => collectorTime };
 }
 
-function component(customId: string, extra: { userId?: string; values?: string[] } = {}) {
+function component(customId: string, extra: { userId?: string; values?: string[]; deferUpdate?: () => Promise<void> } = {}) {
   const updates: Edit[] = [];
   const replies: string[] = [];
+  const followUps: string[] = [];
+  let deferred = 0;
   const value = {
     customId,
     user: { id: extra.userId ?? "100000000000000009" },
@@ -64,9 +66,10 @@ function component(customId: string, extra: { userId?: string; values?: string[]
     isStringSelectMenu: () => extra.values !== undefined,
     update: async (p: Edit) => { updates.push(p); },
     reply: async (p: { content: string }) => { replies.push(p.content); },
-    deferUpdate: async () => undefined,
+    followUp: async (p: { content: string }) => { followUps.push(p.content); },
+    deferUpdate: async () => { deferred += 1; await extra.deferUpdate?.(); },
   } as unknown as MessageComponentInteraction;
-  return { value, updates, replies };
+  return { value, updates, replies, followUps, deferred: () => deferred };
 }
 
 const client = { channels: { fetch: async () => ({ send: async () => ({ id: "log" }) }) } } as unknown as Client;
@@ -186,4 +189,70 @@ test("messageTournoi_clickAfterSend_isIgnored", async () => {
   await flush();
 
   assert.equal(t.sends.length, 1);
+});
+
+test("messageTournoi_sendClickedWhileSelectIsAcknowledging_sendsTheNewSelection", async () => {
+  const t = setup();
+  await runMessageTournoi(client, t.interaction, t.deps);
+  let release: () => void = () => undefined;
+  const slowAck = new Promise<void>((resolve) => { release = resolve; });
+
+  t.collector.emit("collect", component("staffmsg:select:i1", { values: ["OWNERS"], deferUpdate: () => slowAck }).value);
+  t.collector.emit("collect", component("staffmsg:send:i1").value);
+  await flush();
+  release();
+  await flush();
+
+  assert.deepEqual(t.sends[0].categories, ["OWNERS"]);
+});
+
+test("messageTournoi_transientPreviewFailure_keepsPanelOnPreviousSelection", async () => {
+  const t = setup({ preview: [{ ok: true, data: preview }, { ok: false, code: "SITE_TIMEOUT" }] });
+  await runMessageTournoi(client, t.interaction, t.deps);
+  const choice = component("staffmsg:select:i1", { values: ["OWNERS"] });
+
+  t.collector.emit("collect", choice.value);
+  await flush();
+
+  assert.equal(t.collector.stopped, null);
+  assert.equal(t.edits.at(-1)?.components?.length, 2);
+  assert.match(choice.followUps[0], /n'a pas répondu à temps/);
+  t.collector.emit("collect", component("staffmsg:send:i1").value);
+  await flush();
+  assert.deepEqual(t.sends[0].categories, ["ALL"]);
+});
+
+test("messageTournoi_permanentPreviewRefusal_closesPanel", async () => {
+  const t = setup({ preview: [{ ok: true, data: preview }, { ok: false, code: "TOURNAMENT_NOT_OPEN_FOR_MESSAGES" }] });
+  await runMessageTournoi(client, t.interaction, t.deps);
+
+  t.collector.emit("collect", component("staffmsg:select:i1", { values: ["OWNERS"] }).value);
+  await flush();
+
+  assert.equal(t.collector.stopped, "refused");
+  assert.deepEqual(t.edits.at(-1)?.components, []);
+});
+
+test("messageTournoi_clickAfterSend_isAcknowledgedWithoutEffect", async () => {
+  const t = setup();
+  await runMessageTournoi(client, t.interaction, t.deps);
+  t.collector.emit("collect", component("staffmsg:send:i1").value);
+  await flush();
+  const late = component("staffmsg:send:i1");
+
+  t.collector.emit("collect", late.value);
+  await flush();
+
+  assert.equal(late.deferred(), 1);
+  assert.equal(t.sends.length, 1);
+});
+
+test("messageTournoi_sendOutcomeUnknown_saysItMayHaveGoneOut", async () => {
+  const t = setup({ send: { ok: false, code: "SITE_OUTCOME_UNKNOWN" } });
+  await runMessageTournoi(client, t.interaction, t.deps);
+
+  t.collector.emit("collect", component("staffmsg:send:i1").value);
+  await flush();
+
+  assert.match(t.edits.at(-1)?.content ?? "", /peut-être parti/);
 });

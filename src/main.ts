@@ -54,6 +54,9 @@ installProcessGuards(client);
 
 let internalApiServer: ReturnType<typeof startInternalApi> | null = null;
 
+/** Table des commandes Blue, bâtie à la première commande Blue reçue (gestionnaires seulement). */
+let blueCommandTable: Awaited<ReturnType<typeof fillBlueCommands>> | null = null;
+
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isCommand()) return;
 
@@ -84,7 +87,12 @@ client.on("interactionCreate", async (interaction) => {
 
     let command = commands[commandName] ?? globalCommands[commandName];
     if (!command) {
-      command = (await fillBlueCommands(client))[commandName];
+      // La table des commandes Blue ne se bâtit qu'une fois : ses gestionnaires
+      // ne changent pas, et la rebâtir (choix des serveurs partenaires : SQLite
+      // et un appel Discord par serveur) avant chaque commande mangeait les 3 s
+      // que Discord laisse pour accuser l'interaction.
+      blueCommandTable ??= await fillBlueCommands(client);
+      command = blueCommandTable[commandName];
       if (!command) {
         await safeReply(interaction as ChatInputCommandInteraction, "Command not found");
         return;
