@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { Client, Collection, GatewayIntentBits, Message, MessagePayload, VoiceState, VoiceStateManager, type MessageCreateOptions, type MessageTarget, type TextChannel } from "discord.js";
+import { Client, Collection, GatewayIntentBits, Message, MessagePayload, Partials, VoiceState, VoiceStateManager, type MessageCreateOptions, type MessageTarget, type TextChannel } from "discord.js";
 
 import { buildClientOptions, keepVoiceState } from "../../config/clientOptions.js";
 import { DEFAULT_VOICE_CATEGORY_ID } from "../../voice/matchVoice.js";
@@ -42,6 +42,11 @@ test("buildClientOptions_default_setsNoMentionsAndNoReplyPing", () => {
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildVoiceStates,
   ]);
+});
+
+test("buildClientOptions_default_enablesTheMessagePartial", () => {
+  // Annonces GETI : sans lui, la suppression d'un message hors cache n'est jamais annoncée.
+  assert.deepEqual(buildClientOptions().partials, [Partials.Message]);
 });
 
 test("buildClientOptions_twoCalls_returnFreshObjects", () => {

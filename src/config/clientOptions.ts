@@ -1,4 +1,4 @@
-import { GatewayIntentBits, Options, type ClientOptions, type VoiceState } from "discord.js";
+import { GatewayIntentBits, Options, Partials, type ClientOptions, type VoiceState } from "discord.js";
 import { voiceCategoryId } from "../voice/matchVoice.js";
 
 /**
@@ -46,6 +46,11 @@ export function buildClientOptions(): ClientOptions {
       // ne sait pas qu'un salon rendu s'est vidé et `voiceStateUpdate` reste muet.
       GatewayIntentBits.GuildVoiceStates,
     ],
+    // Annonces GETI (`geti/getiRelay.ts`) : sans ce partiel, discord.js tait la
+    // modification et la suppression d'un message qui n'est plus en cache
+    // (tout message antérieur au démarrage), et le site garderait une annonce
+    // supprimée sur Discord.
+    partials: [Partials.Message],
     allowedMentions: { parse: [], repliedUser: false },
     // États vocaux gardés pour le seul serveur de la catégorie (`keepVoiceState`).
     makeCache: Options.cacheWithLimits({

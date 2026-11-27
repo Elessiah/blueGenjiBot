@@ -5,6 +5,7 @@ import type {ChatInputCommandInteraction, Client, Guild} from "discord.js";
 import {Ban} from "../../bdd/types.js";
 import {deleteBanMessages} from "../../privacy/staffLogRetention.js";
 import {forgetBanVerdict} from "../../check/checkBan.js";
+import {requestGetiResync} from "../../geti/getiRelay.js";
 import {sendLog} from "../../safe/sendLog.js";
 import {safeErrorDetail} from "../../safe/errorGuards.js";
 
@@ -66,6 +67,8 @@ async function unban(client: Client,
     } else {
         // Le relais garde une minute le verdict « exclu » : la levée vaut sur-le-champ.
         forgetBanVerdict(target);
+        // Ses annonces directes encore dans les salons GETI reviennent sur le site.
+        requestGetiResync();
         // Réponse d'abord : Discord n'attend que 3 s, et les suppressions
         // ci-dessous font plusieurs appels.
         await safeReply(interaction, "User successfully unbanned.");

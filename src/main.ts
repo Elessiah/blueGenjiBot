@@ -24,6 +24,7 @@ import { safeReply } from "./safe/safeReply.js";
 import { updateCommands } from "./utils/updateCommands.js";
 import { updateGlobalCommands } from "./utils/updateGlobalCommands.js";
 import { startInternalApi } from "./internalApi.js";
+import { registerGetiRelay } from "./geti/getiRelay.js";
 import { purgeFeedIdentifiers } from "./feed/feedBus.js";
 import { eraseLeftGuild, runDataRetention } from "./privacy/dataRetention.js";
 import { recordDailySnapshot } from "./snapshots/dailySnapshot.js";
@@ -51,6 +52,9 @@ import {
 const client = new Client(buildClientOptions());
 
 installProcessGuards(client);
+
+// Annonces GETI : six salons du serveur BlueGenji recopiés vers le site (lecture seule côté Discord).
+const getiRelay = registerGetiRelay(client);
 
 let internalApiServer: ReturnType<typeof startInternalApi> | null = null;
 
@@ -152,6 +156,11 @@ client.on("messageCreate", async (message) => {
 
 client.on("messageUpdate", async (oldMessage, newMessage) => {
   try {
+    // Message hors cache (partiel `Message`, activé pour les annonces GETI) :
+    // comme avant ce partiel, sa modification n'est pas relayée aux serveurs
+    // partenaires — l'ancien message, pièce jointe comprise, n'est pas connu.
+    if (oldMessage.partial || newMessage.partial) return;
+
     const bdd = await getBddInstance();
     const duplicatedMessages = (await bdd.get(
       "DPMsg",
@@ -311,6 +320,12 @@ client.on("clientReady", async () => {
       } catch (error) {
         await reportError(client, "cron sweepVoiceChannels", error);
       }
+    });
+
+    // Annonces GETI : rattrapage de la durée de garde de chaque salon (14 jours, 7 pour les scrims), lancé sans être
+    // attendu (il ne lève pas ; il journalise dans pm2, jamais sur Discord).
+    void getiRelay?.backfill().catch((error: unknown) => {
+      console.error("[geti] rattrapage :", error instanceof Error ? error.name : typeof error);
     });
 
     // Peut-être un redémarrage après une panne : une alerte, qui notifie.

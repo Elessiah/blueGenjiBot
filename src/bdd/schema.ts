@@ -77,6 +77,14 @@ export const DPMSG_TABLE = `CREATE TABLE IF NOT EXISTS DPMsg
                  )
            );`;
 
+/**
+ * Index de `DPMsg.id_og` : la suppression d'un message source cherche ses
+ * copies par cette colonne, et, depuis le partiel `Message` (annonces GETI),
+ * elle part pour tout message supprimé hors cache, de tout serveur — sans
+ * index, un balayage de la table à chaque suppression.
+ */
+export const DPMSG_OG_INDEX = `CREATE INDEX IF NOT EXISTS idx_dpmsg_id_og ON DPMsg (id_og);`;
+
 /** Table `ChannelPartner` (sans effet si elle existe déjà). */
 export const CHANNEL_PARTNER_TABLE = `CREATE TABLE IF NOT EXISTS ChannelPartner
            (

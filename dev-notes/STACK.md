@@ -10,7 +10,7 @@ Texte déplacé tel quel depuis `CLAUDE.md` (allègement du fichier chargé à c
 
 - **Node.js + TypeScript ESM** (strict). Imports avec extension `.js` obligatoire.
 - **Deux TypeScript cohabitent.** `typescript-native` (alias npm de `typescript@^7`, le compilateur réécrit en Go) produit `dist/` — environ 3 s au lieu de 9. `typescript` (5.x) reste installé pour **typescript-eslint** (qui exige `<6.1`) et **ts-node** (`npm run dev`) : TypeScript 7 n'expose plus l'API JavaScript qu'ils appellent. Les deux paquets fournissent un binaire `tsc`, et celui que retient `node_modules/.bin` dépend de l'ordre d'installation : les scripts désignent donc leur compilateur **par chemin** (`node node_modules/<paquet>/bin/tsc`), jamais par `tsc` ni `npx tsc`. `baseUrl` et `paths` ont quitté `tsconfig.json` : les imports sont relatifs, résolus par Node seul — l’alias `@/*` exigeait `tsc-alias` après compilation, qui tirait chokidar/globby et donc `braces` (GHSA-vfj7-8cjw-p6xm, sans correctif). Le mode dev (`npm run dev`) surveille `src/` par `node --watch-path`, sans nodemon. Le lockfile porte les binaires natifs de toutes les plateformes, dont `@typescript/typescript-linux-arm64` pour le serveur. Même schéma que l'app sœur ; le passage complet attendra que typescript-eslint accepte la version 7. Câblage gardé par `tests/utils/typescriptWiring.test.ts`.
-- **discord.js 14** — slash commands, intents : Guilds, GuildMembers, GuildMessages, MessageContent
+- **discord.js 14** — slash commands, intents : Guilds, GuildMembers, GuildMessages, MessageContent, GuildVoiceStates ; partiel `Message` (annonces GETI, `dev-notes/GETI_RELAY.md`)
 - **Express 4** — API interne montée sur `/internal`, auth via header `x-internal-token`
 - **SQLite** (`sqlite` + `sqlite3`) — base locale `database.sqlite`, accès via singleton `Bdd` (`src/bdd/Bdd.ts`)
 - **`allowScripts` (package.json) — requis par npm 12**, qui tourne sur le serveur depuis le 24/09/2026 et bloque par défaut les scripts d'installation des dépendances. `sqlite3` **en a besoin** : son script `install` (`prebuild-install -r napi || node-gyp rebuild`) est ce qui pose `build/Release/node_sqlite3.node` — bloqué, `npm ci` réussit, le build aussi, et le bot meurt au démarrage sur `Could not locate the bindings file` (c'est ainsi que `updateBlueGenji.sh` a laissé le bot à terre ce jour-là). Il est donc **approuvé**, sans épingler la version : épinglé, la prochaine montée de `sqlite3` recasserait le déploiement de la même façon muette. `unrs-resolver` est **refusé** (`postinstall` de simple vérification, la liaison native arrive par sa dépendance optionnelle — même choix que le site). Un nouveau paquet à script s'annonce à la fin de `npm ci` (`npm warn install-scripts`) : le relire (`npm install-scripts ls`), puis l'approuver ou le refuser ici.
@@ -38,6 +38,7 @@ src/
 ├── safe/                   # wrappers défensifs : safeReply, sendLog
 ├── config/                 # commandes statiques + fillBlueCommands (dynamiques)
 ├── voice/                  # salons vocaux d'équipe des matchs (matchVoice, routes /internal/voice/*)
+├── geti/                   # annonces GETI recopiées vers le site (getiPayload, getiSiteClient, getiQueue, getiRelay)
 ├── utils/                  # updateCommands, helpers divers
 └── tests/                  # node:test
 ```

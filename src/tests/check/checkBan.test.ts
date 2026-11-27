@@ -19,6 +19,7 @@ import {
   MAX_QUEUED_BAN_NOTICES,
   checkBan as checkBanNow,
   forgetBanVerdict,
+  readBanVerdict,
   settleBanNotices,
   stopBanNotices,
 } from "../../check/checkBan.js";
@@ -184,6 +185,26 @@ test("rend UNKNOWN quand la lecture du verdict echoue", async () => {
   try {
     const verdict = await checkBan(fakeClient("none", newTrace()), "banni-1", false);
     assert.equal(verdict, "UNKNOWN");
+  } finally {
+    await bdd.raw("ALTER TABLE Ban_indisponible RENAME TO Ban", []);
+  }
+});
+
+test("readBanVerdict_excludedUser_returnsBannedWithoutNotice", async () => {
+  await seedBan("banni-verdict");
+
+  assert.equal(await readBanVerdict("banni-verdict"), "BANNED");
+});
+
+test("readBanVerdict_unknownUser_returnsNotBanned", async () => {
+  assert.equal(await readBanVerdict("libre-verdict"), "NOT_BANNED");
+});
+
+test("readBanVerdict_unreadableTable_returnsUnknown", async () => {
+  const bdd = await getBddInstance();
+  await bdd.raw("ALTER TABLE Ban RENAME TO Ban_indisponible", []);
+  try {
+    assert.equal(await readBanVerdict("banni-verdict"), "UNKNOWN");
   } finally {
     await bdd.raw("ALTER TABLE Ban_indisponible RENAME TO Ban", []);
   }

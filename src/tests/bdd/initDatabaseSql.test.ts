@@ -46,22 +46,22 @@ const sha256 = (value: unknown): string => createHash("sha256").update(JSON.stri
 test("instructions envoyées : mêmes textes, même ordre, mêmes paramètres", async (t) => {
   const { calls, errors } = await play(t);
   assert.deepEqual(errors, []);
-  // 34 `exec` (28 créations ou réglages, PRAGMA et ALTER de ChannelPartner,
+  // 35 `exec` (29 créations ou réglages, PRAGMA et ALTER de ChannelPartner,
   // 4 ALTER de Ban), 5 `get` (une colonne vérifiée chacun), puis un `all` et
   // un `run` par service et par rang semés, et le `run` qui remet au texte
   // bilingue les rappels d'adhésion à l'ancien texte par défaut.
   assert.equal(calls.filter(([m]) => m === "all").length, services.length + ranks.length);
   assert.equal(calls.filter(([m]) => m === "run").length, services.length + ranks.length + 1);
-  assert.equal(calls.length, 34 + 5 + 2 * (services.length + ranks.length) + 1);
+  assert.equal(calls.length, 35 + 5 + 2 * (services.length + ranks.length) + 1);
   // Empreintes du jeu d'instructions (EF-14 : colonnes d'avis de Ban, remise des rappels d'adhésion ; la table des avis à retirer, créée en dernier, est hors du préfixe).
-  assert.equal(sha256(calls.slice(0, -1)), "d50f6914cdf1a6ebb1d099ff102d1dc250204769c1d7cc973532d2a3faab7059");
-  assert.equal(sha256(calls), "eac38ac2ffd5d7c31385bca57e586763941d8974fefe2221e12efe788bfe2b5d");
+  assert.equal(sha256(calls.slice(0, -1)), "433b70314654dc36b4d4256de84c13ac0c4911f60790df2f97513899ae89a4a3");
+  assert.equal(sha256(calls), "b7fb29c429ed3501c878135eddac74aee988f45593425d31f2278133d0259e53");
 });
 
 test("chaque étape en échec : son libellé, dans l'ordre, une fois", async (t) => {
   const { calls, errors } = await play(t, true);
   assert.deepEqual(errors.map((parts) => parts[0]), [
-    "secure_delete error: ", "busy_timeout error: ", "OGMsg :", "MessageService : ", "DPMsg : ",
+    "secure_delete error: ", "busy_timeout error: ", "OGMsg :", "MessageService : ", "DPMsg : ", "DPMsg id_og index : ",
     "ChannelPartner : ", "Service&Co", "ChannelPartnerService : ", "Ban : ", "Error rank filter : ",
     "ChannelPartnerRank: ", "AdhesionInterval error: ", "RoleAdmin error: ", "ServerModule error: ",
     "FeedEvent error: ", "DailySnapshot error: ", "Scrim error: ", "Recrute error: ", "UserLink error: ",
@@ -76,8 +76,8 @@ test("chaque étape en échec : son libellé, dans l'ordre, une fois", async (t)
   // texte bilingue des rappels d'adhésion (un `run`, que la base factice ne
   // refuse pas) passe entre AdhesionInterval et RoleAdmin.
   const expected = errors.map(() => "exec");
-  expected.splice(12, 0, "run");
+  expected.splice(13, 0, "run");
   assert.deepEqual(calls.map(([m]) => m), expected);
-  assert.equal(sha256(calls.slice(0, -1)), "d63ac99e69ab95e7ae46e38d95fd0dbeead8c0c9aa6f638556cd702fd2bc5b9d");
-  assert.equal(sha256(calls), "353b7aadb9f96bbf0149437d65b5025190340a67a8e95cbe2233b45ceb2e4d00");
+  assert.equal(sha256(calls.slice(0, -1)), "190b68bea8e9a66827742ca7f59fb317e146b6a216ab237b2e80439436ddd9e3");
+  assert.equal(sha256(calls), "e102018d54b3ff0543f81538edcb4063b9881dcb7d6e97200346e3df8038dd96");
 });
