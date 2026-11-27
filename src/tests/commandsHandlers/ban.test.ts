@@ -208,4 +208,3 @@ test("verdict indisponible (base fermée) : refus sans rien publier", async () =
   assert.ok(world.logs.every((l) => !l.startsWith("*Un joueur")), "aucun avis d'exclusion");
   assert.ok(world.logs.some((l) => l.startsWith("Failed to check ban : ")));
 });
-
