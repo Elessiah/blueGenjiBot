@@ -91,7 +91,12 @@ message partiel qui échoue autrement que par « message inconnu » (10008) fait
 relire son salon au passage des cinq minutes (`noteChannelLost`). Les annonces
 directes d'un exclu du relais (`Ban`, lu par `readBanVerdict`, sans avis ni
 journal Discord) ne partent pas et ne comptent pas présentes : la
-réconciliation les retire du site ; une base illisible les laisse partir. Par salon : pages de 100 messages jusqu'à la fenêtre de garde
+réconciliation les retire du site ; une base illisible les laisse partir. Un
+rattrapage garde le verdict de chaque auteur lu dans l'historique (une lecture
+par auteur), sauf un verdict illisible, relu à l'annonce suivante ; les messages
+en direct relisent toujours la base, et `/ban` / `/unban` vident ces verdicts
+(`requestGetiResync`) avant de relancer un rattrapage, demandé dès l'exclusion
+écrite. Par salon : pages de 100 messages jusqu'à la fenêtre de garde
 (750 ms entre deux pages, 50 pages au plus), chaque page poussée par lots, puis
 `reconcile` avec les identifiants des **annonces** lues sur la fenêtre (un relais
 changé en avis n'en est plus une : le site le retire, comme à sa modification en
