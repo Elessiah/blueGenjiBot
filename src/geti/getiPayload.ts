@@ -115,12 +115,13 @@ export function getiRetentionMs(channel: GetiChannel): number {
 }
 
 /** Début d'un relais de GETI Bot : la mention de l'auteur de l'annonce (« <@id>*(pseudo)* sur … »). */
-const GETI_RELAY_HEADER_START = /^\s*<@!?\d{15,22}>/u;
+const GETI_RELAY_HEADER_START = /^\s*<@!?\d{15,22}>[^\S\n]*[*_]*\([^\n]{1,200}?\)[*_]*[^\S\n]*(?:sur|on|from)(?![\p{L}\p{N}])/iu;
 
 /**
  * Le message de GETI Bot est-il un relais d'annonce ? Un relais ouvre son
- * premier encart sur la mention de l'auteur ; ses autres messages (« Ton
- * annonce a été publié dans … », l'avis qui suit une annonce directe) n'en
+ * premier encart sur son en-tête : mention de l'auteur, `(pseudo)`, puis
+ * `sur`/`on`/`from` ; ses autres messages (« Ton annonce a été publié dans … »,
+ * l'avis qui suit une annonce directe), même s'ils mentionnent l'auteur, n'en
  * sont pas — même règle que le site (`isGetiRelay`).
  * @param embeds Encarts du message.
  * @returns `true` pour un relais.

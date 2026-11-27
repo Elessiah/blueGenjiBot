@@ -23,7 +23,7 @@ Deux sortes d'annonces, toutes deux poussées (`isGetiPost`) :
   suppression du relais par GETI Bot qui est suivie.
 
 Sont laissés : les avis de GETI Bot qui ne sont pas des relais (premier encart
-sans la mention de l'auteur, `isGetiRelayMessage`), les messages de tout autre bot (le nôtre compris), les messages
+sans l'en-tête d'un relais — mention de l'auteur, `(pseudo)`, puis `sur`/`on`/`from` —, `isGetiRelayMessage`), les messages de tout autre bot (le nôtre compris), les messages
 système, les messages sans auteur. Le bot ne lit rien dans le texte : le site
 analyse (`parseGetiPost`), si bien qu'améliorer l'analyse ne demande pas de
 redéployer le bot — un redémarrage du bot suffit à faire ré-analyser les annonces
@@ -38,11 +38,13 @@ gardées, puisque le rattrapage les repousse toutes.
   « try/catch + `sendLog()` » : un relais de plusieurs centaines d'appels par
   rattrapage noierait le salon de supervision au moindre arrêt du site ; chaque
   écouteur garde son try/catch, seul `sendLog()` est remplacé par pm2. Un refus
-  401/403 du site (jeton, boucle locale) y a sa ligne propre (`refus 401`).
+  401/403 du site (jeton, boucle locale) y a sa ligne propre (`refus 401`), une seule
+  jusqu'au prochain appel reçu.
 - **Rien n'est gardé** par le bot : ni base, ni fichier. La file d'envoi et la
   liste des messages supprimés ou modifiés en direct pendant un rattrapage
-  vivent en mémoire (une version en direct n'est jamais écrasée par la page
-  d'historique lue avant elle). Un lot perdu (site muet) arrête le rattrapage :
+  vivent en mémoire, comme le cache de messages de discord.js (200 derniers
+  messages reçus par salon, effacé au redémarrage, ce que dit la politique). Une version en direct n'est jamais écrasée par la page
+  d'historique lue avant elle. Un lot perdu (site muet) arrête le rattrapage :
   le reste de l'historique attend le rattrapage dû, toutes les cinq minutes.
 - **Le partiel `Message`** (`config/clientOptions.ts`) est nécessaire : sans lui,
   discord.js tait la modification et la suppression d'un message hors cache, et
@@ -63,10 +65,13 @@ gardées, puisque le rattrapage les repousse toutes.
 
 Rattrapage (`GetiRelay.backfill`) : au `clientReady`, à chaque `shardReady`
 suivant (nouvelle session : des événements ont pu manquer — une simple reprise
-les rejoue), et toutes les cinq minutes tant qu'un envoi perdu n'a pas été
+les rejoue), et toutes les cinq minutes tant qu'un envoi perdu ou une lecture de salon
+en échec n'a pas été
 rattrapé (`tick`). Par salon : pages de 100 messages jusqu'à la fenêtre de garde
 (750 ms entre deux pages, 50 pages au plus), chaque page poussée par lots, puis
-`reconcile` avec **tous** les identifiants lus sur la fenêtre (annonces ou non) —
+`reconcile` avec les identifiants des **annonces** lues sur la fenêtre (un relais
+changé en avis n'en est plus une : le site le retire, comme à sa modification en
+direct) —
 le site retire ce qu'il garde et qui n'y est plus. Pas de réconciliation si un
 lot a été perdu ou si le salon est illisible ; un refus définitif de Discord
 (salon inconnu, accès ou permission manquants) ne relance pas le rattrapage en

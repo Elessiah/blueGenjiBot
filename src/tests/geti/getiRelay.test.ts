@@ -194,7 +194,7 @@ test("backfill_scrimChannel_readsAndReconcilesSevenDaysOnly", async () => {
   assert.deepEqual(reconcileOf(LFS_CHANNEL)?.ids, ["100000000000000901"]);
 });
 
-test("backfill_messageOfAnotherBot_isNotPushedButStaysInTheReconciledIds", async () => {
+test("backfill_messageOfAnotherBot_isNeitherPushedNorReconciled", async () => {
   const author = { id: "100000000000000090", username: "AutreBot", discriminator: "0", bot: true };
   const { relay, upserted, reconcileOf } = harness({
     pages: { [LFP_CHANNEL]: () => [relayPost("100000000000000901", { author }), relayPost("100000000000000902")] },
@@ -203,7 +203,7 @@ test("backfill_messageOfAnotherBot_isNotPushedButStaysInTheReconciledIds", async
   await relay.backfill();
 
   assert.deepEqual(upserted(), ["100000000000000902"]);
-  assert.deepEqual(reconcileOf(LFP_CHANNEL)?.ids, ["100000000000000901", "100000000000000902"]);
+  assert.deepEqual(reconcileOf(LFP_CHANNEL)?.ids, ["100000000000000902"]);
 });
 
 test("backfill_fullPage_readsTheNextOneBeforeItsOldestMessage", async () => {
@@ -223,7 +223,7 @@ test("backfill_fullPage_readsTheNextOneBeforeItsOldestMessage", async () => {
   assert.equal(reconcileOf(LFP_CHANNEL)?.ids.length, 101);
 });
 
-test("backfill_systemMessage_isNotPushedButStaysInTheReconciledIds", async () => {
+test("backfill_systemMessage_isNeitherPushedNorReconciled", async () => {
   const { relay, upserted, reconcileOf } = harness({
     pages: { [LFP_CHANNEL]: () => [message("100000000000000901", { system: true })] },
   });
@@ -231,7 +231,7 @@ test("backfill_systemMessage_isNotPushedButStaysInTheReconciledIds", async () =>
   await relay.backfill();
 
   assert.deepEqual(upserted(), []);
-  assert.deepEqual(reconcileOf(LFP_CHANNEL)?.ids, ["100000000000000901"]);
+  assert.deepEqual(reconcileOf(LFP_CHANNEL)?.ids, []);
 });
 
 test("backfill_pageCapReached_reconcilesOnlyThePartThatWasRead", async () => {
@@ -430,4 +430,60 @@ test("noteLost_calledTwice_logsOnce", () => {
   relay.noteLost();
 
   assert.deepEqual(logs, ["[geti] envoi au site abandonné : rattrapage différé"]);
+});
+
+const NOTICE_EMBEDS = [{ description: "<@100000000000000011> Ton annonce a été publiée dans 32 autres channels." }];
+
+test("onMessage_relayEditedIntoANotice_removesItFromTheSite", async () => {
+  const { relay, ops } = harness();
+
+  await relay.onMessage(relayPost("100000000000000901", { embeds: NOTICE_EMBEDS }), true);
+
+  assert.deepEqual(ops, [{ kind: "delete", ids: ["100000000000000901"] }]);
+});
+
+test("onMessage_newNotice_sendsNothing", async () => {
+  const { relay, ops } = harness();
+
+  await relay.onMessage(relayPost("100000000000000901", { embeds: NOTICE_EMBEDS }));
+
+  assert.deepEqual(ops, []);
+});
+
+test("onMessage_editedNonPostInAnotherChannel_sendsNothing", async () => {
+  const { relay, ops } = harness();
+
+  await relay.onMessage(message("100000000000000901", { channelId: OTHER_CHANNEL, system: true }), true);
+
+  assert.deepEqual(ops, []);
+});
+
+test("backfill_relayEditedIntoANoticeWhileItRuns_isNeitherPushedAgainNorReconciled", async () => {
+  const holder: { relay: GetiRelay | null } = { relay: null };
+  const built = harness({
+    pages: {
+      [LFP_CHANNEL]: async () => {
+        // Relais changé en avis en direct, entre la lecture de la page et son envoi.
+        await holder.relay?.onMessage(relayPost("100000000000000901", { embeds: NOTICE_EMBEDS }), true);
+        return [message("100000000000000902"), relayPost("100000000000000901")];
+      },
+    },
+  });
+  holder.relay = built.relay;
+
+  await built.relay.backfill();
+
+  assert.deepEqual(built.upserted(), ["100000000000000902"]);
+  assert.deepEqual(built.reconcileOf(LFP_CHANNEL)?.ids, ["100000000000000902"]);
+});
+
+test("backfill_batchLost_countsOnlyThePostsOfDeliveredBatches", async () => {
+  const { relay, logs } = harness({
+    pages: { [LFP_CHANNEL]: () => [message("100000000000000901"), message("100000000000000902")] },
+    deliver: (op) => (op.kind === "upsert" ? "lost" : "ok"),
+  });
+
+  await relay.backfill();
+
+  assert.equal(logs.at(-1), "[geti] rattrapage : 0 message(s) poussé(s), 0/6 salon(s) réconcilié(s)");
 });

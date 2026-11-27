@@ -120,11 +120,17 @@ export class GetiRelay {
 
   /**
    * Message créé ou modifié dans un salon source : poussé au site s'il est une
-   * annonce (membre ou GETI Bot).
+   * annonce (membre ou GETI Bot). Une modification qui en fait autre chose
+   * qu'une annonce (un relais de GETI Bot changé en avis) la retire du site,
+   * qui ignore l'identifiant s'il ne le gardait pas.
    * @param message Message complet (un message partiel est d'abord relu par l'appelant).
+   * @param edited Vrai pour une modification.
    */
-  async onMessage(message: GetiSourceMessage): Promise<void> {
-    if (!isGetiPost(message)) { return; }
+  async onMessage(message: GetiSourceMessage, edited = false): Promise<void> {
+    if (!isGetiPost(message)) {
+      if (edited) { await this.onDelete(message.channelId, [message.id]); }
+      return;
+    }
     this.updatedDuringBackfill?.add(message.id);
     await this.deps.queue.enqueue({ kind: "upsert", posts: [toGetiWirePost(message)] });
   }
@@ -225,9 +231,11 @@ export class GetiRelay {
       }
       const inWindow = messages.filter((message) => message.createdTimestamp >= windowStart);
       const wanted = inWindow.filter((message) => isGetiPost(message));
-      for (const message of inWindow) { history.ids.push(message.id); }
-      history.delivered = await this.pushBackfillPage(wanted);
-      history.posts += wanted.length;
+      // Seules les annonces comptent présentes : un message qui n'en est plus une (relais changé en avis) est retiré du site.
+      for (const message of wanted) { history.ids.push(message.id); }
+      const pushed = await this.pushBackfillPage(wanted);
+      history.delivered = pushed.delivered;
+      history.posts += pushed.posts;
       // Un lot perdu : le site ne répond plus, la suite de l'historique attend le rattrapage dû.
       if (!history.delivered) { return history; }
       if (messages.length < GETI_PAGE_SIZE || inWindow.length < messages.length) { return history; }
@@ -242,19 +250,22 @@ export class GetiRelay {
     }
   }
 
-  /** Pousse une page d'historique par lots ; `false` si un lot a été perdu. */
-  private async pushBackfillPage(messages: readonly GetiSourceMessage[]): Promise<boolean> {
-    let delivered = true;
+  /**
+   * Pousse une page d'historique par lots ; `delivered` faux si un lot a été
+   * perdu, `posts` ne compte que les annonces des lots remis.
+   */
+  private async pushBackfillPage(messages: readonly GetiSourceMessage[]): Promise<{ delivered: boolean; posts: number }> {
+    let posts = 0;
     for (const batch of batchGetiPosts(messages.map((message) => toGetiWirePost(message)))) {
       const gone = this.deletedDuringBackfill;
       const live = this.updatedDuringBackfill;
       const kept = batch.filter((post) => !gone?.has(post.id) && !live?.has(post.id));
       if ((await this.deps.queue.enqueue({ kind: "upsert", posts: kept })) === "lost") {
-        delivered = false;
-        break;
+        return { delivered: false, posts };
       }
+      posts += kept.length;
     }
-    return delivered;
+    return { delivered: true, posts };
   }
 }
 
@@ -308,17 +319,17 @@ export function registerGetiRelay(client: Client, env: NodeJS.ProcessEnv = proce
   });
   holder.relay = relay;
 
-  const push = async (message: Message | PartialMessage): Promise<void> => {
+  const push = async (message: Message | PartialMessage, edited: boolean): Promise<void> => {
     try {
       if (!isGetiChannel(message.channelId)) { return; }
       const full = await fullMessage(message);
-      if (full) { await relay.onMessage(full); }
+      if (full) { await relay.onMessage(full, edited); }
     } catch (error) {
       logFailure("message non poussé", error);
     }
   };
-  client.on("messageCreate", (message) => { void push(message); });
-  client.on("messageUpdate", (_old, message) => { void push(message); });
+  client.on("messageCreate", (message) => { void push(message, false); });
+  client.on("messageUpdate", (_old, message) => { void push(message, true); });
   client.on("messageDelete", (message) => {
     relay.onDelete(message.channelId, [message.id]).catch((error: unknown) => { logFailure("suppression non poussée", error); });
   });

@@ -40,6 +40,14 @@ const BODY_REFUSALS = new Set([400, 413, 415, 422]);
  */
 const CONFIG_REFUSALS = new Set([401, 403]);
 
+/** Un refus de configuration a déjà sa ligne au journal : la suivante attend un appel reçu. */
+let configRefusalLogged = false;
+
+/** Remet à zéro la ligne de refus de configuration (tests). */
+export function resetGetiConfigRefusalLog(): void {
+  configRefusalLogged = false;
+}
+
 function requestOf(op: GetiSiteOp): { path: string; body: unknown } {
   if (op.kind === "upsert") { return { path: SITE_GETI_POSTS_PATH, body: { posts: op.posts } }; }
   if (op.kind === "delete") { return { path: SITE_GETI_DELETE_PATH, body: { ids: op.ids } }; }
@@ -68,10 +76,15 @@ export async function sendGetiOp(config: SiteConfig, op: GetiSiteOp, fetchImpl: 
     });
     // Le corps de la réponse (des nombres) n'est pas lu : il est libéré.
     await response.body?.cancel().catch(() => undefined);
-    if (response.ok) { return "ok"; }
-    if (CONFIG_REFUSALS.has(response.status)) {
+    if (response.ok) {
+      configRefusalLogged = false;
+      return "ok";
+    }
+    if (CONFIG_REFUSALS.has(response.status) && !configRefusalLogged) {
       // Jeton refusé ou appel hors boucle locale : une erreur de configuration, à corriger avant le prochain démarrage.
-      // Retentée au rythme du rattrapage dû (un seul appel par passage), jamais en boucle serrée.
+      // Retentée comme un site muet (reprises de la file, puis un essai par envoi et le rattrapage dû) : une seule ligne
+      // au journal jusqu'au prochain appel reçu, pas une par essai.
+      configRefusalLogged = true;
       console.error(`[geti] site : refus ${response.status} — vérifier SITE_INTERNAL_URL (boucle locale) et SITE_INTERNAL_TOKEN`);
     }
     return BODY_REFUSALS.has(response.status) ? "drop" : "retry";

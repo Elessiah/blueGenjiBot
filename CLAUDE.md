@@ -31,7 +31,7 @@ node --test "dist/tests/path/to/file.test.js"  # un seul fichier, après build
 
 - **Tout en français** côté messages utilisateur.
 - **SQL exclusivement paramétré** (`Bdd.get/set/...`), jamais de concaténation ; seule exception, un nom de table/colonne tiré d'une constante et vérifié par `assertSqlIdentifier`.
-- **Erreurs** : try/catch + `sendLog()`, jamais une exception qui plante le bot ; **tout listener `client.on(...)` et tout callback `cron`/`setTimeout` a sa propre garde**. Réponses par `safeReply()`, réactions par `safeReact()`.
+- **Erreurs** : try/catch + `sendLog()`, jamais une exception qui plante le bot ; **tout listener `client.on(...)` et tout callback `cron`/`setTimeout` a sa propre garde**. Réponses par `safeReply()`, réactions par `safeReact()`. Seule exception au `sendLog()` : le relais GETI, journalisé dans pm2 seul (`dev-notes/GETI_RELAY.md`).
 - **Flux d'activité** : rien de ce qui entre dans `recordEvent()` ne nomme une personne (règle posée dans `recordEvent`, unique écrivain).
 - **Journal Discord** : un identifiant, **jamais un pseudo**.
 - **Commandes** : enregistrées par `updateCommands()`, déclarées dans `config/commands.ts` ou `fillBlueCommands()`.

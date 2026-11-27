@@ -6,6 +6,7 @@ import {
   GETI_BATCH_MAX_BYTES,
   isGetiChannel,
   isGetiPost,
+  isGetiRelayMessage,
   getiChannel,
   getiRetentionMs,
   GETI_BOT_USER_ID,
@@ -15,6 +16,7 @@ import {
   type GetiWirePost,
 } from "../../geti/getiPayload.js";
 import {
+  resetGetiConfigRefusalLog,
   sendGetiOp,
   SITE_GETI_DELETE_PATH,
   SITE_GETI_POSTS_PATH,
@@ -309,6 +311,7 @@ test("sendGetiOp_fetchThrows_returnsRetry", async () => {
 });
 
 test("sendGetiOp_tokenRefused_retriesAndLogsAConfigurationError", async (t) => {
+  resetGetiConfigRefusalLog();
   const errors = t.mock.method(console, "error", () => undefined);
 
   const outcome = await sendGetiOp(config, { kind: "delete", ids: ["100000000000000901"] }, capture(401, []));
@@ -324,4 +327,38 @@ test("sendGetiOp_routeMissing_retriesWithoutLogging", async (t) => {
 
   assert.equal(outcome, "retry");
   assert.equal(errors.mock.callCount(), 0);
+});
+
+test("sendGetiOp_tokenRefusedTwice_logsOnce", async (t) => {
+  resetGetiConfigRefusalLog();
+  const errors = t.mock.method(console, "error", () => undefined);
+
+  await sendGetiOp(config, { kind: "delete", ids: [] }, respond(401));
+  await sendGetiOp(config, { kind: "delete", ids: [] }, respond(401));
+
+  assert.equal(errors.mock.callCount(), 1);
+});
+
+test("sendGetiOp_refusalThenOkThenRefusal_logsAgainAfterTheSuccess", async (t) => {
+  resetGetiConfigRefusalLog();
+  const errors = t.mock.method(console, "error", () => undefined);
+
+  await sendGetiOp(config, { kind: "delete", ids: [] }, respond(401));
+  await sendGetiOp(config, { kind: "delete", ids: [] }, respond(200));
+  await sendGetiOp(config, { kind: "delete", ids: [] }, respond(403));
+
+  assert.equal(errors.mock.callCount(), 2);
+  assert.match(String(errors.mock.calls[1]?.arguments[0]), /refus 403/u);
+});
+
+test("isGetiRelayMessage_mentionThenNotice_returnsFalse", () => {
+  const embeds = [{ description: "<@100000000000000011> Ton annonce a été publiée dans 32 autres channels." }];
+
+  assert.equal(isGetiRelayMessage(embeds), false);
+});
+
+test("isGetiRelayMessage_englishHeaderWithOn_returnsTrue", () => {
+  const embeds = [{ description: "<@100000000000000011> (fauxpseudo) on [Faux Serveur](https://discord.gg/fauxcode)\n\n> LFT dps" }];
+
+  assert.equal(isGetiRelayMessage(embeds), true);
 });
