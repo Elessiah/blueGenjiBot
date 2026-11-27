@@ -9,6 +9,7 @@ import {safeReply} from "../../safe/safeReply.js";
 import {sendLog} from "../../safe/sendLog.js";
 import type {idSendLogMsg} from "../../safe/types.js";
 import {deleteBanMessages} from "../../privacy/staffLogRetention.js";
+import {requestGetiResync} from "../../geti/getiRelay.js";
 
 /**
  * Ban un utilisateur des utilisations du bot discord.
@@ -105,6 +106,8 @@ async function ban(client: Client,
     for (const OGMsg of OGMsgs) {
         await deleteDPMsgs(client, OGMsg.id_msg);
     }
+    // Ses annonces directes des salons GETI quittent le site (le relais ne les pousse plus).
+    requestGetiResync();
     await safeReply(interaction, "Member has been successfully banned !", true, true);
     return true;
 }

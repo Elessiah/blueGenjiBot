@@ -70,9 +70,9 @@ gardées, puisque le rattrapage les repousse toutes.
 
 Rattrapage (`GetiRelay.backfill`) : au `clientReady`, à chaque `shardReady`
 suivant (nouvelle session : des événements ont pu manquer — une simple reprise
-les rejoue), au bannissement d'un membre du serveur des six salons
-(`guildBanAdd`, intention `GuildModeration` : Discord ne signale pas un à un les
-messages qu'un bannissement efface), et toutes les cinq minutes tant qu'un envoi perdu ou une lecture de salon
+les rejoue), à l'exclusion d'un membre du relais et à sa levée (`/ban`,
+`/unban` → `requestGetiResync` : ses annonces directes quittent le site ou y
+reviennent), et toutes les cinq minutes tant qu'un envoi perdu ou une lecture de salon
 en échec passager n'a pas été
 rattrapé (`tick`) : un envoi perdu relit les six salons, une lecture de salon en échec
 passager ne relit que ce salon (les cinq autres ne sont pas renvoyés au site
@@ -108,9 +108,13 @@ dont toutes les annonces ont changé en direct n'est pas envoyé.
 ## Prérequis sur Discord
 
 Sur les six salons : **Voir le salon**, **Voir les anciens messages**. Intentions
-`Guilds`, `GuildMessages`, `MessageContent` (déjà demandées) et `GuildModeration`
-(non privilégiée, pour `guildBanAdd` ; vérifier après la mise en ligne qu'un
-bannissement de test relance bien `[geti] rattrapage`). À vérifier pour le
+`Guilds`, `GuildMessages`, `MessageContent` (déjà demandées), rien de plus.
+Le bannissement Discord d'un membre (`guildBanAdd`) n'est **pas** écouté : Discord
+ne l'envoie qu'à un bot qui a **Bannir des membres** ou **Voir les logs du
+serveur**, permissions que le relais n'a pas à recevoir (moindre privilège).
+Les messages qu'un bannissement efface, que Discord ne signale pas un à un,
+restent donc sur le site jusqu'au prochain rattrapage ou à la fin de leur durée
+de garde. À vérifier pour le
 bot de production avant la première mise en ligne : un salon illisible est
 journalisé `[geti] salon <id> illisible (<code>)` et reste vide côté site.
 

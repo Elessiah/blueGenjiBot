@@ -15,7 +15,7 @@
  * abandonnés ; un rattrapage complet est alors relancé plus tard.
  */
 
-import type { Client, GuildBan, Message, PartialMessage } from "discord.js";
+import type { Client, Message, PartialMessage } from "discord.js";
 
 import { readBanVerdict } from "../check/checkBan.js";
 import { siteConfig } from "../tournament/siteStaffMessage.js";
@@ -131,11 +131,42 @@ export class GetiRelay {
     this.isExcluded = deps.isExcluded ?? (async () => false);
   }
 
+  /**
+   * Verdicts d'exclusion lus pendant le rattrapage en cours, par auteur : un
+   * auteur de plusieurs annonces n'est lu qu'une fois par rattrapage.
+   */
+  private backfillExclusions: Map<string, Promise<boolean>> | null = null;
+
   /** Une annonce à pousser : `isGetiPost`, et pas l'annonce directe d'un exclu du relais. */
   private async isRelayed(message: GetiSourceMessage): Promise<boolean> {
     if (!isGetiPost(message)) { return false; }
     const author = message.author;
-    return author?.bot === true || !(await this.isExcluded(author?.id ?? ""));
+    if (author?.bot === true) { return true; }
+    const authorId = author?.id ?? "";
+    const cache = this.backfillExclusions;
+    if (cache === null) { return !(await this.isExcluded(authorId)); }
+    let verdict = cache.get(authorId);
+    if (verdict === undefined) {
+      verdict = this.isExcluded(authorId);
+      cache.set(authorId, verdict);
+    }
+    return !(await verdict);
+  }
+
+  /** Marque une lecture en cours du message : une suppression arrivée pendant qu'elle attend l'annule. */
+  private track(id: string): { deleted: boolean } {
+    const pending = { deleted: false };
+    const waiting = this.loading.get(id) ?? new Set<{ deleted: boolean }>();
+    waiting.add(pending);
+    this.loading.set(id, waiting);
+    return pending;
+  }
+
+  private untrack(id: string, pending: { deleted: boolean }): void {
+    const waiting = this.loading.get(id);
+    if (waiting === undefined) { return; }
+    waiting.delete(pending);
+    if (waiting.size === 0) { this.loading.delete(id); }
   }
 
   /** Les annonces à pousser d'une page, dans son ordre. */
@@ -192,7 +223,17 @@ export class GetiRelay {
   async onMessage(message: GetiSourceMessage, edited = false): Promise<void> {
     // Supprimé de Discord pendant le rattrapage : une version reçue après coup est périmée.
     if (this.deletedDuringBackfill?.has(message.id)) { return; }
-    if (!(await this.isRelayed(message))) {
+    // La lecture de l'exclusion attend la base : une suppression arrivée pendant ce temps l'emporte
+    // (sinon l'annonce, déjà retirée du site, y serait repoussée après coup).
+    const pending = this.track(message.id);
+    let relayed: boolean;
+    try {
+      relayed = await this.isRelayed(message);
+    } finally {
+      this.untrack(message.id, pending);
+    }
+    if (pending.deleted) { return; }
+    if (!relayed) {
       if (edited) { await this.retract(message.channelId, message.id); }
       return;
     }
@@ -211,16 +252,12 @@ export class GetiRelay {
    * @param edited Vrai pour une modification.
    */
   async onLoadedMessage(id: string, load: () => Promise<GetiSourceMessage | null>, edited: boolean): Promise<void> {
-    const pending = { deleted: false };
-    const waiting = this.loading.get(id) ?? new Set<{ deleted: boolean }>();
-    waiting.add(pending);
-    this.loading.set(id, waiting);
+    const pending = this.track(id);
     let message: GetiSourceMessage | null;
     try {
       message = await load();
     } finally {
-      waiting.delete(pending);
-      if (waiting.size === 0 && this.loading.get(id) === waiting) { this.loading.delete(id); }
+      this.untrack(id, pending);
     }
     if (message !== null && !pending.deleted) { await this.onMessage(message, edited); }
   }
@@ -292,6 +329,7 @@ export class GetiRelay {
     this.deletedDuringBackfill = new Set();
     this.retractedDuringBackfill = new Set();
     this.updatedDuringBackfill = new Map();
+    this.backfillExclusions = new Map();
     let posts = 0;
     let channels = 0;
     try {
@@ -306,6 +344,7 @@ export class GetiRelay {
       this.deletedDuringBackfill = null;
       this.retractedDuringBackfill = null;
       this.updatedDuringBackfill = null;
+      this.backfillExclusions = null;
     }
     this.log(`[geti] rattrapage : ${posts} message(s) poussé(s), ${channels}/${wanted.length} salon(s) réconcilié(s)`);
   }
@@ -430,11 +469,6 @@ async function fullMessage(message: Message | PartialMessage): Promise<Message |
   }
 }
 
-/** Le bannissement touche-t-il le serveur des six salons ? */
-function bansInSourceGuild(ban: Pick<GuildBan, "guild">): boolean {
-  return GETI_CHANNELS.some((channel) => ban.guild.channels.cache.has(channel.id));
-}
-
 function logFailure(scope: string, error: unknown): void {
   console.error(`[geti] ${scope} : ${errorLabel(error)}`);
 }
@@ -450,6 +484,18 @@ function logFailure(scope: string, error: unknown): void {
  * @param env Environnement du processus.
  * @returns Le relais, à lancer par `backfill()` une fois le client prêt ; `null` s'il n'est pas configuré.
  */
+/** Relais branché par {@link registerGetiRelay} (aucun sans configuration du site). */
+let activeRelay: GetiRelay | null = null;
+
+/**
+ * Un membre vient d'être exclu du relais (`/ban`) ou réadmis (`/unban`) : un
+ * rattrapage complet retire du site ses annonces directes, ou les y remet.
+ * Sans relais branché, rien n'est fait ; un échec n'est que journalisé (pm2).
+ */
+export function requestGetiResync(): void {
+  activeRelay?.backfill().catch((error: unknown) => { logFailure("rattrapage après exclusion", error); });
+}
+
 export function registerGetiRelay(client: Client, env: NodeJS.ProcessEnv = process.env): GetiRelay | null {
   const config = siteConfig(env);
   if (!config) {
@@ -467,6 +513,7 @@ export function registerGetiRelay(client: Client, env: NodeJS.ProcessEnv = proce
     isExcluded: async (authorId) => (await readBanVerdict(authorId)) === "BANNED",
   });
   holder.relay = relay;
+  activeRelay = relay;
 
   const push = async (message: Message | PartialMessage, edited: boolean): Promise<void> => {
     try {
@@ -484,11 +531,6 @@ export function registerGetiRelay(client: Client, env: NodeJS.ProcessEnv = proce
   });
   client.on("messageDeleteBulk", (messages, channel) => {
     relay.onDelete(channel.id, [...messages.keys()]).catch((error: unknown) => { logFailure("suppression en masse non poussée", error); });
-  });
-  // Bannissement avec effacement des messages : Discord n'en signale aucune suppression, le rattrapage les retire.
-  client.on("guildBanAdd", (ban) => {
-    if (!bansInSourceGuild(ban)) { return; }
-    relay.backfill().catch((error: unknown) => { logFailure("rattrapage après bannissement", error); });
   });
   // Nouvelle session Discord (et non simple reprise) : des événements ont pu manquer.
   client.on("shardReady", () => {

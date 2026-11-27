@@ -41,7 +41,6 @@ test("buildClientOptions_default_setsNoMentionsAndNoReplyPing", () => {
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildVoiceStates,
-    GatewayIntentBits.GuildModeration,
   ]);
 });
 

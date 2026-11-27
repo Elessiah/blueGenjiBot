@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { GETI_BOT_USER_ID, GETI_CHANNELS, type GetiSourceMessage } from "../../geti/getiPayload.js";
 import type { GetiDelivery } from "../../geti/getiQueue.js";
-import { GETI_BACKFILL_MAX_PAGES, GetiRelay } from "../../geti/getiRelay.js";
+import { GETI_BACKFILL_MAX_PAGES, GetiRelay, requestGetiResync } from "../../geti/getiRelay.js";
 import type { GetiSiteOp } from "../../geti/getiSiteClient.js";
 
 // Relais GETI : création, modification, suppression, rattrapage sur la durée de garde (14 jours, 7 pour les scrims) et réconciliation par salon.
@@ -46,7 +46,7 @@ function discordError(code: number): Error {
 }
 
 /** Relais branché sur une file et un historique simulés. */
-function harness(options: { pages?: Pages; deliver?: (op: GetiSiteOp) => GetiDelivery; excluded?: string[] } = {}) {
+function harness(options: { pages?: Pages; deliver?: (op: GetiSiteOp) => GetiDelivery; excluded?: string[]; isExcluded?: (authorId: string) => Promise<boolean> } = {}) {
   const ops: GetiSiteOp[] = [];
   const fetched: { channelId: string; before?: string }[] = [];
   const logs: string[] = [];
@@ -67,7 +67,7 @@ function harness(options: { pages?: Pages; deliver?: (op: GetiSiteOp) => GetiDel
     now: () => NOW,
     sleep: async () => undefined,
     log: (line) => { logs.push(line); },
-    isExcluded: async (authorId) => options.excluded?.includes(authorId) ?? false,
+    isExcluded: options.isExcluded ?? (async (authorId) => options.excluded?.includes(authorId) ?? false),
   });
   const upserted = () => ops.flatMap((op) => (op.kind === "upsert" ? op.posts.map((post) => post.id) : []));
   const reconciles = () => ops.filter((op): op is ReconcileOp => op.kind === "reconcile");
@@ -541,6 +541,65 @@ test("backfill_directPostOfExcludedAuthor_isNeitherPushedNorReconciled", async (
 
   assert.deepEqual(upserted(), ["100000000000000901"]);
   assert.deepEqual(reconcileOf(LFP_CHANNEL)?.ids, ["100000000000000901"]);
+});
+
+/** Lecture d'exclusion retenue jusqu'à `release()` : la base répond tard. */
+function heldExclusion() {
+  let release: () => void = () => undefined;
+  const answer = new Promise<boolean>((resolve) => { release = () => { resolve(false); }; });
+  return { isExcluded: () => answer, release: () => { release(); } };
+}
+
+test("onMessage_deletedWhileExclusionCheckPending_pushesNothing", async () => {
+  const held = heldExclusion();
+  const { relay, ops } = harness({ isExcluded: held.isExcluded });
+
+  const pushing = relay.onMessage(message("100000000000000901"));
+  await relay.onDelete(LFP_CHANNEL, ["100000000000000901"]);
+  held.release();
+  await pushing;
+
+  assert.deepEqual(ops, [{ kind: "delete", ids: ["100000000000000901"] }]);
+});
+
+test("onLoadedMessage_deletedDuringExclusionCheck_pushesNothing", async () => {
+  const held = heldExclusion();
+  const { relay, ops } = harness({ isExcluded: held.isExcluded });
+
+  const pushing = relay.onLoadedMessage("100000000000000901", async () => message("100000000000000901"), false);
+  await new Promise((resolve) => { setImmediate(resolve); });
+  await relay.onDelete(LFP_CHANNEL, ["100000000000000901"]);
+  held.release();
+  await pushing;
+
+  assert.deepEqual(ops, [{ kind: "delete", ids: ["100000000000000901"] }]);
+});
+
+test("onMessage_exclusionCheckDone_laterDeleteDoesNotCancelTheNextMessage", async () => {
+  const { relay, upserted } = harness();
+
+  await relay.onMessage(message("100000000000000901"));
+  await relay.onDelete(LFP_CHANNEL, ["100000000000000901"]);
+  await relay.onMessage(message("100000000000000902"));
+
+  assert.deepEqual(upserted(), ["100000000000000901", "100000000000000902"]);
+});
+
+test("backfill_sameAuthorTwice_readsTheExclusionOnce", async () => {
+  const asked: string[] = [];
+  const { relay, upserted } = harness({
+    isExcluded: async (authorId) => { asked.push(authorId); return false; },
+    pages: { [LFP_CHANNEL]: () => [message("100000000000000901"), message("100000000000000902")] },
+  });
+
+  await relay.backfill();
+
+  assert.deepEqual(upserted(), ["100000000000000901", "100000000000000902"]);
+  assert.deepEqual(asked, ["100000000000000001"]);
+});
+
+test("requestGetiResync_noRelayRegistered_doesNothing", () => {
+  assert.doesNotThrow(() => { requestGetiResync(); });
 });
 
 test("noteChannelLost_sourceChannel_rereadsThatChannelOnTheNextTick", async () => {
