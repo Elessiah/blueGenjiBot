@@ -45,6 +45,9 @@ export function buildClientOptions(): ClientOptions {
       // Salons vocaux de match vides (`voice/matchVoice.ts`) : sans elle, le bot
       // ne sait pas qu'un salon rendu s'est vidé et `voiceStateUpdate` reste muet.
       GatewayIntentBits.GuildVoiceStates,
+      // Annonces GETI (`geti/getiRelay.ts`) : `guildBanAdd`, car Discord ne
+      // signale pas les messages qu'un bannissement efface.
+      GatewayIntentBits.GuildModeration,
     ],
     // Annonces GETI (`geti/getiRelay.ts`) : sans ce partiel, discord.js tait la
     // modification et la suppression d'un message qui n'est plus en cache

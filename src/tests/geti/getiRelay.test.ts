@@ -46,7 +46,7 @@ function discordError(code: number): Error {
 }
 
 /** Relais branché sur une file et un historique simulés. */
-function harness(options: { pages?: Pages; deliver?: (op: GetiSiteOp) => GetiDelivery } = {}) {
+function harness(options: { pages?: Pages; deliver?: (op: GetiSiteOp) => GetiDelivery; excluded?: string[] } = {}) {
   const ops: GetiSiteOp[] = [];
   const fetched: { channelId: string; before?: string }[] = [];
   const logs: string[] = [];
@@ -67,6 +67,7 @@ function harness(options: { pages?: Pages; deliver?: (op: GetiSiteOp) => GetiDel
     now: () => NOW,
     sleep: async () => undefined,
     log: (line) => { logs.push(line); },
+    isExcluded: async (authorId) => options.excluded?.includes(authorId) ?? false,
   });
   const upserted = () => ops.flatMap((op) => (op.kind === "upsert" ? op.posts.map((post) => post.id) : []));
   const reconciles = () => ops.filter((op): op is ReconcileOp => op.kind === "reconcile");
@@ -499,6 +500,75 @@ test("tick_nothingLost_doesNothing", async () => {
   await relay.tick();
 
   assert.deepEqual(fetched, []);
+});
+
+const EXCLUDED_AUTHOR = "100000000000000666";
+const excludedAuthor = { id: EXCLUDED_AUTHOR, username: "fauxexclu", discriminator: "0", bot: false };
+
+test("onMessage_directPostOfExcludedAuthor_pushesNothing", async () => {
+  const { relay, ops } = harness({ excluded: [EXCLUDED_AUTHOR] });
+
+  await relay.onMessage(message("100000000000000901", { author: excludedAuthor }));
+
+  assert.deepEqual(ops, []);
+});
+
+test("onMessage_editedDirectPostOfExcludedAuthor_retractsIt", async () => {
+  const { relay, ops } = harness({ excluded: [EXCLUDED_AUTHOR] });
+
+  await relay.onMessage(message("100000000000000901", { author: excludedAuthor }), true);
+
+  assert.deepEqual(ops, [{ kind: "delete", ids: ["100000000000000901"] }]);
+});
+
+test("onMessage_relayOfGetiBot_isNotCheckedAgainstTheExclusions", async () => {
+  const { relay, upserted } = harness({ excluded: [GETI_BOT_USER_ID] });
+
+  await relay.onMessage(relayPost("100000000000000901"));
+
+  assert.deepEqual(upserted(), ["100000000000000901"]);
+});
+
+test("backfill_directPostOfExcludedAuthor_isNeitherPushedNorReconciled", async () => {
+  const { relay, upserted, reconcileOf } = harness({
+    excluded: [EXCLUDED_AUTHOR],
+    pages: {
+      [LFP_CHANNEL]: () => [message("100000000000000901"), message("100000000000000902", { author: excludedAuthor })],
+    },
+  });
+
+  await relay.backfill();
+
+  assert.deepEqual(upserted(), ["100000000000000901"]);
+  assert.deepEqual(reconcileOf(LFP_CHANNEL)?.ids, ["100000000000000901"]);
+});
+
+test("noteChannelLost_sourceChannel_rereadsThatChannelOnTheNextTick", async () => {
+  const { relay, fetched } = harness();
+
+  relay.noteChannelLost(LFP_CHANNEL);
+  await relay.tick();
+
+  assert.deepEqual(fetched.map((call) => call.channelId), [LFP_CHANNEL]);
+  assert.equal(relay.needsResync, false);
+});
+
+test("noteChannelLost_calledTwice_logsOnce", () => {
+  const { relay, logs } = harness();
+
+  relay.noteChannelLost(LFP_CHANNEL);
+  relay.noteChannelLost(LFP_CHANNEL);
+
+  assert.deepEqual(logs, [`[geti] message du salon ${LFP_CHANNEL} non relu : salon relu plus tard`]);
+});
+
+test("noteChannelLost_otherChannel_isIgnored", () => {
+  const { relay, logs } = harness();
+
+  relay.noteChannelLost(OTHER_CHANNEL);
+
+  assert.equal(relay.needsResync, false);
+  assert.deepEqual(logs, []);
 });
 
 test("noteLost_calledTwice_logsOnce", () => {

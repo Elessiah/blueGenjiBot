@@ -388,4 +388,18 @@ function startBanNotice(client: Client, banInfo: BanInfo, now: number): void {
     noticeQueue = notice;
 }
 
+/**
+ * Verdict d'exclusion **sans effet de bord** : ni avis à l'exclu, ni journal
+ * Discord (le relais GETI n'écrit rien sur Discord, pas même une erreur).
+ * @param idUser Identifiant Discord de l'utilisateur.
+ * @returns `"BANNED"`, `"NOT_BANNED"`, ou `"UNKNOWN"` si la base n'a pas pu être lue.
+ */
+export async function readBanVerdict(idUser: string): Promise<BanVerdict> {
+    try {
+        return (await readBan(idUser)) ? "BANNED" : "NOT_BANNED";
+    } catch {
+        return "UNKNOWN";
+    }
+}
+
 export {checkBan};

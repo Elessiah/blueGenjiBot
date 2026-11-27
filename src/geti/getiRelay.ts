@@ -15,8 +15,9 @@
  * abandonnés ; un rattrapage complet est alors relancé plus tard.
  */
 
-import type { Client, Message, PartialMessage } from "discord.js";
+import type { Client, GuildBan, Message, PartialMessage } from "discord.js";
 
+import { readBanVerdict } from "../check/checkBan.js";
 import { siteConfig } from "../tournament/siteStaffMessage.js";
 import {
   batchGetiPosts,
@@ -55,6 +56,12 @@ export type GetiRelayDeps = {
   queue: Pick<GetiQueue, "enqueue">;
   /** Une page d'historique d'un salon, avant `before` ; lève si le salon est illisible. */
   fetchPage: (channelId: string, before?: string) => Promise<GetiSourceMessage[]>;
+  /**
+   * L'auteur d'une annonce directe est-il exclu du relais (`Ban`) ? Ses
+   * annonces ne partent pas vers le site. Une base illisible rend `false` :
+   * l'annonce part (le site reste fidèle au salon, que la modération tient).
+   */
+  isExcluded?: (authorId: string) => Promise<boolean>;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
   log?: (line: string) => void;
@@ -82,6 +89,7 @@ export class GetiRelay {
   private readonly now: () => number;
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly log: (line: string) => void;
+  private readonly isExcluded: (authorId: string) => Promise<boolean>;
   /** Rattrapage en cours, partagé par ceux qui le demandent pendant qu'il tourne. */
   private running: Promise<void> | null = null;
   /** Un rattrapage a été demandé pendant celui qui tourne : il sera rejoué à sa suite. */
@@ -120,6 +128,36 @@ export class GetiRelay {
     this.now = deps.now ?? Date.now;
     this.sleep = deps.sleep ?? defaultSleep;
     this.log = deps.log ?? ((line) => { console.log(line); });
+    this.isExcluded = deps.isExcluded ?? (async () => false);
+  }
+
+  /** Une annonce à pousser : `isGetiPost`, et pas l'annonce directe d'un exclu du relais. */
+  private async isRelayed(message: GetiSourceMessage): Promise<boolean> {
+    if (!isGetiPost(message)) { return false; }
+    const author = message.author;
+    return author?.bot === true || !(await this.isExcluded(author?.id ?? ""));
+  }
+
+  /** Les annonces à pousser d'une page, dans son ordre. */
+  private async relayedOf(messages: readonly GetiSourceMessage[]): Promise<GetiSourceMessage[]> {
+    const wanted: GetiSourceMessage[] = [];
+    for (const message of messages) {
+      if (await this.isRelayed(message)) { wanted.push(message); }
+    }
+    return wanted;
+  }
+
+  /**
+   * La relecture d'un message a échoué autrement que parce qu'il a disparu
+   * (panne passagère de Discord) : son salon est relu au passage des cinq
+   * minutes, pour qu'une modification manquée ne laisse pas l'ancienne version
+   * sur le site.
+   * @param channelId Salon du message.
+   */
+  noteChannelLost(channelId: string): void {
+    if (!isGetiChannel(channelId)) { return; }
+    if (!this.resyncChannels.has(channelId)) { this.log(`[geti] message du salon ${channelId} non relu : salon relu plus tard`); }
+    this.resyncChannels.add(channelId);
   }
 
   /** Un envoi a été perdu (site muet, file pleine) : un rattrapage est dû. */
@@ -154,7 +192,7 @@ export class GetiRelay {
   async onMessage(message: GetiSourceMessage, edited = false): Promise<void> {
     // Supprimé de Discord pendant le rattrapage : une version reçue après coup est périmée.
     if (this.deletedDuringBackfill?.has(message.id)) { return; }
-    if (!isGetiPost(message)) {
+    if (!(await this.isRelayed(message))) {
       if (edited) { await this.retract(message.channelId, message.id); }
       return;
     }
@@ -304,7 +342,7 @@ export class GetiRelay {
       const messages = await this.readPage(channel, before, page === 0);
       if (messages === null) { return null; }
       const inWindow = messages.filter((message) => message.createdTimestamp >= windowStart);
-      const wanted = inWindow.filter((message) => isGetiPost(message));
+      const wanted = await this.relayedOf(inWindow);
       // Seules les annonces comptent présentes : un message qui n'en est plus une (relais changé en avis) est retiré du site.
       for (const message of wanted) { history.ids.push(message.id); }
       const pushed = await this.pushBackfillPage(wanted);
@@ -374,14 +412,27 @@ async function fetchChannelPage(client: Client, channelId: string, before?: stri
   return [...page.values()];
 }
 
-/** Message complet : un message partiel (hors cache) est relu ; `null` s'il a disparu entre-temps. */
+/** Discord : message inconnu (supprimé entre l'événement et sa relecture). */
+const UNKNOWN_MESSAGE_CODE = 10008;
+
+/**
+ * Message complet : un message partiel (hors cache) est relu ; `null` s'il a
+ * disparu entre-temps. Tout autre échec (panne passagère) lève : l'appelant
+ * fait relire le salon plus tard.
+ */
 async function fullMessage(message: Message | PartialMessage): Promise<Message | null> {
   if (!message.partial) { return message; }
   try {
     return await message.fetch();
-  } catch {
-    return null;
+  } catch (error) {
+    if ((error as { code?: unknown } | null)?.code === UNKNOWN_MESSAGE_CODE) { return null; }
+    throw error;
   }
+}
+
+/** Le bannissement touche-t-il le serveur des six salons ? */
+function bansInSourceGuild(ban: Pick<GuildBan, "guild">): boolean {
+  return GETI_CHANNELS.some((channel) => ban.guild.channels.cache.has(channel.id));
 }
 
 function logFailure(scope: string, error: unknown): void {
@@ -413,6 +464,7 @@ export function registerGetiRelay(client: Client, env: NodeJS.ProcessEnv = proce
   const relay = new GetiRelay({
     queue,
     fetchPage: (channelId, before) => fetchChannelPage(client, channelId, before),
+    isExcluded: async (authorId) => (await readBanVerdict(authorId)) === "BANNED",
   });
   holder.relay = relay;
 
@@ -421,6 +473,7 @@ export function registerGetiRelay(client: Client, env: NodeJS.ProcessEnv = proce
       if (!isGetiChannel(message.channelId)) { return; }
       await relay.onLoadedMessage(message.id, () => fullMessage(message), edited);
     } catch (error) {
+      relay.noteChannelLost(message.channelId);
       logFailure("message non poussé", error);
     }
   };
@@ -431,6 +484,11 @@ export function registerGetiRelay(client: Client, env: NodeJS.ProcessEnv = proce
   });
   client.on("messageDeleteBulk", (messages, channel) => {
     relay.onDelete(channel.id, [...messages.keys()]).catch((error: unknown) => { logFailure("suppression en masse non poussée", error); });
+  });
+  // Bannissement avec effacement des messages : Discord n'en signale aucune suppression, le rattrapage les retire.
+  client.on("guildBanAdd", (ban) => {
+    if (!bansInSourceGuild(ban)) { return; }
+    relay.backfill().catch((error: unknown) => { logFailure("rattrapage après bannissement", error); });
   });
   // Nouvelle session Discord (et non simple reprise) : des événements ont pu manquer.
   client.on("shardReady", () => {
