@@ -151,7 +151,7 @@ export class GetiRelay {
     if (author?.bot === true) { return true; }
     const authorId = author?.id ?? "";
     const cache = fromHistory ? this.backfillExclusions : null;
-    if (cache === null) { return (await this.isExcluded(authorId)) !== true; }
+    if (cache === null) { return this.verdictAllows(await this.isExcluded(authorId), message.channelId); }
     let verdict = cache.get(authorId);
     if (verdict === undefined) {
       verdict = this.isExcluded(authorId);
@@ -161,6 +161,21 @@ export class GetiRelay {
     const excluded = await read;
     // Base illisible : l'annonce part, mais la suivante du même auteur relit la base.
     if (excluded === null && cache.get(authorId) === read) { cache.delete(authorId); }
+    return this.verdictAllows(excluded, message.channelId);
+  }
+
+  /**
+   * Vrai sauf pour un exclu. Un verdict illisible (base indisponible) laisse
+   * passer l'annonce, mais fait relire son salon au passage des cinq minutes :
+   * l'annonce d'un exclu passée ainsi quitte le site dès que la base répond.
+   * @param excluded Verdict d'exclusion (`null` : illisible).
+   * @param channelId Salon du message.
+   */
+  private verdictAllows(excluded: boolean | null, channelId: string): boolean {
+    if (excluded === null && isGetiChannel(channelId)) {
+      if (!this.resyncChannels.has(channelId)) { this.log(`[geti] exclusion illisible dans le salon ${channelId} : salon relu plus tard`); }
+      this.resyncChannels.add(channelId);
+    }
     return excluded !== true;
   }
 

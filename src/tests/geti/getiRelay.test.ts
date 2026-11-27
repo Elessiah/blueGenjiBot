@@ -914,3 +914,60 @@ test("backfill_lateUpsertAfterDeleteWhileItRuns_staysDeletedAndOutOfTheReconcile
   assert.deepEqual(built.upserted(), ["100000000000000902"]);
   assert.deepEqual(built.reconcileOf(LFP_CHANNEL)?.ids, ["100000000000000902"]);
 });
+
+test("onMessage_unreadableVerdict_pushesPostAndMarksChannelForResync", async () => {
+  const { relay, upserted, logs } = harness({ isExcluded: async () => null });
+
+  await relay.onMessage(message("100000000000000901"));
+
+  assert.deepEqual(upserted(), ["100000000000000901"]);
+  assert.equal(relay.needsResync, true);
+  assert.deepEqual(logs, [`[geti] exclusion illisible dans le salon ${LFP_CHANNEL} : salon relu plus tard`]);
+});
+
+test("onMessage_unreadableVerdictTwiceSameChannel_logsOnce", async () => {
+  const { relay, logs } = harness({ isExcluded: async () => null });
+
+  await relay.onMessage(message("100000000000000901"));
+  await relay.onMessage(message("100000000000000902"));
+
+  assert.deepEqual(logs, [`[geti] exclusion illisible dans le salon ${LFP_CHANNEL} : salon relu plus tard`]);
+});
+
+test("tick_afterUnreadableVerdict_rereadsOnlyThatChannelAndRemovesExcludedPost", async () => {
+  let verdict: boolean | null = null;
+  const post = message("100000000000000901");
+  const { relay, fetched, reconcileOf } = harness({
+    isExcluded: async () => verdict,
+    pages: { [LFP_CHANNEL]: () => [post] },
+  });
+  await relay.onMessage(post);
+  verdict = true;
+
+  await relay.tick();
+
+  assert.deepEqual([...new Set(fetched.map((read) => read.channelId))], [LFP_CHANNEL]);
+  assert.deepEqual(reconcileOf(LFP_CHANNEL)?.ids, []);
+  assert.equal(relay.needsResync, false);
+});
+
+test("backfill_unreadableVerdict_leavesChannelDueForTheNextTick", async () => {
+  const { relay, upserted } = harness({
+    isExcluded: async () => null,
+    pages: { [LFP_CHANNEL]: () => [message("100000000000000901")] },
+  });
+
+  await relay.backfill();
+
+  assert.deepEqual(upserted(), ["100000000000000901"]);
+  assert.equal(relay.needsResync, true);
+});
+
+test("onMessage_readableVerdict_doesNotMarkResync", async () => {
+  const { relay, upserted } = harness({ isExcluded: async () => false });
+
+  await relay.onMessage(message("100000000000000901"));
+
+  assert.deepEqual(upserted(), ["100000000000000901"]);
+  assert.equal(relay.needsResync, false);
+});
