@@ -487,3 +487,95 @@ test("backfill_batchLost_countsOnlyThePostsOfDeliveredBatches", async () => {
 
   assert.equal(logs.at(-1), "[geti] rattrapage : 0 message(s) poussé(s), 0/6 salon(s) réconcilié(s)");
 });
+
+test("backfill_relayEditedOutThenBackWhileItRuns_staysInTheReconcileIds", async () => {
+  const holder: { relay: GetiRelay | null } = { relay: null };
+  const built = harness({
+    pages: {
+      [LFP_CHANNEL]: async () => {
+        // Changé en avis, puis rétabli en relais, entre la lecture de la page et la réconciliation.
+        await holder.relay?.onMessage(relayPost("100000000000000901", { embeds: NOTICE_EMBEDS }), true);
+        await holder.relay?.onMessage(relayPost("100000000000000901"), true);
+        return [message("100000000000000902"), relayPost("100000000000000901")];
+      },
+    },
+  });
+  holder.relay = built.relay;
+
+  await built.relay.backfill();
+
+  assert.deepEqual(built.reconcileOf(LFP_CHANNEL)?.ids, ["100000000000000902", "100000000000000901"]);
+});
+
+test("backfill_pageReadAsNoticeThenEditedIntoPostLive_isInTheReconcileIds", async () => {
+  const holder: { relay: GetiRelay | null } = { relay: null };
+  const built = harness({
+    pages: {
+      [LFP_CHANNEL]: async () => {
+        // La page lue porte l'avis ; la modification en direct en fait un relais.
+        await holder.relay?.onMessage(relayPost("100000000000000901"), true);
+        return [message("100000000000000902"), relayPost("100000000000000901", { embeds: NOTICE_EMBEDS })];
+      },
+    },
+  });
+  holder.relay = built.relay;
+
+  await built.relay.backfill();
+
+  assert.deepEqual(built.upserted(), ["100000000000000901", "100000000000000902"]);
+  assert.deepEqual(built.reconcileOf(LFP_CHANNEL)?.ids, ["100000000000000902", "100000000000000901"]);
+});
+
+test("backfill_livePostOfAnotherChannel_isNotInThisChannelsReconcile", async () => {
+  const holder: { relay: GetiRelay | null } = { relay: null };
+  const built = harness({
+    pages: {
+      [LFP_CHANNEL]: async () => {
+        await holder.relay?.onMessage(message("100000000000000903", { channelId: LFS_CHANNEL }), true);
+        return [message("100000000000000902")];
+      },
+    },
+  });
+  holder.relay = built.relay;
+
+  await built.relay.backfill();
+
+  assert.deepEqual(built.reconcileOf(LFP_CHANNEL)?.ids, ["100000000000000902"]);
+});
+
+test("backfill_livePostDeletedAfterward_isLeftOutOfTheReconcileIds", async () => {
+  const holder: { relay: GetiRelay | null } = { relay: null };
+  const built = harness({
+    pages: {
+      [LFP_CHANNEL]: async () => {
+        await holder.relay?.onMessage(message("100000000000000901"), true);
+        await holder.relay?.onDelete(LFP_CHANNEL, ["100000000000000901"]);
+        return [message("100000000000000902")];
+      },
+    },
+  });
+  holder.relay = built.relay;
+
+  await built.relay.backfill();
+
+  assert.deepEqual(built.reconcileOf(LFP_CHANNEL)?.ids, ["100000000000000902"]);
+});
+
+test("backfill_wholeBatchUpdatedLive_sendsNoEmptyUpsert", async () => {
+  const holder: { relay: GetiRelay | null } = { relay: null };
+  const built = harness({
+    pages: {
+      [LFP_CHANNEL]: async () => {
+        await holder.relay?.onMessage(message("100000000000000901"), true);
+        return [message("100000000000000901")];
+      },
+    },
+  });
+  holder.relay = built.relay;
+
+  await built.relay.backfill();
+
+  const upserts = built.ops.filter((op) => op.kind === "upsert");
+  assert.equal(upserts.length, 1);
+  assert.deepEqual(built.upserted(), ["100000000000000901"]);
+});

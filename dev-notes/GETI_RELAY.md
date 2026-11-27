@@ -39,7 +39,7 @@ gardées, puisque le rattrapage les repousse toutes.
   rattrapage noierait le salon de supervision au moindre arrêt du site ; chaque
   écouteur garde son try/catch, seul `sendLog()` est remplacé par pm2. Un refus
   401/403 du site (jeton, boucle locale) y a sa ligne propre (`refus 401`), une seule
-  jusqu'au prochain appel reçu.
+  par statut (un 403 après un 401 a la sienne), jusqu'à une autre réponse du site.
 - **Rien n'est gardé** par le bot : ni base, ni fichier. La file d'envoi et la
   liste des messages supprimés ou modifiés en direct pendant un rattrapage
   vivent en mémoire, comme le cache de messages de discord.js (200 derniers
@@ -66,7 +66,7 @@ gardées, puisque le rattrapage les repousse toutes.
 Rattrapage (`GetiRelay.backfill`) : au `clientReady`, à chaque `shardReady`
 suivant (nouvelle session : des événements ont pu manquer — une simple reprise
 les rejoue), et toutes les cinq minutes tant qu'un envoi perdu ou une lecture de salon
-en échec n'a pas été
+en échec passager n'a pas été
 rattrapé (`tick`). Par salon : pages de 100 messages jusqu'à la fenêtre de garde
 (750 ms entre deux pages, 50 pages au plus), chaque page poussée par lots, puis
 `reconcile` avec les identifiants des **annonces** lues sur la fenêtre (un relais
@@ -75,8 +75,11 @@ direct) —
 le site retire ce qu'il garde et qui n'y est plus. Pas de réconciliation si un
 lot a été perdu ou si le salon est illisible ; un refus définitif de Discord
 (salon inconnu, accès ou permission manquants) ne relance pas le rattrapage en
-boucle. Un message supprimé pendant le rattrapage n'est ni repoussé ni compté
-présent.
+boucle : ce salon n'est relu qu'au prochain rattrapage dû à une autre cause
+(ce que dit la politique). Un message supprimé pendant le rattrapage n'est ni repoussé ni compté
+présent ; une annonce poussée en direct pendant le rattrapage compte présente, même
+si sa page d'historique a été lue avant (relais changé en avis puis rétabli). Un lot
+dont toutes les annonces ont changé en direct n'est pas envoyé.
 
 ## Prérequis sur Discord
 

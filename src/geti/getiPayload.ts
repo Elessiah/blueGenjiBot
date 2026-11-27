@@ -114,7 +114,7 @@ export function getiRetentionMs(channel: GetiChannel): number {
   return channel.retentionDays * DAY_MS;
 }
 
-/** Début d'un relais de GETI Bot : la mention de l'auteur de l'annonce (« <@id>*(pseudo)* sur … »). */
+/** Début d'un relais de GETI Bot : la mention de l'auteur, `(pseudo)`, puis `sur`/`on`/`from` (« <@id>*(pseudo)* sur … ») — plus large que l'en-tête lu par le site. */
 const GETI_RELAY_HEADER_START = /^\s*<@!?\d{15,22}>[^\S\n]*[*_]*\([^\n]{1,200}?\)[*_]*[^\S\n]*(?:sur|on|from)(?![\p{L}\p{N}])/iu;
 
 /**

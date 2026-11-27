@@ -5,8 +5,9 @@
  * retirée à sa suppression (seule ou en masse), et la fenêtre de garde de
  * chaque salon (7 jours pour les scrims, 14 pour les autres) est rattrapée au
  * démarrage et à chaque nouvelle session Discord — avec, par salon, la liste
- * des messages encore présents, pour que le site retire ceux supprimés pendant
- * que le bot n'écoutait pas.
+ * des annonces encore présentes (lues dans l'historique ou poussées en direct
+ * pendant le rattrapage), pour que le site retire celles supprimées, ou qui ont
+ * cessé d'être des annonces, pendant que le bot n'écoutait pas.
  *
  * Sur Discord le relais n'écrit rien. Son journal (pm2) ne porte que des
  * nombres et des identifiants de salon : jamais un pseudo, jamais un texte.
@@ -91,9 +92,11 @@ export class GetiRelay {
    * Messages créés ou modifiés en direct pendant le rattrapage : leur version
    * en direct est la plus récente, la page d'historique lue avant ne la
    * repousse pas (une modification qui vide l'annonce la retire du site, que
-   * l'ancienne version relue rétablirait sinon).
+   * l'ancienne version relue rétablirait sinon). Chacun, avec son salon, compte
+   * présent à la réconciliation, même si sa page d'historique a été lue quand il
+   * n'était pas encore (ou plus) une annonce.
    */
-  private updatedDuringBackfill: Set<string> | null = null;
+  private updatedDuringBackfill: Map<string, string> | null = null;
 
   constructor(deps: GetiRelayDeps) {
     this.deps = deps;
@@ -131,7 +134,9 @@ export class GetiRelay {
       if (edited) { await this.onDelete(message.channelId, [message.id]); }
       return;
     }
-    this.updatedDuringBackfill?.add(message.id);
+    // Redevenu une annonce (relais changé en avis, puis rétabli) : il n'est plus « supprimé ».
+    this.deletedDuringBackfill?.delete(message.id);
+    this.updatedDuringBackfill?.set(message.id, message.channelId);
     await this.deps.queue.enqueue({ kind: "upsert", posts: [toGetiWirePost(message)] });
   }
 
@@ -144,7 +149,10 @@ export class GetiRelay {
    */
   async onDelete(channelId: string, ids: readonly string[]): Promise<void> {
     if (!isGetiChannel(channelId) || ids.length === 0) { return; }
-    for (const id of ids) { this.deletedDuringBackfill?.add(id); }
+    for (const id of ids) {
+      this.deletedDuringBackfill?.add(id);
+      this.updatedDuringBackfill?.delete(id);
+    }
     const sends: Promise<GetiDelivery>[] = [];
     for (let start = 0; start < ids.length; start += GETI_DELETE_MAX_IDS) {
       sends.push(this.deps.queue.enqueue({ kind: "delete", ids: ids.slice(start, start + GETI_DELETE_MAX_IDS) }));
@@ -177,7 +185,7 @@ export class GetiRelay {
   private async backfillOnce(): Promise<void> {
     this.resyncNeeded = false;
     this.deletedDuringBackfill = new Set();
-    this.updatedDuringBackfill = new Set();
+    this.updatedDuringBackfill = new Map();
     let posts = 0;
     let channels = 0;
     try {
@@ -202,12 +210,16 @@ export class GetiRelay {
     if (history === null) { return { posts: 0, complete: false, lost: false }; }
     if (!history.delivered) { return { posts: history.posts, complete: false, lost: true }; }
     const gone = this.deletedDuringBackfill ?? new Set<string>();
+    const present = new Set(history.ids);
+    for (const [id, channelId] of this.updatedDuringBackfill ?? []) {
+      if (channelId === channel.id) { present.add(id); }
+    }
     const reconciled = await this.deps.queue.enqueue({
       kind: "reconcile",
       channelId: channel.id,
       since: new Date(history.since).toISOString(),
       until: new Date(started - GETI_RECONCILE_MARGIN_MS).toISOString(),
-      ids: history.ids.filter((id) => !gone.has(id)),
+      ids: [...present].filter((id) => !gone.has(id)),
     });
     return { posts: history.posts, complete: reconciled === "ok", lost: reconciled === "lost" };
   }
@@ -260,6 +272,8 @@ export class GetiRelay {
       const gone = this.deletedDuringBackfill;
       const live = this.updatedDuringBackfill;
       const kept = batch.filter((post) => !gone?.has(post.id) && !live?.has(post.id));
+      // Tout le lot a changé en direct : rien à renvoyer, ni d'appel au site qui pourrait se perdre.
+      if (kept.length === 0) { continue; }
       if ((await this.deps.queue.enqueue({ kind: "upsert", posts: kept })) === "lost") {
         return { delivered: false, posts };
       }

@@ -362,3 +362,25 @@ test("isGetiRelayMessage_englishHeaderWithOn_returnsTrue", () => {
 
   assert.equal(isGetiRelayMessage(embeds), true);
 });
+
+test("sendGetiOp_401Then403_logsEachStatus", async (t) => {
+  resetGetiConfigRefusalLog();
+  const errors = t.mock.method(console, "error", () => undefined);
+
+  await sendGetiOp(config, { kind: "delete", ids: [] }, respond(401));
+  await sendGetiOp(config, { kind: "delete", ids: [] }, respond(403));
+
+  assert.equal(errors.mock.callCount(), 2);
+  assert.match(String(errors.mock.calls[1]?.arguments[0]), /refus 403/u);
+});
+
+test("sendGetiOp_refusalThenServerErrorThenRefusal_logsAgain", async (t) => {
+  resetGetiConfigRefusalLog();
+  const errors = t.mock.method(console, "error", () => undefined);
+
+  await sendGetiOp(config, { kind: "delete", ids: [] }, respond(401));
+  await sendGetiOp(config, { kind: "delete", ids: [] }, respond(500));
+  await sendGetiOp(config, { kind: "delete", ids: [] }, respond(401));
+
+  assert.equal(errors.mock.callCount(), 2);
+});
