@@ -934,6 +934,31 @@ test("onMessage_unreadableVerdictTwiceSameChannel_logsOnce", async () => {
   assert.deepEqual(logs, [`[geti] exclusion illisible dans le salon ${LFP_CHANNEL} : salon relu plus tard`]);
 });
 
+test("onMessage_unreadableVerdictAfterNoteChannelLost_logsExclusionLine", async () => {
+  const { relay, logs } = harness({ isExcluded: async () => null });
+  relay.noteChannelLost(LFP_CHANNEL);
+
+  await relay.onMessage(message("100000000000000901"));
+
+  assert.deepEqual(logs, [
+    `[geti] message du salon ${LFP_CHANNEL} non relu : salon relu plus tard`,
+    `[geti] exclusion illisible dans le salon ${LFP_CHANNEL} : salon relu plus tard`,
+  ]);
+});
+
+test("onMessage_unreadableVerdictAfterBackfill_logsAgain", async () => {
+  const { relay, logs } = harness({ isExcluded: async () => null });
+  await relay.onMessage(message("100000000000000901"));
+  await relay.tick();
+  logs.length = 0;
+
+  await relay.onMessage(message("100000000000000902"));
+
+  assert.deepEqual(logs.filter((line) => line.includes("exclusion illisible")), [
+    `[geti] exclusion illisible dans le salon ${LFP_CHANNEL} : salon relu plus tard`,
+  ]);
+});
+
 test("tick_afterUnreadableVerdict_rereadsOnlyThatChannelAndRemovesExcludedPost", async () => {
   let verdict: boolean | null = null;
   const post = message("100000000000000901");

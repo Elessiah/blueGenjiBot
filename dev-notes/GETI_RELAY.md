@@ -93,7 +93,8 @@ directes d'un exclu du relais (`Ban`, lu par `readBanVerdict`, sans avis ni
 journal Discord) ne partent pas et ne comptent pas présentes : la
 réconciliation les retire du site ; une base illisible les laisse partir, et
 marque leur salon à relire au passage des cinq minutes (`[geti] exclusion
-illisible dans le salon <id>`), pour que l'annonce d'un exclu passée ainsi
+illisible dans le salon <id>`, une fois par salon entre deux rattrapages,
+même si le salon était déjà à relire pour une autre raison), pour que l'annonce d'un exclu passée ainsi
 quitte le site dès que la base répond. Un
 rattrapage garde le verdict de chaque auteur lu dans l'historique (une lecture
 par auteur), sauf un verdict illisible, relu à l'annonce suivante ; les messages

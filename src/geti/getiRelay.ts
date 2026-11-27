@@ -99,6 +99,8 @@ export class GetiRelay {
   private resyncNeeded = false;
   /** Salons dont la lecture a échoué passagèrement : seuls eux sont relus au rattrapage dû (les autres ont été remis). */
   private readonly resyncChannels = new Set<string>();
+  /** Salons où un verdict d'exclusion illisible a déjà été consigné depuis le dernier rattrapage (un log par salon, quel que soit le motif de la relecture). */
+  private readonly unreadableVerdictChannels = new Set<string>();
   /**
    * Messages supprimés de Discord pendant le rattrapage : ni repoussés, ni
    * comptés présents. Discord ne rend jamais un message supprimé : la marque
@@ -173,7 +175,8 @@ export class GetiRelay {
    */
   private verdictAllows(excluded: boolean | null, channelId: string): boolean {
     if (excluded === null && isGetiChannel(channelId)) {
-      if (!this.resyncChannels.has(channelId)) { this.log(`[geti] exclusion illisible dans le salon ${channelId} : salon relu plus tard`); }
+      if (!this.unreadableVerdictChannels.has(channelId)) { this.log(`[geti] exclusion illisible dans le salon ${channelId} : salon relu plus tard`); }
+      this.unreadableVerdictChannels.add(channelId);
       this.resyncChannels.add(channelId);
     }
     return excluded !== true;
@@ -357,6 +360,7 @@ export class GetiRelay {
     const wanted = GETI_CHANNELS.filter((channel) => only === null || only.has(channel.id));
     this.resyncNeeded = false;
     this.resyncChannels.clear();
+    this.unreadableVerdictChannels.clear();
     this.deletedDuringBackfill = new Set();
     this.retractedDuringBackfill = new Set();
     this.updatedDuringBackfill = new Map();
