@@ -6,7 +6,7 @@ import type { GetiDelivery } from "../../geti/getiQueue.js";
 import { GETI_BACKFILL_MAX_PAGES, GetiRelay } from "../../geti/getiRelay.js";
 import type { GetiSiteOp } from "../../geti/getiSiteClient.js";
 
-// Relais GETI : création, modification, suppression, rattrapage de quatorze jours et réconciliation par salon.
+// Relais GETI : création, modification, suppression, rattrapage sur la durée de garde (14 jours, 7 pour les scrims) et réconciliation par salon.
 
 const GETI_CHANNEL_IDS = GETI_CHANNELS.map((channel) => channel.id);
 const LFP_CHANNEL = "679323677874978826";

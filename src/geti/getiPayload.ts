@@ -114,18 +114,36 @@ export function getiRetentionMs(channel: GetiChannel): number {
   return channel.retentionDays * DAY_MS;
 }
 
+/** Début d'un relais de GETI Bot : la mention de l'auteur de l'annonce (« <@id>*(pseudo)* sur … »). */
+const GETI_RELAY_HEADER_START = /^\s*<@!?\d{15,22}>/u;
+
 /**
- * Un message à pousser ? Ceux des six salons écrits par un membre ou par GETI
- * Bot. Sont laissés : les messages système (épingle, arrivée d'un membre…), les
- * messages de tout autre bot (le nôtre compris) et ceux sans auteur connu.
+ * Le message de GETI Bot est-il un relais d'annonce ? Un relais ouvre son
+ * premier encart sur la mention de l'auteur ; ses autres messages (« Ton
+ * annonce a été publié dans … », l'avis qui suit une annonce directe) n'en
+ * sont pas — même règle que le site (`isGetiRelay`).
+ * @param embeds Encarts du message.
+ * @returns `true` pour un relais.
+ */
+export function isGetiRelayMessage(embeds: readonly GetiSourceEmbed[] | null | undefined): boolean {
+  const description = embeds?.[0]?.description;
+  return typeof description === "string" && GETI_RELAY_HEADER_START.test(description);
+}
+
+/**
+ * Un message à pousser ? Ceux des six salons écrits par un membre, et les
+ * relais de GETI Bot. Sont laissés : les messages système (épingle, arrivée
+ * d'un membre…), les avis de GETI Bot qui ne sont pas des relais, les messages
+ * de tout autre bot (le nôtre compris) et ceux sans auteur connu.
  * @param message Message reçu de Discord.
  * @returns `true` si le message part vers le site.
  */
-export function isGetiPost(message: Pick<GetiSourceMessage, "channelId" | "system" | "author">): boolean {
+export function isGetiPost(message: Pick<GetiSourceMessage, "channelId" | "system" | "author" | "embeds">): boolean {
   if (!isGetiChannel(message.channelId) || message.system === true) { return false; }
   const author = message.author;
   if (!author) { return false; }
-  return author.bot !== true || author.id === GETI_BOT_USER_ID;
+  if (author.bot !== true) { return true; }
+  return author.id === GETI_BOT_USER_ID && isGetiRelayMessage(message.embeds);
 }
 
 function wireEmbed(embed: GetiSourceEmbed): GetiWireEmbed {

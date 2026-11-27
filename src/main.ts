@@ -322,7 +322,7 @@ client.on("clientReady", async () => {
       }
     });
 
-    // Annonces GETI : rattrapage des quatorze derniers jours, lancé sans être
+    // Annonces GETI : rattrapage de la durée de garde de chaque salon (14 jours, 7 pour les scrims), lancé sans être
     // attendu (il ne lève pas ; il journalise dans pm2, jamais sur Discord).
     void getiRelay?.backfill().catch((error: unknown) => {
       console.error("[geti] rattrapage :", error instanceof Error ? error.name : typeof error);

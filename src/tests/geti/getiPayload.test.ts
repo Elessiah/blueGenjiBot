@@ -42,11 +42,16 @@ function userMessage(overrides: Partial<GetiSourceMessage> = {}): GetiSourceMess
   };
 }
 
+/** En-tête d'un relais de GETI Bot (données de synthèse). */
+const RELAY_HEADER = "<@100000000000000011>*(fauxpseudo)* sur [Faux Serveur](https://discord.gg/fauxcode)";
+
 function relayMessage(description: string, overrides: Partial<GetiSourceMessage> = {}): GetiSourceMessage {
   return userMessage({
     content: "",
     author: { id: GETI_BOT_USER_ID, username: "GETI Bot", discriminator: "0", bot: true },
-    embeds: [{ description }],
+    embeds: [{ description: `${RELAY_HEADER}
+
+> ${description}` }],
     ...overrides,
   });
 }
@@ -94,6 +99,15 @@ test("isGetiPost_otherChannel_returnsFalse", () => {
 
 test("isGetiPost_relayOfGetiBot_returnsTrue", () => {
   assert.equal(isGetiPost(relayMessage("LFP tank")), true);
+});
+
+test("isGetiPost_publishedNoticeOfGetiBot_returnsFalse", () => {
+  const embeds = [{ description: "Ton annonce a été publié dans **32 autres channels**." }];
+  assert.equal(isGetiPost(relayMessage("", { embeds })), false);
+});
+
+test("isGetiPost_getiBotWithoutEmbed_returnsFalse", () => {
+  assert.equal(isGetiPost(relayMessage("", { embeds: [] })), false);
 });
 
 test("isGetiPost_messageOfAnotherBot_returnsFalse", () => {

@@ -22,7 +22,8 @@ Deux sortes d'annonces, toutes deux poussées (`isGetiPost`) :
   pseudo, le serveur d'origine, puis le texte cité. C'est la modification ou la
   suppression du relais par GETI Bot qui est suivie.
 
-Sont laissés : les messages de tout autre bot (le nôtre compris), les messages
+Sont laissés : les avis de GETI Bot qui ne sont pas des relais (premier encart
+sans la mention de l'auteur, `isGetiRelayMessage`), les messages de tout autre bot (le nôtre compris), les messages
 système, les messages sans auteur. Le bot ne lit rien dans le texte : le site
 analyse (`parseGetiPost`), si bien qu'améliorer l'analyse ne demande pas de
 redéployer le bot — un redémarrage du bot suffit à faire ré-analyser les annonces
