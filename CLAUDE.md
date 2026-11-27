@@ -4,7 +4,7 @@ Chargé à chaque session : règles transverses seulement. Le détail et le pour
 
 ## Project Overview
 
-**BlueGenjiBot**, bot Discord de BlueGenji (esport amateur Marvel Rivals / Overwatch 2, FR) : commandes slash (adhésion, services partenaires, ban, broadcast, admin), API HTTP interne (`internalApi.ts`) consommée par l'app sœur `C:\work\BlueGenji\appbluegenji` (codes de connexion en MP, stats, logs), distribution de messages, tâches cron. `INTERNAL_API_TOKEN` doit égaler `BOT_INTERNAL_TOKEN` côté web. Seul appel bot → site : `/message-tournoi` (`SITE_INTERNAL_URL` en boucle locale, jeton `SITE_INTERNAL_TOKEN`, `doc/internal-api.md`).
+**BlueGenjiBot**, bot Discord de BlueGenji (esport amateur Marvel Rivals / Overwatch 2, FR) : commandes slash (adhésion, services partenaires, ban, broadcast, admin), API HTTP interne (`internalApi.ts`) consommée par l'app sœur `C:\work\BlueGenji\appbluegenji` (codes de connexion en MP, stats, logs), distribution de messages, tâches cron. `INTERNAL_API_TOKEN` doit égaler `BOT_INTERNAL_TOKEN` côté web. Deux appels bot → site (`SITE_INTERNAL_URL` en boucle locale, jeton `SITE_INTERNAL_TOKEN`, `doc/internal-api.md`) : `/message-tournoi`, et le relais des annonces GETI (`src/geti/`, six salons lus, rien d'écrit sur Discord → `dev-notes/GETI_RELAY.md`).
 
 ## Commands
 
