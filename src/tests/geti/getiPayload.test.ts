@@ -307,3 +307,21 @@ test("sendGetiOp_fetchThrows_returnsRetry", async () => {
 
   assert.equal(await sendGetiOp(config, { kind: "delete", ids: [] }, refused), "retry");
 });
+
+test("sendGetiOp_tokenRefused_retriesAndLogsAConfigurationError", async (t) => {
+  const errors = t.mock.method(console, "error", () => undefined);
+
+  const outcome = await sendGetiOp(config, { kind: "delete", ids: ["100000000000000901"] }, capture(401, []));
+
+  assert.equal(outcome, "retry");
+  assert.match(String(errors.mock.calls[0]?.arguments[0]), /refus 401/u);
+});
+
+test("sendGetiOp_routeMissing_retriesWithoutLogging", async (t) => {
+  const errors = t.mock.method(console, "error", () => undefined);
+
+  const outcome = await sendGetiOp(config, { kind: "delete", ids: ["100000000000000901"] }, capture(404, []));
+
+  assert.equal(outcome, "retry");
+  assert.equal(errors.mock.callCount(), 0);
+});

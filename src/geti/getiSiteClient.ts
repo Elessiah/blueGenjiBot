@@ -33,6 +33,12 @@ export type GetiSiteOutcome = "ok" | "retry" | "drop";
 
 /** Refus qui tiennent au corps envoyé : mal formé, trop lourd, mal déclaré. */
 const BODY_REFUSALS = new Set([400, 413, 415, 422]);
+/**
+ * Refus qui tiennent à la configuration (jeton, adresse hors boucle locale) :
+ * journalisés à part. Un 404 reste un site pas encore à jour (bot déployé le
+ * premier) : retenté, il se rattrape dès que les routes existent.
+ */
+const CONFIG_REFUSALS = new Set([401, 403]);
 
 function requestOf(op: GetiSiteOp): { path: string; body: unknown } {
   if (op.kind === "upsert") { return { path: SITE_GETI_POSTS_PATH, body: { posts: op.posts } }; }
@@ -63,6 +69,11 @@ export async function sendGetiOp(config: SiteConfig, op: GetiSiteOp, fetchImpl: 
     // Le corps de la réponse (des nombres) n'est pas lu : il est libéré.
     await response.body?.cancel().catch(() => undefined);
     if (response.ok) { return "ok"; }
+    if (CONFIG_REFUSALS.has(response.status)) {
+      // Jeton refusé ou appel hors boucle locale : une erreur de configuration, à corriger avant le prochain démarrage.
+      // Retentée au rythme du rattrapage dû (un seul appel par passage), jamais en boucle serrée.
+      console.error(`[geti] site : refus ${response.status} — vérifier SITE_INTERNAL_URL (boucle locale) et SITE_INTERNAL_TOKEN`);
+    }
     return BODY_REFUSALS.has(response.status) ? "drop" : "retry";
   } catch {
     return "retry";

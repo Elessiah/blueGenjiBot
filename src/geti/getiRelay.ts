@@ -57,8 +57,8 @@ export type GetiRelayDeps = {
   log?: (line: string) => void;
 };
 
-/** Bilan du rattrapage d'un salon. */
-type ChannelBackfill = { posts: number; complete: boolean };
+/** Bilan du rattrapage d'un salon ; `lost` : un lot n'a pas atteint le site (le reste du rattrapage attend). */
+type ChannelBackfill = { posts: number; complete: boolean; lost: boolean };
 
 /** Ce qui a été lu de l'historique d'un salon. */
 type ChannelHistory = { ids: string[]; posts: number; delivered: boolean; since: number };
@@ -87,6 +87,13 @@ export class GetiRelay {
   private resyncNeeded = false;
   /** Messages supprimés pendant le rattrapage : ni repoussés, ni comptés présents. */
   private deletedDuringBackfill: Set<string> | null = null;
+  /**
+   * Messages créés ou modifiés en direct pendant le rattrapage : leur version
+   * en direct est la plus récente, la page d'historique lue avant ne la
+   * repousse pas (une modification qui vide l'annonce la retire du site, que
+   * l'ancienne version relue rétablirait sinon).
+   */
+  private updatedDuringBackfill: Set<string> | null = null;
 
   constructor(deps: GetiRelayDeps) {
     this.deps = deps;
@@ -118,6 +125,7 @@ export class GetiRelay {
    */
   async onMessage(message: GetiSourceMessage): Promise<void> {
     if (!isGetiPost(message)) { return; }
+    this.updatedDuringBackfill?.add(message.id);
     await this.deps.queue.enqueue({ kind: "upsert", posts: [toGetiWirePost(message)] });
   }
 
@@ -163,6 +171,7 @@ export class GetiRelay {
   private async backfillOnce(): Promise<void> {
     this.resyncNeeded = false;
     this.deletedDuringBackfill = new Set();
+    this.updatedDuringBackfill = new Set();
     let posts = 0;
     let channels = 0;
     try {
@@ -170,9 +179,12 @@ export class GetiRelay {
         const result = await this.backfillChannel(channel);
         posts += result.posts;
         if (result.complete) { channels += 1; }
+        // Site injoignable : lire le reste de l'historique ne ferait que perdre ses lots ; le rattrapage dû reprendra tout.
+        if (result.lost) { break; }
       }
     } finally {
       this.deletedDuringBackfill = null;
+      this.updatedDuringBackfill = null;
     }
     this.log(`[geti] rattrapage : ${posts} message(s) poussé(s), ${channels}/${GETI_CHANNELS.length} salon(s) réconcilié(s)`);
   }
@@ -181,8 +193,8 @@ export class GetiRelay {
   private async backfillChannel(channel: GetiChannel): Promise<ChannelBackfill> {
     const started = this.now();
     const history = await this.readHistory(channel, started - getiRetentionMs(channel));
-    if (history === null) { return { posts: 0, complete: false }; }
-    if (!history.delivered) { return { posts: history.posts, complete: false }; }
+    if (history === null) { return { posts: 0, complete: false, lost: false }; }
+    if (!history.delivered) { return { posts: history.posts, complete: false, lost: true }; }
     const gone = this.deletedDuringBackfill ?? new Set<string>();
     const reconciled = await this.deps.queue.enqueue({
       kind: "reconcile",
@@ -191,7 +203,7 @@ export class GetiRelay {
       until: new Date(started - GETI_RECONCILE_MARGIN_MS).toISOString(),
       ids: history.ids.filter((id) => !gone.has(id)),
     });
-    return { posts: history.posts, complete: reconciled === "ok" };
+    return { posts: history.posts, complete: reconciled === "ok", lost: reconciled === "lost" };
   }
 
   /**
@@ -214,8 +226,10 @@ export class GetiRelay {
       const inWindow = messages.filter((message) => message.createdTimestamp >= windowStart);
       const wanted = inWindow.filter((message) => isGetiPost(message));
       for (const message of inWindow) { history.ids.push(message.id); }
-      history.delivered = (await this.pushBackfillPage(wanted)) && history.delivered;
+      history.delivered = await this.pushBackfillPage(wanted);
       history.posts += wanted.length;
+      // Un lot perdu : le site ne répond plus, la suite de l'historique attend le rattrapage dû.
+      if (!history.delivered) { return history; }
       if (messages.length < GETI_PAGE_SIZE || inWindow.length < messages.length) { return history; }
       const oldest = messages.reduce((a, b) => (a.createdTimestamp <= b.createdTimestamp ? a : b));
       if (page + 1 >= GETI_BACKFILL_MAX_PAGES) {
@@ -233,8 +247,12 @@ export class GetiRelay {
     let delivered = true;
     for (const batch of batchGetiPosts(messages.map((message) => toGetiWirePost(message)))) {
       const gone = this.deletedDuringBackfill;
-      const kept = gone ? batch.filter((post) => !gone.has(post.id)) : batch;
-      if ((await this.deps.queue.enqueue({ kind: "upsert", posts: kept })) === "lost") { delivered = false; }
+      const live = this.updatedDuringBackfill;
+      const kept = batch.filter((post) => !gone?.has(post.id) && !live?.has(post.id));
+      if ((await this.deps.queue.enqueue({ kind: "upsert", posts: kept })) === "lost") {
+        delivered = false;
+        break;
+      }
     }
     return delivered;
   }

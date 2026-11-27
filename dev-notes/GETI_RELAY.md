@@ -34,9 +34,16 @@ gardées, puisque le rattrapage les repousse toutes.
 - **Rien n'est écrit sur Discord** : ni réponse, ni réaction, ni modification —
   pas même un message d'erreur au salon de supervision. Le relais ne journalise
   que dans pm2 (`console`), des **nombres** et des **identifiants de salon** ;
-  jamais un pseudo, jamais un texte.
+  jamais un pseudo, jamais un texte. C'est une **exception assumée** à la règle
+  « try/catch + `sendLog()` » : un relais de plusieurs centaines d'appels par
+  rattrapage noierait le salon de supervision au moindre arrêt du site ; chaque
+  écouteur garde son try/catch, seul `sendLog()` est remplacé par pm2. Un refus
+  401/403 du site (jeton, boucle locale) y a sa ligne propre (`refus 401`).
 - **Rien n'est gardé** par le bot : ni base, ni fichier. La file d'envoi et la
-  liste des messages supprimés pendant un rattrapage vivent en mémoire.
+  liste des messages supprimés ou modifiés en direct pendant un rattrapage
+  vivent en mémoire (une version en direct n'est jamais écrasée par la page
+  d'historique lue avant elle). Un lot perdu (site muet) arrête le rattrapage :
+  le reste de l'historique attend le rattrapage dû, toutes les cinq minutes.
 - **Le partiel `Message`** (`config/clientOptions.ts`) est nécessaire : sans lui,
   discord.js tait la modification et la suppression d'un message hors cache, et
   le site garderait une annonce supprimée sur Discord. Il a un effet de bord sur

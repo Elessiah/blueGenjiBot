@@ -331,6 +331,60 @@ test("backfill_messageDeletedWhileItRuns_isLeftOutOfThePushAndOfTheIds", async (
   assert.deepEqual(built.reconcileOf(LFP_CHANNEL)?.ids, ["100000000000000902"]);
 });
 
+test("backfill_messageEditedLiveWhileItRuns_isNotPushedAgainWithTheOlderVersion", async () => {
+  const holder: { relay: GetiRelay | null } = { relay: null };
+  const built = harness({
+    pages: {
+      [LFP_CHANNEL]: async () => {
+        // Modifié en direct (texte vidé) entre la lecture de la page et son envoi.
+        await holder.relay?.onMessage(message("100000000000000901", { content: "", editedTimestamp: NOW - 1_000 }));
+        return [message("100000000000000902"), message("100000000000000901")];
+      },
+    },
+  });
+  holder.relay = built.relay;
+
+  await built.relay.backfill();
+
+  assert.deepEqual(built.upserted(), ["100000000000000901", "100000000000000902"]);
+  assert.deepEqual(built.reconcileOf(LFP_CHANNEL)?.ids, ["100000000000000902", "100000000000000901"]);
+});
+
+test("backfill_firstBatchLost_stopsReadingTheOtherChannels", async () => {
+  const { relay, fetched } = harness({
+    pages: { [LFP_CHANNEL]: () => [message("100000000000000901")] },
+    deliver: (op) => (op.kind === "upsert" ? "lost" : "ok"),
+  });
+
+  await relay.backfill();
+
+  assert.deepEqual(fetched.map((call) => call.channelId), [LFP_CHANNEL]);
+  assert.equal(relay.needsResync, true);
+});
+
+test("backfill_reconcileLost_stopsReadingTheOtherChannels", async () => {
+  const { relay, fetched } = harness({
+    pages: { [LFP_CHANNEL]: () => [message("100000000000000901")] },
+    deliver: (op) => (op.kind === "reconcile" ? "lost" : "ok"),
+  });
+
+  await relay.backfill();
+
+  assert.deepEqual(fetched.map((call) => call.channelId), [LFP_CHANNEL]);
+});
+
+test("backfill_batchLostOnAFullPage_doesNotReadTheNextPage", async () => {
+  const page = Array.from({ length: 100 }, (_, index) => message(`1000000000000${String(index + 1000).padStart(5, "0")}`));
+  const { relay, fetched } = harness({
+    pages: { [LFP_CHANNEL]: () => page },
+    deliver: (op) => (op.kind === "upsert" ? "lost" : "ok"),
+  });
+
+  await relay.backfill();
+
+  assert.equal(fetched.length, 1);
+});
+
 test("backfill_requestedWhileRunning_runsOnceMoreAfterwards", async () => {
   const holder: { relay: GetiRelay | null; asked: boolean } = { relay: null, asked: false };
   const built = harness({
