@@ -17,6 +17,7 @@ process.env.SERV_RIVALS = "700000000000000002";
 import { unban } from "../../commandsHandlers/ban/unban.js";
 import { checkBan, settleBanNotices } from "../../check/checkBan.js";
 import { closeBddInstance, getBddInstance } from "../../bdd/Bdd.js";
+import { bindGetiRelay } from "../../geti/getiRelay.js";
 
 /**
  * `/unban` : la levée vaut sur-le-champ pour le relais, qui garde une minute
@@ -222,4 +223,37 @@ test("unban_queueInsertFails_staffWarned", async () => {
 
   assert.ok(logs.some((log) => log.includes("Ban notice not queued before unban: Error, code inconnu")), JSON.stringify(logs));
   assert.deepEqual(await bdd.raw("SELECT id_user FROM Ban WHERE id_user = ?", [target]), []);
+});
+
+/** Relais GETI simulé : compte les rattrapages demandés par `/unban`. */
+function boundResyncs(): { count: () => number } {
+  let backfills = 0;
+  bindGetiRelay({ forgetExclusions: () => undefined, backfill: async () => { backfills += 1; } });
+  return { count: () => backfills };
+}
+
+test("unban_lifted_requestsGetiResync", async () => {
+  const bdd = await getBddInstance();
+  await bdd.set("Ban", ["id_user", "id_moderator", "id_reason"], ["500000000000000071", "400000000000000001", "reason-71"]);
+  const client = fakeClient();
+  const resyncs = boundResyncs();
+  try {
+    assert.equal(await unban(client, unbanInteraction(client, "500000000000000071")), true);
+  } finally {
+    bindGetiRelay(null);
+  }
+
+  assert.equal(resyncs.count(), 1);
+});
+
+test("unban_unknownTarget_noResync", async () => {
+  const client = fakeClient();
+  const resyncs = boundResyncs();
+  try {
+    await unban(client, unbanInteraction(client, "500000000000000072"));
+  } finally {
+    bindGetiRelay(null);
+  }
+
+  assert.equal(resyncs.count(), 0);
 });

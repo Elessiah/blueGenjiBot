@@ -58,10 +58,11 @@ export type GetiRelayDeps = {
   fetchPage: (channelId: string, before?: string) => Promise<GetiSourceMessage[]>;
   /**
    * L'auteur d'une annonce directe est-il exclu du relais (`Ban`) ? Ses
-   * annonces ne partent pas vers le site. Une base illisible rend `false` :
-   * l'annonce part (le site reste fidèle au salon, que la modération tient).
+   * annonces ne partent pas vers le site. Une base illisible rend `null` :
+   * l'annonce part (le site reste fidèle au salon, que la modération tient),
+   * et ce verdict n'est pas gardé pour les annonces suivantes du rattrapage.
    */
-  isExcluded?: (authorId: string) => Promise<boolean>;
+  isExcluded?: (authorId: string) => Promise<boolean | null>;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
   log?: (line: string) => void;
@@ -89,7 +90,7 @@ export class GetiRelay {
   private readonly now: () => number;
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly log: (line: string) => void;
-  private readonly isExcluded: (authorId: string) => Promise<boolean>;
+  private readonly isExcluded: (authorId: string) => Promise<boolean | null>;
   /** Rattrapage en cours, partagé par ceux qui le demandent pendant qu'il tourne. */
   private running: Promise<void> | null = null;
   /** Un rattrapage a été demandé pendant celui qui tourne : il sera rejoué à sa suite. */
@@ -132,25 +133,40 @@ export class GetiRelay {
   }
 
   /**
-   * Verdicts d'exclusion lus pendant le rattrapage en cours, par auteur : un
-   * auteur de plusieurs annonces n'est lu qu'une fois par rattrapage.
+   * Verdicts d'exclusion lus dans l'historique pendant le rattrapage en cours,
+   * par auteur : un auteur de plusieurs annonces n'est lu qu'une fois par
+   * rattrapage. Un verdict illisible n'y reste pas ; les messages en direct ne
+   * le lisent pas (une exclusion ou une levée prononcée entre-temps vaut pour eux).
    */
-  private backfillExclusions: Map<string, Promise<boolean>> | null = null;
+  private backfillExclusions: Map<string, Promise<boolean | null>> | null = null;
 
-  /** Une annonce à pousser : `isGetiPost`, et pas l'annonce directe d'un exclu du relais. */
-  private async isRelayed(message: GetiSourceMessage): Promise<boolean> {
+  /**
+   * Une annonce à pousser : `isGetiPost`, et pas l'annonce directe d'un exclu du relais.
+   * @param message Message lu.
+   * @param fromHistory Vrai pour une page d'historique du rattrapage (verdicts gardés le temps du rattrapage).
+   */
+  private async isRelayed(message: GetiSourceMessage, fromHistory: boolean): Promise<boolean> {
     if (!isGetiPost(message)) { return false; }
     const author = message.author;
     if (author?.bot === true) { return true; }
     const authorId = author?.id ?? "";
-    const cache = this.backfillExclusions;
-    if (cache === null) { return !(await this.isExcluded(authorId)); }
+    const cache = fromHistory ? this.backfillExclusions : null;
+    if (cache === null) { return (await this.isExcluded(authorId)) !== true; }
     let verdict = cache.get(authorId);
     if (verdict === undefined) {
       verdict = this.isExcluded(authorId);
       cache.set(authorId, verdict);
     }
-    return !(await verdict);
+    const read = verdict;
+    const excluded = await read;
+    // Base illisible : l'annonce part, mais la suivante du même auteur relit la base.
+    if (excluded === null && cache.get(authorId) === read) { cache.delete(authorId); }
+    return excluded !== true;
+  }
+
+  /** Une exclusion vient d'être prononcée ou levée : les verdicts du rattrapage en cours sont relus. */
+  forgetExclusions(): void {
+    this.backfillExclusions?.clear();
   }
 
   /** Marque une lecture en cours du message : une suppression arrivée pendant qu'elle attend l'annule. */
@@ -173,7 +189,7 @@ export class GetiRelay {
   private async relayedOf(messages: readonly GetiSourceMessage[]): Promise<GetiSourceMessage[]> {
     const wanted: GetiSourceMessage[] = [];
     for (const message of messages) {
-      if (await this.isRelayed(message)) { wanted.push(message); }
+      if (await this.isRelayed(message, true)) { wanted.push(message); }
     }
     return wanted;
   }
@@ -228,7 +244,7 @@ export class GetiRelay {
     const pending = this.track(message.id);
     let relayed: boolean;
     try {
-      relayed = await this.isRelayed(message);
+      relayed = await this.isRelayed(message, false);
     } finally {
       this.untrack(message.id, pending);
     }
@@ -473,6 +489,33 @@ function logFailure(scope: string, error: unknown): void {
   console.error(`[geti] ${scope} : ${errorLabel(error)}`);
 }
 
+/** Ce que `/ban` et `/unban` demandent au relais branché. */
+export type GetiResyncTarget = Pick<GetiRelay, "backfill" | "forgetExclusions">;
+
+/** Relais branché par {@link registerGetiRelay} (aucun sans configuration du site). */
+let activeRelay: GetiResyncTarget | null = null;
+
+/**
+ * Désigne le relais que {@link requestGetiResync} relance ({@link registerGetiRelay}
+ * le fait ; les tests y branchent un double).
+ * @param relay Relais branché, ou `null` pour n'en garder aucun.
+ */
+export function bindGetiRelay(relay: GetiResyncTarget | null): void {
+  activeRelay = relay;
+}
+
+/**
+ * Un membre vient d'être exclu du relais (`/ban`) ou réadmis (`/unban`) : les
+ * verdicts d'exclusion du rattrapage en cours sont oubliés, et un rattrapage
+ * complet retire du site ses annonces directes, ou les y remet. Sans relais
+ * branché, rien n'est fait ; un échec n'est que journalisé (pm2).
+ */
+export function requestGetiResync(): void {
+  if (activeRelay === null) { return; }
+  activeRelay.forgetExclusions();
+  activeRelay.backfill().catch((error: unknown) => { logFailure("rattrapage après exclusion", error); });
+}
+
 /**
  * Branche le relais sur le client : écoute des quatre événements de message,
  * et passage périodique pour le rattrapage dû. Sans `SITE_INTERNAL_URL` ni
@@ -484,18 +527,6 @@ function logFailure(scope: string, error: unknown): void {
  * @param env Environnement du processus.
  * @returns Le relais, à lancer par `backfill()` une fois le client prêt ; `null` s'il n'est pas configuré.
  */
-/** Relais branché par {@link registerGetiRelay} (aucun sans configuration du site). */
-let activeRelay: GetiRelay | null = null;
-
-/**
- * Un membre vient d'être exclu du relais (`/ban`) ou réadmis (`/unban`) : un
- * rattrapage complet retire du site ses annonces directes, ou les y remet.
- * Sans relais branché, rien n'est fait ; un échec n'est que journalisé (pm2).
- */
-export function requestGetiResync(): void {
-  activeRelay?.backfill().catch((error: unknown) => { logFailure("rattrapage après exclusion", error); });
-}
-
 export function registerGetiRelay(client: Client, env: NodeJS.ProcessEnv = process.env): GetiRelay | null {
   const config = siteConfig(env);
   if (!config) {
@@ -510,10 +541,13 @@ export function registerGetiRelay(client: Client, env: NodeJS.ProcessEnv = proce
   const relay = new GetiRelay({
     queue,
     fetchPage: (channelId, before) => fetchChannelPage(client, channelId, before),
-    isExcluded: async (authorId) => (await readBanVerdict(authorId)) === "BANNED",
+    isExcluded: async (authorId) => {
+      const verdict = await readBanVerdict(authorId);
+      return verdict === "UNKNOWN" ? null : verdict === "BANNED";
+    },
   });
   holder.relay = relay;
-  activeRelay = relay;
+  bindGetiRelay(relay);
 
   const push = async (message: Message | PartialMessage, edited: boolean): Promise<void> => {
     try {

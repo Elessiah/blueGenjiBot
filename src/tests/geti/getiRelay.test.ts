@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 import { GETI_BOT_USER_ID, GETI_CHANNELS, type GetiSourceMessage } from "../../geti/getiPayload.js";
 import type { GetiDelivery } from "../../geti/getiQueue.js";
-import { GETI_BACKFILL_MAX_PAGES, GetiRelay, requestGetiResync } from "../../geti/getiRelay.js";
+import { bindGetiRelay, GETI_BACKFILL_MAX_PAGES, GetiRelay, requestGetiResync } from "../../geti/getiRelay.js";
 import type { GetiSiteOp } from "../../geti/getiSiteClient.js";
 
 // Relais GETI : création, modification, suppression, rattrapage sur la durée de garde (14 jours, 7 pour les scrims) et réconciliation par salon.
@@ -46,7 +46,7 @@ function discordError(code: number): Error {
 }
 
 /** Relais branché sur une file et un historique simulés. */
-function harness(options: { pages?: Pages; deliver?: (op: GetiSiteOp) => GetiDelivery; excluded?: string[]; isExcluded?: (authorId: string) => Promise<boolean> } = {}) {
+function harness(options: { pages?: Pages; deliver?: (op: GetiSiteOp) => GetiDelivery; excluded?: string[]; isExcluded?: (authorId: string) => Promise<boolean | null> } = {}) {
   const ops: GetiSiteOp[] = [];
   const fetched: { channelId: string; before?: string }[] = [];
   const logs: string[] = [];
@@ -596,6 +596,74 @@ test("backfill_sameAuthorTwice_readsTheExclusionOnce", async () => {
 
   assert.deepEqual(upserted(), ["100000000000000901", "100000000000000902"]);
   assert.deepEqual(asked, ["100000000000000001"]);
+});
+
+test("backfill_unknownVerdictForFirstPost_rereadsForTheNextPostOfThatAuthor", async () => {
+  let calls = 0;
+  const { relay, upserted } = harness({
+    isExcluded: async () => { calls += 1; return calls === 1 ? null : true; },
+    pages: { [LFP_CHANNEL]: () => [message("100000000000000901"), message("100000000000000902")] },
+  });
+
+  await relay.backfill();
+
+  assert.deepEqual(upserted(), ["100000000000000901"]);
+  assert.equal(calls, 2);
+});
+
+test("onMessage_duringBackfill_doesNotUseTheBackfillCache", async () => {
+  let excluded = true;
+  const live: Promise<void>[] = [];
+  const { relay, ops } = harness({
+    isExcluded: async () => excluded,
+    pages: {
+      [LFP_CHANNEL]: () => [message("100000000000000901")],
+      [LFS_CHANNEL]: () => {
+        excluded = false;
+        live.push(relay.onMessage(message("100000000000000902"), true));
+        return [];
+      },
+    },
+  });
+
+  await relay.backfill();
+  await Promise.all(live);
+
+  assert.ok(ops.some((op) => op.kind === "upsert" && op.posts.some((post) => post.id === "100000000000000902")));
+  assert.ok(!ops.some((op) => op.kind === "delete" && op.ids.includes("100000000000000902")));
+});
+
+test("forgetExclusions_midBackfill_nextHistoryPostRereads", async () => {
+  const asked: string[] = [];
+  const { relay } = harness({
+    isExcluded: async (authorId) => { asked.push(authorId); return false; },
+    pages: {
+      [LFP_CHANNEL]: () => [message("100000000000000901")],
+      [LFS_CHANNEL]: () => {
+        relay.forgetExclusions();
+        return [message("100000000000000902", { channelId: LFS_CHANNEL })];
+      },
+    },
+  });
+
+  await relay.backfill();
+
+  assert.deepEqual(asked, ["100000000000000001", "100000000000000001"]);
+});
+
+test("requestGetiResync_boundRelay_forgetsExclusionsThenBackfills", () => {
+  const calls: string[] = [];
+  bindGetiRelay({
+    forgetExclusions: () => { calls.push("forget"); },
+    backfill: async () => { calls.push("backfill"); },
+  });
+  try {
+    requestGetiResync();
+  } finally {
+    bindGetiRelay(null);
+  }
+
+  assert.deepEqual(calls, ["forget", "backfill"]);
 });
 
 test("requestGetiResync_noRelayRegistered_doesNothing", () => {

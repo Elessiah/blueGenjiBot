@@ -16,6 +16,7 @@ process.env.SERV_RIVALS = "700000000000000002";
 
 import { ban } from "../../commandsHandlers/ban/ban.js";
 import { closeBddInstance, getBddInstance } from "../../bdd/Bdd.js";
+import { bindGetiRelay } from "../../geti/getiRelay.js";
 
 /**
  * `/ban` : préconditions (serveur, taille, droits), verdict déjà banni ou
@@ -164,6 +165,41 @@ test("écriture refusée : messages publiés retirés, échec annoncé", async (
   assert.deepEqual(world.replies, ["Ban could not be recorded, please try again in a moment."]);
 });
 
+/** Relais GETI simulé : compte les rattrapages demandés par `/ban`. */
+function boundResyncs(): { count: () => number } {
+  let backfills = 0;
+  bindGetiRelay({ forgetExclusions: () => undefined, backfill: async () => { backfills += 1; } });
+  return { count: () => backfills };
+}
+
+test("ban_recorded_requestsGetiResync", async () => {
+  const resyncs = boundResyncs();
+  try {
+    const { call } = run();
+    assert.equal(await call(), true);
+  } finally {
+    bindGetiRelay(null);
+  }
+
+  assert.equal(resyncs.count(), 1);
+});
+
+test("ban_relayCleanupThrows_resyncAlreadyRequested", async () => {
+  await sql("INSERT INTO OGMsg (id_msg, id_author) VALUES ('og-1', ?)", [TARGET]);
+  // Table des copies illisible : le ménage des relais lève après l'écriture de l'exclusion.
+  await sql("ALTER TABLE DPMsg RENAME TO DPMsg_hors_ligne");
+  const resyncs = boundResyncs();
+  try {
+    const { call } = run();
+    await assert.rejects(call());
+  } finally {
+    bindGetiRelay(null);
+    await sql("ALTER TABLE DPMsg_hors_ligne RENAME TO DPMsg");
+  }
+
+  assert.equal(resyncs.count(), 1);
+});
+
 test("verdict indisponible (base fermée) : refus sans rien publier", async () => {
   await closeBddInstance();
   const { world, call } = run();
@@ -172,3 +208,4 @@ test("verdict indisponible (base fermée) : refus sans rien publier", async () =
   assert.ok(world.logs.every((l) => !l.startsWith("*Un joueur")), "aucun avis d'exclusion");
   assert.ok(world.logs.some((l) => l.startsWith("Failed to check ban : ")));
 });
+

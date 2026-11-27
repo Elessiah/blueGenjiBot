@@ -102,12 +102,13 @@ async function ban(client: Client,
         await safeReply(interaction, "Ban could not be recorded, please try again in a moment.", true, true);
         return false;
     }
+    // Ses annonces directes des salons GETI quittent le site (le relais ne les pousse plus) : demandé
+    // dès l'exclusion écrite, pour qu'un échec du ménage des relais ci-dessous ne l'empêche pas.
+    requestGetiResync();
     const OGMsgs: {id_msg: string}[] = await bdd.get('OGMsg', ['id_msg'], {}, {query: "id_author = ?", values: [user.id]}) as {id_msg: string}[];
     for (const OGMsg of OGMsgs) {
         await deleteDPMsgs(client, OGMsg.id_msg);
     }
-    // Ses annonces directes des salons GETI quittent le site (le relais ne les pousse plus).
-    requestGetiResync();
     await safeReply(interaction, "Member has been successfully banned !", true, true);
     return true;
 }
