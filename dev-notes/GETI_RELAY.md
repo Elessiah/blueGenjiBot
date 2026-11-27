@@ -72,7 +72,17 @@ Rattrapage (`GetiRelay.backfill`) : au `clientReady`, à chaque `shardReady`
 suivant (nouvelle session : des événements ont pu manquer — une simple reprise
 les rejoue), et toutes les cinq minutes tant qu'un envoi perdu ou une lecture de salon
 en échec passager n'a pas été
-rattrapé (`tick`). Par salon : pages de 100 messages jusqu'à la fenêtre de garde
+rattrapé (`tick`) : un envoi perdu relit les six salons, une lecture de salon en échec
+passager ne relit que ce salon (les cinq autres ne sont pas renvoyés au site
+toutes les cinq minutes pour rien). Une première page vide n'est pas une preuve
+(un salon que Discord rendrait vide un instant ferait retirer ses annonces du
+site) : ce salon n'est pas réconcilié, `[geti] salon <id> rendu vide`. Un 429 du
+site est attendu selon son `Retry-After` (60 s au plus) avant la reprise de la
+file. Le site écrit un lot en une seule instruction, lit la liste par catégorie
+avec une lecture gardée dix secondes (oubliée à chaque écriture) et purge par
+500 lignes. Côté bot, `DPMsg.id_og` est indexé (`DPMSG_OG_INDEX`) : le partiel
+`Message` fait partir `messageDelete` pour tout message hors cache de tout
+serveur, et `deleteDPMsgs` cherche les copies par cette colonne. Par salon : pages de 100 messages jusqu'à la fenêtre de garde
 (750 ms entre deux pages, 50 pages au plus), chaque page poussée par lots, puis
 `reconcile` avec les identifiants des **annonces** lues sur la fenêtre (un relais
 changé en avis n'en est plus une : le site le retire, comme à sa modification en

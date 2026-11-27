@@ -88,6 +88,8 @@ export class GetiRelay {
   private rerun = false;
   /** Des envois ont été perdus : un rattrapage complet est dû. */
   private resyncNeeded = false;
+  /** Salons dont la lecture a échoué passagèrement : seuls eux sont relus au rattrapage dû (les autres ont été remis). */
+  private readonly resyncChannels = new Set<string>();
   /**
    * Messages supprimés de Discord pendant le rattrapage : ni repoussés, ni
    * comptés présents. Discord ne rend jamais un message supprimé : la marque
@@ -128,12 +130,17 @@ export class GetiRelay {
 
   /** Vrai tant qu'un rattrapage est dû. */
   get needsResync(): boolean {
-    return this.resyncNeeded;
+    return this.resyncNeeded || this.resyncChannels.size > 0;
   }
 
-  /** Passage périodique : relance le rattrapage dû, s'il ne tourne pas déjà. */
+  /**
+   * Passage périodique : relance le rattrapage dû, s'il ne tourne pas déjà. Un
+   * envoi perdu relit les six salons ; une lecture passagèrement échouée ne
+   * relit que son salon (les cinq autres ne sont pas renvoyés au site toutes
+   * les cinq minutes pour rien).
+   */
   async tick(): Promise<void> {
-    if (this.resyncNeeded && this.running === null) { await this.backfill(); }
+    if (this.needsResync && this.running === null) { await this.launch("due"); }
   }
 
   /**
@@ -216,31 +223,41 @@ export class GetiRelay {
    * nouvelle session Discord a pu manquer des événements entre-temps).
    */
   backfill(): Promise<void> {
+    return this.launch("all");
+  }
+
+  private launch(scope: "all" | "due"): Promise<void> {
     if (this.running !== null) {
-      this.rerun = true;
+      if (scope === "all") { this.rerun = true; }
       return this.running;
     }
-    const run = this.backfillLoop().finally(() => { this.running = null; });
+    const run = this.backfillLoop(scope).finally(() => { this.running = null; });
     this.running = run;
     return run;
   }
 
-  private async backfillLoop(): Promise<void> {
+  private async backfillLoop(scope: "all" | "due"): Promise<void> {
+    let next = scope;
     do {
       this.rerun = false;
-      await this.backfillOnce();
+      await this.backfillOnce(next);
+      next = "all";
     } while (this.rerun);
   }
 
-  private async backfillOnce(): Promise<void> {
+  private async backfillOnce(scope: "all" | "due"): Promise<void> {
+    // Rattrapage dû par la seule lecture manquée de quelques salons : eux seuls sont relus.
+    const only = scope === "due" && !this.resyncNeeded ? new Set(this.resyncChannels) : null;
+    const wanted = GETI_CHANNELS.filter((channel) => only === null || only.has(channel.id));
     this.resyncNeeded = false;
+    this.resyncChannels.clear();
     this.deletedDuringBackfill = new Set();
     this.retractedDuringBackfill = new Set();
     this.updatedDuringBackfill = new Map();
     let posts = 0;
     let channels = 0;
     try {
-      for (const channel of GETI_CHANNELS) {
+      for (const channel of wanted) {
         const result = await this.backfillChannel(channel);
         posts += result.posts;
         if (result.complete) { channels += 1; }
@@ -252,7 +269,7 @@ export class GetiRelay {
       this.retractedDuringBackfill = null;
       this.updatedDuringBackfill = null;
     }
-    this.log(`[geti] rattrapage : ${posts} message(s) poussé(s), ${channels}/${GETI_CHANNELS.length} salon(s) réconcilié(s)`);
+    this.log(`[geti] rattrapage : ${posts} message(s) poussé(s), ${channels}/${wanted.length} salon(s) réconcilié(s)`);
   }
 
   /** Lit l'historique d'un salon sur sa fenêtre de garde, pousse ses annonces, puis réconcilie. */
@@ -284,15 +301,8 @@ export class GetiRelay {
     const history: ChannelHistory = { ids: [], posts: 0, delivered: true, since: windowStart };
     let before: string | undefined;
     for (let page = 0; ; page += 1) {
-      let messages: GetiSourceMessage[];
-      try {
-        messages = await this.deps.fetchPage(channel.id, before);
-      } catch (error) {
-        const label = errorLabel(error);
-        this.log(`[geti] salon ${channel.id} illisible (${label}) : rattrapage du salon abandonné`);
-        if (!PERMANENT_DISCORD_CODES.has(label)) { this.resyncNeeded = true; }
-        return null;
-      }
+      const messages = await this.readPage(channel, before, page === 0);
+      if (messages === null) { return null; }
       const inWindow = messages.filter((message) => message.createdTimestamp >= windowStart);
       const wanted = inWindow.filter((message) => isGetiPost(message));
       // Seules les annonces comptent présentes : un message qui n'en est plus une (relais changé en avis) est retiré du site.
@@ -312,6 +322,26 @@ export class GetiRelay {
       before = oldest.id;
       await this.sleep(GETI_PAGE_DELAY_MS);
     }
+  }
+
+  /** Une page d'historique ; `null` si le salon est illisible (échec noté pour le rattrapage dû), ou rendu vide dès la première page. */
+  private async readPage(channel: GetiChannel, before: string | undefined, first: boolean): Promise<GetiSourceMessage[] | null> {
+    let messages: GetiSourceMessage[];
+    try {
+      messages = await this.deps.fetchPage(channel.id, before);
+    } catch (error) {
+      const label = errorLabel(error);
+      this.log(`[geti] salon ${channel.id} illisible (${label}) : rattrapage du salon abandonné`);
+      if (!PERMANENT_DISCORD_CODES.has(label)) { this.resyncChannels.add(channel.id); }
+      return null;
+    }
+    // Une première page vide n'est pas une preuve : un salon que Discord rend vide un instant ferait
+    // retirer du site toutes ses annonces par la réconciliation. Rien n'est réconcilié ; le prochain rattrapage tranche.
+    if (first && messages.length === 0) {
+      this.log(`[geti] salon ${channel.id} rendu vide : rattrapage du salon laissé de côté`);
+      return null;
+    }
+    return messages;
   }
 
   /**

@@ -16,6 +16,9 @@ export const SITE_GETI_POSTS_PATH = "/api/internal/geti/posts";
 export const SITE_GETI_DELETE_PATH = "/api/internal/geti/posts/delete";
 export const SITE_GETI_RECONCILE_PATH = "/api/internal/geti/reconcile";
 
+/** Attente maximale sur un `Retry-After` du site (429) : au-delà, la file retombe sur ses propres reprises. */
+export const GETI_RETRY_AFTER_MAX_MS = 60_000;
+
 /** Le site répond en quelques millisecondes ; au-delà, il est tenu pour muet. */
 export const GETI_SITE_TIMEOUT_MS = 15_000;
 
@@ -52,6 +55,17 @@ export function resetGetiConfigRefusalLog(): void {
   loggedConfigRefusals.clear();
 }
 
+function defaultSleep(ms: number): Promise<void> {
+  return new Promise((resolve) => { setTimeout(resolve, ms).unref(); });
+}
+
+/** `Retry-After` en secondes (une date HTTP ou une valeur absurde ne vaut rien), borné. */
+function retryAfterMs(header: string | null): number {
+  const seconds = Number(header);
+  if (header === null || header.trim() === "" || !Number.isFinite(seconds) || seconds <= 0) { return 0; }
+  return Math.min(seconds * 1000, GETI_RETRY_AFTER_MAX_MS);
+}
+
 function requestOf(op: GetiSiteOp): { path: string; body: unknown } {
   if (op.kind === "upsert") { return { path: SITE_GETI_POSTS_PATH, body: { posts: op.posts } }; }
   if (op.kind === "delete") { return { path: SITE_GETI_DELETE_PATH, body: { ids: op.ids } }; }
@@ -68,7 +82,12 @@ function requestOf(op: GetiSiteOp): { path: string; body: unknown } {
  * @param fetchImpl `fetch` (remplacé dans les tests).
  * @returns L'issue de l'appel.
  */
-export async function sendGetiOp(config: SiteConfig, op: GetiSiteOp, fetchImpl: typeof fetch = fetch): Promise<GetiSiteOutcome> {
+export async function sendGetiOp(
+  config: SiteConfig,
+  op: GetiSiteOp,
+  fetchImpl: typeof fetch = fetch,
+  sleep: (ms: number) => Promise<void> = defaultSleep,
+): Promise<GetiSiteOutcome> {
   const { path, body } = requestOf(op);
   try {
     const response = await fetchImpl(`${config.baseUrl}${path}`, {
@@ -90,6 +109,8 @@ export async function sendGetiOp(config: SiteConfig, op: GetiSiteOp, fetchImpl: 
       console.error(`[geti] site : refus ${response.status} — vérifier SITE_INTERNAL_URL (boucle locale) et SITE_INTERNAL_TOKEN`);
     }
     if (response.ok) { return "ok"; }
+    // Plafond d'appels atteint : le site dit combien attendre ; réessayer plus tôt ne ferait que brûler les reprises de la file.
+    if (response.status === 429) { await sleep(retryAfterMs(response.headers.get("retry-after"))); }
     return BODY_REFUSALS.has(response.status) ? "drop" : "retry";
   } catch {
     return "retry";

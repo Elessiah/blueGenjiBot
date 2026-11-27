@@ -61,7 +61,8 @@ function harness(options: { pages?: Pages; deliver?: (op: GetiSiteOp) => GetiDel
     },
     fetchPage: async (channelId, before) => {
       fetched.push({ channelId, before });
-      return (await options.pages?.[channelId]?.(before)) ?? [];
+      // Un salon sans page prévue n'est pas vide : il porte un message système (ni annonce, ni vide de Discord).
+      return (await options.pages?.[channelId]?.(before)) ?? [message("100000000000000001", { channelId, system: true })];
     },
     now: () => NOW,
     sleep: async () => undefined,
@@ -413,6 +414,83 @@ test("tick_afterALostSend_runsABackfillAndClearsTheNeed", async () => {
 
   assert.equal(reconciles().length, 6);
   assert.equal(relay.needsResync, false);
+});
+
+test("tick_oneChannelReadFailedTransiently_rereadsThatChannelOnly", async () => {
+  let failing = true;
+  const { relay, fetched, reconciles } = harness({
+    pages: {
+      [LFP_CHANNEL]: () => {
+        if (failing) { throw discordError(500); }
+        return [message("100000000000000901")];
+      },
+    },
+  });
+  await relay.backfill();
+  fetched.length = 0;
+  failing = false;
+
+  await relay.tick();
+
+  assert.deepEqual([...new Set(fetched.map((call) => call.channelId))], [LFP_CHANNEL]);
+  assert.equal(reconciles().filter((op) => op.channelId === LFP_CHANNEL).length, 1);
+  assert.equal(relay.needsResync, false);
+});
+
+test("tick_oneChannelStillFailing_staysDueAndOtherChannelsAreNotReread", async () => {
+  const { relay, fetched } = harness({
+    pages: { [LFP_CHANNEL]: () => { throw discordError(500); } },
+  });
+  await relay.backfill();
+  fetched.length = 0;
+
+  await relay.tick();
+  await relay.tick();
+
+  assert.deepEqual([...new Set(fetched.map((call) => call.channelId))], [LFP_CHANNEL]);
+  assert.equal(fetched.length, 2);
+  assert.equal(relay.needsResync, true);
+});
+
+test("tick_lostSendAndFailedChannel_rereadsEverySource", async () => {
+  const { relay, fetched } = harness({
+    pages: { [LFP_CHANNEL]: () => { throw discordError(500); } },
+  });
+  await relay.backfill();
+  relay.noteLost();
+  fetched.length = 0;
+
+  await relay.tick();
+
+  assert.equal(new Set(fetched.map((call) => call.channelId)).size, GETI_CHANNEL_IDS.length);
+});
+
+test("backfill_firstPageEmpty_skipsTheReconcileSoNothingIsWipedOnAnUnconfirmedRead", async () => {
+  const { relay, reconciles, logs } = harness({ pages: { [LFP_CHANNEL]: () => [] } });
+
+  await relay.backfill();
+
+  assert.equal(reconciles().some((op) => op.channelId === LFP_CHANNEL), false);
+  assert.equal(reconciles().length, 5);
+  assert.equal(relay.needsResync, false);
+  assert.equal(logs.includes(`[geti] salon ${LFP_CHANNEL} rendu vide : rattrapage du salon laissé de côté`), true);
+});
+
+test("backfill_emptyPageAfterAFullOne_isTheEndOfHistoryAndReconciles", async () => {
+  let call = 0;
+  const { relay, reconcileOf } = harness({
+    pages: {
+      [LFP_CHANNEL]: () => {
+        call += 1;
+        if (call > 1) { return []; }
+        return Array.from({ length: 100 }, (_, index) => message(`10000000000009${String(index).padStart(4, "0")}`, { createdTimestamp: NOW - 1_000 * (index + 1) }));
+      },
+    },
+  });
+
+  await relay.backfill();
+
+  assert.equal(reconcileOf(LFP_CHANNEL)?.ids.length, 100);
 });
 
 test("tick_nothingLost_doesNothing", async () => {

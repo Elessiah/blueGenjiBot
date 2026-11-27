@@ -16,6 +16,7 @@ import {
   type GetiWirePost,
 } from "../../geti/getiPayload.js";
 import {
+  GETI_RETRY_AFTER_MAX_MS,
   resetGetiConfigRefusalLog,
   sendGetiOp,
   SITE_GETI_DELETE_PATH,
@@ -296,6 +297,46 @@ test("sendGetiOp_status403_returnsRetry", async () => {
 
 test("sendGetiOp_status429_returnsRetry", async () => {
   assert.equal(await sendGetiOp(config, { kind: "delete", ids: [] }, respond(429)), "retry");
+});
+
+function tooMany(retryAfter: string | null): typeof fetch {
+  return (async () => new Response("{}", { status: 429, headers: retryAfter === null ? {} : { "retry-after": retryAfter } })) as unknown as typeof fetch;
+}
+
+test("sendGetiOp_status429WithRetryAfter_waitsThatLongBeforeRetry", async () => {
+  const waits: number[] = [];
+
+  const outcome = await sendGetiOp(config, { kind: "delete", ids: [] }, tooMany("12"), async (ms) => { waits.push(ms); });
+
+  assert.equal(outcome, "retry");
+  assert.deepEqual(waits, [12_000]);
+});
+
+test("sendGetiOp_status429WithHugeRetryAfter_isCapped", async () => {
+  const waits: number[] = [];
+
+  await sendGetiOp(config, { kind: "delete", ids: [] }, tooMany("86400"), async (ms) => { waits.push(ms); });
+
+  assert.deepEqual(waits, [GETI_RETRY_AFTER_MAX_MS]);
+});
+
+test("sendGetiOp_status429WithUnusableRetryAfter_waitsNothingExtra", async () => {
+  for (const header of [null, "", "abc", "-5", "0", "Wed, 21 Oct 2026 07:28:00 GMT"]) {
+    const waits: number[] = [];
+
+    await sendGetiOp(config, { kind: "delete", ids: [] }, tooMany(header), async (ms) => { waits.push(ms); });
+
+    assert.deepEqual(waits, [0], String(header));
+  }
+});
+
+test("sendGetiOp_status503WithRetryAfter_doesNotWait", async () => {
+  const waits: number[] = [];
+  const unavailable = (async () => new Response("{}", { status: 503, headers: { "retry-after": "30" } })) as unknown as typeof fetch;
+
+  await sendGetiOp(config, { kind: "delete", ids: [] }, unavailable, async (ms) => { waits.push(ms); });
+
+  assert.deepEqual(waits, []);
 });
 
 test("sendGetiOp_status503_returnsRetry", async () => {
