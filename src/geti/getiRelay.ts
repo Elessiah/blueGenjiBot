@@ -425,7 +425,7 @@ export class GetiRelay {
       // Un lot perdu : le site ne répond plus, la suite de l'historique attend le rattrapage dû.
       if (!history.delivered) { return history; }
       if (messages.length < GETI_PAGE_SIZE || inWindow.length < messages.length) { return history; }
-      const oldest = messages.reduce((a, b) => (a.createdTimestamp <= b.createdTimestamp ? a : b));
+      const oldest = messages.reduce((a, b) => (a.createdTimestamp <= b.createdTimestamp ? a : b), messages[0]);
       if (page + 1 >= GETI_BACKFILL_MAX_PAGES) {
         // Plafond atteint : seule la partie lue est réconciliée (une seconde de marge au bord).
         history.since = oldest.createdTimestamp + 1_000;
