@@ -39,7 +39,7 @@ gardées, puisque le rattrapage les repousse toutes.
   rattrapage noierait le salon de supervision au moindre arrêt du site ; chaque
   écouteur garde son try/catch, seul `sendLog()` est remplacé par pm2. Un refus
   401/403 du site (jeton, boucle locale) y a sa ligne propre (`refus 401`), une seule
-  par statut (un 403 après un 401 a la sienne), jusqu'à une autre réponse du site.
+  par statut (un 403 après un 401 a la sienne, une alternance 401/403 n'en ajoute plus), jusqu'à une autre réponse du site.
 - **Rien n'est gardé** par le bot : ni base, ni fichier. La file d'envoi et la
   liste des messages supprimés ou modifiés en direct pendant un rattrapage
   vivent en mémoire, comme le cache de messages de discord.js (200 derniers
@@ -51,7 +51,12 @@ gardées, puisque le rattrapage les repousse toutes.
   le site garderait une annonce supprimée sur Discord. Il a un effet de bord sur
   les écouteurs historiques de `main.ts` : `messageUpdate` ignore expressément un
   message partiel (comportement d'avant conservé), `messageDelete` retire
-  désormais aussi les copies d'un message d'origine hors cache.
+  désormais aussi les copies d'un message d'origine hors cache. Un message
+  partiel est relu (`message.fetch()`) avant d'être poussé : une suppression
+  reçue pendant cette relecture l'annule (`onLoadedMessage`), et pendant un
+  rattrapage une suppression reste acquise jusqu'à sa fin (Discord ne rend pas
+  un message supprimé), à la différence d'un relais changé en avis, qui
+  redevient présent s'il redevient une annonce.
 - **Chaque écouteur a sa garde** (`registerGetiRelay`), comme partout.
 
 ## Mécanique

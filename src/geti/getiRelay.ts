@@ -45,7 +45,9 @@ export const GETI_RESYNC_INTERVAL_MS = 5 * 60_000;
 /**
  * Refus de Discord qu'un nouvel essai ne lèvera pas : salon inconnu, accès ou
  * permission manquants (`Voir le salon`, `Voir les anciens messages`). Le
- * salon est laissé de côté jusqu'au prochain démarrage, sans rattrapage en boucle.
+ * salon est laissé de côté sans rattrapage dû : il n'est relu qu'au prochain
+ * rattrapage venu d'ailleurs (nouvelle session Discord, envoi perdu ou échec
+ * passager d'un autre salon).
  */
 const PERMANENT_DISCORD_CODES = new Set(["10003", "50001", "50013", "GETI_CHANNEL_NOT_TEXT"]);
 
@@ -86,8 +88,21 @@ export class GetiRelay {
   private rerun = false;
   /** Des envois ont été perdus : un rattrapage complet est dû. */
   private resyncNeeded = false;
-  /** Messages supprimés pendant le rattrapage : ni repoussés, ni comptés présents. */
+  /**
+   * Messages supprimés de Discord pendant le rattrapage : ni repoussés, ni
+   * comptés présents. Discord ne rend jamais un message supprimé : la marque
+   * tient jusqu'à la fin du rattrapage, même si une relecture tardive du
+   * message arrive après sa suppression.
+   */
   private deletedDuringBackfill: Set<string> | null = null;
+  /**
+   * Messages modifiés en direct, pendant le rattrapage, en autre chose qu'une
+   * annonce (relais changé en avis) : ni repoussés, ni comptés présents, sauf
+   * s'ils redeviennent une annonce.
+   */
+  private retractedDuringBackfill: Set<string> | null = null;
+  /** Relectures de messages partiels en cours, par identifiant : une suppression arrivée entre-temps les annule. */
+  private readonly loading = new Map<string, Set<{ deleted: boolean }>>();
   /**
    * Messages créés ou modifiés en direct pendant le rattrapage : leur version
    * en direct est la plus récente, la page d'historique lue avant ne la
@@ -130,14 +145,47 @@ export class GetiRelay {
    * @param edited Vrai pour une modification.
    */
   async onMessage(message: GetiSourceMessage, edited = false): Promise<void> {
+    // Supprimé de Discord pendant le rattrapage : une version reçue après coup est périmée.
+    if (this.deletedDuringBackfill?.has(message.id)) { return; }
     if (!isGetiPost(message)) {
-      if (edited) { await this.onDelete(message.channelId, [message.id]); }
+      if (edited) { await this.retract(message.channelId, message.id); }
       return;
     }
-    // Redevenu une annonce (relais changé en avis, puis rétabli) : il n'est plus « supprimé ».
-    this.deletedDuringBackfill?.delete(message.id);
+    // Redevenu une annonce (relais changé en avis, puis rétabli) : il n'est plus retiré.
+    this.retractedDuringBackfill?.delete(message.id);
     this.updatedDuringBackfill?.set(message.id, message.channelId);
     await this.deps.queue.enqueue({ kind: "upsert", posts: [toGetiWirePost(message)] });
+  }
+
+  /**
+   * Message reçu de Discord, à relire d'abord s'il est partiel : une
+   * suppression arrivée pendant la relecture l'emporte (la réponse de Discord,
+   * partie avant la suppression, ne repousse pas une annonce disparue).
+   * @param id Identifiant du message.
+   * @param load Relecture du message ; `null` s'il a disparu.
+   * @param edited Vrai pour une modification.
+   */
+  async onLoadedMessage(id: string, load: () => Promise<GetiSourceMessage | null>, edited: boolean): Promise<void> {
+    const pending = { deleted: false };
+    const waiting = this.loading.get(id) ?? new Set<{ deleted: boolean }>();
+    waiting.add(pending);
+    this.loading.set(id, waiting);
+    let message: GetiSourceMessage | null;
+    try {
+      message = await load();
+    } finally {
+      waiting.delete(pending);
+      if (waiting.size === 0 && this.loading.get(id) === waiting) { this.loading.delete(id); }
+    }
+    if (message !== null && !pending.deleted) { await this.onMessage(message, edited); }
+  }
+
+  /** Message changé en autre chose qu'une annonce : retiré du site, et réconcilié comme absent. */
+  private async retract(channelId: string, id: string): Promise<void> {
+    if (!isGetiChannel(channelId)) { return; }
+    this.retractedDuringBackfill?.add(id);
+    this.updatedDuringBackfill?.delete(id);
+    await this.deps.queue.enqueue({ kind: "delete", ids: [id] });
   }
 
   /**
@@ -151,7 +199,9 @@ export class GetiRelay {
     if (!isGetiChannel(channelId) || ids.length === 0) { return; }
     for (const id of ids) {
       this.deletedDuringBackfill?.add(id);
+      this.retractedDuringBackfill?.delete(id);
       this.updatedDuringBackfill?.delete(id);
+      for (const pending of this.loading.get(id) ?? []) { pending.deleted = true; }
     }
     const sends: Promise<GetiDelivery>[] = [];
     for (let start = 0; start < ids.length; start += GETI_DELETE_MAX_IDS) {
@@ -185,6 +235,7 @@ export class GetiRelay {
   private async backfillOnce(): Promise<void> {
     this.resyncNeeded = false;
     this.deletedDuringBackfill = new Set();
+    this.retractedDuringBackfill = new Set();
     this.updatedDuringBackfill = new Map();
     let posts = 0;
     let channels = 0;
@@ -198,6 +249,7 @@ export class GetiRelay {
       }
     } finally {
       this.deletedDuringBackfill = null;
+      this.retractedDuringBackfill = null;
       this.updatedDuringBackfill = null;
     }
     this.log(`[geti] rattrapage : ${posts} message(s) poussé(s), ${channels}/${GETI_CHANNELS.length} salon(s) réconcilié(s)`);
@@ -209,7 +261,7 @@ export class GetiRelay {
     const history = await this.readHistory(channel, started - getiRetentionMs(channel));
     if (history === null) { return { posts: 0, complete: false, lost: false }; }
     if (!history.delivered) { return { posts: history.posts, complete: false, lost: true }; }
-    const gone = this.deletedDuringBackfill ?? new Set<string>();
+    const gone = new Set([...(this.deletedDuringBackfill ?? []), ...(this.retractedDuringBackfill ?? [])]);
     const present = new Set(history.ids);
     for (const [id, channelId] of this.updatedDuringBackfill ?? []) {
       if (channelId === channel.id) { present.add(id); }
@@ -270,8 +322,9 @@ export class GetiRelay {
     let posts = 0;
     for (const batch of batchGetiPosts(messages.map((message) => toGetiWirePost(message)))) {
       const gone = this.deletedDuringBackfill;
+      const retracted = this.retractedDuringBackfill;
       const live = this.updatedDuringBackfill;
-      const kept = batch.filter((post) => !gone?.has(post.id) && !live?.has(post.id));
+      const kept = batch.filter((post) => !gone?.has(post.id) && !retracted?.has(post.id) && !live?.has(post.id));
       // Tout le lot a changé en direct : rien à renvoyer, ni d'appel au site qui pourrait se perdre.
       if (kept.length === 0) { continue; }
       if ((await this.deps.queue.enqueue({ kind: "upsert", posts: kept })) === "lost") {
@@ -336,8 +389,7 @@ export function registerGetiRelay(client: Client, env: NodeJS.ProcessEnv = proce
   const push = async (message: Message | PartialMessage, edited: boolean): Promise<void> => {
     try {
       if (!isGetiChannel(message.channelId)) { return; }
-      const full = await fullMessage(message);
-      if (full) { await relay.onMessage(full, edited); }
+      await relay.onLoadedMessage(message.id, () => fullMessage(message), edited);
     } catch (error) {
       logFailure("message non poussé", error);
     }

@@ -579,3 +579,63 @@ test("backfill_wholeBatchUpdatedLive_sendsNoEmptyUpsert", async () => {
   assert.equal(upserts.length, 1);
   assert.deepEqual(built.upserted(), ["100000000000000901"]);
 });
+
+test("onLoadedMessage_deletedWhileLoading_pushesNothing", async () => {
+  const { relay, ops } = harness();
+  const gate: { open?: (value: GetiSourceMessage) => void } = {};
+  const load = new Promise<GetiSourceMessage>((resolve) => { gate.open = resolve; });
+
+  const loading = relay.onLoadedMessage("100000000000000901", () => load, true);
+  await relay.onDelete(LFP_CHANNEL, ["100000000000000901"]);
+  gate.open?.(message("100000000000000901"));
+  await loading;
+
+  assert.deepEqual(ops, [{ kind: "delete", ids: ["100000000000000901"] }]);
+});
+
+test("onLoadedMessage_loadedMessage_pushesIt", async () => {
+  const { relay, upserted } = harness();
+
+  await relay.onLoadedMessage("100000000000000901", async () => message("100000000000000901"), false);
+
+  assert.deepEqual(upserted(), ["100000000000000901"]);
+});
+
+test("onLoadedMessage_messageGone_pushesNothing", async () => {
+  const { relay, ops } = harness();
+
+  await relay.onLoadedMessage("100000000000000901", async () => null, true);
+
+  assert.deepEqual(ops, []);
+});
+
+test("onLoadedMessage_deleteAfterAnEarlierLoadFinished_doesNotCancelTheNextLoad", async () => {
+  const { relay, upserted } = harness();
+  await relay.onLoadedMessage("100000000000000901", async () => null, true);
+  await relay.onDelete(LFP_CHANNEL, ["100000000000000901"]);
+
+  await relay.onLoadedMessage("100000000000000902", async () => message("100000000000000902"), false);
+  await relay.onLoadedMessage("100000000000000901", async () => message("100000000000000901"), true);
+
+  assert.deepEqual(upserted(), ["100000000000000902", "100000000000000901"]);
+});
+
+test("backfill_lateUpsertAfterDeleteWhileItRuns_staysDeletedAndOutOfTheReconcile", async () => {
+  const holder: { relay: GetiRelay | null } = { relay: null };
+  const built = harness({
+    pages: {
+      [LFP_CHANNEL]: async () => {
+        // Supprimé sur Discord, puis une relecture partie avant la suppression arrive après elle.
+        await holder.relay?.onDelete(LFP_CHANNEL, ["100000000000000901"]);
+        await holder.relay?.onMessage(message("100000000000000901"), true);
+        return [message("100000000000000902"), message("100000000000000901")];
+      },
+    },
+  });
+  holder.relay = built.relay;
+
+  await built.relay.backfill();
+
+  assert.deepEqual(built.upserted(), ["100000000000000902"]);
+  assert.deepEqual(built.reconcileOf(LFP_CHANNEL)?.ids, ["100000000000000902"]);
+});

@@ -41,15 +41,15 @@ const BODY_REFUSALS = new Set([400, 413, 415, 422]);
 const CONFIG_REFUSALS = new Set([401, 403]);
 
 /**
- * Statut du refus de configuration qui a déjà sa ligne au journal : le même
- * refus n'en reprend pas, un autre (401 puis 403) en a une ; toute autre réponse
- * du site remet la ligne à zéro.
+ * Statuts de refus de configuration qui ont déjà leur ligne au journal : un
+ * statut déjà noté n'en reprend pas, même en alternance (401, 403, 401…) ; toute
+ * autre réponse du site les remet à zéro.
  */
-let loggedConfigRefusal: number | null = null;
+const loggedConfigRefusals = new Set<number>();
 
 /** Remet à zéro la ligne de refus de configuration (tests). */
 export function resetGetiConfigRefusalLog(): void {
-  loggedConfigRefusal = null;
+  loggedConfigRefusals.clear();
 }
 
 function requestOf(op: GetiSiteOp): { path: string; body: unknown } {
@@ -81,12 +81,12 @@ export async function sendGetiOp(config: SiteConfig, op: GetiSiteOp, fetchImpl: 
     // Le corps de la réponse (des nombres) n'est pas lu : il est libéré.
     await response.body?.cancel().catch(() => undefined);
     if (!CONFIG_REFUSALS.has(response.status)) {
-      loggedConfigRefusal = null;
-    } else if (loggedConfigRefusal !== response.status) {
+      loggedConfigRefusals.clear();
+    } else if (!loggedConfigRefusals.has(response.status)) {
       // Jeton refusé ou appel hors boucle locale : une erreur de configuration, à corriger avant le prochain démarrage.
       // Retentée comme un site muet (reprises de la file, puis un essai par envoi et le rattrapage dû) : une seule ligne
-      // au journal par refus, jusqu'à une autre réponse du site, pas une par essai.
-      loggedConfigRefusal = response.status;
+      // au journal par statut, jusqu'à une autre réponse du site, pas une par essai.
+      loggedConfigRefusals.add(response.status);
       console.error(`[geti] site : refus ${response.status} — vérifier SITE_INTERNAL_URL (boucle locale) et SITE_INTERNAL_TOKEN`);
     }
     if (response.ok) { return "ok"; }

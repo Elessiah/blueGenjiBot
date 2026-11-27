@@ -384,3 +384,15 @@ test("sendGetiOp_refusalThenServerErrorThenRefusal_logsAgain", async (t) => {
 
   assert.equal(errors.mock.callCount(), 2);
 });
+
+test("sendGetiOp_alternating401And403_logsEachStatusOnce", async (t) => {
+  resetGetiConfigRefusalLog();
+  const errors = t.mock.method(console, "error", () => undefined);
+
+  await sendGetiOp(config, { kind: "delete", ids: [] }, respond(401));
+  await sendGetiOp(config, { kind: "delete", ids: [] }, respond(403));
+  await sendGetiOp(config, { kind: "delete", ids: [] }, respond(401));
+  await sendGetiOp(config, { kind: "delete", ids: [] }, respond(403));
+
+  assert.equal(errors.mock.callCount(), 2);
+});
