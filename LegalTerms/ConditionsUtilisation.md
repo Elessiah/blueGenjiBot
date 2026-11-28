@@ -2,7 +2,7 @@
 
 # Conditions d'Utilisation — BlueGenji Bot
 
-**Dernière mise à jour** : 26 novembre 2026
+**Dernière mise à jour** : 28 novembre 2026
 
 > Copie du texte publié sur [https://bluegenji-esport.fr/terms-of-service-bot](https://bluegenji-esport.fr/terms-of-service-bot), **qui fait foi** en cas de divergence. Ne modifiez pas ce fichier à la main : il est régénéré depuis le site (`lib/shared/bot-legal-content.ts` d'AppBlueGenji).
 
@@ -14,7 +14,7 @@ Ces conditions encadrent l'utilisation du bot Discord **BlueGenji Bot** : ses co
 
 **BlueGenji Bot** est édité par l'association **Bluegenji Esport** (association loi 1901, siège : 4 impasse des Cyprès, 51210 Janvilliers, France). Il est développé et administré bénévolement par Keryan Houssin, hébergeur technique de l'association.
 
-Le Bot relaie les annonces de la communauté esport BlueGenji — Overwatch et Marvel Rivals — entre les salons des serveurs partenaires (recherches de scrims, recrutements et autres services). Il remet aussi en message privé les messages du site BlueGenji : codes de connexion, horaires de match (posés, changés ou retirés), rappels de match, check-in d'un match, avis de retrait d'un match (« Match retiré ») et avis envoyé à un caster dont l'inscription est retirée par un autre que lui — ces messages de match aux seuls comptes dont le tag Discord est certifié sur le site —, alertes d'arbitrage, avis de modération, demandes d'adhésion à une équipe, invitations d'une équipe, reprises d'une équipe fantôme que le staff propose et propriétés d'équipe transférées (qui ne nomment que l'équipe, jamais personne), messages du staff d'un tournoi à ses participants (signés « le staff du tournoi ») et informations sur les données. Le staff des tournois du site peut écrire ces derniers depuis Discord, par la commande **/message-tournoi** : le Bot transmet la demande au site, qui vérifie le droit de son auteur, choisit les destinataires et n'en rend que le nombre. Il est gratuit.
+Le Bot relaie les annonces de la communauté esport BlueGenji — Overwatch et Marvel Rivals — entre les salons des serveurs partenaires (recherches de scrims, recrutements et autres services). Il remet aussi en message privé les messages du site BlueGenji : codes de connexion, horaires de match (posés, changés ou retirés), rappels de match, check-in d'un match, avis de retrait d'un match (« Match retiré »), dates butoirs de planification, annonces d'un nouveau match, avis de prod et avis envoyé à un caster dont l'inscription est retirée par un autre que lui — ces messages de match aux seuls comptes dont le tag Discord est certifié sur le site —, alertes d'arbitrage, avis du planning des casts et arbitres, avis de modération, demandes d'adhésion à une équipe, invitations d'une équipe, reprises d'une équipe fantôme que le staff propose et propriétés d'équipe transférées (qui ne nomment que l'équipe, jamais personne), alertes d'annonces GETI (aux seuls comptes dont le tag Discord est certifié), messages du staff d'un tournoi à ses participants (signés « le staff du tournoi ») et informations sur les données. Le staff des tournois du site peut écrire ces derniers depuis Discord, par la commande **/message-tournoi** : le Bot transmet la demande au site, qui vérifie le droit de son auteur, choisit les destinataires et n'en rend que le nombre. Il est gratuit.
 
 ---
 
